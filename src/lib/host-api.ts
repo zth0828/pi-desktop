@@ -11,4 +11,9 @@ export const hostApi = {
   shell: {
     openExternal: (url: string) => invokeHost('shell', 'openExternal', { url }),
   },
+  piSystem: {
+    detect: (force?: boolean) => invokeHost('piSystem', 'detect', force ? { force } : undefined),
+    checkLatest: () => invokeHost('piSystem', 'checkLatest'),
+    install: () => invokeHost('piSystem', 'install'),
+  },
 };
