@@ -6,6 +6,7 @@ import { dialogApi } from './dialog-api';
 import { piRuntimeApi } from './pi-runtime-api';
 import { piSystemApi } from './pi-system-api';
 import { providersApi } from './providers-api';
+import { sessionsApi } from './sessions-api';
 import { settingsApi } from './settings-api';
 import { shellApi } from './shell-api';
 
@@ -16,6 +17,7 @@ export function createHostServices(): HostServiceRegistry {
     piSystem: piSystemApi,
     piRuntime: piRuntimeApi,
     providers: providersApi,
+    piSessions: sessionsApi,
     settings: settingsApi,
     dialog: dialogApi,
   };

@@ -128,6 +128,25 @@ export type PiOAuthProgressEvent = {
 export type PiCommandRow = { name: string; description?: string; source: string };
 export type PiCommandListResult = { commands: PiCommandRow[] };
 
+// —— piSessions：会话管理（M4，docs §4.4）——
+
+export type PiSessionRow = {
+  path: string;
+  id: string;
+  name?: string;
+  firstMessage: string;
+  messageCount: number;
+  /** ISO 时间字符串（Date 不过 IPC） */
+  created: string;
+  modified: string;
+  isCurrent: boolean;
+};
+export type PiSessionListResult = { sessions: PiSessionRow[] };
+export type PiSessionPathPayload = { path: string };
+export type PiSessionRenamePayload = { path: string; name: string };
+export type PiSessionForkResult = HostSuccess & { path?: string };
+export type PiSessionExportResult = HostSuccess & { path?: string };
+
 export type HostApiContract = {
   app: {
     version: () => string;
@@ -170,6 +189,19 @@ export type HostApiContract = {
     removeCredential: (payload: { providerId: string }) => HostSuccess;
     startOAuth: (payload: { providerId: string }) => HostSuccess;
     addCustom: (payload: PiProviderAddCustomPayload) => HostSuccess;
+  };
+  piSessions: {
+    /** 当前 workspace cwd 的会话列表（modified 倒序）。runtime 未启动时回退 settings.workspaceCwd。 */
+    list: (payload?: { scope?: 'cwd' }) => PiSessionListResult;
+    /** 切换活动会话；成功后经 piRuntime.sessionReplaced 推全量状态。 */
+    switch: (payload: PiSessionPathPayload) => HostSuccess;
+    rename: (payload: PiSessionRenamePayload) => HostSuccess;
+    /** 分叉到当前 cwd 并切过去；返回新会话文件路径。 */
+    fork: (payload: PiSessionPathPayload) => PiSessionForkResult;
+    /** pi 无删除 API：壳直接删 JSONL 文件；删当前会话前先 newSession。 */
+    remove: (payload: PiSessionPathPayload) => HostSuccess;
+    /** v1 简化：只导当前会话（exportToHtml 在 AgentSession 上），非当前先 switch。导出到会话同目录。 */
+    exportHtml: (payload: PiSessionPathPayload) => PiSessionExportResult;
   };
   settings: {
     getAll: () => SettingsSnapshot;

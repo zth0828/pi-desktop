@@ -5,11 +5,12 @@ import { bindChatEvents } from './stores/chat';
 import Onboarding from './pages/Onboarding';
 import ChatPage from './pages/Chat';
 import ModelsPage from './pages/Models';
+import SessionsPage from './pages/Sessions';
 
 type PageId = 'chat' | 'models' | 'sessions' | 'skills' | 'extensions' | 'mcp' | 'settings';
 const PAGES: PageId[] = ['chat', 'models', 'sessions', 'skills', 'extensions', 'mcp', 'settings'];
 
-// M2 起逐步填充的页面占位（Models/Sessions/Skills/Extensions/MCP/Settings）
+// M2 起逐步填充的页面占位（Skills/Extensions/MCP/Settings）
 function PlaceholderPage({ id }: { id: PageId }) {
   const { t } = useTranslation();
   return (
@@ -61,7 +62,15 @@ export default function App() {
         </div>
       </nav>
       <main className="content">
-        {page === 'chat' ? <ChatPage /> : page === 'models' ? <ModelsPage /> : <PlaceholderPage id={page} />}
+        {page === 'chat' ? (
+          <ChatPage />
+        ) : page === 'models' ? (
+          <ModelsPage />
+        ) : page === 'sessions' ? (
+          <SessionsPage />
+        ) : (
+          <PlaceholderPage id={page} />
+        )}
       </main>
     </div>
   );

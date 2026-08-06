@@ -486,6 +486,84 @@ button.danger-outline {
   font-size: 12px;
 }
 
+.sessions-page {
+  padding: 24px 32px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 720px;
+}
+
+.session-row {
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.session-row.current {
+  border-color: rgba(37, 99, 235, 0.6);
+}
+
+.session-row-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
+.session-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.session-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.session-current-badge {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.25);
+  color: #60a5fa;
+  font-size: 11px;
+}
+
+.session-actions,
+.rename-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.rename-form input {
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  min-width: 220px;
+}
+
 .chat-input {
   position: relative;
 }

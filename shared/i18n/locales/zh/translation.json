@@ -89,5 +89,21 @@
     "customModels": "模型 id，逗号分隔",
     "saveCustom": "保存供应商",
     "cancel": "取消"
+  },
+  "sessions": {
+    "title": "会话",
+    "empty": "当前工作目录还没有会话，先去聊几句吧。",
+    "untitled": "未命名会话",
+    "current": "当前",
+    "messageCount": "{{count}} 条消息",
+    "rename": "重命名",
+    "renamePlaceholder": "会话名称",
+    "save": "保存",
+    "cancel": "取消",
+    "fork": "分叉",
+    "export": "导出 HTML",
+    "delete": "删除",
+    "confirmDelete": "确认删除",
+    "exported": "已导出到 {{path}}"
   }
 }

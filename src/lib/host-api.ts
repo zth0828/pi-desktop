@@ -44,6 +44,14 @@ export const hostApi = {
       models: Array<{ id: string; name?: string }>;
     }) => invokeHost('providers', 'addCustom', payload),
   },
+  piSessions: {
+    list: () => invokeHost('piSessions', 'list'),
+    switch: (path: string) => invokeHost('piSessions', 'switch', { path }),
+    rename: (path: string, name: string) => invokeHost('piSessions', 'rename', { path, name }),
+    fork: (path: string) => invokeHost('piSessions', 'fork', { path }),
+    remove: (path: string) => invokeHost('piSessions', 'remove', { path }),
+    exportHtml: (path: string) => invokeHost('piSessions', 'exportHtml', { path }),
+  },
   settings: {
     getAll: () => invokeHost('settings', 'getAll'),
     get: (key: 'language' | 'workspaceCwd') => invokeHost('settings', 'get', { key }),

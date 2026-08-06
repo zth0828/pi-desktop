@@ -14,7 +14,7 @@ import type { AgentSession, AgentSessionRuntime } from '@earendil-works/pi-codin
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 
-type ActiveRuntime = {
+export type ActiveRuntime = {
   sdk: PiSdk;
   runtime: AgentSessionRuntime;
   cwd: string;
@@ -25,6 +25,11 @@ type ActiveRuntime = {
 
 let active: ActiveRuntime | null = null;
 let startInFlight: Promise<PiRuntimeStateResult> | null = null;
+
+/** 当前活动运行时（供 piSessions 等兄弟服务复用；只读使用，替换会话须走 afterSessionReplaced）。 */
+export function getActiveRuntime(): ActiveRuntime | null {
+  return active;
+}
 
 function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
   const session = runtime.runtime.session;
@@ -139,7 +144,7 @@ async function createRuntime(cwd: string): Promise<ActiveRuntime> {
 }
 
 /** 会话替换（new/switch/fork）后的统一收尾：重绑 + 重订阅 + 通知渲染层清空。 */
-async function afterSessionReplaced(runtime: ActiveRuntime): Promise<PiRuntimeStateResult> {
+export async function afterSessionReplaced(runtime: ActiveRuntime): Promise<PiRuntimeStateResult> {
   runtime.unsubscribe();
   runtime.generation += 1;
   runtime.sessionId = runtime.runtime.session.sessionId;
