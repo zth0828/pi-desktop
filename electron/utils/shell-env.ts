@@ -8,6 +8,12 @@ let cached: string | null = null;
 
 export function resolveUserPath(): string {
   if (cached) return cached;
+  // 测试钩子：E2E 用隔离 PATH 模拟各场景，不走 login shell
+  const override = process.env.PI_DESKTOP_USER_PATH;
+  if (override) {
+    cached = override;
+    return cached;
+  }
   const envPath = process.env.PATH ?? '';
   if (process.platform === 'win32') {
     cached = envPath;

@@ -1,0 +1,46 @@
+{
+  "app": {
+    "tagline": "pi coding agent 的桌面壳"
+  },
+  "onboarding": {
+    "checking": "正在检测环境…",
+    "recheck": "重新检测",
+    "install": "帮我安装",
+    "installing": "安装中…",
+    "installLog": "安装输出",
+    "retry": "重试",
+    "continue": "进入",
+    "noNode": {
+      "title": "需要 Node.js",
+      "body": "Pi Desktop 需要 Node.js ≥ {{min}} 和 npm。pi 只能通过 npm 安装，所以 Node 是硬前提。",
+      "detected": "检测到 Node.js v{{version}}，低于要求的 v{{min}}。",
+      "notFound": "PATH 中未找到 Node.js。",
+      "download": "下载 Node.js LTS"
+    },
+    "noPi": {
+      "title": "安装 pi",
+      "body": "Pi Desktop 是一个 GUI 壳：agent 运行在你自己的环境里。请用 npm 安装 pi——这是唯一支持的安装方式：",
+      "hint": "你的配置、会话和密钥都在 ~/.pi/agent/，完全归你所有。Pi Desktop 不会背着你升级 pi。"
+    },
+    "nonNpm": {
+      "title": "切换 pi 的安装方式",
+      "body": "检测到 pi v{{version}}（{{path}}），但它不是通过 npm 安装的。桌面端只有内嵌 npm 安装的 pi 才能提供完整体验。",
+      "lossless": "切换是无损的：配置、会话、密钥都在 ~/.pi/agent/，与安装方式无关。原二进制不会被动它，你可以自行删除。",
+      "switch": "一键切换到 npm 版",
+      "shadowed": "已存在 npm 安装的 pi（v{{version}}），但 PATH 中 {{binPath}} 优先级更高。请调整 PATH 或移除旧二进制后重新检测。"
+    },
+    "outdated": {
+      "title": "pi 版本过低",
+      "body": "检测到 pi v{{current}}，Pi Desktop 需要 ≥ v{{min}}。",
+      "upgrade": "升级 pi"
+    },
+    "failed": {
+      "title": "安装失败",
+      "detail": "安装命令出错退出。你也可以在终端手动执行上面的命令，然后重新检测。"
+    }
+  },
+  "status": {
+    "ready": "已检测到 pi v{{version}}",
+    "latestAvailable": "最新版本：v{{version}}"
+  }
+}

@@ -17,3 +17,117 @@
   height: 100vh;
   gap: 8px;
 }
+
+.onboarding {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 64px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.onboarding h1 {
+  font-size: 28px;
+}
+
+.onboarding .tagline {
+  opacity: 0.6;
+  margin-top: -8px;
+}
+
+.onboarding section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 10px;
+}
+
+.onboarding h2 {
+  font-size: 18px;
+}
+
+.command {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.12);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  user-select: all;
+}
+
+.hint {
+  font-size: 13px;
+  opacity: 0.65;
+}
+
+.warning {
+  font-size: 13px;
+  color: #b45309;
+}
+
+.detect-detail {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  padding: 8px 16px;
+  border-radius: 7px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.install-log {
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.install-log-title {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-bottom: 6px;
+}
+
+.install-log pre {
+  max-height: 200px;
+  overflow: auto;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.error h2 {
+  color: #dc2626;
+}
+
+.error-detail {
+  font-size: 12px;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+}

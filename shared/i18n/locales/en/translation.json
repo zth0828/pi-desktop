@@ -1,0 +1,46 @@
+{
+  "app": {
+    "tagline": "A desktop shell for the pi coding agent"
+  },
+  "onboarding": {
+    "checking": "Checking your environment…",
+    "recheck": "Re-check",
+    "install": "Install for me",
+    "installing": "Installing…",
+    "installLog": "Install output",
+    "retry": "Retry",
+    "continue": "Continue",
+    "noNode": {
+      "title": "Node.js is required",
+      "body": "Pi Desktop needs Node.js ≥ {{min}} with npm. pi is installed via npm, so Node is a hard prerequisite.",
+      "detected": "Detected Node.js v{{version}}, which is below the required v{{min}}.",
+      "notFound": "Node.js was not found on your PATH.",
+      "download": "Download Node.js LTS"
+    },
+    "noPi": {
+      "title": "Install pi",
+      "body": "Pi Desktop is a GUI shell: the agent runtime lives in your own environment. Install pi with npm — the only supported install method:",
+      "hint": "Your config, sessions and keys live in ~/.pi/agent/ and stay yours. Pi Desktop never upgrades pi without you asking."
+    },
+    "nonNpm": {
+      "title": "Switch pi to the npm install",
+      "body": "Found pi v{{version}} at {{path}}, but it was not installed via npm. The desktop app can only embed an npm-installed pi for the full experience.",
+      "lossless": "Switching is lossless: your config, sessions and keys in ~/.pi/agent/ are shared by every install method. The old binary is left untouched — remove it yourself if you want.",
+      "switch": "Switch to npm install",
+      "shadowed": "An npm-installed pi (v{{version}}) already exists, but {{binPath}} comes first on your PATH. Adjust your PATH or remove the old binary, then re-check."
+    },
+    "outdated": {
+      "title": "pi is too old",
+      "body": "Found pi v{{current}}, but Pi Desktop requires ≥ v{{min}}.",
+      "upgrade": "Upgrade pi"
+    },
+    "failed": {
+      "title": "Installation failed",
+      "detail": "The installer exited with an error. You can also run the command above in your terminal, then re-check."
+    }
+  },
+  "status": {
+    "ready": "pi v{{version}} detected",
+    "latestAvailable": "Latest: v{{version}}"
+  }
+}

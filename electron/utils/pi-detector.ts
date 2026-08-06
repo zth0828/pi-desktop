@@ -58,7 +58,8 @@ export function detectNode(): NodeDetectResult {
 export function detectNpm(): NpmDetectResult {
   const version = findOnPath('npm') ? run('npm', ['--version']) : null;
   if (!version) return { found: false };
-  const rootOut = run('npm', ['root', '-g']);
+  // 测试钩子：E2E 用临时 npm prefix 模拟各安装场景
+  const rootOut = process.env.PI_DESKTOP_NPM_ROOT ?? run('npm', ['root', '-g']);
   let globalRoot: string | undefined;
   if (rootOut && existsSync(rootOut)) {
     // macOS: /tmp → /private/tmp 等 symlink，比较前必须 realpath（Spike A 教训）
