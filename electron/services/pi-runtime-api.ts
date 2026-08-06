@@ -9,6 +9,7 @@ import type {
   PiRuntimePromptPayload,
   PiRuntimeStartPayload,
   PiRuntimeStateResult,
+  PiRuntimeContextUsage,
 } from '@shared/host-api/contract';
 import type { AgentSession, AgentSessionRuntime, EventBus } from '@earendil-works/pi-coding-agent';
 import { sendHostEvent } from '../main/ipc/host-events';
@@ -44,6 +45,7 @@ export function getLatestMcpStatusSnapshot(): Record<string, unknown> | null {
 
 function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
   const session = runtime.runtime.session;
+  const contextUsage = session.getContextUsage();
   return {
     sessionId: session.sessionId,
     cwd: runtime.cwd,
@@ -55,6 +57,13 @@ function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
     isStreaming: session.isStreaming,
     messages: session.messages as unknown[],
     sessionFile: session.sessionFile,
+    contextUsage: contextUsage
+      ? {
+          tokens: contextUsage.tokens,
+          contextWindow: contextUsage.contextWindow,
+          percent: contextUsage.percent,
+        }
+      : undefined,
   };
 }
 
@@ -199,6 +208,13 @@ export const piRuntimeApi = {
   },
 
   getState: (): PiRuntimeStateResult | null => (active ? snapshotState(active) : null),
+
+  getContextUsage: (): PiRuntimeContextUsage | null => {
+    const usage = active?.runtime.session.getContextUsage();
+    return usage
+      ? { tokens: usage.tokens, contextWindow: usage.contextWindow, percent: usage.percent }
+      : null;
+  },
 
   prompt: async (payload: PiRuntimePromptPayload) => {
     if (!active) return { success: false, error: 'session not started' };

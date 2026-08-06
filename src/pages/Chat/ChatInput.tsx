@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, Paperclip, Square } from 'lucide-react';
-import type { PiCommandRow } from '@shared/host-api/contract';
+import { ArrowUp, ChevronDown, CircleGauge, Folder, Paperclip, Square } from 'lucide-react';
+import type { PiCommandRow, PiModelRow, PiRuntimeContextUsage } from '@shared/host-api/contract';
 import { hostApi } from '../../lib/host-api';
 import { useChatStore } from '../../stores/chat';
 
 type StagedImage = { data: string; mediaType: string; previewUrl: string };
+
+type ChatInputProps = {
+  cwd: string;
+  onChooseWorkspace: () => Promise<void>;
+  onNewSession: () => void;
+};
 
 function fileToStagedImage(file: File): Promise<StagedImage> {
   return new Promise((resolveFile, reject) => {
@@ -23,7 +29,7 @@ function fileToStagedImage(file: File): Promise<StagedImage> {
   });
 }
 
-export function ChatInput() {
+export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
   const [images, setImages] = useState<StagedImage[]>([]);
@@ -35,13 +41,55 @@ export function ChatInput() {
   const abort = useChatStore((s) => s.abort);
   const newSession = useChatStore((s) => s.newSession);
   const compact = useChatStore((s) => s.compact);
+  const model = useChatStore((s) => s.model);
+  const messages = useChatStore((s) => s.messages);
+  const [models, setModels] = useState<PiModelRow[]>([]);
+  const [modelKey, setModelKey] = useState('');
+  const [contextUsage, setContextUsage] = useState<PiRuntimeContextUsage | null>(null);
+  const [usageOpen, setUsageOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (started) {
       void hostApi.piRuntime.getCommands().then((r) => setCommands(r.commands));
+      void hostApi.providers.listModels().then((r) => setModels(r.models)).catch(() => {});
+      const refreshUsage = () => {
+        void hostApi.piRuntime.getContextUsage().then(setContextUsage).catch(() => setContextUsage(null));
+      };
+      refreshUsage();
+      const timer = window.setInterval(refreshUsage, 1000);
+      return () => window.clearInterval(timer);
     }
   }, [started]);
+
+  useEffect(() => {
+    if (model) setModelKey(`${model.provider}/${model.id}`);
+  }, [model]);
+
+  const usageTotals = messages.reduce(
+    (totals, message) => {
+      const usage = (message.raw as { usage?: Record<string, unknown> } | undefined)?.usage;
+      if (!usage) return totals;
+      return {
+        input: totals.input + Number(usage.input ?? usage.prompt_tokens ?? 0),
+        output: totals.output + Number(usage.output ?? usage.completion_tokens ?? 0),
+        cacheRead: totals.cacheRead + Number(usage.cacheRead ?? 0),
+        cacheWrite: totals.cacheWrite + Number(usage.cacheWrite ?? 0),
+      };
+    },
+    { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  );
+  const selectedModel = models.find((candidate) => `${candidate.provider}/${candidate.id}` === modelKey);
+  const contextWindow = selectedModel?.contextWindow
+    ?? (contextUsage?.contextWindow && contextUsage.contextWindow > 0 ? contextUsage.contextWindow : null);
+  const contextPercent = contextUsage?.tokens != null && contextWindow
+    ? (contextUsage.tokens / contextWindow) * 100
+    : contextUsage?.percent;
+  const contextLabel = contextUsage?.tokens == null || contextPercent == null
+    ? t('chat.tokenUnknown')
+    : `${Math.round(contextPercent)}%`;
+  const formatTokens = (value: number | null | undefined) =>
+    value == null ? t('chat.tokenUnknown') : value.toLocaleString();
 
   // / 补全面板：裸 '/' 只显示内置命令 + prompt 模板（skills 多，不打脸）；
   // 输入字符后再全量过滤，前缀匹配优先，built-in > prompt > skill 排序
@@ -163,6 +211,60 @@ export function ChatInput() {
         </div>
       )}
       <div className="chat-input-card">
+        <div className="chat-context-bar">
+          <button
+            className="context-chip workspace-chip"
+            data-testid="chat-workspace"
+            title={cwd}
+            onClick={() => void onChooseWorkspace()}
+          >
+            <Folder size={15} />
+            <span>{cwd.split('/').filter(Boolean).pop() ?? cwd}</span>
+            <ChevronDown size={13} />
+          </button>
+          <span className="context-separator" aria-hidden="true" />
+          {models.length > 0 ? (
+            <select
+              className="context-chip model-select"
+              data-testid="model-select"
+              aria-label={t('chat.model')}
+              value={modelKey}
+              onChange={(e) => {
+                const previous = modelKey;
+                const next = e.target.value;
+                setModelKey(next);
+                const [provider, ...rest] = e.target.value.split('/');
+                void hostApi.piRuntime.setModel(provider, rest.join('/')).then(async (result) => {
+                  if (!result.success) {
+                    setModelKey(previous);
+                    return;
+                  }
+                  const usage = await hostApi.piRuntime.getContextUsage();
+                  setContextUsage(usage);
+                });
+              }}
+            >
+              {models.map((m) => (
+                <option key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
+                  {m.name ?? m.id}
+                </option>
+              ))}
+            </select>
+          ) : model ? (
+            <span className="context-chip model-badge" data-testid="model-badge">
+              {model.name ?? model.id}
+            </span>
+          ) : null}
+          <span className="spacer" />
+          <button
+            className="context-action"
+            data-testid="new-session"
+            onClick={onNewSession}
+            disabled={isStreaming}
+          >
+            {t('chat.newSession')}
+          </button>
+        </div>
         {images.length > 0 && (
           <div className="staged-images" data-testid="staged-images">
             {images.map((img, i) => (
@@ -207,6 +309,33 @@ export function ChatInput() {
             />
           </label>
           <span className="spacer" />
+          <div className="usage-control">
+            <button
+              className="usage-button"
+              data-testid="token-usage"
+              aria-label={t('chat.tokenUsage')}
+              aria-expanded={usageOpen}
+              onClick={() => setUsageOpen((open) => !open)}
+            >
+              <CircleGauge size={17} />
+              <span>{contextLabel}</span>
+            </button>
+            {usageOpen && (
+              <div className="usage-popover" role="dialog" data-testid="token-usage-popover">
+                <div className="usage-popover-title">{t('chat.tokenUsage')}</div>
+                <div className="usage-row"><span>{t('chat.contextUsed')}</span><strong>{formatTokens(contextUsage?.tokens)}</strong></div>
+                <div className="usage-row"><span>{t('chat.contextWindow')}</span><strong>{formatTokens(contextWindow)}</strong></div>
+                <div className="usage-row"><span>{t('chat.inputTokens')}</span><strong>{formatTokens(usageTotals.input)}</strong></div>
+                <div className="usage-row"><span>{t('chat.outputTokens')}</span><strong>{formatTokens(usageTotals.output)}</strong></div>
+                {(usageTotals.cacheRead > 0 || usageTotals.cacheWrite > 0) && (
+                  <>
+                    <div className="usage-row"><span>{t('chat.cacheRead')}</span><strong>{formatTokens(usageTotals.cacheRead)}</strong></div>
+                    <div className="usage-row"><span>{t('chat.cacheWrite')}</span><strong>{formatTokens(usageTotals.cacheWrite)}</strong></div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
           {isStreaming ? (
             <button data-testid="chat-stop" className="send-button stop" onClick={() => void abort()}>
               <Square size={13} />

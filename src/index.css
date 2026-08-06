@@ -336,7 +336,6 @@ button.danger-outline {
   background: var(--bg-raised);
   border-radius: 14px 0 0 0;
   border-left: 1px solid var(--border);
-  border-top: 1px solid var(--border);
   overflow: hidden;
 }
 
@@ -539,54 +538,12 @@ button.danger-outline {
   color: var(--text-secondary);
 }
 
-.chat-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  border-bottom: 1px solid var(--border);
-  font-size: 13px;
-}
-
-.chat-header .workspace {
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
-}
-
-.chat-header > button {
-  padding: 5px 12px;
-  font-size: 12.5px;
-  border-radius: 99px;
-  border: 1px solid var(--border);
-}
-
-.chat-header > button:hover {
-  background: var(--bg-hover);
-}
-
-.model-badge {
-  padding: 3px 10px;
-  border-radius: 99px;
-  background: var(--accent-soft);
-  font-size: 12px;
-}
-
-.model-select {
-  padding: 5px 10px;
-  border-radius: 99px;
-  font-size: 12.5px;
-  max-width: 200px;
-}
-
 .chat-column {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-width: 800px;
+  max-width: 960px;
   width: 100%;
   margin: 0 auto;
 }
@@ -734,14 +691,14 @@ button.danger-outline {
 
 .chat-input {
   position: relative;
-  padding: 10px 24px 16px;
+  padding: 12px 28px 22px;
 }
 
 .chat-input-card {
   border: 1px solid var(--border-strong);
   border-radius: 18px;
   background: var(--bg-raised);
-  padding: 10px 12px 8px;
+  padding: 8px 12px 10px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
 }
 
@@ -749,12 +706,63 @@ button.danger-outline {
   border-color: var(--accent);
 }
 
+.chat-context-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 2px 6px;
+}
+
+.context-chip,
+.context-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.context-chip:hover,
+.context-action:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.workspace-chip span {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+}
+
+.model-select {
+  max-width: 210px;
+  padding-right: 24px;
+  border: 0;
+  background-color: transparent;
+}
+
+.model-badge {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
 .chat-input-card textarea {
   width: 100%;
   resize: none;
   border: none;
   background: transparent;
-  padding: 4px 6px;
+  padding: 5px 6px 8px;
   font-size: 14.5px;
 }
 
@@ -768,6 +776,7 @@ button.danger-outline {
   align-items: center;
   gap: 8px;
   padding: 2px 2px 0;
+  position: relative;
 }
 
 .attach-button {
@@ -795,6 +804,60 @@ button.danger-outline {
 
 .send-button.stop {
   background: var(--danger);
+}
+
+.usage-control {
+  position: relative;
+}
+
+.usage-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 5px 7px;
+  border-radius: 99px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.usage-button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.usage-popover {
+  position: absolute;
+  right: 0;
+  bottom: 40px;
+  width: 230px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-panel);
+  z-index: 12;
+}
+
+.usage-popover-title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.usage-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.usage-row strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .staged-images {

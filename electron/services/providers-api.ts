@@ -61,6 +61,8 @@ export const providersApi = {
         id: m.id,
         name: m.name,
         reasoning: m.reasoning,
+        contextWindow: m.contextWindow,
+        maxTokens: m.maxTokens,
       })),
     };
   },
@@ -130,8 +132,8 @@ export const providersApi = {
           reasoning: m.reasoning ?? false,
           input: ['text'],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          contextWindow: m.contextWindow ?? 128000,
-          maxTokens: m.maxTokens ?? 4096,
+          ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
+          ...(m.maxTokens !== undefined ? { maxTokens: m.maxTokens } : {}),
         })),
       };
       mkdirSync(agentDir, { recursive: true });

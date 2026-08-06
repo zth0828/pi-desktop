@@ -75,6 +75,15 @@
       "result": "结果"
     },
     "attachImage": "添加图片",
+    "model": "选择模型",
+    "tokenUsage": "Token 使用情况",
+    "contextUsed": "当前上下文",
+    "contextWindow": "上下文上限",
+    "inputTokens": "输入 Token",
+    "outputTokens": "输出 Token",
+    "cacheRead": "缓存读取",
+    "cacheWrite": "缓存写入",
+    "tokenUnknown": "—",
     "greeting": "我能为你做些什么？"
   },
   "models": {

@@ -53,6 +53,15 @@ test.beforeEach(async () => {
               contextWindow: 128000,
               maxTokens: 4096,
             },
+            {
+              id: 'mock-wide',
+              name: 'Mock Wide',
+              reasoning: false,
+              input: ['text'],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 200000,
+              maxTokens: 8192,
+            },
           ],
         },
         // 无 apiKey 的自定义供应商：login('api_key') 不触发远程刷新，确定性测试
@@ -171,4 +180,18 @@ test('/ 内置命令：/new 直接开新会话', async ({ launchElectronApp }) =
   await page.getByTestId('chat-input').fill('/new');
   await page.getByTestId('chat-input').press('Enter');
   await expect(page.getByTestId('message-assistant')).toHaveCount(0);
+});
+
+test('Token 上限随当前模型切换，不使用固定 128K', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+
+  await page.getByTestId('token-usage').click();
+  const popover = page.getByTestId('token-usage-popover');
+  await expect(popover).toContainText('128,000');
+
+  await selector.selectOption('mock/mock-wide');
+  await expect(popover).toContainText('200,000');
 });

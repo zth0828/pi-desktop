@@ -62,6 +62,12 @@ export type PiRuntimePromptPayload = { text: string; images?: unknown[] };
 
 export type PiRuntimeModelInfo = { provider: string; id: string; name?: string };
 
+export type PiRuntimeContextUsage = {
+  tokens: number | null;
+  contextWindow: number;
+  percent: number | null;
+};
+
 export type PiRuntimeStateResult = {
   sessionId: string;
   cwd: string;
@@ -72,6 +78,7 @@ export type PiRuntimeStateResult = {
   /** pi AgentMessage[]，渲染层按结构渲染（user/assistant/toolResult） */
   messages: unknown[];
   sessionFile?: string;
+  contextUsage?: PiRuntimeContextUsage;
 };
 
 // —— settings：壳自身设置（electron-store 持久化）——
@@ -105,7 +112,14 @@ export type PiProviderRow = {
 };
 export type PiProviderListResult = { providers: PiProviderRow[] };
 export type PiProviderSetKeyPayload = { providerId: string; apiKey: string };
-export type PiModelRow = { provider: string; id: string; name?: string; reasoning?: boolean };
+export type PiModelRow = {
+  provider: string;
+  id: string;
+  name?: string;
+  reasoning?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
+};
 export type PiProviderAddCustomPayload = {
   id: string;
   baseUrl: string;
@@ -276,6 +290,7 @@ export type HostApiContract = {
     /** 启动（或复用）指定 cwd 的会话运行时；更换 cwd 会重建。 */
     start: (payload: PiRuntimeStartPayload) => PiRuntimeStateResult;
     getState: () => PiRuntimeStateResult | null;
+    getContextUsage: () => PiRuntimeContextUsage | null;
     /** 生成中调用自动走 steer（§4.1）。 */
     prompt: (payload: PiRuntimePromptPayload) => HostSuccess;
     abort: () => HostSuccess;

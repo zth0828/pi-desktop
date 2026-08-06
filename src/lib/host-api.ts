@@ -19,6 +19,7 @@ export const hostApi = {
   piRuntime: {
     start: (cwd: string) => invokeHost('piRuntime', 'start', { cwd }),
     getState: () => invokeHost('piRuntime', 'getState'),
+    getContextUsage: () => invokeHost('piRuntime', 'getContextUsage'),
     prompt: (text: string, images?: unknown[]) =>
       invokeHost('piRuntime', 'prompt', { text, images }),
     abort: () => invokeHost('piRuntime', 'abort'),

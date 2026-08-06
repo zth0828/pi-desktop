@@ -75,6 +75,15 @@
       "result": "Result"
     },
     "attachImage": "Attach image",
+    "model": "Select model",
+    "tokenUsage": "Token usage",
+    "contextUsed": "Current context",
+    "contextWindow": "Context window",
+    "inputTokens": "Input tokens",
+    "outputTokens": "Output tokens",
+    "cacheRead": "Cache read",
+    "cacheWrite": "Cache write",
+    "tokenUnknown": "—",
     "greeting": "What can I do for you?"
   },
   "models": {
