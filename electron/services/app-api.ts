@@ -1,5 +1,5 @@
 // app 模块：壳自身信息。
-import { app } from 'electron';
+import { app, clipboard } from 'electron';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -22,4 +22,8 @@ export const appApi = {
   version: () => resolveAppVersion(),
   name: () => app.getName(),
   platform: () => process.platform,
+  writeClipboard: (payload: { text: string }) => {
+    clipboard.writeText(payload.text);
+    return { success: true };
+  },
 };

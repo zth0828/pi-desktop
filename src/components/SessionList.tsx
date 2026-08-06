@@ -1,6 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronRight, Folder } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Folder,
+  GitFork,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  X,
+} from 'lucide-react';
 import type { PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
@@ -12,6 +26,13 @@ type ProjectGroup = {
   sessions: PiSessionRow[];
   latest: string;
 };
+
+type MenuPosition = { left: number; top: number };
+
+const SESSION_PAGE_SIZE = 10;
+const MENU_WIDTH = 196;
+const SESSION_MENU_HEIGHT = 246;
+const PROJECT_MENU_HEIGHT = 48;
 
 function groupByProject(sessions: PiSessionRow[]): ProjectGroup[] {
   const map = new Map<string, PiSessionRow[]>();
@@ -29,11 +50,18 @@ function groupByProject(sessions: PiSessionRow[]): ProjectGroup[] {
     .sort((a, b) => b.latest.localeCompare(a.latest));
 }
 
-/** 侧栏会话列表：按项目（cwd）分组折叠，Codex 式。 */
+/** 侧栏会话列表：按项目分组，支持项目/会话归档与删除。 */
 export function SessionList() {
   const { t } = useTranslation();
   const [sessions, setSessions] = useState<PiSessionRow[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [openMenu, setOpenMenu] = useState<string>();
+  const [confirmDelete, setConfirmDelete] = useState<string>();
+  const [renamePath, setRenamePath] = useState<string>();
+  const [renameValue, setRenameValue] = useState('');
+  const [menuPosition, setMenuPosition] = useState<MenuPosition>();
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
+  const [busy, setBusy] = useState(false);
   const started = useChatStore((s) => s.started);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const activeCwd = useChatStore((s) => s.cwd);
@@ -52,55 +80,305 @@ export function SessionList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [started]);
 
-  // 一轮对话结束后刷新（消息数/修改时间变化）
   useEffect(() => {
     if (!isStreaming && started) refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStreaming]);
 
-  const groups = useMemo(() => groupByProject(sessions), [sessions]);
+  useEffect(() => {
+    const closeMenu = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('[data-session-menu]')) return;
+      setOpenMenu(undefined);
+      setConfirmDelete(undefined);
+      setRenamePath(undefined);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenMenu(undefined);
+        setConfirmDelete(undefined);
+        setRenamePath(undefined);
+      }
+    };
+    document.addEventListener('pointerdown', closeMenu);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeMenu);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
 
-  if (!started || groups.length === 0) return null;
+  const groups = useMemo(() => groupByProject(sessions), [sessions]);
+  const activeGroups = groups.filter((group) => group.sessions.some((session) => !session.archived));
+  const archivedGroups = groups.filter((group) => group.sessions.some((session) => session.archived));
+
+  const openMenuAt = (key: string, x: number, y: number, estimatedHeight: number) => {
+    const margin = 8;
+    setOpenMenu(key);
+    setConfirmDelete(undefined);
+    setRenamePath(undefined);
+    setMenuPosition({
+      left: Math.max(margin, Math.min(x, window.innerWidth - MENU_WIDTH - margin)),
+      top: Math.max(margin, Math.min(y, window.innerHeight - estimatedHeight - margin)),
+    });
+  };
+
+  const openMenuFromTrigger = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    key: string,
+    estimatedHeight: number,
+  ) => {
+    event.stopPropagation();
+    if (openMenu === key) {
+      setOpenMenu(undefined);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    openMenuAt(key, rect.right + 6, rect.top, estimatedHeight);
+  };
+
+  const run = async (action: () => Promise<{ success: boolean; error?: string }>) => {
+    setBusy(true);
+    try {
+      const result = await action();
+      if (result.success) {
+        setOpenMenu(undefined);
+        setConfirmDelete(undefined);
+        setRenamePath(undefined);
+        refresh();
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const renderGroup = (group: ProjectGroup, archivedOnly: boolean) => {
+    const visibleSessions = group.sessions.filter((session) => session.archived === archivedOnly);
+    if (visibleSessions.length === 0) return null;
+    const groupKey = `${archivedOnly ? 'archived' : 'active'}:${group.cwd}`;
+    const isCollapsed = collapsed[groupKey] ?? (archivedOnly || group.cwd !== activeCwd);
+    const menuOpen = openMenu === groupKey;
+    const currentIndex = visibleSessions.findIndex((session) => session.isCurrent);
+    const visibleCount = Math.max(
+      visibleCounts[groupKey] ?? SESSION_PAGE_SIZE,
+      currentIndex >= 0 ? currentIndex + 1 : 0,
+    );
+    const displayedSessions = visibleSessions.slice(0, visibleCount);
+    const remainingCount = visibleSessions.length - displayedSessions.length;
+    return (
+      <div
+        key={groupKey}
+        className="session-group"
+        data-testid={`${archivedOnly ? 'archived-' : ''}session-group-${group.name}`}
+        onContextMenu={(event) => {
+          if ((event.target as Element).closest('.sidebar-session-row')) return;
+          event.preventDefault();
+          openMenuAt(groupKey, event.clientX, event.clientY, PROJECT_MENU_HEIGHT);
+        }}
+      >
+        <div className="session-group-heading">
+          <button
+            className="session-group-header"
+            data-testid={`${archivedOnly ? 'archived-' : ''}session-group-header-${group.name}`}
+            title={group.cwd}
+            aria-expanded={!isCollapsed}
+            onClick={() => setCollapsed((prev) => ({ ...prev, [groupKey]: !isCollapsed }))}
+          >
+            {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+            {archivedOnly ? <Archive size={13} /> : <Folder size={13} />}
+            <span className="session-group-name">{group.name}</span>
+            <span className="session-group-count">{visibleSessions.length}</span>
+          </button>
+          <button
+            className="session-menu-trigger"
+            data-testid={`${archivedOnly ? 'archived-' : ''}session-group-menu-${group.name}`}
+            aria-label={t('sessions.projectMenu')}
+            onClick={(event) => openMenuFromTrigger(event, groupKey, PROJECT_MENU_HEIGHT)}
+          >
+            <MoreHorizontal size={15} />
+          </button>
+          {menuOpen && menuPosition && createPortal(
+            <div
+              className="session-context-menu project-context-menu"
+              data-session-menu
+              data-testid={`project-context-menu-${group.name}`}
+              role="menu"
+              style={menuPosition}
+            >
+              <button
+                onClick={() => void run(() => hostApi.piSessions.archiveProject(group.cwd, !archivedOnly))}
+                disabled={busy || isStreaming}
+              >
+                {archivedOnly ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+                {archivedOnly ? t('sessions.unarchive') : t('sessions.archive')}
+              </button>
+            </div>,
+            document.body,
+          )}
+        </div>
+        {!isCollapsed && displayedSessions.map((session) => {
+          const sessionKey = `session:${session.path}`;
+          const sessionMenuOpen = openMenu === sessionKey;
+          const deleting = confirmDelete === session.path;
+          const renaming = renamePath === session.path;
+          return (
+            <div
+              key={session.id}
+              className="sidebar-session-row"
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openMenuAt(sessionKey, event.clientX, event.clientY, SESSION_MENU_HEIGHT);
+              }}
+            >
+              <button
+                data-testid={`sidebar-session-${session.id}`}
+                className={session.isCurrent ? 'sidebar-session current' : 'sidebar-session'}
+                title={session.path}
+                onClick={() => {
+                  setOpenMenu(undefined);
+                  if (!session.isCurrent) void hostApi.piSessions.switch(session.path, session.cwd);
+                }}
+              >
+                <span className="sidebar-session-title">
+                  {session.name || session.firstMessage || t('sessions.untitled')}
+                </span>
+              </button>
+              <button
+                className="session-menu-trigger sidebar-session-menu-trigger"
+                data-testid={`sidebar-session-menu-${session.id}`}
+                aria-label={t('sessions.sessionMenu')}
+                onClick={(event) => openMenuFromTrigger(event, sessionKey, SESSION_MENU_HEIGHT)}
+              >
+                <MoreHorizontal size={14} />
+              </button>
+              {sessionMenuOpen && menuPosition && createPortal(
+                <div
+                  className="session-context-menu session-item-context-menu"
+                  data-session-menu
+                  data-testid={`session-context-menu-${session.id}`}
+                  role="menu"
+                  style={menuPosition}
+                >
+                  {renaming ? (
+                    <div className="sidebar-session-rename-form">
+                      <input
+                        data-testid={`sidebar-session-rename-input-${session.id}`}
+                        value={renameValue}
+                        placeholder={t('sessions.renamePlaceholder')}
+                        autoFocus
+                        onChange={(event) => setRenameValue(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' && renameValue.trim()) {
+                            void run(() => hostApi.piSessions.rename(session.path, renameValue));
+                          }
+                          if (event.key === 'Escape') setRenamePath(undefined);
+                        }}
+                      />
+                      <div className="sidebar-session-rename-actions">
+                        <button
+                          aria-label={t('sessions.save')}
+                          disabled={busy || !renameValue.trim()}
+                          onClick={() => void run(() => hostApi.piSessions.rename(session.path, renameValue))}
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button aria-label={t('sessions.cancel')} onClick={() => setRenamePath(undefined)}>
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        data-testid={`sidebar-session-rename-${session.id}`}
+                        onClick={() => {
+                          setRenameValue(session.name || session.firstMessage || '');
+                          setRenamePath(session.path);
+                        }}
+                        disabled={busy || isStreaming}
+                      >
+                        <Pencil size={14} />
+                        {t('sessions.rename')}
+                      </button>
+                      <button
+                        data-testid={`sidebar-session-copy-id-${session.id}`}
+                        onClick={() => {
+                          void hostApi.app.writeClipboard(session.id);
+                          setOpenMenu(undefined);
+                        }}
+                      >
+                        <Copy size={14} />
+                        {t('sessions.copyId')}
+                      </button>
+                      <button
+                        data-testid={`sidebar-session-fork-${session.id}`}
+                        onClick={() => void run(() => hostApi.piSessions.fork(session.path))}
+                        disabled={busy || isStreaming}
+                      >
+                        <GitFork size={14} />
+                        {t('sessions.continueNewChat')}
+                      </button>
+                      <div className="session-context-separator" />
+                      <button
+                        onClick={() => void run(() => hostApi.piSessions.archive(session.path, !session.archived))}
+                        disabled={busy || isStreaming}
+                      >
+                        {session.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+                        {session.archived ? t('sessions.unarchive') : t('sessions.archive')}
+                      </button>
+                      {deleting ? (
+                        <button
+                          className="session-context-danger"
+                          onClick={() => void run(() => hostApi.piSessions.remove(session.path))}
+                          disabled={busy || isStreaming}
+                        >
+                          <Trash2 size={14} />
+                          {t('sessions.confirmDelete')}
+                        </button>
+                      ) : (
+                        <button
+                          className="session-context-danger"
+                          onClick={() => setConfirmDelete(session.path)}
+                          disabled={busy || isStreaming}
+                        >
+                          <Trash2 size={14} />
+                          {t('sessions.delete')}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>,
+                document.body,
+              )}
+            </div>
+          );
+        })}
+        {!isCollapsed && remainingCount > 0 && (
+          <button
+            className="session-show-more"
+            data-testid={`${archivedOnly ? 'archived-' : ''}session-group-show-more-${group.name}`}
+            onClick={() => setVisibleCounts((previous) => ({
+              ...previous,
+              [groupKey]: visibleCount + SESSION_PAGE_SIZE,
+            }))}
+          >
+            {t('sessions.showMore', { count: remainingCount })}
+          </button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="sidebar-sessions" data-testid="sidebar-sessions">
-      {groups.map((group) => {
-        // 当前项目默认展开；其他项目默认折叠（用户手动展开后记住状态）
-        const isCollapsed = collapsed[group.cwd] ?? group.cwd !== activeCwd;
-        return (
-          <div key={group.cwd} className="session-group" data-testid={`session-group-${group.name}`}>
-            <button
-              className="session-group-header"
-              data-testid={`session-group-header-${group.name}`}
-              title={group.cwd}
-              onClick={() =>
-                setCollapsed((prev) => ({ ...prev, [group.cwd]: !isCollapsed }))
-              }
-            >
-              {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-              <Folder size={13} />
-              <span className="session-group-name">{group.name}</span>
-              <span className="session-group-count">{group.sessions.length}</span>
-            </button>
-            {!isCollapsed &&
-              group.sessions.slice(0, 10).map((s) => (
-                <button
-                  key={s.id}
-                  data-testid={`sidebar-session-${s.id}`}
-                  className={s.isCurrent ? 'sidebar-session current' : 'sidebar-session'}
-                  title={s.path}
-                  onClick={() => {
-                    if (!s.isCurrent) void hostApi.piSessions.switch(s.path, s.cwd);
-                  }}
-                >
-                  <span className="sidebar-session-title">
-                    {s.name || s.firstMessage || t('sessions.untitled')}
-                  </span>
-                </button>
-              ))}
-          </div>
-        );
-      })}
+      {started && activeGroups.map((group) => renderGroup(group, false))}
+      {started && archivedGroups.length > 0 && (
+        <div className="archived-sessions" data-testid="archived-sessions">
+          <div className="archived-sessions-label">{t('sessions.archived')}</div>
+          {archivedGroups.map((group) => renderGroup(group, true))}
+        </div>
+      )}
     </div>
   );
 }

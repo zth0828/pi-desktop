@@ -93,6 +93,51 @@ async function seedSessionInB(text: string) {
   session.dispose();
 }
 
+/** 用 pi SessionManager 原生格式快速造大量会话，不调用模型。 */
+async function seedManySessions(cwd: string, count: number) {
+  const { piPrefix } = piTestEnv();
+  const entry = path.join(
+    piPrefix,
+    'lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js',
+  );
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  const sdk = (await import(pathToFileURL(entry).href)) as typeof import('@earendil-works/pi-coding-agent');
+  const sessionModulePath = path.join(
+    piPrefix,
+    'lib/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js',
+  );
+  const sessionModule = (await import(pathToFileURL(sessionModulePath).href)) as {
+    getDefaultSessionDir: (targetCwd: string, targetAgentDir?: string) => string;
+  };
+  const sessionDir = sessionModule.getDefaultSessionDir(cwd, agentDir);
+  for (let index = 1; index <= count; index += 1) {
+    const session = sdk.SessionManager.create(cwd, sessionDir);
+    session.appendMessage({
+      role: 'user',
+      content: `bulk session ${String(index).padStart(2, '0')}`,
+      timestamp: Date.now() + index,
+    });
+    session.appendMessage({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'seeded' }],
+      api: 'openai-completions',
+      provider: 'mock',
+      model: 'mock-1',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: Date.now() + index,
+    });
+    session.appendSessionInfo(`Bulk session ${String(index).padStart(2, '0')}`);
+  }
+}
+
 test('侧栏按项目分组折叠，跨项目点击切换会话', async ({ launchElectronApp }) => {
   await seedSessionInB('这是 beta 项目的会话');
 
@@ -130,5 +175,57 @@ test('侧栏按项目分组折叠，跨项目点击切换会话', async ({ launc
   await expect(page.getByTestId('message-user').first()).toContainText('这是 beta 项目的会话', {
     timeout: 15_000,
   });
-  await expect(page.locator('.chat-header .workspace')).toHaveText(workspaceB);
+  await expect(page.getByTestId('chat-workspace')).toContainText(path.basename(workspaceB));
+  await expect(page.getByTestId('chat-workspace')).toHaveAttribute('title', workspaceB);
+});
+
+test('大量会话按项目分批显示，侧栏可独立滚动', async ({ launchElectronApp }) => {
+  await seedManySessions(workspaceA, 25);
+
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspaceA },
+  });
+  const page = await app.firstWindow();
+  await expect(
+    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  const nameA = path.basename(workspaceA);
+  const group = page.getByTestId(`session-group-${nameA}`);
+  const groupHeader = page.getByTestId(`session-group-header-${nameA}`);
+  if ((await groupHeader.getAttribute('aria-expanded')) === 'false') await groupHeader.click();
+  await expect(group.locator('.sidebar-session-row')).toHaveCount(10, { timeout: 15_000 });
+
+  const showMore = page.getByTestId(`session-group-show-more-${nameA}`);
+  await expect(showMore).toContainText('15 remaining');
+  await showMore.click();
+  await expect(group.locator('.sidebar-session-row')).toHaveCount(20);
+  await expect(showMore).toContainText('5 remaining');
+  await showMore.click();
+  await expect(group.locator('.sidebar-session-row')).toHaveCount(25);
+  await expect(showMore).toHaveCount(0);
+
+  const sidebarSessions = page.getByTestId('sidebar-sessions');
+  await expect.poll(() => sidebarSessions.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await sidebarSessions.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await expect.poll(() => sidebarSessions.evaluate((element) => element.scrollTop > 0)).toBe(true);
+  await expect(page.getByTestId('nav-settings')).toBeVisible();
+
+  const bottomRow = group.locator('.sidebar-session-row').last();
+  await bottomRow.scrollIntoViewIfNeeded();
+  const bottomSessionButton = bottomRow.locator('[data-testid^="sidebar-session-"]').first();
+  const bottomSessionTestId = await bottomSessionButton.getAttribute('data-testid');
+  const bottomSessionId = bottomSessionTestId?.replace('sidebar-session-', '');
+  expect(bottomSessionId).toBeTruthy();
+  await bottomRow.click({ button: 'right' });
+  const bottomMenu = page.getByTestId(`session-context-menu-${bottomSessionId}`);
+  await expect(bottomMenu).toBeVisible();
+  const bottomMenuBox = await bottomMenu.boundingBox();
+  const viewport = await page.evaluate<{ width: number; height: number }>(
+    '({ width: window.innerWidth, height: window.innerHeight })',
+  );
+  expect(bottomMenuBox).not.toBeNull();
+  expect(bottomMenuBox!.y + bottomMenuBox!.height).toBeLessThanOrEqual(viewport.height);
 });

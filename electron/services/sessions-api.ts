@@ -1,15 +1,18 @@
 // piSessions：会话管理（M4，docs §4.4）。
 // 列表/切换/重命名/分叉走 pi SDK（SessionManager 静态方法 + runtime.switchSession）；
-// 删除 pi 无 API（已确认），壳直接删 JSONL 文件。
+// 删除 pi 无 SDK API（已确认），对齐 pi `/resume`：优先移入系统废纸篓。
 // 会话替换后必须 afterSessionReplaced（重订阅 + 重绑扩展 + 推 sessionReplaced）。
 import { realpathSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
+import { shell } from 'electron';
 import type {
   HostSuccess,
   PiSessionExportResult,
   PiSessionForkResult,
   PiSessionListResult,
   PiSessionPathPayload,
+  PiSessionArchivePayload,
+  PiSessionProjectArchivePayload,
   PiSessionRenamePayload,
   PiSessionRow,
 } from '@shared/host-api/contract';
@@ -18,7 +21,7 @@ import {
   getActiveRuntime,
 } from './pi-runtime-api';
 import { settingsApi } from './settings-api';
-import { loadPiSdk } from '../utils/pi-loader';
+import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 
 function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -39,6 +42,31 @@ function currentSessionFile(): string | undefined {
   return getActiveRuntime()?.runtime.session.sessionFile;
 }
 
+const ARCHIVE_CUSTOM_TYPE = 'pi-desktop.archive';
+
+function sessionManagerFor(path: string, sdk: PiSdk) {
+  const active = getActiveRuntime();
+  if (active && samePath(path, active.runtime.session.sessionFile)) {
+    return active.runtime.session.sessionManager;
+  }
+  return sdk.SessionManager.open(path);
+}
+
+function isArchived(path: string, sdk: PiSdk): boolean {
+  const entries = sessionManagerFor(path, sdk).getEntries();
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i] as { type?: string; customType?: string; data?: { archived?: unknown } };
+    if (entry.type === 'custom' && entry.customType === ARCHIVE_CUSTOM_TYPE) {
+      return entry.data?.archived === true;
+    }
+  }
+  return false;
+}
+
+function setArchived(path: string, archived: boolean, sdk: PiSdk): void {
+  sessionManagerFor(path, sdk).appendCustomEntry(ARCHIVE_CUSTOM_TYPE, { archived });
+}
+
 /** runtime 未启动（用户还没开过 Chat 页）时回退 settings.workspaceCwd。 */
 async function resolveCwd(): Promise<string | null> {
   const active = getActiveRuntime();
@@ -55,7 +83,7 @@ function toRow(s: {
   messageCount: number;
   created: Date;
   modified: Date;
-}, current?: string): PiSessionRow {
+}, current: string | undefined, sdk: PiSdk): PiSessionRow {
   return {
     path: s.path,
     id: s.id,
@@ -66,6 +94,7 @@ function toRow(s: {
     created: s.created.toISOString(),
     modified: s.modified.toISOString(),
     isCurrent: samePath(s.path, current),
+    archived: isArchived(s.path, sdk),
   };
 }
 
@@ -77,7 +106,7 @@ export const sessionsApi = {
     const infos = await sdk.SessionManager.list(cwd);
     const current = currentSessionFile();
     const sessions = infos
-      .map((s) => toRow(s, current))
+      .map((s) => toRow(s, current, sdk))
       .sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
   },
@@ -87,7 +116,7 @@ export const sessionsApi = {
     const infos = await sdk.SessionManager.listAll();
     const current = currentSessionFile();
     const sessions = infos
-      .map((s) => toRow(s, current))
+      .map((s) => toRow(s, current, sdk))
       .sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
   },
@@ -147,6 +176,27 @@ export const sessionsApi = {
     }
   },
 
+  archive: async (payload: PiSessionArchivePayload): Promise<HostSuccess> => {
+    try {
+      const sdk = await loadPiSdk();
+      setArchived(payload.path, payload.archived, sdk);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: toError(err) };
+    }
+  },
+
+  archiveProject: async (payload: PiSessionProjectArchivePayload): Promise<HostSuccess> => {
+    try {
+      const sdk = await loadPiSdk();
+      const projectSessions = await sdk.SessionManager.list(payload.cwd);
+      for (const session of projectSessions) setArchived(session.path, payload.archived, sdk);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: toError(err) };
+    }
+  },
+
   remove: async (payload: PiSessionPathPayload): Promise<HostSuccess> => {
     try {
       const active = getActiveRuntime();
@@ -155,7 +205,17 @@ export const sessionsApi = {
         await active.runtime.newSession();
         await afterSessionReplaced(active);
       }
-      await rm(payload.path, { force: true });
+      // 对齐 pi `/resume` 的删除语义：真实应用优先移到系统废纸篓；
+      // E2E 隔离目录直接删除，避免把测试会话灌进用户废纸篓。
+      if (process.env.PI_DESKTOP_USER_DATA_DIR) {
+        await rm(payload.path, { force: true });
+      } else {
+        try {
+          await shell.trashItem(payload.path);
+        } catch {
+          await rm(payload.path, { force: true });
+        }
+      }
       return { success: true };
     } catch (err) {
       return { success: false, error: toError(err) };

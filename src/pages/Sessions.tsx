@@ -33,6 +33,7 @@ function SessionRow({ session, onChanged, onError, onExported }: RowProps) {
 
   const switchTo = () => run(() => hostApi.piSessions.switch(session.path));
   const fork = () => run(() => hostApi.piSessions.fork(session.path));
+  const archive = () => run(() => hostApi.piSessions.archive(session.path, !session.archived));
   const remove = () => run(() => hostApi.piSessions.remove(session.path));
   const exportHtml = async () => {
     setBusy(true);
@@ -104,6 +105,9 @@ function SessionRow({ session, onChanged, onError, onExported }: RowProps) {
           </button>
           <button data-testid="session-export" disabled={busy} onClick={() => void exportHtml()}>
             {t('sessions.export')}
+          </button>
+          <button data-testid="session-archive" disabled={busy} onClick={() => void archive()}>
+            {session.archived ? t('sessions.unarchive') : t('sessions.archive')}
           </button>
           {confirmingDelete ? (
             <>

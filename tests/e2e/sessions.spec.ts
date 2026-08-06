@@ -170,3 +170,77 @@ test('删除（二次确认）→ 列表减少', async ({ launchElectronApp }) =
   await expect(sessionRows(page)).toHaveCount(1, { timeout: 15_000 });
   await expect(sessionRows(page).filter({ hasText: 'keep me ECHO' })).toHaveCount(1);
 });
+
+test('侧栏会话菜单 → 归档后移入已归档，可恢复；删除后消失', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'archive from sidebar FOX');
+  await page.getByTestId('new-session').click();
+  await sendAndWaitReply(page, 'delete from sidebar OWL');
+
+  const workspaceName = path.basename(workspace);
+  const archiveRow = page.locator('.sidebar-session-row').filter({ hasText: 'archive from sidebar FOX' });
+  await archiveRow.locator('.sidebar-session-menu-trigger').click();
+  await page.getByRole('button', { name: 'Archive chats' }).click();
+  await page.getByTestId(`archived-session-group-header-${workspaceName}`).click();
+  await expect(page.getByTestId('archived-sessions')).toContainText('archive from sidebar FOX');
+
+  await page.getByTestId(`archived-session-group-menu-${workspaceName}`).click();
+  await page.getByRole('button', { name: 'Restore archive' }).click();
+  await expect(page.getByTestId('archived-sessions')).toHaveCount(0);
+  await expect(page.locator('.sidebar-session-row').filter({ hasText: 'archive from sidebar FOX' })).toBeVisible();
+
+  const deleteRow = page.locator('.sidebar-session-row').filter({ hasText: 'delete from sidebar OWL' });
+  await deleteRow.locator('.sidebar-session-menu-trigger').click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+  await expect(page.locator('.sidebar-session-row').filter({ hasText: 'delete from sidebar OWL' })).toHaveCount(0);
+});
+
+test('侧栏会话菜单 → 复制 ID、重命名、在新聊天中继续', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'native session actions LYNX');
+  const row = page.locator('.sidebar-session-row').filter({ hasText: 'native session actions LYNX' });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+
+  const sessionButton = row.locator('[data-testid^="sidebar-session-"]').first();
+  const sessionTestId = await sessionButton.getAttribute('data-testid');
+  const sessionId = sessionTestId?.replace('sidebar-session-', '');
+  expect(sessionId).toBeTruthy();
+
+  await row.click({ button: 'right' });
+  const contextMenu = page.getByTestId(`session-context-menu-${sessionId}`);
+  await expect(contextMenu).toBeVisible();
+  const menuBox = await contextMenu.boundingBox();
+  const viewport = await page.evaluate<{ width: number; height: number }>(
+    '({ width: window.innerWidth, height: window.innerHeight })',
+  );
+  expect(menuBox).not.toBeNull();
+  expect(menuBox!.x).toBeGreaterThanOrEqual(0);
+  expect(menuBox!.y).toBeGreaterThanOrEqual(0);
+  expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport.width);
+  expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport.height);
+  await page.getByRole('button', { name: 'Copy session ID' }).click();
+  await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe(sessionId);
+
+  await row.click({ button: 'right' });
+  await page.getByRole('button', { name: 'Rename', exact: true }).click();
+  const renameInput = page.getByTestId(`sidebar-session-rename-input-${sessionId}`);
+  await renameInput.fill('Sidebar Renamed Session');
+  await renameInput.press('Enter');
+  const renamedRow = page.locator('.sidebar-session-row').filter({ hasText: 'Sidebar Renamed Session' });
+  await expect(renamedRow).toBeVisible({ timeout: 15_000 });
+
+  await page.getByTestId('nav-sessions').click();
+  await expect(sessionRows(page).filter({ hasText: 'Sidebar Renamed Session' })).toHaveCount(1);
+  await page.getByTestId('nav-chat').click();
+
+  await renamedRow.locator('.sidebar-session-menu-trigger').click();
+  await page.getByRole('button', { name: 'Continue in new chat' }).click();
+  await expect(page.locator('.sidebar-session-row')).toHaveCount(2, { timeout: 15_000 });
+});

@@ -7,6 +7,7 @@ export const hostApi = {
     version: () => invokeHost('app', 'version'),
     name: () => invokeHost('app', 'name'),
     platform: () => invokeHost('app', 'platform'),
+    writeClipboard: (text: string) => invokeHost('app', 'writeClipboard', { text }),
   },
   shell: {
     openExternal: (url: string) => invokeHost('shell', 'openExternal', { url }),
@@ -51,6 +52,10 @@ export const hostApi = {
     switch: (path: string, cwd?: string) => invokeHost('piSessions', 'switch', { path, cwd }),
     rename: (path: string, name: string) => invokeHost('piSessions', 'rename', { path, name }),
     fork: (path: string) => invokeHost('piSessions', 'fork', { path }),
+    archive: (path: string, archived: boolean) =>
+      invokeHost('piSessions', 'archive', { path, archived }),
+    archiveProject: (cwd: string, archived: boolean) =>
+      invokeHost('piSessions', 'archiveProject', { cwd, archived }),
     remove: (path: string) => invokeHost('piSessions', 'remove', { path }),
     exportHtml: (path: string) => invokeHost('piSessions', 'exportHtml', { path }),
   },

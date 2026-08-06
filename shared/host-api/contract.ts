@@ -7,6 +7,7 @@ export type JsonRecord = Record<string, unknown>;
 export type HostSuccess = { success: boolean; error?: string };
 
 export type ShellOpenExternalPayload = { url: string };
+export type AppClipboardWritePayload = { text: string };
 
 // —— piSystem：pi/Node/npm 环境检测与安装引导（M1）——
 
@@ -157,9 +158,12 @@ export type PiSessionRow = {
   created: string;
   modified: string;
   isCurrent: boolean;
+  archived: boolean;
 };
 export type PiSessionListResult = { sessions: PiSessionRow[] };
 export type PiSessionPathPayload = { path: string; cwd?: string };
+export type PiSessionArchivePayload = PiSessionPathPayload & { archived: boolean };
+export type PiSessionProjectArchivePayload = { cwd: string; archived: boolean };
 export type PiSessionRenamePayload = { path: string; name: string };
 export type PiSessionForkResult = HostSuccess & { path?: string };
 export type PiSessionExportResult = HostSuccess & { path?: string };
@@ -270,6 +274,7 @@ export type HostApiContract = {
     version: () => string;
     name: () => string;
     platform: () => string;
+    writeClipboard: (payload: AppClipboardWritePayload) => HostSuccess;
   };
   shell: {
     openExternal: (payload: ShellOpenExternalPayload) => void;
@@ -319,7 +324,9 @@ export type HostApiContract = {
     rename: (payload: PiSessionRenamePayload) => HostSuccess;
     /** 分叉到当前 cwd 并切过去；返回新会话文件路径。 */
     fork: (payload: PiSessionPathPayload) => PiSessionForkResult;
-    /** pi 无删除 API：壳直接删 JSONL 文件；删当前会话前先 newSession。 */
+    archive: (payload: PiSessionArchivePayload) => HostSuccess;
+    archiveProject: (payload: PiSessionProjectArchivePayload) => HostSuccess;
+    /** pi 无删除 SDK API：删当前会话前先 newSession，随后移入系统废纸篓。 */
     remove: (payload: PiSessionPathPayload) => HostSuccess;
     /** v1 简化：只导当前会话（exportToHtml 在 AgentSession 上），非当前先 switch。导出到会话同目录。 */
     exportHtml: (payload: PiSessionPathPayload) => PiSessionExportResult;
