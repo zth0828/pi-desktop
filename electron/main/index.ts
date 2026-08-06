@@ -1,10 +1,16 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
+import { HostApiRegistry, registerHostInvokeHandler } from './ipc/host-invoke';
+import { createHostServices } from '../services';
 
 // M1 skeleton: minimal single window. Tray/menu/single-instance/session
 // recovery are ported from ClawX in later batches (see docs/TECHNICAL-PLAN.md §5.1).
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+
+const hostRegistry = new HostApiRegistry();
+hostRegistry.registerCoreServices(createHostServices());
+registerHostInvokeHandler(hostRegistry);
 
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
