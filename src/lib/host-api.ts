@@ -52,6 +52,9 @@ export const hostApi = {
     remove: (path: string) => invokeHost('piSessions', 'remove', { path }),
     exportHtml: (path: string) => invokeHost('piSessions', 'exportHtml', { path }),
   },
+  piSkills: {
+    list: () => invokeHost('piSkills', 'list'),
+  },
   settings: {
     getAll: () => invokeHost('settings', 'getAll'),
     get: (key: 'language' | 'workspaceCwd') => invokeHost('settings', 'get', { key }),

@@ -147,6 +147,26 @@ export type PiSessionRenamePayload = { path: string; name: string };
 export type PiSessionForkResult = HostSuccess & { path?: string };
 export type PiSessionExportResult = HostSuccess & { path?: string };
 
+// —— piSkills：技能列表（M5）——
+
+export type PiSkillSource = 'agentDir' | 'user' | 'project' | 'package';
+
+export type PiSkillRow = {
+  name: string;
+  description: string;
+  filePath: string;
+  /** 来源分类（按路径推导；origin=package 时归 package） */
+  source: PiSkillSource;
+  /** pi 的 sourceInfo（source/scope/origin），UI 可直接展示 */
+  sourceDetail?: string;
+  disableModelInvocation: boolean;
+};
+export type PiSkillListResult = {
+  skills: PiSkillRow[];
+  /** runtime 未启动时 skills 恒为空（数据源是活动 runtime 的 resourceLoader） */
+  runtimeActive: boolean;
+};
+
 export type HostApiContract = {
   app: {
     version: () => string;
@@ -207,6 +227,10 @@ export type HostApiContract = {
     getAll: () => SettingsSnapshot;
     get: (payload: SettingsGetPayload) => string | undefined;
     set: (payload: SettingsSetPayload) => HostSuccess;
+  };
+  piSkills: {
+    /** 活动 runtime 的 skills（resourceLoader.getSkills()）；runtime 未启动返回空列表。 */
+    list: () => PiSkillListResult;
   };
   dialog: {
     open: (payload: DialogOpenPayload) => DialogOpenResult;

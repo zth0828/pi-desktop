@@ -9,6 +9,7 @@ import { providersApi } from './providers-api';
 import { sessionsApi } from './sessions-api';
 import { settingsApi } from './settings-api';
 import { shellApi } from './shell-api';
+import { skillsApi } from './skills-api';
 
 export function createHostServices(): HostServiceRegistry {
   return {
@@ -18,6 +19,7 @@ export function createHostServices(): HostServiceRegistry {
     piRuntime: piRuntimeApi,
     providers: providersApi,
     piSessions: sessionsApi,
+    piSkills: skillsApi,
     settings: settingsApi,
     dialog: dialogApi,
   };

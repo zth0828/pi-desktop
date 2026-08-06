@@ -110,6 +110,19 @@
   "sidebar": {
     "newChat": "新会话"
   },
+  "skills": {
+    "title": "Skills",
+    "readonlyHint": "Skills 由 pi 以下来源加载。单个 skill 的启用/禁用由 pi 自己管理，本应用不提供。",
+    "noRuntime": "先打开一个聊天会话——skills 从活动会话中读取。",
+    "empty": "没有发现任何 skill。",
+    "manualOnly": "仅手动调用",
+    "source": {
+      "agentDir": "agent 目录",
+      "user": "用户",
+      "project": "项目",
+      "package": "扩展包"
+    }
+  },
   "settings": {
     "title": "设置",
     "language": "语言",

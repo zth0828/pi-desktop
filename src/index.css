@@ -741,3 +741,142 @@ button.danger-outline {
   border-radius: 8px;
   margin-bottom: 6px;
 }
+
+/* —— M5: Skills / Extensions / MCP 页 —— */
+
+.skills-page,
+.extensions-page,
+.mcp-page {
+  padding: 24px 32px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.skill-list,
+.package-list,
+.mcp-server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 760px;
+}
+
+.skill-row,
+.package-row,
+.mcp-server-row {
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skill-row-main,
+.package-row-main,
+.mcp-server-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.skill-name,
+.package-name,
+.mcp-server-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.skill-source-badge,
+.package-scope-badge,
+.mcp-scope-badge,
+.mcp-status-badge {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.2);
+  color: inherit;
+  font-size: 11px;
+}
+
+.skill-source-badge.source-project {
+  background: rgba(37, 99, 235, 0.25);
+  color: #60a5fa;
+}
+
+.mcp-status-badge.connected {
+  background: rgba(22, 163, 74, 0.25);
+  color: #4ade80;
+}
+
+.mcp-status-badge.disabled,
+.mcp-server-row.disabled .mcp-server-name {
+  opacity: 0.6;
+}
+
+.skill-desc,
+.package-desc {
+  margin: 0;
+  font-size: 13px;
+}
+
+.skill-path,
+.package-path,
+.mcp-server-detail {
+  margin: 0;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.package-actions,
+.mcp-server-actions,
+.extensions-install-form,
+.mcp-install-guide {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.extensions-install-form input,
+.mcp-server-form input,
+.mcp-server-form select,
+.mcp-server-form textarea {
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+}
+
+.extensions-install-form input {
+  flex: 1;
+  min-width: 260px;
+}
+
+.mcp-server-form {
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 760px;
+}
+
+.mcp-server-form .form-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.mcp-server-form label {
+  font-size: 12px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}

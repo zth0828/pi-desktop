@@ -110,6 +110,19 @@
   "sidebar": {
     "newChat": "New chat"
   },
+  "skills": {
+    "title": "Skills",
+    "readonlyHint": "Skills are loaded by pi from the locations below. Enabling/disabling individual skills is managed by pi, not this app.",
+    "noRuntime": "Start a chat session first — skills are read from the active session.",
+    "empty": "No skills found.",
+    "manualOnly": "manual only",
+    "source": {
+      "agentDir": "agent dir",
+      "user": "user",
+      "project": "project",
+      "package": "package"
+    }
+  },
   "settings": {
     "title": "Settings",
     "language": "Language",

@@ -9,6 +9,7 @@ import ChatPage from './pages/Chat';
 import ModelsPage from './pages/Models';
 import SessionsPage from './pages/Sessions';
 import SettingsPage from './pages/Settings';
+import SkillsPage from './pages/Skills';
 import i18n from './lib/i18n';
 
 type PageId = 'chat' | 'models' | 'sessions' | 'skills' | 'extensions' | 'mcp' | 'settings';
@@ -89,6 +90,8 @@ export default function App() {
           <ModelsPage />
         ) : page === 'sessions' ? (
           <SessionsPage />
+        ) : page === 'skills' ? (
+          <SkillsPage />
         ) : page === 'settings' ? (
           <SettingsPage />
         ) : (
