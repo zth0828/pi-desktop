@@ -50,8 +50,7 @@
     "skills": "Skills",
     "extensions": "Extensions",
     "mcp": "MCP",
-    "settings": "Settings",
-    "placeholder": "Coming in a later milestone."
+    "settings": "Settings"
   },
   "chat": {
     "placeholder": "Message pi…  (Enter to send, Shift+Enter for newline)",

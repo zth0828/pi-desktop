@@ -50,8 +50,7 @@
     "skills": "Skills",
     "extensions": "扩展",
     "mcp": "MCP",
-    "settings": "设置",
-    "placeholder": "将在后续里程碑提供。"
+    "settings": "设置"
   },
   "chat": {
     "placeholder": "给 pi 发消息…（Enter 发送，Shift+Enter 换行）",
