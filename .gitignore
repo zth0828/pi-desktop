@@ -1,0 +1,77 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+dist-electron/
+release/
+*.local
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test coverage
+coverage/
+playwright-report/
+test-results/
+
+# Local session transcript fixtures (may contain private conversation data)
+tests/fixtures/transcripts/
+
+# Cache
+.cache/
+.turbo/
+*.tsbuildinfo
+
+# Electron
+*.dmg
+*.exe
+*.AppImage
+*.deb
+*.rpm
+
+resources/bin
+
+# Secrets
+*.p12
+*.pem
+*.key
+
+build/
+artifacts/
+
+.cursor/
+.claude/
+.pnpm-store/
+package-lock.json
+
+# 内部材料：技术方案、spike 记录等不进 git 历史（见 docs/TECHNICAL-PLAN.md §6.1）
+docs/
+spikes/

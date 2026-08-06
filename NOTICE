@@ -1,0 +1,24 @@
+Pi Desktop
+==========
+
+A desktop GUI shell for the pi coding agent.
+
+This product includes code derived from the following open-source projects:
+
+ClawX
+-----
+Portions of this software (Electron shell architecture, host-api IPC
+boundary, preload patterns, chat UI mechanics, packaging pipeline) are
+derived from ClawX, Copyright (c) ValueCell Team, licensed under the
+MIT License. Source files ported from ClawX retain their original
+copyright headers where applicable, and individual commit messages
+identify the ported file paths ("Ported from ClawX: <path>").
+
+pi (pi-mono)
+------------
+Pi Desktop integrates with, but does not bundle or copy code from,
+the pi coding agent (@earendil-works/pi-coding-agent),
+Copyright (c) Mario Zechner, licensed under the MIT License.
+pi is provided by the user's own environment installation.
+
+Both projects are used in accordance with the MIT License terms.
