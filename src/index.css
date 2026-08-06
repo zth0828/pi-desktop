@@ -1107,3 +1107,48 @@ button.danger-outline {
 .placeholder-page {
   padding: 40px;
 }
+
+/* 布局稳定性：滚动条出现/消失不引起横向跳动 */
+.message-list,
+.sidebar-sessions,
+.page {
+  scrollbar-gutter: stable;
+}
+
+/* 侧栏项目分组（Codex 式） */
+.session-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.session-group-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.session-group-header:hover {
+  background: var(--bg-hover);
+}
+
+.session-group-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.session-group-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.session-group .sidebar-session {
+  padding-left: 26px;
+}

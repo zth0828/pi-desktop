@@ -134,6 +134,8 @@ export type PiCommandListResult = { commands: PiCommandRow[] };
 export type PiSessionRow = {
   path: string;
   id: string;
+  /** 会话所属项目目录（分组用） */
+  cwd: string;
   name?: string;
   firstMessage: string;
   messageCount: number;
@@ -143,7 +145,7 @@ export type PiSessionRow = {
   isCurrent: boolean;
 };
 export type PiSessionListResult = { sessions: PiSessionRow[] };
-export type PiSessionPathPayload = { path: string };
+export type PiSessionPathPayload = { path: string; cwd?: string };
 export type PiSessionRenamePayload = { path: string; name: string };
 export type PiSessionForkResult = HostSuccess & { path?: string };
 export type PiSessionExportResult = HostSuccess & { path?: string };
@@ -295,6 +297,8 @@ export type HostApiContract = {
   piSessions: {
     /** 当前 workspace cwd 的会话列表（modified 倒序）。runtime 未启动时回退 settings.workspaceCwd。 */
     list: (payload?: { scope?: 'cwd' }) => PiSessionListResult;
+    /** 全部项目的会话（侧栏按 cwd 分组用）。 */
+    listAll: () => PiSessionListResult;
     /** 切换活动会话；成功后经 piRuntime.sessionReplaced 推全量状态。 */
     switch: (payload: PiSessionPathPayload) => HostSuccess;
     rename: (payload: PiSessionRenamePayload) => HostSuccess;

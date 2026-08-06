@@ -48,6 +48,9 @@ export default function ChatPage() {
   const start = useChatStore((s) => s.start);
   const newSession = useChatStore((s) => s.newSession);
   const compact = useChatStore((s) => s.compact);
+  // 跨项目切换会话时以 runtime 的实际 cwd 为准
+  const activeCwd = useChatStore((s) => (s.started ? s.cwd : undefined));
+  const effectiveCwd = activeCwd ?? cwd;
   const listRef = useRef<HTMLDivElement>(null);
 
   // 恢复上次的工作目录并启动会话
@@ -74,7 +77,7 @@ export default function ChatPage() {
     void start(dir);
   };
 
-  if (!cwd) {
+  if (!effectiveCwd) {
     return (
       <div className="chat-page chat-empty">
         <p>{t('chat.workspace.required')}</p>
@@ -88,7 +91,7 @@ export default function ChatPage() {
   return (
     <div className="chat-page">
       <header className="chat-header">
-        <span className="workspace" title={cwd}>{cwd}</span>
+        <span className="workspace" title={effectiveCwd}>{effectiveCwd}</span>
         <button onClick={() => void chooseWorkspace()}>{t('chat.workspace.change')}</button>
         <span className="spacer" />
         <ModelSelector />

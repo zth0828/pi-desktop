@@ -55,6 +55,22 @@ test.beforeEach(async () => {
             },
           ],
         },
+        // 无 apiKey 的自定义供应商：login('api_key') 不触发远程刷新，确定性测试
+        customnoauth: {
+          baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+          api: 'openai-completions',
+          models: [
+            {
+              id: 'mock-2',
+              name: 'Mock 2',
+              reasoning: false,
+              input: ['text'],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 128000,
+              maxTokens: 4096,
+            },
+          ],
+        },
       },
     }),
   );
@@ -95,19 +111,18 @@ test('Models 页：provider 列表与认证状态灯', async ({ launchElectronAp
 });
 
 test('Models 页：录入 API key 后状态变已配置', async ({ launchElectronApp }) => {
-  // login('api_key') 可能触发供应商的远程 catalog 刷新，全量跑时较慢 → 放宽超时 + 重试
-  test.setTimeout(90_000);
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
 
   await page.getByTestId('nav-models').click();
-  const row = page.getByTestId('provider-deepseek');
+  const row = page.getByTestId('provider-customnoauth');
   await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('provider-status-customnoauth')).not.toHaveClass(/configured/);
   await row.locator('.provider-row-header').click();
-  await page.getByTestId('key-input-deepseek').fill('sk-test-fake-key');
+  await page.getByTestId('key-input-customnoauth').fill('sk-test-fake-key');
   await page.getByRole('button', { name: 'Save key' }).click();
-  await expect(page.getByTestId('provider-status-deepseek')).toHaveClass(/configured/, {
-    timeout: 60_000,
+  await expect(page.getByTestId('provider-status-customnoauth')).toHaveClass(/configured/, {
+    timeout: 15_000,
   });
 });
 

@@ -43,11 +43,25 @@ export function ChatInput() {
     }
   }, [started]);
 
-  // / 补全面板：输入以 / 开头时过滤
+  // / 补全面板：裸 '/' 只显示内置命令 + prompt 模板（skills 多，不打脸）；
+  // 输入字符后再全量过滤，前缀匹配优先，built-in > prompt > skill 排序
   const query = value.startsWith('/') && !value.includes(' ') ? value.slice(1) : null;
+  const sourceRank = (source: string) =>
+    source === 'built-in' ? 0 : source.startsWith('prompt') ? 1 : 2;
   const matches = query === null
     ? []
-    : commands.filter((c) => c.name.toLowerCase().includes(query.toLowerCase())).slice(0, 8);
+    : commands
+        .filter((c) => {
+          if (query === '') return sourceRank(c.source) < 2;
+          return c.name.toLowerCase().includes(query.toLowerCase());
+        })
+        .sort((a, b) => {
+          const qa = query.toLowerCase();
+          const pa = a.name.toLowerCase().startsWith(qa) ? 0 : 1;
+          const pb = b.name.toLowerCase().startsWith(qa) ? 0 : 1;
+          return pa - pb || sourceRank(a.source) - sourceRank(b.source) || a.name.localeCompare(b.name);
+        })
+        .slice(0, 8);
   const panelOpen = matches.length > 0;
 
   const send = () => {

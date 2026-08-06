@@ -46,7 +46,8 @@ export const hostApi = {
   },
   piSessions: {
     list: () => invokeHost('piSessions', 'list'),
-    switch: (path: string) => invokeHost('piSessions', 'switch', { path }),
+    listAll: () => invokeHost('piSessions', 'listAll'),
+    switch: (path: string, cwd?: string) => invokeHost('piSessions', 'switch', { path, cwd }),
     rename: (path: string, name: string) => invokeHost('piSessions', 'rename', { path, name }),
     fork: (path: string) => invokeHost('piSessions', 'fork', { path }),
     remove: (path: string) => invokeHost('piSessions', 'remove', { path }),

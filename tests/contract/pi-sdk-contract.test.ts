@@ -38,6 +38,9 @@ beforeAll(async () => {
 
   agentDir = mkdtempSync(path.join(tmpdir(), 'pi-contract-agent-'));
   workspace = mkdtempSync(path.join(tmpdir(), 'pi-contract-workspace-'));
+  // SessionManager.create(cwd) 的默认 sessionDir 走 getAgentDir()（读环境变量），
+  // 不设会把测试会话写进真实 ~/.pi/agent
+  process.env.PI_CODING_AGENT_DIR = agentDir;
   writeFileSync(
     path.join(agentDir, 'models.json'),
     JSON.stringify({

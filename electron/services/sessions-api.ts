@@ -46,6 +46,29 @@ async function resolveCwd(): Promise<string | null> {
   return (await settingsApi.get({ key: 'workspaceCwd' })) ?? null;
 }
 
+function toRow(s: {
+  path: string;
+  id: string;
+  cwd: string;
+  name?: string;
+  firstMessage: string;
+  messageCount: number;
+  created: Date;
+  modified: Date;
+}, current?: string): PiSessionRow {
+  return {
+    path: s.path,
+    id: s.id,
+    cwd: s.cwd,
+    name: s.name,
+    firstMessage: s.firstMessage,
+    messageCount: s.messageCount,
+    created: s.created.toISOString(),
+    modified: s.modified.toISOString(),
+    isCurrent: samePath(s.path, current),
+  };
+}
+
 export const sessionsApi = {
   list: async (): Promise<PiSessionListResult> => {
     const cwd = await resolveCwd();
@@ -53,22 +76,30 @@ export const sessionsApi = {
     const sdk = await loadPiSdk();
     const infos = await sdk.SessionManager.list(cwd);
     const current = currentSessionFile();
-    const sessions: PiSessionRow[] = infos
-      .map((s) => ({
-        path: s.path,
-        id: s.id,
-        name: s.name,
-        firstMessage: s.firstMessage,
-        messageCount: s.messageCount,
-        created: s.created.toISOString(),
-        modified: s.modified.toISOString(),
-        isCurrent: samePath(s.path, current),
-      }))
+    const sessions = infos
+      .map((s) => toRow(s, current))
+      .sort((a, b) => b.modified.localeCompare(a.modified));
+    return { sessions };
+  },
+
+  listAll: async (): Promise<PiSessionListResult> => {
+    const sdk = await loadPiSdk();
+    const infos = await sdk.SessionManager.listAll();
+    const current = currentSessionFile();
+    const sessions = infos
+      .map((s) => toRow(s, current))
       .sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
   },
 
   switch: async (payload: PiSessionPathPayload): Promise<HostSuccess> => {
+    // 跨项目切换：目标会话的 cwd 与当前 runtime 不同时先重建 runtime
+    const before = getActiveRuntime();
+    if (payload.cwd && before && !samePath(payload.cwd, before.cwd)) {
+      const { piRuntimeApi } = await import('./pi-runtime-api');
+      await piRuntimeApi.start({ cwd: payload.cwd });
+      await settingsApi.set({ key: 'workspaceCwd', value: payload.cwd });
+    }
     const active = getActiveRuntime();
     if (!active) return { success: false, error: 'session not started' };
     if (samePath(payload.path, currentSessionFile())) return { success: true };
