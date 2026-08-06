@@ -131,3 +131,265 @@ button.primary {
   overflow: auto;
   white-space: pre-wrap;
 }
+/* 追加：M2 布局与聊天 UI */
+.app-layout {
+  display: flex;
+  height: 100vh;
+}
+
+.sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 10px;
+  border-right: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.sidebar-title {
+  font-weight: 600;
+  padding: 4px 10px 12px;
+}
+
+.nav-item {
+  text-align: left;
+  border: none;
+  border-radius: 7px;
+  padding: 8px 10px;
+}
+
+.nav-item.active {
+  background: rgba(37, 99, 235, 0.15);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.placeholder-page {
+  padding: 40px;
+}
+
+/* Chat */
+.chat-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  opacity: 0.7;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+  font-size: 13px;
+}
+
+.chat-header .workspace {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.chat-header .spacer {
+  flex: 1;
+}
+
+.chat-header button {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.model-badge {
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: rgba(37, 99, 235, 0.12);
+  font-size: 12px;
+}
+
+.error-banner {
+  margin: 8px 16px 0;
+  padding: 8px 12px;
+  border-radius: 7px;
+  background: rgba(220, 38, 38, 0.12);
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.message-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.message-user .message-bubble {
+  max-width: 75%;
+  padding: 10px 14px;
+  border-radius: 14px 14px 4px 14px;
+  background: #2563eb;
+  color: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+}
+
+.message-assistant {
+  max-width: 85%;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.cursor-blink {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.thinking-block {
+  margin: 6px 0;
+  padding: 8px 12px;
+  border-left: 3px solid rgba(128, 128, 128, 0.4);
+  opacity: 0.75;
+  font-size: 13px;
+}
+
+.thinking-block pre {
+  white-space: pre-wrap;
+  margin-top: 6px;
+}
+
+.tool-card {
+  margin: 6px 0;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tool-card-header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  background: rgba(128, 128, 128, 0.08);
+  font-size: 13px;
+}
+
+.tool-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+}
+
+.tool-status {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 99px;
+}
+
+.tool-status-running {
+  background: rgba(217, 119, 6, 0.18);
+  color: #b45309;
+}
+
+.tool-status-success {
+  background: rgba(22, 163, 74, 0.15);
+  color: #15803d;
+}
+
+.tool-status-error {
+  background: rgba(220, 38, 38, 0.15);
+  color: #dc2626;
+}
+
+.tool-card-body {
+  padding: 10px 12px;
+}
+
+.tool-card-body pre {
+  font-size: 12px;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: rgba(128, 128, 128, 0.08);
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.tool-section-title {
+  font-size: 11px;
+  opacity: 0.6;
+  margin: 6px 0 4px;
+}
+
+.chat-input {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.chat-input textarea {
+  flex: 1;
+  resize: none;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+
+.chat-input button {
+  align-self: flex-end;
+}
+
+button.danger {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+
+.markdown pre {
+  overflow-x: auto;
+}

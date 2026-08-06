@@ -42,5 +42,38 @@
   "status": {
     "ready": "已检测到 pi v{{version}}",
     "latestAvailable": "最新版本：v{{version}}"
+  },
+  "nav": {
+    "chat": "对话",
+    "models": "模型",
+    "sessions": "会话",
+    "skills": "Skills",
+    "extensions": "扩展",
+    "mcp": "MCP",
+    "settings": "设置",
+    "placeholder": "将在后续里程碑提供。"
+  },
+  "chat": {
+    "placeholder": "给 pi 发消息…（Enter 发送，Shift+Enter 换行）",
+    "send": "发送",
+    "stop": "停止",
+    "newSession": "新会话",
+    "compact": "压缩上下文",
+    "compacting": "压缩中…",
+    "thinking": "思考过程",
+    "starting": "正在启动会话…",
+    "empty": "还没有消息，和 pi 说点什么吧。",
+    "workspace": {
+      "required": "先为 pi 会话选择一个工作目录。",
+      "choose": "选择目录",
+      "change": "更换"
+    },
+    "tool": {
+      "running": "执行中",
+      "success": "完成",
+      "error": "出错",
+      "args": "参数",
+      "result": "结果"
+    }
   }
 }

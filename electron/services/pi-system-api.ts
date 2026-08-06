@@ -9,6 +9,7 @@ import type {
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { detectPiEnvironment } from '../utils/pi-detector';
+import { invalidatePiSdkCache } from '../utils/pi-loader';
 import { envWithUserPath } from '../utils/shell-env';
 
 const DETECT_TTL_MS = 5 * 60 * 1000;
@@ -16,6 +17,7 @@ let detectCache: { at: number; env: PiEnvironment } | null = null;
 
 export function invalidateDetectCache(): void {
   detectCache = null;
+  invalidatePiSdkCache();
 }
 
 let installInFlight: Promise<PiInstallResult> | null = null;

@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "pnpm run build:vite && playwright test"
+    "test:e2e": "pnpm run build:vite && playwright test",
+    "test:contract": "vitest run --config vitest.contract.config.ts"
   },
   "piCompat": {
     "min": "0.83.0",
@@ -28,13 +29,20 @@
     ]
   },
   "dependencies": {
+    "@streamdown/cjk": "^1.0.3",
+    "@streamdown/code": "^1.1.1",
+    "@streamdown/math": "^1.0.2",
+    "electron-store": "^11.0.2",
     "i18next": "^26.3.6",
+    "katex": "^0.18.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-i18next": "^17.0.11",
+    "streamdown": "^2.5.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.83.0",
     "@playwright/test": "^1.62.1",
     "@types/node": "^26.1.2",
     "@types/react": "^19.2.0",

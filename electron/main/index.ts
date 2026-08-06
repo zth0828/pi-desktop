@@ -8,6 +8,11 @@ import { createHostServices } from '../services';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
+// 测试钩子：E2E 用隔离 userData（settings 等壳状态落在这里）
+if (process.env.PI_DESKTOP_USER_DATA_DIR) {
+  app.setPath('userData', process.env.PI_DESKTOP_USER_DATA_DIR);
+}
+
 const hostRegistry = new HostApiRegistry();
 hostRegistry.registerCoreServices(createHostServices());
 registerHostInvokeHandler(hostRegistry);

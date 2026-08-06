@@ -42,5 +42,38 @@
   "status": {
     "ready": "pi v{{version}} detected",
     "latestAvailable": "Latest: v{{version}}"
+  },
+  "nav": {
+    "chat": "Chat",
+    "models": "Models",
+    "sessions": "Sessions",
+    "skills": "Skills",
+    "extensions": "Extensions",
+    "mcp": "MCP",
+    "settings": "Settings",
+    "placeholder": "Coming in a later milestone."
+  },
+  "chat": {
+    "placeholder": "Message pi…  (Enter to send, Shift+Enter for newline)",
+    "send": "Send",
+    "stop": "Stop",
+    "newSession": "New session",
+    "compact": "Compact",
+    "compacting": "Compacting…",
+    "thinking": "Thinking",
+    "starting": "Starting session…",
+    "empty": "No messages yet. Say something to pi.",
+    "workspace": {
+      "required": "Pick a working directory for pi sessions first.",
+      "choose": "Choose folder",
+      "change": "Change"
+    },
+    "tool": {
+      "running": "running",
+      "success": "done",
+      "error": "error",
+      "args": "Arguments",
+      "result": "Result"
+    }
   }
 }

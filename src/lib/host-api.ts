@@ -16,4 +16,24 @@ export const hostApi = {
     checkLatest: () => invokeHost('piSystem', 'checkLatest'),
     install: () => invokeHost('piSystem', 'install'),
   },
+  piRuntime: {
+    start: (cwd: string) => invokeHost('piRuntime', 'start', { cwd }),
+    getState: () => invokeHost('piRuntime', 'getState'),
+    prompt: (text: string, images?: unknown[]) =>
+      invokeHost('piRuntime', 'prompt', { text, images }),
+    abort: () => invokeHost('piRuntime', 'abort'),
+    newSession: () => invokeHost('piRuntime', 'newSession'),
+    compact: () => invokeHost('piRuntime', 'compact'),
+    setThinkingLevel: (level: string) => invokeHost('piRuntime', 'setThinkingLevel', { level }),
+  },
+  settings: {
+    getAll: () => invokeHost('settings', 'getAll'),
+    get: (key: 'language' | 'workspaceCwd') => invokeHost('settings', 'get', { key }),
+    set: (key: 'language' | 'workspaceCwd', value: string | undefined) =>
+      invokeHost('settings', 'set', { key, value }),
+  },
+  dialog: {
+    openDirectory: (title?: string, defaultPath?: string) =>
+      invokeHost('dialog', 'open', { title, defaultPath, properties: ['openDirectory', 'createDirectory'] }),
+  },
 };

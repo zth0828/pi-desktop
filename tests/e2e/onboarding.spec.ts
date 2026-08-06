@@ -1,6 +1,5 @@
 // M1 验收：onboarding 五场景（docs/TECHNICAL-PLAN.md §3、§9 M1 DoD）。
 // 通过 PI_DESKTOP_USER_PATH / PI_DESKTOP_NPM_ROOT 测试钩子隔离模拟各环境。
-import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,14 +7,6 @@ import { expect, test } from './fixtures/electron';
 
 const SYSTEM_BINS = '/usr/bin:/bin';
 const nodeBinDir = path.dirname(process.execPath);
-
-function whichBin(bin: string): string | null {
-  try {
-    return execFileSync('which', [bin], { encoding: 'utf8' }).trim() || null;
-  } catch {
-    return null;
-  }
-}
 
 /** 造一个假的 npm 全局 prefix：<root>/bin/pi → lib/node_modules/.../dist/cli.js */
 async function makeFakeNpmPrefix(version: string): Promise<{ prefix: string; npmRoot: string; cleanup: () => Promise<void> }> {
@@ -47,13 +38,18 @@ test('场景2：有 Node 无 pi → 安装引导页', async ({ launchElectronApp
 });
 
 test('场景3：非 npm 安装的 pi → 一键切换引导', async ({ launchElectronApp }) => {
-  const piBin = whichBin('pi');
-  test.skip(!piBin, '本机 PATH 上没有 pi，跳过');
-  const app = await launchElectronApp({
-    userPath: `${path.dirname(piBin!)}:${nodeBinDir}:${SYSTEM_BINS}`,
-  });
-  const page = await app.firstWindow();
-  await expect(page.getByRole('heading', { name: 'Switch pi to the npm install' })).toBeVisible();
+  // 假 prefix 但不传 npmRoot 钩子 → 包不在真实 npm root 下 → 判为 non-npm
+  // （真实 bun 安装场景已由开发机手动验证，E2E 用可控布局保证可重复）
+  const fake = await makeFakeNpmPrefix('0.83.0');
+  try {
+    const app = await launchElectronApp({
+      userPath: `${fake.prefix}/bin:${nodeBinDir}:${SYSTEM_BINS}`,
+    });
+    const page = await app.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Switch pi to the npm install' })).toBeVisible();
+  } finally {
+    await fake.cleanup();
+  }
 });
 
 test('场景4：npm 安装但版本过低 → 阻断升级页', async ({ launchElectronApp }) => {

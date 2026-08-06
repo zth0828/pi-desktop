@@ -55,6 +55,44 @@ export type PiInstallResult = HostSuccess & {
   version?: string;
 };
 
+// —— piRuntime：SDK 会话运行时（M2）——
+
+export type PiRuntimeStartPayload = { cwd: string };
+export type PiRuntimePromptPayload = { text: string; images?: unknown[] };
+
+export type PiRuntimeModelInfo = { provider: string; id: string; name?: string };
+
+export type PiRuntimeStateResult = {
+  sessionId: string;
+  cwd: string;
+  generation: number;
+  model?: PiRuntimeModelInfo;
+  thinkingLevel: string;
+  isStreaming: boolean;
+  /** pi AgentMessage[]，渲染层按结构渲染（user/assistant/toolResult） */
+  messages: unknown[];
+  sessionFile?: string;
+};
+
+// —— settings：壳自身设置（electron-store 持久化）——
+
+export type SettingsSnapshot = {
+  language?: 'zh' | 'en';
+  workspaceCwd?: string;
+};
+
+export type SettingsGetPayload = { key: keyof SettingsSnapshot };
+export type SettingsSetPayload = { key: keyof SettingsSnapshot; value: string | undefined };
+
+// —— dialog：系统对话框 ——
+
+export type DialogOpenPayload = {
+  title?: string;
+  defaultPath?: string;
+  properties?: Array<'openFile' | 'openDirectory' | 'createDirectory'>;
+};
+export type DialogOpenResult = { canceled: boolean; filePaths: string[] };
+
 export type HostApiContract = {
   app: {
     version: () => string;
@@ -75,6 +113,25 @@ export type HostApiContract = {
      * 进度经 piSystem.installProgress 事件流式推送。
      */
     install: () => PiInstallResult;
+  };
+  piRuntime: {
+    /** 启动（或复用）指定 cwd 的会话运行时；更换 cwd 会重建。 */
+    start: (payload: PiRuntimeStartPayload) => PiRuntimeStateResult;
+    getState: () => PiRuntimeStateResult | null;
+    /** 生成中调用自动走 steer（§4.1）。 */
+    prompt: (payload: PiRuntimePromptPayload) => HostSuccess;
+    abort: () => HostSuccess;
+    newSession: () => HostSuccess;
+    compact: () => HostSuccess;
+    setThinkingLevel: (payload: { level: string }) => HostSuccess;
+  };
+  settings: {
+    getAll: () => SettingsSnapshot;
+    get: (payload: SettingsGetPayload) => string | undefined;
+    set: (payload: SettingsSetPayload) => HostSuccess;
+  };
+  dialog: {
+    open: (payload: DialogOpenPayload) => DialogOpenResult;
   };
 };
 

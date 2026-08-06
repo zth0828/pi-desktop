@@ -32,10 +32,21 @@ function run(cmd: string, args: string[]): string | null {
 
 function findOnPath(bin: string): string | null {
   const exts = process.platform === 'win32' ? ['.cmd', '.exe', '.bat', ''] : [''];
+  // 开发期壳自身 node_modules/.bin 里的 pi（devDependency 类型包）会遮蔽用户
+  // 环境的 pi，必须跳过——检测的目标是用户环境安装，不是壳的开发依赖。
+  const ownModules = path.resolve(process.cwd(), 'node_modules');
   for (const dir of resolveUserPath().split(path.delimiter)) {
     for (const ext of exts) {
       const candidate = path.join(dir, bin + ext);
-      if (existsSync(candidate)) return candidate;
+      if (!existsSync(candidate)) continue;
+      if (bin === 'pi') {
+        try {
+          if (realpathSync(candidate).startsWith(ownModules + path.sep)) continue;
+        } catch {
+          // realpath 失败不过滤
+        }
+      }
+      return candidate;
     }
   }
   return null;
