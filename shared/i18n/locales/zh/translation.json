@@ -74,7 +74,8 @@
       "args": "参数",
       "result": "结果"
     },
-    "attachImage": "添加图片"
+    "attachImage": "添加图片",
+    "greeting": "我能为你做些什么？"
   },
   "models": {
     "title": "供应商与模型",
@@ -180,6 +181,18 @@
     "language": "语言",
     "workspace": "默认工作目录",
     "noWorkspace": "未设置",
-    "versions": "版本"
+    "versions": "版本",
+    "subtitle": "配置你的 Pi Desktop 体验",
+    "general": "通用",
+    "theme": "主题",
+    "about": "关于",
+    "themeOptions": {
+      "light": "浅色",
+      "dark": "深色",
+      "system": "跟随系统"
+    }
+  },
+  "list": {
+    "search": "搜索…"
   }
 }

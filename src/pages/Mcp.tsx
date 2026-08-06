@@ -87,6 +87,7 @@ function rowToForm(row: PiMcpServerRow): FormState {
 export default function McpPage() {
   const { t } = useTranslation();
   const [result, setResult] = useState<PiMcpListResult | null>(null);
+  const [query, setQuery] = useState('');
   const [error, setError] = useState<string>();
   const [form, setForm] = useState<FormState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -158,6 +159,12 @@ export default function McpPage() {
     <div className="mcp-page">
       <h2>{t('mcp.title')}</h2>
       <p className="hint">{t('mcp.hint')}</p>
+      <input
+        className="search-input"
+        placeholder={t('list.search')}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
 
       {result && !result.adapterInstalled && (
         <div className="mcp-server-form" data-testid="mcp-no-adapter">
@@ -289,7 +296,9 @@ export default function McpPage() {
         <p className="hint" data-testid="mcp-empty">{t('mcp.empty')}</p>
       ) : (
         <div className="mcp-server-list">
-          {servers.map((s) => (
+          {servers
+            .filter((s) => !query || s.name.toLowerCase().includes(query.toLowerCase()))
+            .map((s) => (
             <div
               className={s.config.disabled ? 'mcp-server-row disabled' : 'mcp-server-row'}
               data-testid={`mcp-server-${s.name}`}

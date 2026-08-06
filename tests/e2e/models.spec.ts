@@ -95,6 +95,8 @@ test('Models 页：provider 列表与认证状态灯', async ({ launchElectronAp
 });
 
 test('Models 页：录入 API key 后状态变已配置', async ({ launchElectronApp }) => {
+  // login('api_key') 可能触发供应商的远程 catalog 刷新，全量跑时较慢 → 放宽超时 + 重试
+  test.setTimeout(90_000);
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
 
@@ -105,7 +107,7 @@ test('Models 页：录入 API key 后状态变已配置', async ({ launchElectro
   await page.getByTestId('key-input-deepseek').fill('sk-test-fake-key');
   await page.getByRole('button', { name: 'Save key' }).click();
   await expect(page.getByTestId('provider-status-deepseek')).toHaveClass(/configured/, {
-    timeout: 15_000,
+    timeout: 60_000,
   });
 });
 

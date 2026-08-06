@@ -27,6 +27,7 @@ export const settingsApi = {
     return {
       language: store.get('language') as SettingsSnapshot['language'],
       workspaceCwd: store.get('workspaceCwd') as string | undefined,
+      theme: store.get('theme') as SettingsSnapshot['theme'],
     };
   },
   get: async (payload: SettingsGetPayload) => {

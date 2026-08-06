@@ -74,7 +74,8 @@
       "args": "Arguments",
       "result": "Result"
     },
-    "attachImage": "Attach image"
+    "attachImage": "Attach image",
+    "greeting": "What can I do for you?"
   },
   "models": {
     "title": "Providers & Models",
@@ -180,6 +181,18 @@
     "language": "Language",
     "workspace": "Default workspace",
     "noWorkspace": "Not set",
-    "versions": "Versions"
+    "versions": "Versions",
+    "subtitle": "Tune your Pi Desktop experience",
+    "general": "General",
+    "theme": "Theme",
+    "about": "About",
+    "themeOptions": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    }
+  },
+  "list": {
+    "search": "Search…"
   }
 }

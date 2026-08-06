@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  History,
+  MessageSquare,
+  Monitor,
+  Plug,
+  Plus,
+  Puzzle,
+  Settings as SettingsIcon,
+  Sparkles,
+} from 'lucide-react';
 import { bindPiSystemEvents, usePiSystemStore } from './stores/pi-system';
 import { bindChatEvents, useChatStore } from './stores/chat';
 import { hostApi } from './lib/host-api';
+import { initTheme } from './lib/theme';
 import { SessionList } from './components/SessionList';
 import Onboarding from './pages/Onboarding';
 import ChatPage from './pages/Chat';
@@ -15,7 +26,15 @@ import McpPage from './pages/Mcp';
 import i18n from './lib/i18n';
 
 type PageId = 'chat' | 'models' | 'sessions' | 'skills' | 'extensions' | 'mcp' | 'settings';
-const PAGES: PageId[] = ['chat', 'models', 'sessions', 'skills', 'extensions', 'mcp', 'settings'];
+const PAGES: Array<{ id: PageId; icon: typeof MessageSquare }> = [
+  { id: 'chat', icon: MessageSquare },
+  { id: 'models', icon: Monitor },
+  { id: 'sessions', icon: History },
+  { id: 'skills', icon: Sparkles },
+  { id: 'extensions', icon: Puzzle },
+  { id: 'mcp', icon: Plug },
+  { id: 'settings', icon: SettingsIcon },
+];
 
 export default function App() {
   const { t } = useTranslation();
@@ -31,6 +50,7 @@ export default function App() {
     const unbind = bindPiSystemEvents();
     bindChatEvents();
     void detect();
+    void initTheme();
     // 恢复保存的语言
     void hostApi.settings.get('language').then((lng) => {
       if (lng && lng !== i18n.language) void i18n.changeLanguage(lng);
@@ -51,18 +71,20 @@ export default function App() {
     <div className="app-layout">
       <nav className="sidebar">
         <div className="sidebar-title drag-region">Pi Desktop</div>
-        <button className="primary new-chat" data-testid="new-chat" onClick={newChat}>
+        <button className="new-chat" data-testid="new-chat" onClick={newChat}>
+          <Plus size={15} />
           {t('sidebar.newChat')}
         </button>
         <SessionList />
         <div className="sidebar-nav">
-          {PAGES.map((id) => (
+          {PAGES.map(({ id, icon: Icon }) => (
             <button
               key={id}
               data-testid={`nav-${id}`}
               className={page === id ? 'nav-item active' : 'nav-item'}
               onClick={() => setPage(id)}
             >
+              <Icon size={15} />
               {t(`nav.${id}`)}
             </button>
           ))}

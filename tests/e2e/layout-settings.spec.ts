@@ -95,7 +95,7 @@ test('Settings：语言切换为中文即时生效并持久化', async ({ launch
   await page.getByTestId('lang-zh').click();
   await expect(page.getByTestId('nav-chat')).toHaveText('对话');
   // 版本区显示 pi 版本
-  await expect(page.locator('.settings-page')).toContainText('pi v0.83');
+  await expect(page.locator('.settings-page')).toContainText(/pi\s*v0\.83/);
   await rm(agentDir, { recursive: true, force: true });
 });
 

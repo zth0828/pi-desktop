@@ -79,6 +79,7 @@ export type PiRuntimeStateResult = {
 export type SettingsSnapshot = {
   language?: 'zh' | 'en';
   workspaceCwd?: string;
+  theme?: 'light' | 'dark' | 'system';
 };
 
 export type SettingsGetPayload = { key: keyof SettingsSnapshot };

@@ -87,8 +87,8 @@ export const hostApi = {
   },
   settings: {
     getAll: () => invokeHost('settings', 'getAll'),
-    get: (key: 'language' | 'workspaceCwd') => invokeHost('settings', 'get', { key }),
-    set: (key: 'language' | 'workspaceCwd', value: string | undefined) =>
+    get: (key: 'language' | 'workspaceCwd' | 'theme') => invokeHost('settings', 'get', { key }),
+    set: (key: 'language' | 'workspaceCwd' | 'theme', value: string | undefined) =>
       invokeHost('settings', 'set', { key, value }),
   },
   dialog: {

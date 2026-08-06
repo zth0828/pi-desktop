@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ArrowUp, Paperclip, Square } from 'lucide-react';
 import type { PiCommandRow } from '@shared/host-api/contract';
 import { hostApi } from '../../lib/host-api';
 import { useChatStore } from '../../stores/chat';
@@ -147,62 +148,67 @@ export function ChatInput() {
           ))}
         </div>
       )}
-      {images.length > 0 && (
-        <div className="staged-images" data-testid="staged-images">
-          {images.map((img, i) => (
-            <span key={i} className="staged-image">
-              <img src={img.previewUrl} alt="" />
-              <button
-                className="staged-remove"
-                onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <textarea
-        ref={textareaRef}
-        data-testid="chat-input"
-        value={value}
-        placeholder={t('chat.placeholder')}
-        onChange={(e) => {
-          setValue(e.target.value);
-          setSelected(0);
-        }}
-        onKeyDown={onKeyDown}
-        onPaste={onPaste}
-        rows={3}
-      />
-      <label className="attach-button" data-testid="attach-image" title={t('chat.attachImage')}>
-        📎
-        <input
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          data-testid="attach-input"
+      <div className="chat-input-card">
+        {images.length > 0 && (
+          <div className="staged-images" data-testid="staged-images">
+            {images.map((img, i) => (
+              <span key={i} className="staged-image">
+                <img src={img.previewUrl} alt="" />
+                <button
+                  className="staged-remove"
+                  onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <textarea
+          ref={textareaRef}
+          data-testid="chat-input"
+          value={value}
+          placeholder={t('chat.placeholder')}
           onChange={(e) => {
-            void stageFiles(Array.from(e.target.files ?? []));
-            e.target.value = '';
+            setValue(e.target.value);
+            setSelected(0);
           }}
+          onKeyDown={onKeyDown}
+          onPaste={onPaste}
+          rows={3}
         />
-      </label>
-      {isStreaming ? (
-        <button data-testid="chat-stop" className="danger" onClick={() => void abort()}>
-          {t('chat.stop')}
-        </button>
-      ) : (
-        <button
-          data-testid="chat-send"
-          className="primary"
-          onClick={send}
-          disabled={!value.trim() && images.length === 0}
-        >
-          {t('chat.send')}
-        </button>
-      )}
+        <div className="chat-input-toolbar">
+          <label className="attach-button" data-testid="attach-image" title={t('chat.attachImage')}>
+            <Paperclip size={16} />
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              data-testid="attach-input"
+              onChange={(e) => {
+                void stageFiles(Array.from(e.target.files ?? []));
+                e.target.value = '';
+              }}
+            />
+          </label>
+          <span className="spacer" />
+          {isStreaming ? (
+            <button data-testid="chat-stop" className="send-button stop" onClick={() => void abort()}>
+              <Square size={13} />
+            </button>
+          ) : (
+            <button
+              data-testid="chat-send"
+              className="send-button"
+              onClick={send}
+              disabled={!value.trim() && images.length === 0}
+            >
+              <ArrowUp size={15} />
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

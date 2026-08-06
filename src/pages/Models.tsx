@@ -147,6 +147,7 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
 export default function ModelsPage() {
   const { t } = useTranslation();
   const [providers, setProviders] = useState<PiProviderRow[]>([]);
+  const [query, setQuery] = useState('');
   const [oauthMessages, setOauthMessages] = useState<string[]>([]);
 
   const refresh = () => {
@@ -167,13 +168,27 @@ export default function ModelsPage() {
   return (
     <div className="models-page">
       <h2>{t('models.title')}</h2>
+      <input
+        className="search-input"
+        data-testid="models-search"
+        placeholder={t('list.search')}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
       {oauthMessages.length > 0 && (
         <div className="hint" data-testid="oauth-progress">
           {t('models.oauthStarted')}
         </div>
       )}
       <div className="provider-list">
-        {providers.map((p) => (
+        {providers
+          .filter(
+            (p) =>
+              !query ||
+              p.name.toLowerCase().includes(query.toLowerCase()) ||
+              p.id.toLowerCase().includes(query.toLowerCase()),
+          )
+          .map((p) => (
           <ProviderRow key={p.id} provider={p} onChanged={refresh} />
         ))}
       </div>

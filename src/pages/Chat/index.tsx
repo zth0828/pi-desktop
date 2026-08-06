@@ -103,14 +103,20 @@ export default function ChatPage() {
       {startError && <div className="error-banner">{startError}</div>}
       {starting && <div className="chat-empty">{t('chat.starting')}</div>}
 
-      <div className="message-list" ref={listRef} data-testid="message-list">
-        {started && messages.length === 0 && <div className="chat-empty">{t('chat.empty')}</div>}
-        {messages.map((m, i) => (
-          <MessageItem key={i} message={m} />
-        ))}
-      </div>
+      <div className="chat-column">
+        <div className="message-list" ref={listRef} data-testid="message-list">
+          {started && messages.length === 0 && (
+            <div className="chat-greeting" data-testid="chat-greeting">
+              <h1>{t('chat.greeting')}</h1>
+            </div>
+          )}
+          {messages.map((m, i) => (
+            <MessageItem key={i} message={m} />
+          ))}
+        </div>
 
-      <ChatInput />
+        <ChatInput />
+      </div>
     </div>
   );
 }

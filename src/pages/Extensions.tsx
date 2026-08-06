@@ -7,6 +7,7 @@ import { onHostEvent } from '../lib/host-events';
 export default function ExtensionsPage() {
   const { t } = useTranslation();
   const [packages, setPackages] = useState<PiPackageRow[]>([]);
+  const [query, setQuery] = useState('');
   const [updates, setUpdates] = useState<PiPackageUpdateInfo[] | null>(null);
   const [source, setSource] = useState('');
   const [busy, setBusy] = useState(false);
@@ -73,6 +74,12 @@ export default function ExtensionsPage() {
     <div className="extensions-page">
       <h2>{t('extensions.title')}</h2>
       <p className="hint">{t('extensions.hint')}</p>
+      <input
+        className="search-input"
+        placeholder={t('list.search')}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
 
       <div className="extensions-install-form">
         <input
@@ -116,7 +123,9 @@ export default function ExtensionsPage() {
         <p className="hint" data-testid="packages-empty">{t('extensions.empty')}</p>
       ) : (
         <div className="package-list">
-          {packages.map((p) => (
+          {packages
+            .filter((p) => !query || p.name.toLowerCase().includes(query.toLowerCase()))
+            .map((p) => (
             <div className="package-row" data-testid={`package-row-${p.name}`} key={`${p.scope}:${p.source}`}>
               <div className="package-row-main">
                 <span className="package-name">{p.name}</span>

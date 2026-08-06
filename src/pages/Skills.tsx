@@ -7,6 +7,7 @@ import { useChatStore } from '../stores/chat';
 export default function SkillsPage() {
   const { t } = useTranslation();
   const [skills, setSkills] = useState<PiSkillRow[]>([]);
+  const [query, setQuery] = useState('');
   const [runtimeActive, setRuntimeActive] = useState(false);
   const [error, setError] = useState<string>();
   const chatStarted = useChatStore((s) => s.started);
@@ -29,6 +30,13 @@ export default function SkillsPage() {
     <div className="skills-page">
       <h2>{t('skills.title')}</h2>
       <p className="hint">{t('skills.readonlyHint')}</p>
+      <input
+        className="search-input"
+        data-testid="skills-search"
+        placeholder={t('list.search')}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
       {error && <p className="error-text" data-testid="skills-error">{error}</p>}
       {!runtimeActive && !error ? (
         <p className="hint" data-testid="skills-no-runtime">{t('skills.noRuntime')}</p>
@@ -36,7 +44,9 @@ export default function SkillsPage() {
         <p className="hint" data-testid="skills-empty">{t('skills.empty')}</p>
       ) : (
         <div className="skill-list">
-          {skills.map((s) => (
+          {skills
+            .filter((s) => !query || s.name.toLowerCase().includes(query.toLowerCase()))
+            .map((s) => (
             <div className="skill-row" data-testid={`skill-row-${s.name}`} key={`${s.source}:${s.filePath}`}>
               <div className="skill-row-main">
                 <span className="skill-name">{s.name}</span>
