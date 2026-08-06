@@ -167,6 +167,39 @@ export type PiSkillListResult = {
   runtimeActive: boolean;
 };
 
+// —— piPackages：扩展包管理（M5，SDK PackageManager 的封装）——
+
+export type PiPackageRow = {
+  /** settings.json 里的原始 source（npm:<pkg> / git:<url> / 本地路径） */
+  source: string;
+  scope: 'user' | 'project';
+  /** autoload=false 或带资源过滤（pi 的 PackageSource 对象形式） */
+  filtered: boolean;
+  installedPath?: string;
+  /** 已安装包版本（读 installedPath/package.json，读不到则缺省） */
+  version?: string;
+  /** 显示名（npm 包名 / git 仓库名 / 目录名） */
+  name: string;
+};
+export type PiPackageListResult = { packages: PiPackageRow[] };
+export type PiPackageInstallPayload = { source: string };
+export type PiPackageRemovePayload = { source: string; scope: 'user' | 'project' };
+/** source 缺省 = 更新全部 */
+export type PiPackageUpdatePayload = { source?: string };
+export type PiPackageUpdateInfo = {
+  source: string;
+  displayName: string;
+  type: 'npm' | 'git';
+  scope: 'user' | 'project';
+};
+export type PiPackageCheckUpdatesResult = { updates: PiPackageUpdateInfo[] };
+export type PiPackageProgressEvent = {
+  type: 'start' | 'progress' | 'complete' | 'error';
+  action: 'install' | 'remove' | 'update' | 'clone' | 'pull';
+  source: string;
+  message?: string;
+};
+
 export type HostApiContract = {
   app: {
     version: () => string;
@@ -231,6 +264,18 @@ export type HostApiContract = {
   piSkills: {
     /** 活动 runtime 的 skills（resourceLoader.getSkills()）；runtime 未启动返回空列表。 */
     list: () => PiSkillListResult;
+  };
+  piPackages: {
+    /** settings.json 里配置的扩展包（user + project scope 合并）。 */
+    list: () => PiPackageListResult;
+    /** 安装并持久化到 settings.json（installAndPersist）。 */
+    install: (payload: PiPackageInstallPayload) => HostSuccess;
+    /** 卸载并从 settings.json 移除（removeAndPersist）。 */
+    remove: (payload: PiPackageRemovePayload) => HostSuccess;
+    /** 更新单个（给 source）或全部（缺省）。 */
+    update: (payload: PiPackageUpdatePayload) => HostSuccess;
+    /** 检查可更新项（npm 查 registry / git 查 remote，可能较慢）。 */
+    checkUpdates: () => PiPackageCheckUpdatesResult;
   };
   dialog: {
     open: (payload: DialogOpenPayload) => DialogOpenResult;

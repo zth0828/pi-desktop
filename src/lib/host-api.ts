@@ -55,6 +55,14 @@ export const hostApi = {
   piSkills: {
     list: () => invokeHost('piSkills', 'list'),
   },
+  piPackages: {
+    list: () => invokeHost('piPackages', 'list'),
+    install: (source: string) => invokeHost('piPackages', 'install', { source }),
+    remove: (source: string, scope: 'user' | 'project') =>
+      invokeHost('piPackages', 'remove', { source, scope }),
+    update: (source?: string) => invokeHost('piPackages', 'update', { source }),
+    checkUpdates: () => invokeHost('piPackages', 'checkUpdates'),
+  },
   settings: {
     getAll: () => invokeHost('settings', 'getAll'),
     get: (key: 'language' | 'workspaceCwd') => invokeHost('settings', 'get', { key }),

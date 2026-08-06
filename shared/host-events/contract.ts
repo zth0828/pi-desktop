@@ -3,7 +3,11 @@
  * 机制移植自 ClawX shared/host-events/contract.ts，通道清单按 Pi Desktop 收敛。
  */
 import type { PiRuntimeEventEnvelope } from '../pi-event-map';
-import type { PiOAuthProgressEvent, PiRuntimeStateResult } from '../host-api/contract';
+import type {
+  PiOAuthProgressEvent,
+  PiPackageProgressEvent,
+  PiRuntimeStateResult,
+} from '../host-api/contract';
 
 export type PiInstallProgressEvent = {
   stream: 'stdout' | 'stderr' | 'status';
@@ -23,6 +27,10 @@ export type HostEventContract = {
   providers: {
     /** OAuth 授权进度（授权 URL 等），由 pi provider-owned 流程发出 */
     oauthProgress: (payload: PiOAuthProgressEvent) => void;
+  };
+  piPackages: {
+    /** 包安装/卸载/更新进度（PackageManager.setProgressCallback 转发） */
+    progress: (payload: PiPackageProgressEvent) => void;
   };
 };
 
@@ -47,6 +55,9 @@ export const HOST_EVENT_CHANNELS = {
   },
   providers: {
     oauthProgress: 'providers:oauth-progress',
+  },
+  piPackages: {
+    progress: 'pi-packages:progress',
   },
 } as const satisfies {
   [M in HostEventModule]: { [E in HostEventName<M>]: string };

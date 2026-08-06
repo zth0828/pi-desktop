@@ -107,6 +107,25 @@
     "confirmDelete": "Confirm delete",
     "exported": "Exported to {{path}}"
   },
+  "extensions": {
+    "title": "Extensions",
+    "hint": "Extensions are installed by pi into your agent directory. New extensions take effect on the next session.",
+    "installPlaceholder": "npm:<package> · git:<url> · or local path",
+    "install": "Install",
+    "remove": "Remove",
+    "update": "Update",
+    "updateAll": "Update all ({{count}})",
+    "updateAvailable": "update available",
+    "checkUpdates": "Check for updates",
+    "checking": "Checking…",
+    "upToDate": "All packages are up to date.",
+    "empty": "No extensions installed.",
+    "filtered": "filtered",
+    "scope": {
+      "user": "user",
+      "project": "project"
+    }
+  },
   "sidebar": {
     "newChat": "New chat"
   },

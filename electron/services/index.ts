@@ -3,6 +3,7 @@
 import type { HostServiceRegistry } from '../main/ipc/host-contract';
 import { appApi } from './app-api';
 import { dialogApi } from './dialog-api';
+import { packagesApi } from './packages-api';
 import { piRuntimeApi } from './pi-runtime-api';
 import { piSystemApi } from './pi-system-api';
 import { providersApi } from './providers-api';
@@ -20,6 +21,7 @@ export function createHostServices(): HostServiceRegistry {
     providers: providersApi,
     piSessions: sessionsApi,
     piSkills: skillsApi,
+    piPackages: packagesApi,
     settings: settingsApi,
     dialog: dialogApi,
   };

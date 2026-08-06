@@ -107,6 +107,25 @@
     "confirmDelete": "确认删除",
     "exported": "已导出到 {{path}}"
   },
+  "extensions": {
+    "title": "扩展",
+    "hint": "扩展由 pi 安装到你的 agent 目录。新装的扩展在下一个会话生效。",
+    "installPlaceholder": "npm:<包名> · git:<地址> · 或本地路径",
+    "install": "安装",
+    "remove": "卸载",
+    "update": "更新",
+    "updateAll": "全部更新（{{count}}）",
+    "updateAvailable": "有更新",
+    "checkUpdates": "检查更新",
+    "checking": "检查中…",
+    "upToDate": "所有扩展都是最新。",
+    "empty": "还没有安装扩展。",
+    "filtered": "按需加载",
+    "scope": {
+      "user": "用户",
+      "project": "项目"
+    }
+  },
   "sidebar": {
     "newChat": "新会话"
   },
