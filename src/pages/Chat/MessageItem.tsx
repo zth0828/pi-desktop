@@ -37,9 +37,17 @@ export function MessageItem({ message }: { message: ChatMessage }) {
       .filter((b) => b.type === 'text')
       .map((b) => b.text ?? '')
       .join('\n');
+    const images = message.content.filter((b) => b.type === 'image');
     return (
       <div className="message message-user" data-testid="message-user">
-        <div className="message-bubble">{text}</div>
+        <div className="message-bubble">
+          {images.map((b, i) => {
+            const src = (b as { source?: { type?: string; mediaType?: string; data?: string } }).source;
+            const url = src?.type === 'base64' ? `data:${src.mediaType};base64,${src.data}` : undefined;
+            return url ? <img key={i} className="message-image" data-testid="message-image" src={url} alt="" /> : null;
+          })}
+          {text}
+        </div>
       </div>
     );
   }

@@ -74,7 +74,8 @@
       "error": "出错",
       "args": "参数",
       "result": "结果"
-    }
+    },
+    "attachImage": "添加图片"
   },
   "models": {
     "title": "供应商与模型",
@@ -105,5 +106,15 @@
     "delete": "删除",
     "confirmDelete": "确认删除",
     "exported": "已导出到 {{path}}"
+  },
+  "sidebar": {
+    "newChat": "新会话"
+  },
+  "settings": {
+    "title": "设置",
+    "language": "语言",
+    "workspace": "默认工作目录",
+    "noWorkspace": "未设置",
+    "versions": "版本"
   }
 }

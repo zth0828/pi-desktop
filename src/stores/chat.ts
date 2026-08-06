@@ -58,7 +58,7 @@ type ChatState = {
   compacting: boolean;
 
   start: (cwd: string) => Promise<void>;
-  prompt: (text: string) => Promise<void>;
+  prompt: (text: string, images?: unknown[]) => Promise<void>;
   abort: () => Promise<void>;
   newSession: () => Promise<void>;
   compact: () => Promise<void>;
@@ -88,8 +88,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  prompt: async (text) => {
-    const result = await hostApi.piRuntime.prompt(text);
+  prompt: async (text, images) => {
+    const result = await hostApi.piRuntime.prompt(text, images);
     if (!result.success) set({ startError: result.error });
   },
 

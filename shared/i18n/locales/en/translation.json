@@ -74,7 +74,8 @@
       "error": "error",
       "args": "Arguments",
       "result": "Result"
-    }
+    },
+    "attachImage": "Attach image"
   },
   "models": {
     "title": "Providers & Models",
@@ -105,5 +106,15 @@
     "delete": "Delete",
     "confirmDelete": "Confirm delete",
     "exported": "Exported to {{path}}"
+  },
+  "sidebar": {
+    "newChat": "New chat"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "workspace": "Default workspace",
+    "noWorkspace": "Not set",
+    "versions": "Versions"
   }
 }

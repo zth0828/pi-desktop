@@ -1,12 +1,31 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PiCommandRow } from '@shared/host-api/contract';
 import { hostApi } from '../../lib/host-api';
 import { useChatStore } from '../../stores/chat';
 
+type StagedImage = { data: string; mediaType: string; previewUrl: string };
+
+function fileToStagedImage(file: File): Promise<StagedImage> {
+  return new Promise((resolveFile, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      resolveFile({
+        data: dataUrl.split(',')[1] ?? '',
+        mediaType: file.type || 'image/png',
+        previewUrl: dataUrl,
+      });
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export function ChatInput() {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
+  const [images, setImages] = useState<StagedImage[]>([]);
   const [commands, setCommands] = useState<PiCommandRow[]>([]);
   const [selected, setSelected] = useState(0);
   const isStreaming = useChatStore((s) => s.isStreaming);
@@ -32,12 +51,40 @@ export function ChatInput() {
 
   const send = () => {
     const text = value.trim();
-    if (!text) return;
+    if (!text && images.length === 0) return;
+    const outgoing = images;
     setValue('');
+    setImages([]);
     // 壳内置命令直接执行，不发给 pi
-    if (text === '/new') return void newSession();
-    if (text === '/compact') return void compact();
-    void prompt(text);
+    if (text === '/new' && outgoing.length === 0) return void newSession();
+    if (text === '/compact' && outgoing.length === 0) return void compact();
+    void prompt(
+      text,
+      outgoing.map((img) => ({
+        type: 'image',
+        source: { type: 'base64', mediaType: img.mediaType, data: img.data },
+      })),
+    );
+  };
+
+  const stageFiles = async (files: Iterable<File>) => {
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      try {
+        const staged = await fileToStagedImage(file);
+        setImages((prev) => [...prev, staged]);
+      } catch {
+        // 忽略读不了的文件
+      }
+    }
+  };
+
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData.files);
+    if (files.length > 0) {
+      e.preventDefault();
+      void stageFiles(files);
+    }
   };
 
   const pick = (cmd: PiCommandRow) => {
@@ -100,6 +147,21 @@ export function ChatInput() {
           ))}
         </div>
       )}
+      {images.length > 0 && (
+        <div className="staged-images" data-testid="staged-images">
+          {images.map((img, i) => (
+            <span key={i} className="staged-image">
+              <img src={img.previewUrl} alt="" />
+              <button
+                className="staged-remove"
+                onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <textarea
         ref={textareaRef}
         data-testid="chat-input"
@@ -110,14 +172,34 @@ export function ChatInput() {
           setSelected(0);
         }}
         onKeyDown={onKeyDown}
+        onPaste={onPaste}
         rows={3}
       />
+      <label className="attach-button" data-testid="attach-image" title={t('chat.attachImage')}>
+        📎
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          data-testid="attach-input"
+          onChange={(e) => {
+            void stageFiles(Array.from(e.target.files ?? []));
+            e.target.value = '';
+          }}
+        />
+      </label>
       {isStreaming ? (
         <button data-testid="chat-stop" className="danger" onClick={() => void abort()}>
           {t('chat.stop')}
         </button>
       ) : (
-        <button data-testid="chat-send" className="primary" onClick={send} disabled={!value.trim()}>
+        <button
+          data-testid="chat-send"
+          className="primary"
+          onClick={send}
+          disabled={!value.trim() && images.length === 0}
+        >
           {t('chat.send')}
         </button>
       )}
