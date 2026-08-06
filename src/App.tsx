@@ -4,6 +4,7 @@ import { bindPiSystemEvents, usePiSystemStore } from './stores/pi-system';
 import { bindChatEvents } from './stores/chat';
 import Onboarding from './pages/Onboarding';
 import ChatPage from './pages/Chat';
+import ModelsPage from './pages/Models';
 
 type PageId = 'chat' | 'models' | 'sessions' | 'skills' | 'extensions' | 'mcp' | 'settings';
 const PAGES: PageId[] = ['chat', 'models', 'sessions', 'skills', 'extensions', 'mcp', 'settings'];
@@ -59,7 +60,9 @@ export default function App() {
           )}
         </div>
       </nav>
-      <main className="content">{page === 'chat' ? <ChatPage /> : <PlaceholderPage id={page} />}</main>
+      <main className="content">
+        {page === 'chat' ? <ChatPage /> : page === 'models' ? <ModelsPage /> : <PlaceholderPage id={page} />}
+      </main>
     </div>
   );
 }

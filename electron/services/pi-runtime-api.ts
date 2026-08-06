@@ -215,4 +215,33 @@ export const piRuntimeApi = {
     active.runtime.session.setThinkingLevel(payload.level as never);
     return { success: true };
   },
+
+  setModel: async (payload: { provider: string; id: string }) => {
+    if (!active) return { success: false, error: 'session not started' };
+    const model = active.runtime.services.modelRuntime.getModel(payload.provider, payload.id);
+    if (!model) return { success: false, error: `model not found: ${payload.provider}/${payload.id}` };
+    await active.runtime.session.setModel(model);
+    return { success: true };
+  },
+
+  /** / 补全数据源：内置命令 + prompt 模板 + skills（docs §4.3）。 */
+  getCommands: () => {
+    if (!active) return { commands: [] };
+    const loader = active.runtime.services.resourceLoader;
+    const prompts = loader.getPrompts().prompts.map((p) => ({
+      name: p.name,
+      description: p.description,
+      source: `prompt:${(p.sourceInfo as { label?: string } | undefined)?.label ?? ''}`,
+    }));
+    const skills = loader.getSkills().skills.map((s) => ({
+      name: `skill:${s.name}`,
+      description: s.description,
+      source: `skill:${(s.sourceInfo as { label?: string } | undefined)?.label ?? ''}`,
+    }));
+    const builtIns = [
+      { name: 'new', description: 'New session', source: 'built-in' },
+      { name: 'compact', description: 'Compact context', source: 'built-in' },
+    ];
+    return { commands: [...builtIns, ...prompts, ...skills] };
+  },
 };

@@ -1,9 +1,40 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { PiModelRow } from '@shared/host-api/contract';
 import { hostApi } from '../../lib/host-api';
 import { useChatStore } from '../../stores/chat';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
+
+function ModelSelector() {
+  const model = useChatStore((s) => s.model);
+  const [models, setModels] = useState<PiModelRow[]>([]);
+
+  useEffect(() => {
+    void hostApi.providers.listModels().then((r) => setModels(r.models)).catch(() => {});
+  }, []);
+
+  if (models.length === 0) {
+    return model ? <span className="model-badge" data-testid="model-badge">{model.name ?? model.id}</span> : null;
+  }
+  return (
+    <select
+      className="model-select"
+      data-testid="model-select"
+      value={model ? `${model.provider}/${model.id}` : ''}
+      onChange={(e) => {
+        const [provider, ...rest] = e.target.value.split('/');
+        void hostApi.piRuntime.setModel(provider, rest.join('/'));
+      }}
+    >
+      {models.map((m) => (
+        <option key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
+          {m.name ?? m.id}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 export default function ChatPage() {
   const { t } = useTranslation();
@@ -12,7 +43,6 @@ export default function ChatPage() {
   const starting = useChatStore((s) => s.starting);
   const startError = useChatStore((s) => s.startError);
   const messages = useChatStore((s) => s.messages);
-  const model = useChatStore((s) => s.model);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const compacting = useChatStore((s) => s.compacting);
   const start = useChatStore((s) => s.start);
@@ -61,7 +91,7 @@ export default function ChatPage() {
         <span className="workspace" title={cwd}>{cwd}</span>
         <button onClick={() => void chooseWorkspace()}>{t('chat.workspace.change')}</button>
         <span className="spacer" />
-        {model && <span className="model-badge" data-testid="model-badge">{model.name ?? model.id}</span>}
+        <ModelSelector />
         <button onClick={() => void compact()} disabled={isStreaming || compacting}>
           {compacting ? t('chat.compacting') : t('chat.compact')}
         </button>

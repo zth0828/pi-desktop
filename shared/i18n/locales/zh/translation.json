@@ -75,5 +75,19 @@
       "args": "参数",
       "result": "结果"
     }
+  },
+  "models": {
+    "title": "供应商与模型",
+    "modelCount": "{{count}} 个模型",
+    "keyPlaceholder": "API key",
+    "saveKey": "保存 key",
+    "removeKey": "删除凭证",
+    "oauth": "浏览器授权登录",
+    "oauthStarted": "授权已发起——请在浏览器中完成。",
+    "addCustom": "添加自定义供应商",
+    "customId": "供应商 id（如 my-llm）",
+    "customModels": "模型 id，逗号分隔",
+    "saveCustom": "保存供应商",
+    "cancel": "取消"
   }
 }

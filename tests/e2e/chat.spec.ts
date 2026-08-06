@@ -62,9 +62,11 @@ const launchOptions = () => ({
   seedSettings: { workspaceCwd: workspace },
 });
 
-/** 等会话启动（模型徽标出现 = runtime 就绪） */
+/** 等会话启动（模型选择器/徽标出现 = runtime 就绪） */
 async function waitSessionReady(page: import('@playwright/test').Page) {
-  await expect(page.getByTestId('model-badge')).toBeVisible({ timeout: 30_000 });
+  await expect(
+    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
 }
 
 test('发消息 → 流式渲染回复', async ({ launchElectronApp }) => {

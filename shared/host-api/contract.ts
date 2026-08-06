@@ -93,6 +93,41 @@ export type DialogOpenPayload = {
 };
 export type DialogOpenResult = { canceled: boolean; filePaths: string[] };
 
+// —— providers：模型/供应商管理（M3）——
+
+export type PiProviderRow = {
+  id: string;
+  name: string;
+  authMethods: string[];
+  configured: boolean;
+  modelCount: number;
+};
+export type PiProviderListResult = { providers: PiProviderRow[] };
+export type PiProviderSetKeyPayload = { providerId: string; apiKey: string };
+export type PiModelRow = { provider: string; id: string; name?: string; reasoning?: boolean };
+export type PiProviderAddCustomPayload = {
+  id: string;
+  baseUrl: string;
+  api: string;
+  apiKey?: string;
+  models: Array<{
+    id: string;
+    name?: string;
+    reasoning?: boolean;
+    contextWindow?: number;
+    maxTokens?: number;
+  }>;
+};
+export type PiOAuthProgressEvent = {
+  providerId: string;
+  event: Record<string, unknown>;
+};
+
+// —— piRuntime 命令补全（M3，docs §4.3）——
+
+export type PiCommandRow = { name: string; description?: string; source: string };
+export type PiCommandListResult = { commands: PiCommandRow[] };
+
 export type HostApiContract = {
   app: {
     version: () => string;
@@ -124,6 +159,17 @@ export type HostApiContract = {
     newSession: () => HostSuccess;
     compact: () => HostSuccess;
     setThinkingLevel: (payload: { level: string }) => HostSuccess;
+    setModel: (payload: { provider: string; id: string }) => HostSuccess;
+    /** / 补全：内置命令 + prompt 模板 + skills */
+    getCommands: () => PiCommandListResult;
+  };
+  providers: {
+    list: () => PiProviderListResult;
+    listModels: () => { models: PiModelRow[] };
+    setApiKey: (payload: PiProviderSetKeyPayload) => HostSuccess;
+    removeCredential: (payload: { providerId: string }) => HostSuccess;
+    startOAuth: (payload: { providerId: string }) => HostSuccess;
+    addCustom: (payload: PiProviderAddCustomPayload) => HostSuccess;
   };
   settings: {
     getAll: () => SettingsSnapshot;

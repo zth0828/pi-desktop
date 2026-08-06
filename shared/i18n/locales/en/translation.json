@@ -75,5 +75,19 @@
       "args": "Arguments",
       "result": "Result"
     }
+  },
+  "models": {
+    "title": "Providers & Models",
+    "modelCount": "{{count}} models",
+    "keyPlaceholder": "API key",
+    "saveKey": "Save key",
+    "removeKey": "Remove credential",
+    "oauth": "Sign in with browser",
+    "oauthStarted": "Authorization started — complete it in your browser.",
+    "addCustom": "Add custom provider",
+    "customId": "Provider id (e.g. my-llm)",
+    "customModels": "Model ids, comma separated",
+    "saveCustom": "Save provider",
+    "cancel": "Cancel"
   }
 }

@@ -25,6 +25,24 @@ export const hostApi = {
     newSession: () => invokeHost('piRuntime', 'newSession'),
     compact: () => invokeHost('piRuntime', 'compact'),
     setThinkingLevel: (level: string) => invokeHost('piRuntime', 'setThinkingLevel', { level }),
+    setModel: (provider: string, id: string) => invokeHost('piRuntime', 'setModel', { provider, id }),
+    getCommands: () => invokeHost('piRuntime', 'getCommands'),
+  },
+  providers: {
+    list: () => invokeHost('providers', 'list'),
+    listModels: () => invokeHost('providers', 'listModels'),
+    setApiKey: (providerId: string, apiKey: string) =>
+      invokeHost('providers', 'setApiKey', { providerId, apiKey }),
+    removeCredential: (providerId: string) =>
+      invokeHost('providers', 'removeCredential', { providerId }),
+    startOAuth: (providerId: string) => invokeHost('providers', 'startOAuth', { providerId }),
+    addCustom: (payload: {
+      id: string;
+      baseUrl: string;
+      api: string;
+      apiKey?: string;
+      models: Array<{ id: string; name?: string }>;
+    }) => invokeHost('providers', 'addCustom', payload),
   },
   settings: {
     getAll: () => invokeHost('settings', 'getAll'),
