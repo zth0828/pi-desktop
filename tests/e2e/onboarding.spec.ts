@@ -27,6 +27,7 @@ async function makeFakeNpmPrefix(version: string): Promise<{ prefix: string; npm
 test('场景1：无 Node → Node 引导页', async ({ launchElectronApp }) => {
   const app = await launchElectronApp({ userPath: SYSTEM_BINS });
   const page = await app.firstWindow();
+  await expect(page.getByTestId('window-drag-strip')).toHaveCSS('-webkit-app-region', 'drag');
   await expect(page.getByRole('heading', { name: 'Node.js is required' })).toBeVisible();
 });
 

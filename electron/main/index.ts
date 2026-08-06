@@ -24,6 +24,10 @@ function createMainWindow(): BrowserWindow {
     minWidth: 800,
     minHeight: 600,
     title: 'Pi Desktop',
+    // 让 macOS 原生红黄绿按钮叠在应用内容上，避免额外占一整行标题栏。
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 14 } }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,

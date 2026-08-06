@@ -71,7 +71,23 @@ test('侧栏：新会话按钮 + 发消息后会话列表出现', async ({ launc
     seedSettings: { workspaceCwd: workspace },
   });
   const page = await app.firstWindow();
+  const dragStrip = page.getByTestId('window-drag-strip');
+  await expect(dragStrip).toBeVisible();
+  await expect(dragStrip).toHaveCSS('-webkit-app-region', 'drag');
   await expect(page.getByTestId('new-chat')).toBeVisible();
+  const dragBox = await dragStrip.boundingBox();
+  const newChatBox = await page.getByTestId('new-chat').boundingBox();
+  expect(dragBox).not.toBeNull();
+  expect(newChatBox).not.toBeNull();
+  expect(newChatBox!.y).toBeGreaterThanOrEqual(dragBox!.height + 8);
+  await expect(page.locator('.chat-header')).toHaveCount(0);
+  await expect(page.getByTestId('chat-workspace')).toBeVisible();
+  await expect(page.getByTestId('model-select').or(page.getByTestId('model-badge')).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByTestId('token-usage').click();
+  await expect(page.getByTestId('token-usage-popover')).toBeVisible();
+  await expect(page.getByTestId('token-usage-popover')).toContainText(/Context|上下文/);
 
   await page.getByTestId('chat-input').fill('Say PONG');
   await page.getByTestId('chat-send').click();

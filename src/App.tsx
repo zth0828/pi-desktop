@@ -39,6 +39,7 @@ const PAGES: Array<{ id: PageId; icon: typeof MessageSquare }> = [
 export default function App() {
   const { t } = useTranslation();
   const [page, setPage] = useState<PageId>('chat');
+  const [platform, setPlatform] = useState('');
   const state = usePiSystemStore((s) => s.state);
   const env = usePiSystemStore((s) => s.env);
   const latestVersion = usePiSystemStore((s) => s.latestVersion);
@@ -51,6 +52,7 @@ export default function App() {
     bindChatEvents();
     void detect();
     void initTheme();
+    void hostApi.app.platform().then(setPlatform);
     // 恢复保存的语言
     void hostApi.settings.get('language').then((lng) => {
       if (lng && lng !== i18n.language) void i18n.changeLanguage(lng);
@@ -58,8 +60,16 @@ export default function App() {
     return unbind;
   }, [detect]);
 
+  const isMac = platform === 'darwin';
+  const dragStrip = isMac ? <div className="window-drag-strip" data-testid="window-drag-strip" /> : null;
+
   if (state !== 'ready') {
-    return <Onboarding />;
+    return (
+      <>
+        {dragStrip}
+        <Onboarding />
+      </>
+    );
   }
 
   const newChat = () => {
@@ -68,9 +78,9 @@ export default function App() {
   };
 
   return (
-    <div className="app-layout">
+    <div className={isMac ? 'app-layout is-macos' : 'app-layout'}>
+      {dragStrip}
       <nav className="sidebar">
-        <div className="sidebar-title drag-region">Pi Desktop</div>
         <button className="new-chat" data-testid="new-chat" onClick={newChat}>
           <Plus size={15} />
           {t('sidebar.newChat')}

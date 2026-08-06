@@ -222,14 +222,28 @@ button.danger-outline {
   height: 100vh;
 }
 
+.window-drag-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 54px;
+  z-index: 100;
+  -webkit-app-region: drag;
+}
+
 .sidebar {
   width: 224px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 14px 10px 10px;
+  padding: 22px 10px 10px;
   background: var(--bg);
+}
+
+.app-layout.is-macos .sidebar {
+  padding-top: 66px;
 }
 
 .sidebar-title {
