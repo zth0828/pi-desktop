@@ -11,21 +11,11 @@ import SessionsPage from './pages/Sessions';
 import SettingsPage from './pages/Settings';
 import SkillsPage from './pages/Skills';
 import ExtensionsPage from './pages/Extensions';
+import McpPage from './pages/Mcp';
 import i18n from './lib/i18n';
 
 type PageId = 'chat' | 'models' | 'sessions' | 'skills' | 'extensions' | 'mcp' | 'settings';
 const PAGES: PageId[] = ['chat', 'models', 'sessions', 'skills', 'extensions', 'mcp', 'settings'];
-
-// M5 逐步填充的页面占位（Skills/Extensions/MCP/Settings）
-function PlaceholderPage({ id }: { id: PageId }) {
-  const { t } = useTranslation();
-  return (
-    <div className="placeholder-page">
-      <h2>{t(`nav.${id}`)}</h2>
-      <p className="hint">{t('nav.placeholder')}</p>
-    </div>
-  );
-}
 
 export default function App() {
   const { t } = useTranslation();
@@ -95,11 +85,11 @@ export default function App() {
           <SkillsPage />
         ) : page === 'extensions' ? (
           <ExtensionsPage />
+        ) : page === 'mcp' ? (
+          <McpPage />
         ) : page === 'settings' ? (
           <SettingsPage />
-        ) : (
-          <PlaceholderPage id={page} />
-        )}
+        ) : null}
       </main>
     </div>
   );

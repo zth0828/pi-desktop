@@ -200,6 +200,54 @@ export type PiPackageProgressEvent = {
   message?: string;
 };
 
+// —— piMcp：MCP server 配置（M5，pi-mcp-adapter 的标准 mcpServers 格式，docs §4.7）——
+
+export type PiMcpServerConfig = {
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+  disabled?: boolean;
+  lifecycle?: string;
+};
+
+/** adapter 事件总线快照里的 per-server 状态（增强项，接不通则缺省） */
+export type PiMcpServerStatus = {
+  connected?: boolean;
+  toolCount?: number;
+  disabled?: boolean;
+  error?: string;
+  /** adapter 原始 status 文本 */
+  raw?: string;
+};
+
+export type PiMcpScope = 'global' | 'project';
+
+export type PiMcpServerRow = {
+  name: string;
+  scope: PiMcpScope;
+  config: PiMcpServerConfig;
+  status?: PiMcpServerStatus;
+};
+
+export type PiMcpListResult = {
+  servers: PiMcpServerRow[];
+  adapterInstalled: boolean;
+  globalPath: string;
+  projectPath?: string;
+};
+
+export type PiMcpUpsertPayload = {
+  scope: PiMcpScope;
+  name: string;
+  /** 重命名时带原名 */
+  originalName?: string;
+  config: PiMcpServerConfig;
+};
+export type PiMcpServerRefPayload = { scope: PiMcpScope; name: string };
+export type PiMcpSetDisabledPayload = PiMcpServerRefPayload & { disabled: boolean };
+
 export type HostApiContract = {
   app: {
     version: () => string;
@@ -276,6 +324,16 @@ export type HostApiContract = {
     update: (payload: PiPackageUpdatePayload) => HostSuccess;
     /** 检查可更新项（npm 查 registry / git 查 remote，可能较慢）。 */
     checkUpdates: () => PiPackageCheckUpdatesResult;
+  };
+  piMcp: {
+    /** 合并 <agentDir>/mcp.json（global）与 <cwd>/.mcp.json（project）的 server 列表。 */
+    list: () => PiMcpListResult;
+    /** 新增/编辑（originalName 用于重命名）；写回对应文件，保留文件里其他字段。 */
+    upsert: (payload: PiMcpUpsertPayload) => HostSuccess;
+    remove: (payload: PiMcpServerRefPayload) => HostSuccess;
+    setDisabled: (payload: PiMcpSetDisabledPayload) => HostSuccess;
+    /** 引导按钮：spawn 用户环境的 pi bin 执行 `pi install npm:pi-mcp-adapter`。 */
+    installAdapter: () => HostSuccess;
   };
   dialog: {
     open: (payload: DialogOpenPayload) => DialogOpenResult;

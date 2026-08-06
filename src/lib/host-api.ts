@@ -63,6 +63,28 @@ export const hostApi = {
     update: (source?: string) => invokeHost('piPackages', 'update', { source }),
     checkUpdates: () => invokeHost('piPackages', 'checkUpdates'),
   },
+  piMcp: {
+    list: () => invokeHost('piMcp', 'list'),
+    upsert: (payload: {
+      scope: 'global' | 'project';
+      name: string;
+      originalName?: string;
+      config: {
+        command?: string;
+        args?: string[];
+        env?: Record<string, string>;
+        url?: string;
+        headers?: Record<string, string>;
+        disabled?: boolean;
+        lifecycle?: string;
+      };
+    }) => invokeHost('piMcp', 'upsert', payload),
+    remove: (scope: 'global' | 'project', name: string) =>
+      invokeHost('piMcp', 'remove', { scope, name }),
+    setDisabled: (scope: 'global' | 'project', name: string, disabled: boolean) =>
+      invokeHost('piMcp', 'setDisabled', { scope, name, disabled }),
+    installAdapter: () => invokeHost('piMcp', 'installAdapter'),
+  },
   settings: {
     getAll: () => invokeHost('settings', 'getAll'),
     get: (key: 'language' | 'workspaceCwd') => invokeHost('settings', 'get', { key }),

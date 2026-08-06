@@ -126,6 +126,40 @@
       "project": "项目"
     }
   },
+  "mcp": {
+    "title": "MCP",
+    "hint": "MCP server 由 pi-mcp-adapter 扩展提供。配置写在 <agentDir>/mcp.json（全局）和 <工作区>/.mcp.json（项目），改动在下一个会话生效。",
+    "noAdapter": "尚未安装 pi-mcp-adapter 扩展。下面的配置装好后才会生效。",
+    "installAdapter": "安装 pi-mcp-adapter",
+    "installingAdapter": "安装中…",
+    "addServer": "添加 server",
+    "empty": "还没有配置 MCP server。",
+    "disabled": "已禁用",
+    "enable": "启用",
+    "disable": "禁用",
+    "edit": "编辑",
+    "delete": "删除",
+    "confirmDelete": "确认删除",
+    "scope": {
+      "global": "全局",
+      "project": "项目"
+    },
+    "status": {
+      "connected": "已连接 · {{count}} 个工具",
+      "disconnected": "未连接"
+    },
+    "form": {
+      "name": "Server 名称",
+      "command": "命令（如 node）",
+      "args": "参数，空格分隔",
+      "url": "Server URL",
+      "env": "环境变量，每行 KEY=VALUE",
+      "lifecycleDefault": "lifecycle（默认）",
+      "disabled": "禁用",
+      "save": "保存",
+      "cancel": "取消"
+    }
+  },
   "sidebar": {
     "newChat": "新会话"
   },

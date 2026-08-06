@@ -32,6 +32,10 @@ export type HostEventContract = {
     /** 包安装/卸载/更新进度（PackageManager.setProgressCallback 转发） */
     progress: (payload: PiPackageProgressEvent) => void;
   };
+  piMcp: {
+    /** pi-mcp-adapter 状态快照（eventBus 通道 pi-mcp-adapter/status/v1 转发） */
+    statusChanged: (payload: { snapshot: Record<string, unknown> | null }) => void;
+  };
 };
 
 export type HostEventModule = keyof HostEventContract;
@@ -58,6 +62,9 @@ export const HOST_EVENT_CHANNELS = {
   },
   piPackages: {
     progress: 'pi-packages:progress',
+  },
+  piMcp: {
+    statusChanged: 'pi-mcp:status-changed',
   },
 } as const satisfies {
   [M in HostEventModule]: { [E in HostEventName<M>]: string };

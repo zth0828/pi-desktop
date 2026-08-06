@@ -10,7 +10,7 @@ import type {
   PiRuntimeStartPayload,
   PiRuntimeStateResult,
 } from '@shared/host-api/contract';
-import type { AgentSession, AgentSessionRuntime } from '@earendil-works/pi-coding-agent';
+import type { AgentSession, AgentSessionRuntime, EventBus } from '@earendil-works/pi-coding-agent';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 
@@ -20,15 +20,26 @@ export type ActiveRuntime = {
   cwd: string;
   sessionId: string;
   generation: number;
+  /** 传给 resourceLoader 的事件总线（pi-mcp-adapter 等扩展的状态通道挂在上面） */
+  eventBus: EventBus;
   unsubscribe: () => void;
 };
 
+/** pi-mcp-adapter 的版本化状态通道（docs §4.7 Spike B 结论）。 */
+export const MCP_STATUS_CHANNEL = 'pi-mcp-adapter/status/v1';
+
 let active: ActiveRuntime | null = null;
 let startInFlight: Promise<PiRuntimeStateResult> | null = null;
+let latestMcpStatus: Record<string, unknown> | null = null;
 
 /** 当前活动运行时（供 piSessions 等兄弟服务复用；只读使用，替换会话须走 afterSessionReplaced）。 */
 export function getActiveRuntime(): ActiveRuntime | null {
   return active;
+}
+
+/** 最近一次 pi-mcp-adapter 状态快照（未装 adapter / 未发过则为 null）。 */
+export function getLatestMcpStatusSnapshot(): Record<string, unknown> | null {
+  return latestMcpStatus;
 }
 
 function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
@@ -105,6 +116,7 @@ async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
 async function createRuntime(cwd: string): Promise<ActiveRuntime> {
   const sdk = await loadPiSdk();
   const agentDir = sdk.getAgentDir();
+  const eventBus = sdk.createEventBus();
   const createFactory = async ({
     cwd: effectiveCwd,
     sessionManager,
@@ -114,7 +126,11 @@ async function createRuntime(cwd: string): Promise<ActiveRuntime> {
     sessionManager: unknown;
     sessionStartEvent?: unknown;
   }) => {
-    const services = await sdk.createAgentSessionServices({ cwd: effectiveCwd, agentDir });
+    const services = await sdk.createAgentSessionServices({
+      cwd: effectiveCwd,
+      agentDir,
+      resourceLoaderOptions: { eventBus },
+    });
     return {
       ...(await sdk.createAgentSessionFromServices({
         services,
@@ -136,8 +152,15 @@ async function createRuntime(cwd: string): Promise<ActiveRuntime> {
     cwd,
     sessionId: runtime.session.sessionId,
     generation: 1,
+    eventBus,
     unsubscribe: () => {},
   };
+  // pi-mcp-adapter 状态快照：缓存 + 转发渲染层（增强项；未装 adapter 时永远不发）
+  latestMcpStatus = null;
+  eventBus.on(MCP_STATUS_CHANNEL, (data) => {
+    latestMcpStatus = (data ?? null) as Record<string, unknown> | null;
+    sendHostEvent('piMcp', 'statusChanged', { snapshot: latestMcpStatus });
+  });
   await bindCurrentSession(active_);
   bridgeSessionEvents(active_);
   return active_;

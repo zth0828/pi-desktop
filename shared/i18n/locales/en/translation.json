@@ -126,6 +126,40 @@
       "project": "project"
     }
   },
+  "mcp": {
+    "title": "MCP",
+    "hint": "MCP servers are provided by the pi-mcp-adapter extension. Config lives in <agentDir>/mcp.json (global) and <workspace>/.mcp.json (project); changes apply to the next session.",
+    "noAdapter": "The pi-mcp-adapter extension is not installed. Configurations below only take effect once it is installed.",
+    "installAdapter": "Install pi-mcp-adapter",
+    "installingAdapter": "Installing…",
+    "addServer": "Add server",
+    "empty": "No MCP servers configured.",
+    "disabled": "disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Confirm delete",
+    "scope": {
+      "global": "global",
+      "project": "project"
+    },
+    "status": {
+      "connected": "connected · {{count}} tools",
+      "disconnected": "disconnected"
+    },
+    "form": {
+      "name": "Server name",
+      "command": "Command (e.g. node)",
+      "args": "Args, space separated",
+      "url": "Server URL",
+      "env": "Env vars, KEY=VALUE per line",
+      "lifecycleDefault": "lifecycle (default)",
+      "disabled": "Disabled",
+      "save": "Save",
+      "cancel": "Cancel"
+    }
+  },
   "sidebar": {
     "newChat": "New chat"
   },
