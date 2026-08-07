@@ -69,6 +69,12 @@ export const hostApi = {
       invokeHost('piPackages', 'remove', { source, scope }),
     update: (source?: string) => invokeHost('piPackages', 'update', { source }),
     checkUpdates: () => invokeHost('piPackages', 'checkUpdates'),
+    catalog: (query: {
+      name?: string;
+      type?: '' | 'extension' | 'skill' | 'theme' | 'prompt';
+      sort?: 'downloads' | 'recent' | 'name';
+      page?: number;
+    }) => invokeHost('piPackages', 'catalog', query),
   },
   piMcp: {
     list: () => invokeHost('piMcp', 'list'),

@@ -25,6 +25,10 @@ export type LaunchOptions = {
   agentDir?: string;
   /** 预置壳设置（如 workspaceCwd） */
   seedSettings?: Record<string, string>;
+  /** 官方 Package Catalog 的测试替身地址。 */
+  packageCatalogUrl?: string;
+  /** npm package 安装测试使用的 registry 地址。 */
+  npmRegistryUrl?: string;
 };
 
 type ElectronFixtures = {
@@ -96,6 +100,8 @@ export const test = base.extend<ElectronFixtures>({
             ? { PI_DESKTOP_NPM_ROOT: options.npmRoot ?? piEnv!.npmRoot }
             : {}),
           ...(options.agentDir ? { PI_CODING_AGENT_DIR: options.agentDir } : {}),
+          ...(options.packageCatalogUrl ? { PI_PACKAGE_CATALOG_URL: options.packageCatalogUrl } : {}),
+          ...(options.npmRegistryUrl ? { npm_config_registry: options.npmRegistryUrl } : {}),
           PI_DESKTOP_USER_DATA_DIR: join(homeDir, 'user-data'),
         },
         timeout: 60_000,

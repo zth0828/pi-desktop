@@ -1,0 +1,128 @@
+import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+
+const tarballPath = process.argv[2];
+if (!tarballPath) throw new Error('tarball path is required');
+const tarball = readFileSync(tarballPath);
+
+const allPackages = [
+  {
+    name: 'pi-desktop-catalog-fixture',
+    description: 'Installable package used by the Pi Desktop catalog test.',
+    author: 'pi-desktop',
+    downloads: 4200,
+    date: 1786000000000,
+    types: ['extension'],
+  },
+  {
+    name: 'pi-desktop-skill-fixture',
+    description: 'A searchable skill package for testing catalog filters.',
+    author: 'fixture-author',
+    downloads: 900,
+    date: 1785000000000,
+    types: ['skill'],
+  },
+  {
+    name: 'pi-desktop-theme-fixture',
+    description: 'A theme package on the second catalog page.',
+    author: 'fixture-author',
+    downloads: 100,
+    date: 1784000000000,
+    types: ['theme'],
+  },
+];
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function renderCard(pkg) {
+  const types = pkg.types.join(' ');
+  const badges = pkg.types.map((type) => `<span data-type="${type}">${type}</span>`).join('');
+  return `<article data-package-card="true" data-package-name="${pkg.name}" data-package-types="${types}" data-package-downloads="${pkg.downloads}" data-package-date="${pkg.date}">
+    <h3 class="packages-name"><a href="/packages/${pkg.name}">${pkg.name}</a></h3>
+    <p class="packages-desc">${escapeHtml(pkg.description)}</p>
+    <div class="packages-meta"><span>${pkg.author}</span><span>${pkg.downloads}/mo</span><span>recently</span></div>
+    <div class="packages-badges">${badges}</div>
+    <div class="packages-links"><a href="https://www.npmjs.com/package/${pkg.name}">npm</a><a href="https://github.com/example/${pkg.name}">repo</a></div>
+  </article>`;
+}
+
+function renderCatalog(url) {
+  const name = (url.searchParams.get('name') ?? '').toLowerCase();
+  const type = url.searchParams.get('type') ?? '';
+  const sort = url.searchParams.get('sort') ?? 'downloads';
+  const page = Math.max(1, Number(url.searchParams.get('page') ?? 1));
+  let packages = allPackages.filter((pkg) => (
+    (!name || `${pkg.name} ${pkg.description} ${pkg.author}`.toLowerCase().includes(name))
+    && (!type || pkg.types.includes(type))
+  ));
+  packages = packages.toSorted((a, b) => {
+    if (sort === 'recent') return b.date - a.date;
+    if (sort === 'name') return a.name.localeCompare(b.name);
+    return b.downloads - a.downloads;
+  });
+  const pageSize = 2;
+  const startIndex = (page - 1) * pageSize;
+  const pageRows = packages.slice(startIndex, startIndex + pageSize);
+  const start = pageRows.length ? startIndex + 1 : 0;
+  const end = startIndex + pageRows.length;
+  const totalPages = Math.max(1, Math.ceil(packages.length / pageSize));
+  const pagination = Array.from({ length: totalPages }, (_, index) => {
+    const number = index + 1;
+    return number === page ? `<span>${number}</span>` : `<a href="/packages?page=${number}">${number}</a>`;
+  }).join('');
+  return `<!doctype html><html><body>
+    <span class="packages-count">${start}-${end} / ${packages.length}</span>
+    ${pageRows.map(renderCard).join('')}
+    <nav>${pagination}</nav>
+  </body></html>`;
+}
+
+const server = createServer((req, res) => {
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  const url = new URL(req.url ?? '/', baseUrl);
+  if (url.pathname === '/packages') {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(renderCatalog(url));
+    return;
+  }
+  if (url.pathname === '/pi-desktop-catalog-fixture') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      name: 'pi-desktop-catalog-fixture',
+      'dist-tags': { latest: '1.0.0' },
+      versions: {
+        '1.0.0': {
+          name: 'pi-desktop-catalog-fixture',
+          version: '1.0.0',
+          dist: {
+            tarball: `${baseUrl}/pi-desktop-catalog-fixture/-/pi-desktop-catalog-fixture-1.0.0.tgz`,
+          },
+        },
+      },
+    }));
+    return;
+  }
+  if (url.pathname === '/pi-desktop-catalog-fixture/-/pi-desktop-catalog-fixture-1.0.0.tgz') {
+    res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': tarball.length });
+    res.end(tarball);
+    return;
+  }
+  res.writeHead(404);
+  res.end('not found');
+});
+
+server.listen(0, '127.0.0.1', () => {
+  const address = server.address();
+  process.stdout.write(`http://127.0.0.1:${address.port}\n`);
+});
+
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => server.close(() => process.exit(0)));
+}

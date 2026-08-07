@@ -214,6 +214,35 @@ export type PiPackageUpdateInfo = {
   scope: 'user' | 'project';
 };
 export type PiPackageCheckUpdatesResult = { updates: PiPackageUpdateInfo[] };
+export type PiPackageCatalogType = 'extension' | 'skill' | 'theme' | 'prompt' | 'package';
+export type PiPackageCatalogFilterType = Exclude<PiPackageCatalogType, 'package'> | '';
+export type PiPackageCatalogSort = 'downloads' | 'recent' | 'name';
+export type PiPackageCatalogQuery = {
+  name?: string;
+  type?: PiPackageCatalogFilterType;
+  sort?: PiPackageCatalogSort;
+  page?: number;
+};
+export type PiPackageCatalogRow = {
+  name: string;
+  description: string;
+  author: string;
+  downloads: number;
+  publishedAt?: string;
+  publishedLabel: string;
+  types: PiPackageCatalogType[];
+  detailsUrl: string;
+  npmUrl?: string;
+  repositoryUrl?: string;
+};
+export type PiPackageCatalogResult = {
+  packages: PiPackageCatalogRow[];
+  page: number;
+  totalPages: number;
+  totalCount: number;
+  start: number;
+  end: number;
+};
 export type PiPackageProgressEvent = {
   type: 'start' | 'progress' | 'complete' | 'error';
   action: 'install' | 'remove' | 'update' | 'clone' | 'pull';
@@ -351,6 +380,8 @@ export type HostApiContract = {
     update: (payload: PiPackageUpdatePayload) => HostSuccess;
     /** 检查可更新项（npm 查 registry / git 查 remote，可能较慢）。 */
     checkUpdates: () => PiPackageCheckUpdatesResult;
+    /** 查询 pi.dev 官方 Package Catalog；Main 侧获取并解析，Renderer 不跨域抓网页。 */
+    catalog: (payload: PiPackageCatalogQuery) => PiPackageCatalogResult;
   };
   piMcp: {
     /** 合并 <agentDir>/mcp.json（global）与 <cwd>/.mcp.json（project）的 server 列表。 */

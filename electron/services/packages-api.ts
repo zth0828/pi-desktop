@@ -1,13 +1,15 @@
 // piPackages：扩展包管理（M5）。全部经 pi SDK 的 DefaultPackageManager
 // （list/installAndPersist/removeAndPersist/update/checkForAvailableUpdates），
 // 壳不直接改 settings.json 的 packages 字段。进度经 piPackages.progress 事件转发。
-// 市场浏览 v1 不做（pi.dev API 未确认，docs §4.6）。
+// 官方目录查询在 Main 侧读取 pi.dev 服务端 HTML，安装动作仍完全复用 pi SDK。
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type {
   HostSuccess,
   PiPackageCheckUpdatesResult,
+  PiPackageCatalogQuery,
+  PiPackageCatalogResult,
   PiPackageInstallPayload,
   PiPackageListResult,
   PiPackageRemovePayload,
@@ -19,6 +21,7 @@ import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 import { getActiveRuntime } from './pi-runtime-api';
 import { settingsApi } from './settings-api';
+import { fetchPackageCatalog } from './package-catalog';
 
 // 用类而非 PackageManager 接口：checkForAvailableUpdates 只在 DefaultPackageManager 上
 type Pm = InstanceType<typeof DefaultPackageManager>;
@@ -132,4 +135,7 @@ export const packagesApi = {
       })),
     };
   },
+
+  catalog: async (payload: PiPackageCatalogQuery): Promise<PiPackageCatalogResult> =>
+    fetchPackageCatalog(payload),
 };
