@@ -35,6 +35,10 @@ export type PiDetectResult = {
   version?: string;
   installKind?: PiInstallKind;
   meetsMin: boolean;
+  /** 仅开发启动脚本可设置：显式使用用户指定的本地 pi 包。 */
+  devOverride?: boolean;
+  /** 仅开发启动脚本可设置：允许加载低于最低兼容版本的 pi。 */
+  devAllowsOutdated?: boolean;
   /** npm root 下装着 pi 但 PATH 里的 pi 指向别处（PATH 遮蔽）时给出 */
   npmInstalledVersion?: string;
 };

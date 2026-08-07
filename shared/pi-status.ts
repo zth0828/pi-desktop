@@ -11,7 +11,7 @@ export type OnboardingState =
 export function computeOnboardingState(env: PiEnvironment): OnboardingState {
   if (!env.node.found || !env.node.meetsMin || !env.npm.found) return 'no-node';
   if (!env.pi.found) return 'no-pi';
-  if (env.pi.installKind !== 'npm') return 'non-npm';
-  if (!env.pi.meetsMin) return 'pi-outdated';
+  if (env.pi.installKind !== 'npm' && !env.pi.devOverride) return 'non-npm';
+  if (!env.pi.meetsMin && !(env.pi.devOverride && env.pi.devAllowsOutdated)) return 'pi-outdated';
   return 'ready';
 }

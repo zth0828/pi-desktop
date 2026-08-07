@@ -15,6 +15,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:local-pi": "node scripts/dev-with-local-pi.mjs",
     "build:vite": "vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
     "test": "vitest run",

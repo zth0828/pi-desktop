@@ -24,21 +24,25 @@ import SkillsPage from './pages/Skills';
 import ExtensionsPage from './pages/Extensions';
 import McpPage from './pages/Mcp';
 import i18n from './lib/i18n';
+import { APP_PAGE_IDS, initialAppPage, type AppPageId } from '@shared/app-page';
 
-type PageId = 'chat' | 'models' | 'sessions' | 'skills' | 'extensions' | 'mcp' | 'settings';
-const PAGES: Array<{ id: PageId; icon: typeof MessageSquare }> = [
-  { id: 'chat', icon: MessageSquare },
-  { id: 'models', icon: Monitor },
-  { id: 'sessions', icon: History },
-  { id: 'skills', icon: Sparkles },
-  { id: 'extensions', icon: Puzzle },
-  { id: 'mcp', icon: Plug },
-  { id: 'settings', icon: SettingsIcon },
-];
+const PAGE_ICONS: Record<AppPageId, typeof MessageSquare> = {
+  chat: MessageSquare,
+  models: Monitor,
+  sessions: History,
+  skills: Sparkles,
+  extensions: Puzzle,
+  mcp: Plug,
+  settings: SettingsIcon,
+};
+const PAGES: Array<{ id: AppPageId; icon: typeof MessageSquare }> = APP_PAGE_IDS.map((id) => ({
+  id,
+  icon: PAGE_ICONS[id],
+}));
 
 export default function App() {
   const { t } = useTranslation();
-  const [page, setPage] = useState<PageId>('chat');
+  const [page, setPage] = useState<AppPageId>(() => initialAppPage(window.location.search));
   const [platform, setPlatform] = useState('');
   const state = usePiSystemStore((s) => s.state);
   const env = usePiSystemStore((s) => s.env);

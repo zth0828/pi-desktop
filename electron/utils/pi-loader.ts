@@ -23,10 +23,10 @@ export async function loadPiSdk(): Promise<PiSdk> {
   if (!env.pi.found || !env.pi.packageRoot) {
     throw new PiNotReadyError('not-installed');
   }
-  if (env.pi.installKind !== 'npm') {
+  if (env.pi.installKind !== 'npm' && !env.pi.devOverride) {
     throw new PiNotReadyError('non-npm-install');
   }
-  if (!env.pi.meetsMin) {
+  if (!env.pi.meetsMin && !(env.pi.devOverride && env.pi.devAllowsOutdated)) {
     throw new PiNotReadyError(`version-too-low:${env.pi.version ?? 'unknown'}`);
   }
   if (cached && cachedPackageRoot === env.pi.packageRoot) return cached;

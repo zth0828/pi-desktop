@@ -29,6 +29,11 @@ export type LaunchOptions = {
   packageCatalogUrl?: string;
   /** npm package 安装测试使用的 registry 地址。 */
   npmRegistryUrl?: string;
+  /** 仅 E2E：模拟 dev 脚本指定的初始功能页。 */
+  initialPage?: string;
+  /** 仅 E2E：模拟 dev 脚本显式选择非 npm pi 包。 */
+  devPiPackageRoot?: string;
+  devAllowOutdated?: boolean;
 };
 
 type ElectronFixtures = {
@@ -102,6 +107,17 @@ export const test = base.extend<ElectronFixtures>({
           ...(options.agentDir ? { PI_CODING_AGENT_DIR: options.agentDir } : {}),
           ...(options.packageCatalogUrl ? { PI_PACKAGE_CATALOG_URL: options.packageCatalogUrl } : {}),
           ...(options.npmRegistryUrl ? { npm_config_registry: options.npmRegistryUrl } : {}),
+          ...(options.initialPage
+            ? { PI_DESKTOP_E2E: '1', PI_DESKTOP_DEV_INITIAL_PAGE: options.initialPage }
+            : {}),
+          ...(options.devPiPackageRoot
+            ? {
+              PI_DESKTOP_E2E: '1',
+              PI_DESKTOP_DEV_ALLOW_NON_NPM: '1',
+              PI_DESKTOP_DEV_PI_PACKAGE_ROOT: options.devPiPackageRoot,
+            }
+            : {}),
+          ...(options.devAllowOutdated ? { PI_DESKTOP_DEV_ALLOW_OUTDATED: '1' } : {}),
           PI_DESKTOP_USER_DATA_DIR: join(homeDir, 'user-data'),
         },
         timeout: 60_000,

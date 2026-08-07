@@ -44,4 +44,28 @@ describe('computeOnboardingState — onboarding 五场景', () => {
   it('npm 安装且版本达标 → ready', () => {
     expect(computeOnboardingState(env({}))).toBe('ready');
   });
+
+  it('dev override 允许使用达标的非 npm pi', () => {
+    expect(computeOnboardingState(env({
+      pi: { installKind: 'non-npm', devOverride: true },
+    }))).toBe('ready');
+  });
+
+  it('dev override 默认仍阻止过低版本', () => {
+    expect(computeOnboardingState(env({
+      pi: { version: '0.82.1', installKind: 'non-npm', meetsMin: false, devOverride: true },
+    }))).toBe('pi-outdated');
+  });
+
+  it('dev override 只有显式 unsafe 时才允许过低版本', () => {
+    expect(computeOnboardingState(env({
+      pi: {
+        version: '0.82.1',
+        installKind: 'non-npm',
+        meetsMin: false,
+        devOverride: true,
+        devAllowsOutdated: true,
+      },
+    }))).toBe('ready');
+  });
 });

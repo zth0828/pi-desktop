@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
+import { resolveAppPageId } from '@shared/app-page';
 import { HostApiRegistry, registerHostInvokeHandler } from './ipc/host-invoke';
 import { createHostServices } from '../services';
 
@@ -36,10 +37,21 @@ function createMainWindow(): BrowserWindow {
     },
   });
 
+  const canUseInitialPage = Boolean(process.env.VITE_DEV_SERVER_URL)
+    || process.env.PI_DESKTOP_E2E === '1';
+  const initialPage = canUseInitialPage
+    ? resolveAppPageId(process.env.PI_DESKTOP_DEV_INITIAL_PAGE)
+    : undefined;
+
   if (process.env.VITE_DEV_SERVER_URL) {
-    win.loadURL(process.env.VITE_DEV_SERVER_URL);
+    const url = new URL(process.env.VITE_DEV_SERVER_URL);
+    if (initialPage) url.searchParams.set('page', initialPage);
+    win.loadURL(url.toString());
   } else {
-    win.loadFile(path.join(__dirname, '../../dist/index.html'));
+    win.loadFile(
+      path.join(__dirname, '../../dist/index.html'),
+      initialPage ? { query: { page: initialPage } } : undefined,
+    );
   }
   return win;
 }

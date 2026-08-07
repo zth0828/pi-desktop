@@ -104,6 +104,62 @@ export function isUnderDir(child: string, parent: string): boolean {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
+export function detectPiPackageRoot(
+  packageRoot: string,
+  npm: NpmDetectResult,
+  devAllowsOutdated = false,
+): PiDetectResult | null {
+  try {
+    const realPackageRoot = realpathSync(packageRoot);
+    const manifest = JSON.parse(readFileSync(path.join(realPackageRoot, 'package.json'), 'utf8')) as {
+      name?: string;
+      version?: string;
+      bin?: string | Record<string, string>;
+    };
+    if (manifest.name !== PI_PACKAGE_NAME || typeof manifest.version !== 'string') return null;
+
+    const cliRelative = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.pi;
+    const realBinPath = cliRelative
+      ? realpathSync(path.join(realPackageRoot, cliRelative))
+      : undefined;
+    const installKind: PiInstallKind =
+      npm.globalRoot && isUnderDir(realPackageRoot, npm.globalRoot) ? 'npm' : 'non-npm';
+    let meetsMin = false;
+    try {
+      meetsMin = gte(manifest.version, MIN_PI_VERSION);
+    } catch {
+      meetsMin = false;
+    }
+
+    return {
+      found: true,
+      binPath: realBinPath,
+      realBinPath,
+      packageRoot: realPackageRoot,
+      version: manifest.version,
+      installKind,
+      meetsMin,
+      devOverride: true,
+      devAllowsOutdated,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function detectDevPiOverride(npm: NpmDetectResult): PiDetectResult | null {
+  // 只允许 Vite dev server 或 E2E 使用，打包应用即使被注入环境变量也不会放行。
+  if (!process.env.VITE_DEV_SERVER_URL && process.env.PI_DESKTOP_E2E !== '1') return null;
+  if (process.env.PI_DESKTOP_DEV_ALLOW_NON_NPM !== '1') return null;
+  const packageRoot = process.env.PI_DESKTOP_DEV_PI_PACKAGE_ROOT;
+  if (!packageRoot) return null;
+  return detectPiPackageRoot(
+    packageRoot,
+    npm,
+    process.env.PI_DESKTOP_DEV_ALLOW_OUTDATED === '1',
+  );
+}
+
 export function detectPi(npm: NpmDetectResult): PiDetectResult {
   const binPath = findOnPath('pi');
   const base: PiDetectResult = { found: false, meetsMin: false };
@@ -155,6 +211,8 @@ export function detectPi(npm: NpmDetectResult): PiDetectResult {
 export function detectPiEnvironment(): PiEnvironment {
   const node = detectNode();
   const npm = node.found ? detectNpm() : { found: false };
-  const pi = npm.found ? detectPi(npm) : { found: false, meetsMin: false };
+  const pi = npm.found
+    ? detectDevPiOverride(npm) ?? detectPi(npm)
+    : { found: false, meetsMin: false };
   return { node, npm, pi, minNodeVersion: MIN_NODE_VERSION, minPiVersion: MIN_PI_VERSION };
 }
