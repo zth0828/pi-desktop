@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowUp, ChevronDown, CircleGauge, Folder, Paperclip, Square } from 'lucide-react';
 import type { PiCommandRow, PiModelRow, PiRuntimeContextUsage } from '@shared/host-api/contract';
 import { hostApi } from '../../lib/host-api';
+import { cacheHitRate, formatCost, formatHitRate, summarizeUsage } from '../../lib/usage-stats';
 import { useChatStore } from '../../stores/chat';
 
 type StagedImage = { data: string; mediaType: string; previewUrl: string };
@@ -66,19 +67,9 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
     if (model) setModelKey(`${model.provider}/${model.id}`);
   }, [model]);
 
-  const usageTotals = messages.reduce(
-    (totals, message) => {
-      const usage = (message.raw as { usage?: Record<string, unknown> } | undefined)?.usage;
-      if (!usage) return totals;
-      return {
-        input: totals.input + Number(usage.input ?? usage.prompt_tokens ?? 0),
-        output: totals.output + Number(usage.output ?? usage.completion_tokens ?? 0),
-        cacheRead: totals.cacheRead + Number(usage.cacheRead ?? 0),
-        cacheWrite: totals.cacheWrite + Number(usage.cacheWrite ?? 0),
-      };
-    },
-    { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  );
+  const usageTotals = summarizeUsage(messages);
+  const totalHitRate = cacheHitRate(usageTotals);
+  const lastTurnHitRate = usageTotals.lastTurn ? cacheHitRate(usageTotals.lastTurn) : null;
   const selectedModel = models.find((candidate) => `${candidate.provider}/${candidate.id}` === modelKey);
   // 模型下拉按供应商分组（optgroup），供应商顺序保持 listModels 的首现顺序
   const modelGroups = new Map<string, PiModelRow[]>();
@@ -343,6 +334,15 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
                     <div className="usage-row"><span>{t('chat.cacheRead')}</span><strong>{formatTokens(usageTotals.cacheRead)}</strong></div>
                     <div className="usage-row"><span>{t('chat.cacheWrite')}</span><strong>{formatTokens(usageTotals.cacheWrite)}</strong></div>
                   </>
+                )}
+                {totalHitRate != null && (
+                  <div className="usage-row"><span>{t('chat.cacheHitRate')}</span><strong>{formatHitRate(totalHitRate)}</strong></div>
+                )}
+                {lastTurnHitRate != null && (
+                  <div className="usage-row"><span>{t('chat.cacheHitRateLast')}</span><strong>{formatHitRate(lastTurnHitRate)}</strong></div>
+                )}
+                {usageTotals.cost > 0 && (
+                  <div className="usage-row"><span>{t('chat.totalCost')}</span><strong>{formatCost(usageTotals.cost)}</strong></div>
                 )}
               </div>
             )}

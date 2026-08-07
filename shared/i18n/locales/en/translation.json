@@ -83,6 +83,9 @@
     "outputTokens": "Output tokens",
     "cacheRead": "Cache read",
     "cacheWrite": "Cache write",
+    "cacheHitRate": "Cache hit rate",
+    "cacheHitRateLast": "Last turn hit rate",
+    "totalCost": "Session cost",
     "tokenUnknown": "—",
     "greeting": "What can I do for you?"
   },

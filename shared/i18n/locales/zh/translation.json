@@ -83,6 +83,9 @@
     "outputTokens": "输出 Token",
     "cacheRead": "缓存读取",
     "cacheWrite": "缓存写入",
+    "cacheHitRate": "缓存命中率",
+    "cacheHitRateLast": "本轮命中率",
+    "totalCost": "累计成本",
     "tokenUnknown": "—",
     "greeting": "我能为你做些什么？"
   },
