@@ -59,7 +59,7 @@ async function makeAgentDir(): Promise<string> {
       },
     }),
   );
-  await writeFile(path.join(agentDir, 'settings.json'), JSON.stringify({ defaultModel: 'mock/mock-1' }));
+  await writeFile(path.join(agentDir, 'settings.json'), JSON.stringify({ defaultProvider: 'mock', defaultModel: 'mock-1' }));
   return agentDir;
 }
 

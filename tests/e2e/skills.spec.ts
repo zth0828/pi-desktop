@@ -58,7 +58,7 @@ test.beforeEach(async () => {
   );
   await writeFile(
     path.join(agentDir, 'settings.json'),
-    JSON.stringify({ defaultModel: 'mock/mock-1' }),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'mock-1' }),
   );
 });
 
