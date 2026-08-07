@@ -1,10 +1,25 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PiProviderRow } from '@shared/host-api/contract';
+import type { PiDefaultModel, PiModelRow, PiProviderRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 
-function ProviderRow({ provider, onChanged }: { provider: PiProviderRow; onChanged: () => void }) {
+const CUSTOM_API_TYPES = [
+  'openai-completions',
+  'openai-responses',
+  'anthropic-messages',
+  'google-generative-ai',
+] as const;
+
+type ProviderRowProps = {
+  provider: PiProviderRow;
+  /** 该供应商已配置凭证后的可用模型（providers.listModels 按 provider 分组）。 */
+  models: PiModelRow[];
+  defaultModel: PiDefaultModel | null;
+  onChanged: () => void;
+};
+
+function ProviderRow({ provider, models, defaultModel, onChanged }: ProviderRowProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [key, setKey] = useState('');
@@ -36,6 +51,21 @@ function ProviderRow({ provider, onChanged }: { provider: PiProviderRow; onChang
     onChanged();
   };
 
+  const setCurrent = async (modelId: string) => {
+    setBusy(true);
+    setMessage(undefined);
+    const result = await hostApi.providers.setDefaultModel(provider.id, modelId);
+    setBusy(false);
+    if (result.success) {
+      onChanged();
+    } else {
+      setMessage(result.error);
+    }
+  };
+
+  const isDefault = (modelId: string) =>
+    defaultModel?.provider === provider.id && defaultModel.id === modelId;
+
   return (
     <div className="provider-row" data-testid={`provider-${provider.id}`}>
       <button className="provider-row-header" onClick={() => setExpanded((v) => !v)}>
@@ -45,6 +75,13 @@ function ProviderRow({ provider, onChanged }: { provider: PiProviderRow; onChang
         />
         <span className="provider-name">{provider.name}</span>
         <span className="hint">{provider.id}</span>
+        <span className="spacer" />
+        <span
+          className={provider.configured ? 'provider-state configured' : 'provider-state'}
+          data-testid={`provider-state-${provider.id}`}
+        >
+          {provider.configured ? t('models.configured') : t('models.notConfigured')}
+        </span>
         <span className="hint">{t('models.modelCount', { count: provider.modelCount })}</span>
       </button>
       {expanded && (
@@ -73,6 +110,42 @@ function ProviderRow({ provider, onChanged }: { provider: PiProviderRow; onChang
               {t('models.removeKey')}
             </button>
           )}
+          {provider.configured && (
+            <div className="provider-models" data-testid={`provider-models-${provider.id}`}>
+              <div className="provider-models-title">{t('models.availableModels')}</div>
+              {models.length === 0 ? (
+                <div className="hint">{t('models.noAvailableModels')}</div>
+              ) : (
+                models.map((m) => (
+                  <div
+                    className="provider-model-row"
+                    key={m.id}
+                    data-testid={`provider-model-${provider.id}-${m.id}`}
+                  >
+                    <span className="provider-model-name">{m.name ?? m.id}</span>
+                    {m.name && m.name !== m.id && <span className="hint">{m.id}</span>}
+                    <span className="spacer" />
+                    {isDefault(m.id) ? (
+                      <span
+                        className="provider-model-current"
+                        data-testid={`current-model-${provider.id}-${m.id}`}
+                      >
+                        {t('models.current')}
+                      </span>
+                    ) : (
+                      <button
+                        disabled={busy}
+                        data-testid={`set-current-${provider.id}-${m.id}`}
+                        onClick={() => void setCurrent(m.id)}
+                      >
+                        {t('models.setCurrent')}
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
           {message && <p className="error-text">{message}</p>}
         </div>
       )}
@@ -85,6 +158,7 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const [id, setId] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+  const [api, setApi] = useState<string>(CUSTOM_API_TYPES[0]);
   const [apiKey, setApiKey] = useState('');
   const [modelIds, setModelIds] = useState('');
   const [message, setMessage] = useState<string>();
@@ -98,7 +172,7 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
     const result = await hostApi.providers.addCustom({
       id: id.trim(),
       baseUrl: baseUrl.trim(),
-      api: 'openai-completions',
+      api,
       apiKey: apiKey.trim() || undefined,
       models,
     });
@@ -121,7 +195,23 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
   return (
     <div className="custom-provider-form" data-testid="custom-provider-form">
       <input placeholder={t('models.customId')} value={id} onChange={(e) => setId(e.target.value)} />
-      <input placeholder="baseURL" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+      <input
+        placeholder={t('models.customBaseUrl')}
+        value={baseUrl}
+        onChange={(e) => setBaseUrl(e.target.value)}
+      />
+      <select
+        aria-label={t('models.customApi')}
+        data-testid="custom-api-select"
+        value={api}
+        onChange={(e) => setApi(e.target.value)}
+      >
+        {CUSTOM_API_TYPES.map((apiType) => (
+          <option key={apiType} value={apiType}>
+            {apiType}
+          </option>
+        ))}
+      </select>
       <input
         placeholder={t('models.keyPlaceholder')}
         type="password"
@@ -147,11 +237,15 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
 export default function ModelsPage() {
   const { t } = useTranslation();
   const [providers, setProviders] = useState<PiProviderRow[]>([]);
+  const [models, setModels] = useState<PiModelRow[]>([]);
+  const [defaultModel, setDefaultModel] = useState<PiDefaultModel | null>(null);
   const [query, setQuery] = useState('');
   const [oauthMessages, setOauthMessages] = useState<string[]>([]);
 
   const refresh = () => {
     void hostApi.providers.list().then((r) => setProviders(r.providers));
+    void hostApi.providers.listModels().then((r) => setModels(r.models)).catch(() => {});
+    void hostApi.providers.getDefaultModel().then((r) => setDefaultModel(r.model)).catch(() => {});
   };
 
   useEffect(() => {
@@ -189,7 +283,13 @@ export default function ModelsPage() {
               p.id.toLowerCase().includes(query.toLowerCase()),
           )
           .map((p) => (
-          <ProviderRow key={p.id} provider={p} onChanged={refresh} />
+          <ProviderRow
+            key={p.id}
+            provider={p}
+            models={models.filter((m) => m.provider === p.id)}
+            defaultModel={defaultModel}
+            onChanged={refresh}
+          />
         ))}
       </div>
       <CustomProviderForm onAdded={refresh} />

@@ -96,9 +96,17 @@
     "oauthStarted": "授权已发起——请在浏览器中完成。",
     "addCustom": "添加自定义供应商",
     "customId": "供应商 id（如 my-llm）",
+    "customBaseUrl": "baseURL",
+    "customApi": "API 类型",
     "customModels": "模型 id，逗号分隔",
     "saveCustom": "保存供应商",
-    "cancel": "取消"
+    "cancel": "取消",
+    "configured": "已配置",
+    "notConfigured": "未配置",
+    "availableModels": "可用模型",
+    "noAvailableModels": "暂无可用模型",
+    "setCurrent": "设为当前模型",
+    "current": "当前"
   },
   "sessions": {
     "title": "会话",

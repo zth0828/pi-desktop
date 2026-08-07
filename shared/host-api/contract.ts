@@ -143,6 +143,10 @@ export type PiOAuthProgressEvent = {
   event: Record<string, unknown>;
 };
 
+/** 首选模型（pi settings.json 的 defaultProvider/defaultModel，新会话的初始模型）。 */
+export type PiDefaultModel = { provider: string; id: string };
+export type PiDefaultModelResult = { model: PiDefaultModel | null };
+
 // —— piRuntime 命令补全（M3，docs §4.3）——
 
 export type PiCommandRow = { name: string; description?: string; source: string };
@@ -380,6 +384,13 @@ export type HostApiContract = {
     removeCredential: (payload: { providerId: string }) => HostSuccess;
     startOAuth: (payload: { providerId: string }) => HostSuccess;
     addCustom: (payload: PiProviderAddCustomPayload) => HostSuccess;
+    /** 首选模型（pi 原生 defaultProvider/defaultModel）；null = 未设置。 */
+    getDefaultModel: () => PiDefaultModelResult;
+    /**
+     * 设为首选模型：有活动会话时走 session.setModel（切换 + pi 原生持久化）；
+     * 无会话时经 pi SettingsManager 写 settings.json，新会话启动时应用。
+     */
+    setDefaultModel: (payload: PiDefaultModel) => HostSuccess;
   };
   piSessions: {
     /** 当前 workspace cwd 的会话列表（modified 倒序）。runtime 未启动时回退 settings.workspaceCwd。 */

@@ -1,6 +1,6 @@
 // M3 验收：providers 管理 + / 命令补全。
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
@@ -90,7 +90,8 @@ test.beforeEach(async () => {
 });
 
 test.afterEach(async () => {
-  await rm(agentDir, { recursive: true, force: true });
+  // app 可能仍在写 agentDir（session/settings 落盘），rm 加重试吸收竞态
+  await rm(agentDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
 
 test.afterAll(async () => {
@@ -133,6 +134,85 @@ test('Models 页：录入 API key 后状态变已配置', async ({ launchElectro
   await expect(page.getByTestId('provider-status-customnoauth')).toHaveClass(/configured/, {
     timeout: 15_000,
   });
+});
+
+test('Models 页：已配置供应商展开显示可用模型，可设为当前模型并持久化', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  const row = page.getByTestId('provider-mock');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.provider-row-header').click();
+
+  // 展开区域列出该供应商的可用模型
+  const modelList = page.getByTestId('provider-models-mock');
+  await expect(modelList).toBeVisible();
+  await expect(page.getByTestId('provider-model-mock-mock-1')).toBeVisible();
+  await expect(page.getByTestId('provider-model-mock-mock-wide')).toBeVisible();
+
+  // fixture 默认模型是 mock-1 → mock-wide 初始非「当前」，显示设为当前按钮
+  await expect(page.getByTestId('set-current-mock-mock-wide')).toBeVisible();
+  await page.getByTestId('set-current-mock-mock-wide').click();
+
+  // 设为当前后：标记出现，且 pi settings.json 持久化 defaultProvider/defaultModel
+  await expect(page.getByTestId('current-model-mock-mock-wide')).toBeVisible({ timeout: 15_000 });
+  await expect
+    .poll(
+      async () => {
+        try {
+          const settings = JSON.parse(
+            await readFile(path.join(agentDir, 'settings.json'), 'utf8'),
+          ) as { defaultProvider?: string; defaultModel?: string };
+          return `${settings.defaultProvider}/${settings.defaultModel}`;
+        } catch {
+          return '';
+        }
+      },
+      { timeout: 15_000 },
+    )
+    .toBe('mock/mock-wide');
+
+  // 新会话启动时应用首选模型
+  await page.getByTestId('nav-chat').click();
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  await expect(selector).toHaveValue('mock/mock-wide');
+  await page.getByTestId('new-session').click();
+  await expect.poll(async () => selector.inputValue(), { timeout: 15_000 }).toBe('mock/mock-wide');
+});
+
+test('聊天页模型下拉按供应商分组（optgroup）', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  await expect(selector.locator('optgroup[label="mock"]')).toHaveCount(1);
+  await expect(selector.locator('optgroup[label="mock"] option')).toHaveCount(2);
+});
+
+test('Models 页：自定义供应商表单的 API 类型可选', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('add-custom-provider').click();
+
+  const apiSelect = page.getByTestId('custom-api-select');
+  await expect(apiSelect).toBeVisible();
+  await expect(apiSelect).toHaveValue('openai-completions');
+  await expect(apiSelect.locator('option')).toHaveText([
+    'openai-completions',
+    'openai-responses',
+    'anthropic-messages',
+    'google-generative-ai',
+  ]);
+  await apiSelect.selectOption('openai-responses');
+  await expect(apiSelect).toHaveValue('openai-responses');
 });
 
 test('/ 命令补全：内置命令 + prompt 模板，选中可发送', async ({ launchElectronApp }) => {

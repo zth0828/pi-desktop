@@ -96,9 +96,17 @@
     "oauthStarted": "Authorization started — complete it in your browser.",
     "addCustom": "Add custom provider",
     "customId": "Provider id (e.g. my-llm)",
+    "customBaseUrl": "baseURL",
+    "customApi": "API type",
     "customModels": "Model ids, comma separated",
     "saveCustom": "Save provider",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "configured": "Configured",
+    "notConfigured": "Not configured",
+    "availableModels": "Available models",
+    "noAvailableModels": "No available models",
+    "setCurrent": "Set as current",
+    "current": "Current"
   },
   "sessions": {
     "title": "Sessions",

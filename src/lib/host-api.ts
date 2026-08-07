@@ -45,6 +45,9 @@ export const hostApi = {
       apiKey?: string;
       models: Array<{ id: string; name?: string }>;
     }) => invokeHost('providers', 'addCustom', payload),
+    getDefaultModel: () => invokeHost('providers', 'getDefaultModel'),
+    setDefaultModel: (provider: string, id: string) =>
+      invokeHost('providers', 'setDefaultModel', { provider, id }),
   },
   piSessions: {
     list: () => invokeHost('piSessions', 'list'),

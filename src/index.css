@@ -1057,6 +1057,63 @@ button.danger-outline {
   border-top: 1px solid var(--border);
 }
 
+.provider-state {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.provider-state.configured {
+  color: var(--success);
+}
+
+.provider-models {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.provider-models-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, var(--text-tertiary));
+  margin-bottom: 4px;
+}
+
+.provider-model-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.provider-model-row:hover {
+  background: var(--bg-hover);
+}
+
+.provider-model-name {
+  font-weight: 500;
+}
+
+.provider-model-current {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--success);
+  background: var(--success-soft);
+  border-radius: 99px;
+  padding: 2px 10px;
+}
+
+.provider-models button {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
 .key-form {
   display: flex;
   gap: 8px;

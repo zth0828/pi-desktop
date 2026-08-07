@@ -1,9 +1,12 @@
 // providers 模块：pi ModelRuntime 的封装（供应商枚举、认证状态、key 录入、OAuth、
 // 自定义供应商）。key 存取全程经 pi 的 auth-storage（login/logout），壳不写 auth.json。
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type {
   HostSuccess,
+  PiDefaultModel,
+  PiDefaultModelResult,
   PiProviderAddCustomPayload,
   PiProviderListResult,
   PiProviderRow,
@@ -11,6 +14,8 @@ import type {
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
+import { getActiveRuntime, piRuntimeApi } from './pi-runtime-api';
+import { settingsApi } from './settings-api';
 
 type ModelRuntime = Awaited<ReturnType<PiSdk['ModelRuntime']['create']>>;
 
@@ -25,6 +30,14 @@ async function getModelRuntime(): Promise<{ sdk: PiSdk; runtime: ModelRuntime }>
 /** 凭证变化后调用：下次使用时重建 ModelRuntime。 */
 export function invalidateModelRuntime(): void {
   runtimePromise = null;
+}
+
+/** 无活动会话时建独立 SettingsManager 需要的 cwd（global settings 只依赖 agentDir，cwd 仅为构造参数）。 */
+async function resolveStandaloneCwd(): Promise<string> {
+  const workspace = await settingsApi
+    .get({ key: 'workspaceCwd' })
+    .catch(() => undefined);
+  return workspace ?? os.homedir();
 }
 
 export const providersApi = {
@@ -139,6 +152,49 @@ export const providersApi = {
       mkdirSync(agentDir, { recursive: true });
       writeFileSync(modelsPath, JSON.stringify(doc, null, 2));
       invalidateModelRuntime();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /** 首选模型 = pi settings.json 的 defaultProvider/defaultModel（新会话的初始模型来源）。 */
+  getDefaultModel: async (): Promise<PiDefaultModelResult> => {
+    try {
+      const active = getActiveRuntime();
+      const sdk = active ? null : await loadPiSdk();
+      const settingsManager = active
+        ? active.runtime.services.settingsManager
+        : sdk!.SettingsManager.create(await resolveStandaloneCwd(), sdk!.getAgentDir());
+      const provider = settingsManager.getDefaultProvider();
+      const id = settingsManager.getDefaultModel();
+      return { model: provider && id ? { provider, id } : null };
+    } catch {
+      return { model: null };
+    }
+  },
+
+  /**
+   * 设为首选模型。pi 原生机制：AgentSession.setModel 内部会持久化
+   * defaultProvider/defaultModel（新会话经 findInitialModel 应用），
+   * 所以有活动会话时直接复用 piRuntime.setModel；无会话时用独立
+   * SettingsManager 写同一份 settings.json，语义完全一致。
+   */
+  setDefaultModel: async (payload: PiDefaultModel): Promise<HostSuccess> => {
+    const active = getActiveRuntime();
+    if (active) return piRuntimeApi.setModel(payload);
+    try {
+      const sdk = await loadPiSdk();
+      const { runtime } = await getModelRuntime();
+      if (!runtime.getModel(payload.provider, payload.id)) {
+        return { success: false, error: `model not found: ${payload.provider}/${payload.id}` };
+      }
+      const settingsManager = sdk.SettingsManager.create(
+        await resolveStandaloneCwd(),
+        sdk.getAgentDir(),
+      );
+      settingsManager.setDefaultModelAndProvider(payload.provider, payload.id);
+      await settingsManager.flush();
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };

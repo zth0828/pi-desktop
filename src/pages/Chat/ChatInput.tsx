@@ -80,6 +80,13 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
     { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
   );
   const selectedModel = models.find((candidate) => `${candidate.provider}/${candidate.id}` === modelKey);
+  // 模型下拉按供应商分组（optgroup），供应商顺序保持 listModels 的首现顺序
+  const modelGroups = new Map<string, PiModelRow[]>();
+  for (const m of models) {
+    const group = modelGroups.get(m.provider);
+    if (group) group.push(m);
+    else modelGroups.set(m.provider, [m]);
+  }
   const contextWindow = selectedModel?.contextWindow
     ?? (contextUsage?.contextWindow && contextUsage.contextWindow > 0 ? contextUsage.contextWindow : null);
   const contextPercent = contextUsage?.tokens != null && contextWindow
@@ -244,10 +251,14 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
                 });
               }}
             >
-              {models.map((m) => (
-                <option key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
-                  {m.name ?? m.id}
-                </option>
+              {[...modelGroups.entries()].map(([provider, providerModels]) => (
+                <optgroup key={provider} label={provider}>
+                  {providerModels.map((m) => (
+                    <option key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
+                      {m.name ?? m.id}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           ) : model ? (
