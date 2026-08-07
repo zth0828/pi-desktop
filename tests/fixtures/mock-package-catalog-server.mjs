@@ -83,6 +83,22 @@ function renderCatalog(url) {
   </body></html>`;
 }
 
+function renderDetail(name) {
+  const pkg = allPackages.find((item) => item.name === name) ?? allPackages[0];
+  return `<!doctype html><html><body>
+    <header class="content-hero"><h1 class="content-title">${pkg.name}</h1><p class="content-description">${escapeHtml(pkg.description)}</p></header>
+    <div class="packages-detail-topline">
+      ${pkg.types.map((type) => `<span class="packages-badge" data-type="${type}">${type}</span>`).join('')}
+      <div class="packages-detail-links"><a href="https://www.npmjs.com/package/${pkg.name}">npm</a><a href="https://github.com/example/${pkg.name}">repo</a><a href="https://github.com/example/${pkg.name}">home</a></div>
+    </div>
+    <div class="packages-install--detail"><code>$ pi install npm:${pkg.name}</code></div>
+    <dl class="definition-grid"><dt>Package</dt><dd><code>${pkg.name}</code></dd><dt>Version</dt><dd><code>1.0.0</code></dd><dt>Published</dt><dd>Jul 1, 2026</dd><dt>Downloads</dt><dd>${pkg.downloads}/mo</dd><dt>Author</dt><dd>${pkg.author}</dd><dt>License</dt><dd>MIT</dd><dt>Types</dt><dd>${pkg.types.join(', ')}</dd><dt>Dependencies</dt><dd>0 dependencies</dd></dl>
+    <pre class="raw-data-panel">{&amp;quot;extensions&amp;quot;:[&amp;quot;index.ts&amp;quot;]}</pre>
+    <section class="packages-security-card"><p>Review this package before installing.</p></section>
+    <div class="packages-readme"><h2>${pkg.name}</h2><p>Fixture README with <strong>consistent</strong> package detail rendering.</p><pre><code>pi install npm:${pkg.name}</code></pre></div>
+  </body></html>`;
+}
+
 const server = createServer((req, res) => {
   const address = server.address();
   const baseUrl = `http://127.0.0.1:${address.port}`;
@@ -90,6 +106,12 @@ const server = createServer((req, res) => {
   if (url.pathname === '/packages') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(renderCatalog(url));
+    return;
+  }
+  if (url.pathname.startsWith('/packages/')) {
+    const name = decodeURIComponent(url.pathname.slice('/packages/'.length));
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(renderDetail(name));
     return;
   }
   if (url.pathname === '/pi-desktop-catalog-fixture') {

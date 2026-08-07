@@ -12,6 +12,7 @@ import type {
   PiPackageCatalogFilterType,
   PiPackageCatalogResult,
   PiPackageCatalogRow,
+  PiPackageDetail,
   PiPackageCatalogSort,
   PiPackageRow,
   PiPackageUpdateInfo,
@@ -19,6 +20,7 @@ import type {
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { formatRelativeTime } from '../lib/session-format';
+import PackageDetail from './PackageDetail';
 
 type ExtensionsView = 'discover' | 'installed';
 
@@ -46,6 +48,12 @@ export default function ExtensionsPage() {
   const [catalogSort, setCatalogSort] = useState<PiPackageCatalogSort>('downloads');
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogNonce, setCatalogNonce] = useState(0);
+  const [catalogRefreshKey, setCatalogRefreshKey] = useState<string>();
+  const [selectedPackageName, setSelectedPackageName] = useState<string>();
+  const [packageDetail, setPackageDetail] = useState<PiPackageDetail>();
+  const [packageDetailLoading, setPackageDetailLoading] = useState(false);
+  const [packageDetailError, setPackageDetailError] = useState<string>();
+  const [packageDetailRefresh, setPackageDetailRefresh] = useState(false);
   const unbindRef = useRef<(() => void) | null>(null);
 
   const refresh = useCallback(async () => {
@@ -68,6 +76,9 @@ export default function ExtensionsPage() {
 
   useEffect(() => {
     let active = true;
+    const requestKey = `${submittedQuery}|${catalogType}|${catalogSort}|${catalogPage}`;
+    const forceRefresh = catalogRefreshKey === requestKey;
+    if (forceRefresh) setCatalogRefreshKey(undefined);
     setCatalogLoading(true);
     setCatalogError(undefined);
     void hostApi.piPackages.catalog({
@@ -75,6 +86,7 @@ export default function ExtensionsPage() {
       type: catalogType,
       sort: catalogSort,
       page: catalogPage,
+      refresh: forceRefresh,
     }).then((result) => {
       if (!active) return;
       setCatalog(result);
@@ -87,7 +99,24 @@ export default function ExtensionsPage() {
     return () => {
       active = false;
     };
-  }, [catalogNonce, catalogPage, catalogSort, catalogType, submittedQuery]);
+  }, [catalogNonce, catalogPage, catalogRefreshKey, catalogSort, catalogType, submittedQuery]);
+
+  useEffect(() => {
+    if (!selectedPackageName) return undefined;
+    let active = true;
+    const forceRefresh = packageDetailRefresh;
+    if (forceRefresh) setPackageDetailRefresh(false);
+    setPackageDetailLoading(true);
+    setPackageDetailError(undefined);
+    void hostApi.piPackages.detail(selectedPackageName, forceRefresh).then((result) => {
+      if (active) setPackageDetail(result);
+    }).catch((err) => {
+      if (active) setPackageDetailError(err instanceof Error ? err.message : String(err));
+    }).finally(() => {
+      if (active) setPackageDetailLoading(false);
+    });
+    return () => { active = false; };
+  }, [packageDetailRefresh, selectedPackageName]);
 
   const run = async (
     actionSource: string,
@@ -155,6 +184,28 @@ export default function ExtensionsPage() {
     setCatalogNonce((value) => value + 1);
   };
 
+  const refreshCatalog = () => {
+    setCatalogRefreshKey(`${submittedQuery}|${catalogType}|${catalogSort}|${catalogPage}`);
+    setCatalogNonce((value) => value + 1);
+  };
+
+  const openPackageDetail = (name: string) => {
+    setSelectedPackageName(name);
+    setPackageDetail(undefined);
+    setPackageDetailError(undefined);
+  };
+
+  const closePackageDetail = () => {
+    setSelectedPackageName(undefined);
+    setPackageDetail(undefined);
+    setPackageDetailError(undefined);
+  };
+
+  const installPackageDetail = () => {
+    if (!packageDetail) return;
+    void run(`npm:${packageDetail.name}`, () => hostApi.piPackages.install(`npm:${packageDetail.name}`));
+  };
+
   return (
     <div className="extensions-page">
       <div className="extensions-header">
@@ -195,8 +246,20 @@ export default function ExtensionsPage() {
         </button>
       </div>
 
-      {error && <p className="error-text" data-testid="packages-error">{error}</p>}
-      {progress && busySource && <p className="hint" data-testid="packages-progress">{progress}</p>}
+      {selectedPackageName ? (
+        <PackageDetail
+          detail={packageDetail}
+          loading={packageDetailLoading}
+          error={packageDetailError}
+          installing={busySource === `npm:${selectedPackageName}`}
+          onBack={closePackageDetail}
+          onRefresh={() => setPackageDetailRefresh(true)}
+          onInstall={installPackageDetail}
+        />
+      ) : (
+        <>
+          {error && <p className="error-text" data-testid="packages-error">{error}</p>}
+          {progress && busySource && <p className="hint" data-testid="packages-progress">{progress}</p>}
 
       {view === 'discover' ? (
         <div className="catalog-view" data-testid="package-catalog">
@@ -263,6 +326,7 @@ export default function ExtensionsPage() {
                     end: catalog.end,
                     total: catalog.totalCount,
                   })}
+                  {catalog.cacheState === 'stale' && ` · ${t('extensions.catalogCachedStale')}`}
                 </p>
               )}
             </div>
@@ -270,7 +334,7 @@ export default function ExtensionsPage() {
               className="icon-text-button"
               aria-label={t('extensions.retry')}
               disabled={catalogLoading}
-              onClick={() => setCatalogNonce((value) => value + 1)}
+              onClick={refreshCatalog}
             >
               <RefreshCw size={14} />
               {t('extensions.refresh')}
@@ -280,7 +344,7 @@ export default function ExtensionsPage() {
           {catalogError ? (
             <div className="catalog-error" data-testid="catalog-error">
               <p className="error-text">{catalogError}</p>
-              <button onClick={() => setCatalogNonce((value) => value + 1)}>{t('extensions.retry')}</button>
+              <button onClick={refreshCatalog}>{t('extensions.retry')}</button>
             </div>
           ) : catalogLoading ? (
             <p className="hint" data-testid="catalog-loading">{t('extensions.loading')}</p>
@@ -315,9 +379,11 @@ export default function ExtensionsPage() {
                       </div>
                     </div>
                     <div className="catalog-card-actions">
-                      <button onClick={() => void hostApi.shell.openExternal(item.detailsUrl)}>
+                      <button
+                        data-testid={`catalog-details-${item.name}`}
+                        onClick={() => openPackageDetail(item.name)}
+                      >
                         {t('extensions.details')}
-                        <ExternalLink size={13} />
                       </button>
                       {installed ? (
                         <button
@@ -459,6 +525,8 @@ export default function ExtensionsPage() {
             </div>
           </details>
         </div>
+      )}
+        </>
       )}
     </div>
   );

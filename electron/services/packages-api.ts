@@ -10,6 +10,8 @@ import type {
   PiPackageCheckUpdatesResult,
   PiPackageCatalogQuery,
   PiPackageCatalogResult,
+  PiPackageDetailQuery,
+  PiPackageDetailResult,
   PiPackageInstallPayload,
   PiPackageListResult,
   PiPackageRemovePayload,
@@ -21,7 +23,7 @@ import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 import { getActiveRuntime } from './pi-runtime-api';
 import { settingsApi } from './settings-api';
-import { fetchPackageCatalog } from './package-catalog';
+import { fetchPackageCatalog, fetchPackageDetail } from './package-catalog';
 
 // 用类而非 PackageManager 接口：checkForAvailableUpdates 只在 DefaultPackageManager 上
 type Pm = InstanceType<typeof DefaultPackageManager>;
@@ -138,4 +140,7 @@ export const packagesApi = {
 
   catalog: async (payload: PiPackageCatalogQuery): Promise<PiPackageCatalogResult> =>
     fetchPackageCatalog(payload),
+
+  detail: async (payload: PiPackageDetailQuery): Promise<PiPackageDetailResult> =>
+    fetchPackageDetail(payload),
 };

@@ -1,5 +1,12 @@
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import path from 'node:path';
 import type {
   PiPackageCatalogQuery,
+  PiPackageDetail,
+  PiPackageDetailQuery,
+  PiPackageDetailResult,
   PiPackageCatalogResult,
   PiPackageCatalogRow,
   PiPackageCatalogType,
@@ -7,8 +14,44 @@ import type {
 
 const DEFAULT_CATALOG_URL = 'https://pi.dev/packages';
 const PAGE_SIZE = 50;
+const CATALOG_CACHE_TTL_MS = 10 * 60 * 1000;
+const DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
 const VALID_TYPES = new Set(['extension', 'skill', 'theme', 'prompt']);
 const VALID_SORTS = new Set(['downloads', 'recent', 'name']);
+
+type CacheEnvelope<T> = { fetchedAt: number; value: T };
+
+function cacheDirectory(): string {
+  return process.env.PI_PACKAGE_CATALOG_CACHE_DIR
+    ?? path.join(homedir(), '.pi-desktop', 'package-cache');
+}
+
+function cacheFile(prefix: string, key: string): string {
+  const digest = createHash('sha256').update(key).digest('hex');
+  return path.join(cacheDirectory(), `${prefix}-${digest}.json`);
+}
+
+async function readCache<T>(prefix: string, key: string): Promise<CacheEnvelope<T> | null> {
+  try {
+    const parsed = JSON.parse(await readFile(cacheFile(prefix, key), 'utf8')) as CacheEnvelope<T>;
+    if (!parsed || typeof parsed.fetchedAt !== 'number' || !parsed.value) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCache<T>(prefix: string, key: string, value: T, fetchedAt: number): Promise<void> {
+  try {
+    await mkdir(cacheDirectory(), { recursive: true });
+    const target = cacheFile(prefix, key);
+    const temporary = `${target}.${process.pid}.tmp`;
+    await writeFile(temporary, JSON.stringify({ fetchedAt, value }), 'utf8');
+    await rename(temporary, target);
+  } catch {
+    // Caching is opportunistic; a read-only home directory must not break discovery.
+  }
+}
 
 function decodeHtml(value: string): string {
   const named: Record<string, string> = {
@@ -34,6 +77,13 @@ function decodeHtml(value: string): string {
 
 function textContent(value: string): string {
   return decodeHtml(value.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+}
+
+function innerByClass(html: string, tag: string, className: string): string | undefined {
+  const match = html.match(
+    new RegExp(`<${tag}\\b[^>]*class="[^"]*\\b${className}\\b[^"]*"[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'),
+  );
+  return match?.[1];
 }
 
 function attr(source: string, name: string): string | undefined {
@@ -147,6 +197,113 @@ export function parsePackageCatalogHtml(
   };
 }
 
+function safePackageName(name: string): boolean {
+  return /^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(name);
+}
+
+function detailUrlForName(name: string): string {
+  const catalogUrl = new URL(process.env.PI_PACKAGE_CATALOG_URL ?? DEFAULT_CATALOG_URL);
+  catalogUrl.pathname = `/packages/${encodeURIComponent(name)}`;
+  catalogUrl.search = '';
+  return catalogUrl.toString();
+}
+
+function sanitizeReadmeHtml(html: string): string {
+  let sanitized = html
+    .replace(/<(script|style|iframe|object|embed|form|base|svg|math)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(script|style|iframe|object|embed|form|base|svg|math)\b[^>]*\/?>/gi, '')
+    .replace(/\s+on[a-z-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  sanitized = sanitized.replace(
+    /\s+(href|src)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/gi,
+    (whole, attribute: string, quoted: string, doubleQuoted: string, singleQuoted: string, bare: string) => {
+      const value = doubleQuoted ?? singleQuoted ?? bare ?? '';
+      if (/^\s*(?:javascript|vbscript|data):/i.test(decodeHtml(value))) return '';
+      const quote = quoted?.startsWith("'") ? "'" : '"';
+      return ` ${attribute}=${quote}${value}${quote}`;
+    },
+  );
+  return sanitized;
+}
+
+function parseDetailLinks(html: string, baseUrl: string): Pick<
+  PiPackageDetail,
+  'npmUrl' | 'repositoryUrl' | 'homepageUrl' | 'reportUrl'
+> {
+  const links = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)]
+    .map((match) => ({
+      href: absoluteUrl(baseUrl, attr(match[1] ?? '', 'href')),
+      label: textContent(match[2] ?? '').toLowerCase(),
+    }))
+    .filter((link): link is { href: string; label: string } => Boolean(link.href));
+  const npmUrl = links.find((link) => {
+    try { return new URL(link.href).hostname === 'www.npmjs.com'; } catch { return false; }
+  })?.href;
+  const reportUrl = links.find((link) => {
+    try { return new URL(link.href).pathname.includes('/issues/new'); } catch { return false; }
+  })?.href;
+  const repositoryUrl = links.find((link) => link.label === 'repo')?.href;
+  const homepageUrl = links.find((link) => link.label === 'home')?.href;
+  return { npmUrl, repositoryUrl, homepageUrl, reportUrl };
+}
+
+function parseDetailDefinition(html: string): Record<string, string> {
+  const block = innerByClass(html, 'dl', 'definition-grid') ?? '';
+  const fields: Record<string, string> = {};
+  for (const match of block.matchAll(/<dt\b[^>]*>([\s\S]*?)<\/dt>\s*<dd\b[^>]*>([\s\S]*?)<\/dd>/gi)) {
+    const key = textContent(match[1] ?? '').toLowerCase();
+    if (key) fields[key] = textContent(match[2] ?? '');
+  }
+  return fields;
+}
+
+function parseDetailTypes(html: string): PiPackageCatalogType[] {
+  const types = [...html.matchAll(/data-type="([^\"]+)"/gi)]
+    .map((match) => decodeHtml(match[1] ?? ''))
+    .filter((type): type is PiPackageCatalogType => (
+      type === 'extension' || type === 'skill' || type === 'theme' || type === 'prompt' || type === 'package'
+    ));
+  return [...new Set(types)];
+}
+
+export function parsePackageDetailHtml(html: string, detailsUrl: string, requestedName?: string): PiPackageDetail {
+  const heroName = textContent(innerByClass(html, 'h1', 'content-title') ?? '');
+  const name = heroName || requestedName || 'unknown-package';
+  const fields = parseDetailDefinition(html);
+  const detailBlock = innerByClass(html, 'div', 'packages-detail-topline') ?? html;
+  const installBlock = innerByClass(html, 'div', 'packages-install--detail') ?? '';
+  const installCode = installBlock.match(/<code\b[^>]*>([\s\S]*?)<\/code>/i)?.[1] ?? '';
+  const published = fields.published;
+  const publishedMs = published ? Date.parse(published) : Number.NaN;
+  const manifest = textContent(innerByClass(html, 'pre', 'raw-data-panel') ?? '');
+  const readmeBlock = innerByClass(html, 'div', 'packages-readme');
+  const securityNote = textContent(
+    (innerByClass(html, 'section', 'packages-security-card') ?? innerByClass(html, 'div', 'packages-security-card'))
+      ?.match(/<p\b[^>]*>([\s\S]*?)<\/p>/i)?.[1] ?? '',
+  );
+  return {
+    name,
+    description: textContent(innerByClass(html, 'p', 'content-description') ?? '')
+      || textContent(innerByClass(detailBlock, 'p', 'packages-detail-description') ?? ''),
+    version: fields.version,
+    author: fields.author,
+    license: fields.license,
+    downloadsLabel: fields.downloads,
+    publishedLabel: published,
+    publishedAt: Number.isFinite(publishedMs) ? new Date(publishedMs).toISOString() : undefined,
+    sizeLabel: fields.size,
+    dependenciesLabel: fields.dependencies,
+    types: parseDetailTypes(detailBlock),
+    installCommand: textContent(installCode).replace(/^\$\s*/, ''),
+    ...parseDetailLinks(detailBlock, detailsUrl),
+    detailsUrl,
+    manifestJson: manifest || undefined,
+    readmeHtml: sanitizeReadmeHtml(readmeBlock ?? ''),
+    securityNote: securityNote || undefined,
+    fetchedAt: Date.now(),
+    cacheState: 'network',
+  };
+}
+
 export async function fetchPackageCatalog(query: PiPackageCatalogQuery): Promise<PiPackageCatalogResult> {
   const baseUrl = process.env.PI_PACKAGE_CATALOG_URL ?? DEFAULT_CATALOG_URL;
   const url = new URL(baseUrl);
@@ -159,12 +316,53 @@ export async function fetchPackageCatalog(query: PiPackageCatalogQuery): Promise
   if (sort !== 'downloads') url.searchParams.set('sort', sort);
   if (page > 1) url.searchParams.set('page', String(page));
 
-  const response = await fetch(url, {
-    headers: { accept: 'text/html', 'user-agent': 'Pi Desktop' },
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) {
-    throw new Error(`Package catalog request failed (${response.status})`);
+  const cacheKey = url.toString();
+  const cached = await readCache<PiPackageCatalogResult>('catalog', cacheKey);
+  const now = Date.now();
+  if (cached && !query.refresh && now - cached.fetchedAt < CATALOG_CACHE_TTL_MS) {
+    return { ...cached.value, fetchedAt: cached.fetchedAt, cacheState: 'fresh' };
   }
-  return parsePackageCatalogHtml(await response.text(), url.toString(), page);
+
+  try {
+    const response = await fetch(url, {
+      headers: { accept: 'text/html', 'user-agent': 'Pi Desktop' },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) {
+      throw new Error(`Package catalog request failed (${response.status})`);
+    }
+    const result = parsePackageCatalogHtml(await response.text(), url.toString(), page);
+    const fetchedAt = Date.now();
+    await writeCache('catalog', cacheKey, result, fetchedAt);
+    return { ...result, fetchedAt, cacheState: 'network' };
+  } catch (error) {
+    if (cached) return { ...cached.value, fetchedAt: cached.fetchedAt, cacheState: 'stale' };
+    throw error;
+  }
+}
+
+export async function fetchPackageDetail(query: PiPackageDetailQuery): Promise<PiPackageDetailResult> {
+  const name = query.name.trim();
+  if (!safePackageName(name)) throw new Error('Invalid package name');
+  const detailsUrl = detailUrlForName(name);
+  const cached = await readCache<PiPackageDetail>('detail', name);
+  const now = Date.now();
+  if (cached && !query.refresh && now - cached.fetchedAt < DETAIL_CACHE_TTL_MS) {
+    return { ...cached.value, fetchedAt: cached.fetchedAt, cacheState: 'fresh' };
+  }
+
+  try {
+    const response = await fetch(detailsUrl, {
+      headers: { accept: 'text/html', 'user-agent': 'Pi Desktop' },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) throw new Error(`Package detail request failed (${response.status})`);
+    const result = parsePackageDetailHtml(await response.text(), detailsUrl, name);
+    const fetchedAt = Date.now();
+    await writeCache('detail', name, result, fetchedAt);
+    return { ...result, fetchedAt, cacheState: 'network' };
+  } catch (error) {
+    if (cached) return { ...cached.value, fetchedAt: cached.fetchedAt, cacheState: 'stale' };
+    throw error;
+  }
 }

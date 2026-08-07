@@ -74,7 +74,10 @@ export const hostApi = {
       type?: '' | 'extension' | 'skill' | 'theme' | 'prompt';
       sort?: 'downloads' | 'recent' | 'name';
       page?: number;
+      refresh?: boolean;
     }) => invokeHost('piPackages', 'catalog', query),
+    detail: (name: string, refresh = false) =>
+      invokeHost('piPackages', 'detail', { name, refresh }),
   },
   piMcp: {
     list: () => invokeHost('piMcp', 'list'),

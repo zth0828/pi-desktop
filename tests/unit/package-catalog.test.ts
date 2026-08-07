@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { parsePackageCatalogHtml } from '../../electron/services/package-catalog';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  fetchPackageDetail,
+  parsePackageCatalogHtml,
+  parsePackageDetailHtml,
+} from '../../electron/services/package-catalog';
 
 const HTML = `
   <span class="packages-count">51-100 / 120</span>
@@ -43,6 +50,12 @@ const HTML = `
 `;
 
 describe('pi.dev package catalog parser', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.PI_PACKAGE_CATALOG_URL;
+    delete process.env.PI_PACKAGE_CATALOG_CACHE_DIR;
+  });
+
   it('解析包字段、类型、链接与 HTML entity', () => {
     const result = parsePackageCatalogHtml(HTML, 'https://pi.dev/packages?page=2', 2);
     expect(result).toMatchObject({
@@ -73,5 +86,69 @@ describe('pi.dev package catalog parser', () => {
       types: ['package'],
       publishedAt: undefined,
     });
+  });
+
+  it('解析详情页的元数据、manifest、README，并清洗危险标签', () => {
+    const detail = parsePackageDetailHtml(`
+      <header class="content-hero"><h1 class="content-title">@demo/pi-tools</h1><p class="content-description">A toolkit.</p></header>
+      <div class="packages-detail-topline">
+        <span class="packages-badge" data-type="extension">extension</span>
+        <div class="packages-detail-links">
+          <a href="https://www.npmjs.com/package/@demo/pi-tools">npm</a>
+          <a href="https://github.com/demo/pi-tools">repo</a>
+          <a href="https://github.com/demo/pi-tools">home</a>
+          <a href="https://github.com/earendil-works/pi/issues/new?package-name=x">report</a>
+        </div>
+      </div>
+      <div class="packages-install--detail"><code>$ pi install npm:@demo/pi-tools</code></div>
+      <dl class="definition-grid"><dt>Version</dt><dd><code>1.2.3</code></dd><dt>License</dt><dd>MIT</dd><dt>Dependencies</dt><dd>2 dependencies · 1 peer</dd></dl>
+      <pre class="raw-data-panel">{&amp;quot;extensions&amp;quot;:[&amp;quot;index.ts&amp;quot;]}</pre>
+      <section class="packages-security-card"><p>Review before install.</p></section>
+      <div class="packages-readme"><h2>Read me</h2><p>Hello <a href="javascript:alert(1)">world</a>.</p><script>alert(1)</script><pre><code>npm run test</code></pre></div>
+    `, 'https://pi.dev/packages/@demo/pi-tools', '@demo/pi-tools');
+
+    expect(detail).toMatchObject({
+      name: '@demo/pi-tools',
+      description: 'A toolkit.',
+      version: '1.2.3',
+      license: 'MIT',
+      dependenciesLabel: '2 dependencies · 1 peer',
+      types: ['extension'],
+      installCommand: 'pi install npm:@demo/pi-tools',
+      npmUrl: 'https://www.npmjs.com/package/@demo/pi-tools',
+      repositoryUrl: 'https://github.com/demo/pi-tools',
+      homepageUrl: 'https://github.com/demo/pi-tools',
+      securityNote: 'Review before install.',
+    });
+    expect(detail.manifestJson).toContain('extensions');
+    expect(detail.readmeHtml).toContain('<h2>Read me</h2>');
+    expect(detail.readmeHtml).not.toContain('<script');
+    expect(detail.readmeHtml).not.toContain('javascript:');
+  });
+
+  it('详情按包名缓存，TTL 内复用，refresh 显式绕过缓存', async () => {
+    const cacheDir = mkdtempSync(path.join(tmpdir(), 'pi-desktop-package-cache-'));
+    process.env.PI_PACKAGE_CATALOG_CACHE_DIR = cacheDir;
+    process.env.PI_PACKAGE_CATALOG_URL = 'https://pi.dev/packages';
+    let requests = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      requests += 1;
+      return new Response(`
+        <header class="content-hero"><h1 class="content-title">@demo/pi-tools</h1><p class="content-description">Cached.</p></header>
+        <div class="packages-detail-topline"><span data-type="extension">extension</span></div>
+        <div class="packages-install--detail"><code>$ pi install npm:@demo/pi-tools</code></div>
+        <dl class="definition-grid"><dt>Version</dt><dd>1.0.0</dd></dl>
+      `, { status: 200, headers: { 'content-type': 'text/html' } });
+    }));
+
+    const first = await fetchPackageDetail({ name: '@demo/pi-tools' });
+    const second = await fetchPackageDetail({ name: '@demo/pi-tools' });
+    const third = await fetchPackageDetail({ name: '@demo/pi-tools', refresh: true });
+
+    expect(first.cacheState).toBe('network');
+    expect(second.cacheState).toBe('fresh');
+    expect(third.cacheState).toBe('network');
+    expect(requests).toBe(2);
+    rmSync(cacheDir, { recursive: true, force: true });
   });
 });

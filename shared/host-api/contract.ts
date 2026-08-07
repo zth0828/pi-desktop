@@ -226,6 +226,8 @@ export type PiPackageCatalogQuery = {
   type?: PiPackageCatalogFilterType;
   sort?: PiPackageCatalogSort;
   page?: number;
+  /** 绕过 TTL 缓存，重新抓取 pi.dev。 */
+  refresh?: boolean;
 };
 export type PiPackageCatalogRow = {
   name: string;
@@ -246,7 +248,39 @@ export type PiPackageCatalogResult = {
   totalCount: number;
   start: number;
   end: number;
+  fetchedAt?: number;
+  cacheState?: 'network' | 'fresh' | 'stale';
 };
+export type PiPackageDetailQuery = {
+  name: string;
+  /** 绕过 TTL 缓存，重新抓取详情页。 */
+  refresh?: boolean;
+};
+export type PiPackageDetail = {
+  name: string;
+  description: string;
+  version?: string;
+  author?: string;
+  license?: string;
+  downloadsLabel?: string;
+  publishedLabel?: string;
+  publishedAt?: string;
+  sizeLabel?: string;
+  dependenciesLabel?: string;
+  types: PiPackageCatalogType[];
+  installCommand: string;
+  npmUrl?: string;
+  repositoryUrl?: string;
+  homepageUrl?: string;
+  reportUrl?: string;
+  detailsUrl: string;
+  manifestJson?: string;
+  readmeHtml: string;
+  securityNote?: string;
+  fetchedAt: number;
+  cacheState: 'network' | 'fresh' | 'stale';
+};
+export type PiPackageDetailResult = PiPackageDetail;
 export type PiPackageProgressEvent = {
   type: 'start' | 'progress' | 'complete' | 'error';
   action: 'install' | 'remove' | 'update' | 'clone' | 'pull';
@@ -386,6 +420,8 @@ export type HostApiContract = {
     checkUpdates: () => PiPackageCheckUpdatesResult;
     /** 查询 pi.dev 官方 Package Catalog；Main 侧获取并解析，Renderer 不跨域抓网页。 */
     catalog: (payload: PiPackageCatalogQuery) => PiPackageCatalogResult;
+    /** 查询单个 pi.dev Package 详情，包含 manifest 与经过清洗的 README HTML。 */
+    detail: (payload: PiPackageDetailQuery) => PiPackageDetailResult;
   };
   piMcp: {
     /** 合并 <agentDir>/mcp.json（global）与 <cwd>/.mcp.json（project）的 server 列表。 */

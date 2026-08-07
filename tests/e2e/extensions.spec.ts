@@ -134,3 +134,25 @@ test('Packages 页：高级 source 安装保留本地目录能力', async ({ lau
   await expect(row).not.toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('packages-empty')).toBeVisible();
 });
+
+test('Packages 页：详情在应用内渲染元数据、manifest 与 README', async ({ launchElectronApp }) => {
+  await writeFile(path.join(agentDir, 'settings.json'), '{}');
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-extensions').click();
+  await expect(page.getByTestId('catalog-package-pi-desktop-catalog-fixture')).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('catalog-details-pi-desktop-catalog-fixture').click();
+
+  const detail = page.getByTestId('package-detail');
+  await expect(detail).toBeVisible();
+  await expect(detail.locator('.package-detail-hero h3')).toHaveText('pi-desktop-catalog-fixture');
+  await expect(detail.getByText('Fixture README with')).toBeVisible();
+  await expect(detail.getByText('Pi manifest JSON')).toBeVisible();
+  await expect(page.getByTestId('package-cache-status')).toContainText('Cached');
+
+  await page.getByTestId('package-detail-refresh').click();
+  await expect(page.getByTestId('package-detail')).toBeVisible();
+  await page.getByTestId('package-detail-back').click();
+  await expect(page.getByTestId('package-catalog')).toBeVisible();
+});

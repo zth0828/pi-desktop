@@ -14,6 +14,9 @@ if (process.env.PI_DESKTOP_USER_DATA_DIR) {
   app.setPath('userData', process.env.PI_DESKTOP_USER_DATA_DIR);
 }
 
+// Package catalog/detail cache lives with the isolated Electron profile.
+process.env.PI_PACKAGE_CATALOG_CACHE_DIR = path.join(app.getPath('userData'), 'package-cache');
+
 const hostRegistry = new HostApiRegistry();
 hostRegistry.registerCoreServices(createHostServices());
 registerHostInvokeHandler(hostRegistry);
