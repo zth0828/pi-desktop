@@ -50,8 +50,12 @@ function groupByProject(sessions: PiSessionRow[]): ProjectGroup[] {
     .sort((a, b) => b.latest.localeCompare(a.latest));
 }
 
+type SessionListProps = {
+  onOpenChat: () => void;
+};
+
 /** 侧栏会话列表：按项目分组，支持项目/会话归档与删除。 */
-export function SessionList() {
+export function SessionList({ onOpenChat }: SessionListProps) {
   const { t } = useTranslation();
   const [sessions, setSessions] = useState<PiSessionRow[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -137,11 +141,15 @@ export function SessionList() {
     openMenuAt(key, rect.right + 6, rect.top, estimatedHeight);
   };
 
-  const run = async (action: () => Promise<{ success: boolean; error?: string }>) => {
+  const run = async (
+    action: () => Promise<{ success: boolean; error?: string }>,
+    openChatOnSuccess = false,
+  ) => {
     setBusy(true);
     try {
       const result = await action();
       if (result.success) {
+        if (openChatOnSuccess) onOpenChat();
         setOpenMenu(undefined);
         setConfirmDelete(undefined);
         setRenamePath(undefined);
@@ -237,6 +245,7 @@ export function SessionList() {
                 title={session.path}
                 onClick={() => {
                   setOpenMenu(undefined);
+                  onOpenChat();
                   if (!session.isCurrent) void hostApi.piSessions.switch(session.path, session.cwd);
                 }}
               >
@@ -313,7 +322,7 @@ export function SessionList() {
                       </button>
                       <button
                         data-testid={`sidebar-session-fork-${session.id}`}
-                        onClick={() => void run(() => hostApi.piSessions.fork(session.path))}
+                        onClick={() => void run(() => hostApi.piSessions.fork(session.path), true)}
                         disabled={busy || isStreaming}
                       >
                         <GitFork size={14} />

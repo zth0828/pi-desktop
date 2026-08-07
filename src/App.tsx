@@ -85,7 +85,7 @@ export default function App() {
           <Plus size={15} />
           {t('sidebar.newChat')}
         </button>
-        <SessionList />
+        <SessionList onOpenChat={() => setPage('chat')} />
         <div className="sidebar-nav">
           {PAGES.map(({ id, icon: Icon }) => (
             <button
@@ -112,7 +112,7 @@ export default function App() {
         ) : page === 'models' ? (
           <ModelsPage />
         ) : page === 'sessions' ? (
-          <SessionsPage />
+          <SessionsPage onOpenChat={() => setPage('chat')} />
         ) : page === 'skills' ? (
           <SkillsPage />
         ) : page === 'extensions' ? (

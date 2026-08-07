@@ -118,15 +118,30 @@ test('切换会话 → 消息列表恢复目标会话内容', async ({ launchEle
   await page.getByTestId('nav-sessions').click();
   await expect(sessionRows(page)).toHaveCount(2, { timeout: 15_000 });
 
-  // 点 ALPHA 那行切回去（行主体即切换按钮）
+  // 点 ALPHA 那行切回去（切换成功后直接回到对话页）
   const alphaRow = sessionRows(page).filter({ hasText: 'session one ALPHA' });
   await alphaRow.locator('.session-row-main').click();
-  // 切换后它成为当前会话
-  await expect(alphaRow.getByTestId('session-current')).toBeVisible({ timeout: 15_000 });
-
-  await page.getByTestId('nav-chat').click();
+  await expect(page.getByTestId('nav-chat')).toHaveClass(/active/);
   await expect(page.getByTestId('message-user').last()).toContainText('session one ALPHA');
   await expect(page.getByTestId('message-user')).toHaveCount(1);
+});
+
+test('侧栏会话入口：从其他功能页点击后切回对话并恢复目标消息', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'sidebar target KOALA');
+  await page.getByTestId('new-session').click();
+  await sendAndWaitReply(page, 'sidebar current PANDA');
+  await page.getByTestId('nav-models').click();
+  await expect(page.getByTestId('nav-models')).toHaveClass(/active/);
+
+  const target = page.locator('.sidebar-session-row').filter({ hasText: 'sidebar target KOALA' });
+  await target.locator('[data-testid^="sidebar-session-"]').first().click();
+  await expect(page.getByTestId('nav-chat')).toHaveClass(/active/);
+  await expect(page.getByTestId('chat-input')).toBeVisible();
+  await expect(page.getByTestId('message-user').last()).toContainText('sidebar target KOALA');
 });
 
 test('重命名 → 列表显示新名', async ({ launchElectronApp }) => {

@@ -9,21 +9,28 @@ type RowProps = {
   onChanged: () => void;
   onError: (message: string) => void;
   onExported: (path: string) => void;
+  onOpenChat: () => void;
 };
 
-function SessionRow({ session, onChanged, onError, onExported }: RowProps) {
+function SessionRow({ session, onChanged, onError, onExported, onOpenChat }: RowProps) {
   const { t, i18n } = useTranslation();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(session.name ?? '');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const run = async (action: () => Promise<{ success: boolean; error?: string }>) => {
+  const run = async (
+    action: () => Promise<{ success: boolean; error?: string }>,
+    openChatOnSuccess = false,
+  ) => {
     setBusy(true);
     try {
       const result = await action();
       if (!result.success) onError(result.error ?? 'unknown');
-      else onChanged();
+      else {
+        onChanged();
+        if (openChatOnSuccess) onOpenChat();
+      }
     } catch (err) {
       onError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -31,8 +38,8 @@ function SessionRow({ session, onChanged, onError, onExported }: RowProps) {
     }
   };
 
-  const switchTo = () => run(() => hostApi.piSessions.switch(session.path));
-  const fork = () => run(() => hostApi.piSessions.fork(session.path));
+  const switchTo = () => run(() => hostApi.piSessions.switch(session.path), true);
+  const fork = () => run(() => hostApi.piSessions.fork(session.path), true);
   const archive = () => run(() => hostApi.piSessions.archive(session.path, !session.archived));
   const remove = () => run(() => hostApi.piSessions.remove(session.path));
   const exportHtml = async () => {
@@ -137,7 +144,11 @@ function SessionRow({ session, onChanged, onError, onExported }: RowProps) {
   );
 }
 
-export default function SessionsPage() {
+type SessionsPageProps = {
+  onOpenChat: () => void;
+};
+
+export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
   const { t } = useTranslation();
   const [sessions, setSessions] = useState<PiSessionRow[]>([]);
   const [error, setError] = useState<string>();
@@ -175,6 +186,7 @@ export default function SessionsPage() {
               onChanged={refresh}
               onError={setError}
               onExported={setExported}
+              onOpenChat={onOpenChat}
             />
           ))}
         </div>
