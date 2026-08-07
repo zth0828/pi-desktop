@@ -48,4 +48,54 @@ describe('pi-event-map（录制 fixture 回放，pi 0.83.0）', () => {
       }
     }
   });
+
+  it('auto_retry_start 透传 attempt/maxAttempts/delayMs/errorMessage', () => {
+    const mapped = mapPiSessionEvent({
+      type: 'auto_retry_start',
+      attempt: 1,
+      maxAttempts: 3,
+      delayMs: 8000,
+      errorMessage: '429 rate limited',
+    } as AgentSessionEvent);
+    expect(mapped).toEqual({
+      type: 'retry.started',
+      attempt: 1,
+      maxAttempts: 3,
+      delayMs: 8000,
+      message: '429 rate limited',
+    });
+  });
+
+  it('auto_retry_end 透传 success', () => {
+    const mapped = mapPiSessionEvent({
+      type: 'auto_retry_end',
+      success: true,
+      attempt: 1,
+    } as AgentSessionEvent);
+    expect(mapped).toEqual({ type: 'retry.ended', success: true });
+  });
+
+  it('compaction_start/end 透传 reason/willRetry/errorMessage', () => {
+    const started = mapPiSessionEvent({
+      type: 'compaction_start',
+      reason: 'overflow',
+    } as AgentSessionEvent);
+    expect(started).toEqual({ type: 'compaction.started', reason: 'overflow' });
+
+    const ended = mapPiSessionEvent({
+      type: 'compaction_end',
+      reason: 'manual',
+      result: undefined,
+      aborted: false,
+      willRetry: false,
+      errorMessage: 'Compaction failed: boom',
+    } as AgentSessionEvent);
+    expect(ended).toEqual({
+      type: 'compaction.ended',
+      reason: 'manual',
+      aborted: false,
+      willRetry: false,
+      message: 'Compaction failed: boom',
+    });
+  });
 });

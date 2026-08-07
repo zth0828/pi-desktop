@@ -58,8 +58,22 @@
     "stop": "停止",
     "newSession": "新会话",
     "compact": "压缩上下文",
-    "compacting": "压缩中…",
+    "status": {
+      "working": "工作中…",
+      "retrying": "重试中（{{attempt}}/{{maxAttempts}}），{{seconds}} 秒后重试…",
+      "retryingNow": "重试中（{{attempt}}/{{maxAttempts}}）…",
+      "retryingGeneric": "重试中…",
+      "compacting": "正在压缩上下文…",
+      "compactingOverflow": "检测到上下文溢出，自动压缩中…"
+    },
+    "queue": {
+      "steering": "引导 ×{{count}}：{{preview}}",
+      "followUp": "排队 ×{{count}}：{{preview}}"
+    },
+    "compactionSummary": "上下文已压缩 — 摘要",
     "thinking": "思考过程",
+    "thinkingStreaming": "思考中…",
+    "thinkingDone": "思考完成",
     "starting": "正在启动会话…",
     "empty": "还没有消息，和 pi 说点什么吧。",
     "workspace": {
@@ -72,8 +86,19 @@
       "success": "完成",
       "error": "出错",
       "args": "参数",
-      "result": "结果"
+      "result": "结果",
+      "interrupted": "已中断",
+      "took": "用时 {{duration}}",
+      "earlierLines": "…（更早还有 {{count}} 行）",
+      "fullOutput": "完整输出：{{path}}",
+      "truncatedLines": "输出被截断：仅显示 {{outputLines}} / {{totalLines}} 行",
+      "truncatedBytes": "输出超出大小上限，仅显示 {{outputLines}} 行",
+      "matchLimit": "匹配数达到上限（{{limit}}）",
+      "linesTruncated": "部分过长的行被截断"
     },
+    "stopLength": "回复因达到长度上限而停止。",
+    "expandTools": "展开全部工具",
+    "collapseTools": "折叠全部工具",
     "attachImage": "添加图片",
     "model": "选择模型",
     "tokenUsage": "Token 使用情况",

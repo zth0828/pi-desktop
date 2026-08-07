@@ -58,8 +58,22 @@
     "stop": "Stop",
     "newSession": "New session",
     "compact": "Compact",
-    "compacting": "Compacting…",
+    "status": {
+      "working": "Working…",
+      "retrying": "Retrying ({{attempt}}/{{maxAttempts}}) in {{seconds}}s…",
+      "retryingNow": "Retrying ({{attempt}}/{{maxAttempts}})…",
+      "retryingGeneric": "Retrying…",
+      "compacting": "Compacting context…",
+      "compactingOverflow": "Context overflow detected, auto-compacting…"
+    },
+    "queue": {
+      "steering": "Steer ×{{count}}: {{preview}}",
+      "followUp": "Queued ×{{count}}: {{preview}}"
+    },
+    "compactionSummary": "Context compacted — summary",
     "thinking": "Thinking",
+    "thinkingStreaming": "Thinking…",
+    "thinkingDone": "Thought",
     "starting": "Starting session…",
     "empty": "No messages yet. Say something to pi.",
     "workspace": {
@@ -72,8 +86,19 @@
       "success": "done",
       "error": "error",
       "args": "Arguments",
-      "result": "Result"
+      "result": "Result",
+      "interrupted": "interrupted",
+      "took": "Took {{duration}}",
+      "earlierLines": "… ({{count}} earlier lines)",
+      "fullOutput": "Full output: {{path}}",
+      "truncatedLines": "Truncated: showing {{outputLines}} of {{totalLines}} lines",
+      "truncatedBytes": "Output exceeded size limit, showing {{outputLines}} lines",
+      "matchLimit": "Match limit reached ({{limit}})",
+      "linesTruncated": "Some long lines were truncated"
     },
+    "stopLength": "Response stopped: length limit reached.",
+    "expandTools": "Expand all tools",
+    "collapseTools": "Collapse all tools",
     "attachImage": "Attach image",
     "model": "Select model",
     "tokenUsage": "Token usage",

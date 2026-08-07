@@ -13,8 +13,8 @@ function AssistantBlock({ block, streaming }: { block: ContentBlock; streaming?:
   }
   if (block.type === 'thinking') {
     return (
-      <details className="thinking-block">
-        <summary>{t('chat.thinking')}</summary>
+      <details className={`thinking-block${streaming ? ' streaming' : ''}`}>
+        <summary>{streaming ? t('chat.thinkingStreaming') : t('chat.thinkingDone')}</summary>
         <pre>{block.thinking}</pre>
       </details>
     );
@@ -32,6 +32,7 @@ function AssistantBlock({ block, streaming }: { block: ContentBlock; streaming?:
 }
 
 export function MessageItem({ message }: { message: ChatMessage }) {
+  const { t } = useTranslation();
   if (message.role === 'user') {
     const text = message.content
       .filter((b) => b.type === 'text')
@@ -54,12 +55,34 @@ export function MessageItem({ message }: { message: ChatMessage }) {
   if (message.role === 'toolResult') {
     return null; // 工具结果合并进 ToolCallCard 展示
   }
+  if (message.role === 'compactionSummary') {
+    // compaction 后刷新消息列表时 pi 带回的摘要消息（createCompactionSummaryMessage）
+    const raw = message.raw as { summary?: string } | undefined;
+    return (
+      <details className="compaction-summary" data-testid="message-compaction">
+        <summary>{t('chat.compactionSummary')}</summary>
+        <Markdown text={raw?.summary ?? ''} />
+      </details>
+    );
+  }
+  const raw = message.raw as { stopReason?: string; errorMessage?: string } | undefined;
+  const showTail = !message.streaming;
   return (
     <div className="message message-assistant" data-testid="message-assistant">
       {message.content.map((block, i) => (
         <AssistantBlock key={i} block={block} streaming={message.streaming} />
       ))}
       {message.streaming && <span className="cursor-blink">▍</span>}
+      {showTail && raw?.stopReason === 'length' && (
+        <div className="message-notice" data-testid="message-notice">
+          {t('chat.stopLength')}
+        </div>
+      )}
+      {showTail && raw?.errorMessage && (
+        <div className="message-notice error" data-testid="message-error">
+          {raw.errorMessage}
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,21 @@ import { hostApi } from '../../lib/host-api';
 import { useChatStore } from '../../stores/chat';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
+import { StatusBar } from './StatusBar';
+
+/** 消息列表工具栏：全局展开/折叠所有工具卡片 */
+function ChatToolbar() {
+  const { t } = useTranslation();
+  const toolsExpanded = useChatStore((s) => s.toolsExpanded);
+  const toggleToolsExpanded = useChatStore((s) => s.toggleToolsExpanded);
+  return (
+    <div className="chat-toolbar">
+      <button className="chat-toolbar-btn" data-testid="toggle-tools" onClick={toggleToolsExpanded}>
+        {toolsExpanded ? t('chat.collapseTools') : t('chat.expandTools')}
+      </button>
+    </div>
+  );
+}
 
 export default function ChatPage() {
   const { t } = useTranslation();
@@ -60,6 +75,7 @@ export default function ChatPage() {
       {starting && <div className="chat-empty">{t('chat.starting')}</div>}
 
       <div className="chat-column">
+        {started && messages.length > 0 && <ChatToolbar />}
         <div className="message-list" ref={listRef} data-testid="message-list">
           {started && messages.length === 0 && (
             <div className="chat-greeting" data-testid="chat-greeting">
@@ -71,6 +87,7 @@ export default function ChatPage() {
           ))}
         </div>
 
+        <StatusBar />
         <ChatInput
           cwd={effectiveCwd}
           onChooseWorkspace={chooseWorkspace}

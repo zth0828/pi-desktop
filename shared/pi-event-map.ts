@@ -3,6 +3,8 @@
 // （tests/fixtures/pi-events/text-and-toolcall.json，pi 0.83.0）。
 import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 
+export type CompactionReason = 'manual' | 'threshold' | 'overflow';
+
 export type PiChatEvent =
   | { type: 'run.started' }
   | { type: 'run.ended'; willRetry?: boolean }
@@ -20,10 +22,22 @@ export type PiChatEvent =
       isError: boolean;
     }
   | { type: 'queue.updated'; steering: string[]; followUp: string[] }
-  | { type: 'compaction.started' }
-  | { type: 'compaction.ended'; aborted?: boolean }
-  | { type: 'retry.started'; message?: string }
-  | { type: 'retry.ended' };
+  | { type: 'compaction.started'; reason: CompactionReason }
+  | {
+      type: 'compaction.ended';
+      reason: CompactionReason;
+      aborted?: boolean;
+      willRetry?: boolean;
+      message?: string;
+    }
+  | {
+      type: 'retry.started';
+      attempt?: number;
+      maxAttempts?: number;
+      delayMs?: number;
+      message?: string;
+    }
+  | { type: 'retry.ended'; success?: boolean };
 
 /** Main 侧桥接时套的信封：渲染层按 generation 丢弃过期会话的事件。 */
 export type PiRuntimeEventEnvelope = {
@@ -78,13 +92,25 @@ export function mapPiSessionEvent(event: AgentSessionEvent): PiChatEvent | null 
         followUp: [...event.followUp],
       };
     case 'compaction_start':
-      return { type: 'compaction.started' };
+      return { type: 'compaction.started', reason: event.reason };
     case 'compaction_end':
-      return { type: 'compaction.ended', aborted: event.aborted };
+      return {
+        type: 'compaction.ended',
+        reason: event.reason,
+        aborted: event.aborted,
+        willRetry: event.willRetry,
+        message: event.errorMessage,
+      };
     case 'auto_retry_start':
-      return { type: 'retry.started', message: event.errorMessage };
+      return {
+        type: 'retry.started',
+        attempt: event.attempt,
+        maxAttempts: event.maxAttempts,
+        delayMs: event.delayMs,
+        message: event.errorMessage,
+      };
     case 'auto_retry_end':
-      return { type: 'retry.ended' };
+      return { type: 'retry.ended', success: event.success };
     default:
       return null;
   }
