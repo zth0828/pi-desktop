@@ -118,12 +118,8 @@ export function ToolCallCard({ execution }: { execution: ToolExecution }) {
 
       {expanded && (
         <div className="tool-card-body">
-          {execution.args !== undefined && (
-            <>
-              <div className="tool-section-title">{t('chat.tool.args')}</div>
-              <pre>{JSON.stringify(execution.args, null, 2)}</pre>
-            </>
-          )}
+          {/* 对齐 Codex：参数 JSON 不展示（header 摘要已含命令/路径等关键信息），
+              展开只看结果（输出/diff） */}
           {(realDiff || outputText) && (
             <>
               <div className="tool-section-title">{t('chat.tool.result')}</div>

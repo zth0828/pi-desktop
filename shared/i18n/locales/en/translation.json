@@ -98,7 +98,6 @@
       "running": "running",
       "success": "done",
       "error": "error",
-      "args": "Arguments",
       "result": "Result",
       "interrupted": "interrupted",
       "line": {
