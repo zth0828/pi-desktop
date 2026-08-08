@@ -61,6 +61,11 @@ export const hostApi = {
       apiKey?: string;
       models: Array<{ id: string; name?: string }>;
     }) => invokeHost('providers', 'addCustom', payload),
+    probe: (payload: { baseUrl: string; apiKey?: string; model?: string }) =>
+      invokeHost('providers', 'probe', payload),
+    getCompaction: () => invokeHost('providers', 'getCompaction'),
+    setCompaction: (payload: { reserveTokens?: number; keepRecentTokens?: number; enabled?: boolean }) =>
+      invokeHost('providers', 'setCompaction', payload),
     getDefaultModel: () => invokeHost('providers', 'getDefaultModel'),
     setDefaultModel: (provider: string, id: string) =>
       invokeHost('providers', 'setDefaultModel', { provider, id }),

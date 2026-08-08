@@ -40,8 +40,9 @@ type ChatState = {
   cwd?: string;
   sessionId?: string;
   generation: number;
-  model?: { provider: string; id: string; name?: string };
+  model?: { provider: string; id: string; name?: string; reasoning?: boolean; contextWindow?: number };
   thinkingLevel: string;
+  availableThinkingLevels: string[];
   isStreaming: boolean;
   messages: ChatMessage[];
   toolExecutions: Record<string, ToolExecution>;
@@ -91,6 +92,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   starting: false,
   generation: 0,
   thinkingLevel: 'off',
+  availableThinkingLevels: [],
   isStreaming: false,
   messages: [],
   toolExecutions: {},
@@ -186,6 +188,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       generation: state.generation,
       model: state.model,
       thinkingLevel: state.thinkingLevel,
+      availableThinkingLevels: state.availableThinkingLevels ?? [],
       isStreaming: state.isStreaming,
       messages: state.messages.map((m, i) => ({
         ...asMessage(m),

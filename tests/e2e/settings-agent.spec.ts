@@ -94,6 +94,9 @@ test('设置页：四个新设置项渲染 + 切换后落盘 config.json', async
   await expect(page.getByTestId('prevent-sleep-off')).toHaveClass(/active/);
   await expect(page.getByTestId('settings-notify-ui-request')).toBeVisible();
   await expect(page.getByTestId('notify-ui-request-on')).toHaveClass(/active/);
+  await expect(page.getByTestId('settings-compaction')).toBeVisible();
+  await expect(page.getByTestId('compaction-reserve')).toHaveValue('16384');
+  await expect(page.getByTestId('compaction-keep-recent')).toHaveValue('20000');
 
   // 切换 → 落盘（electron-store：<userData>/config.json）
   await page.getByTestId('followup-steer').click();

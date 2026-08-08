@@ -98,9 +98,17 @@ function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
     cwd: runtime.cwd,
     generation: runtime.generation,
     model: session.model
-      ? { provider: session.model.provider, id: session.model.id, name: session.model.name }
+      ? { provider: session.model.provider, id: session.model.id, name: session.model.name, reasoning: session.model.reasoning, contextWindow: session.model.contextWindow }
       : undefined,
     thinkingLevel: session.thinkingLevel,
+    availableThinkingLevels: (() => {
+      try {
+        const levels = (session as unknown as { getAvailableThinkingLevels?: () => string[] }).getAvailableThinkingLevels;
+        return typeof levels === 'function' ? levels.call(session) : [];
+      } catch {
+        return [];
+      }
+    })(),
     isStreaming: session.isStreaming,
     messages: session.messages as unknown[],
     messageEntryIds: messageEntryIds(session),

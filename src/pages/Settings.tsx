@@ -31,6 +31,8 @@ export default function SettingsPage() {
   const [sendWith, setSendWith] = useState<SendWith>('enter');
   const [preventSleep, setPreventSleep] = useState(false);
   const [notifyUiRequest, setNotifyUiRequest] = useState(true);
+  const [compaction, setCompaction] = useState({ reserveTokens: 16384, keepRecentTokens: 20000, enabled: true });
+  const [modelWindow, setModelWindow] = useState<number>();
   const env = usePiSystemStore((s) => s.env);
   const latestVersion = usePiSystemStore((s) => s.latestVersion);
   const detect = usePiSystemStore((s) => s.detect);
@@ -46,6 +48,11 @@ export default function SettingsPage() {
     void hostApi.settings.get('sendWith').then((v) => setSendWith(v === 'cmdEnter' ? 'cmdEnter' : 'enter'));
     void hostApi.settings.get('preventSleep').then((v) => setPreventSleep(v === true));
     void hostApi.settings.get('notifyUiRequest').then((v) => setNotifyUiRequest(v !== false));
+    void hostApi.providers.getCompaction().then(setCompaction).catch(() => {});
+    void Promise.all([hostApi.providers.listModels(), hostApi.providers.getDefaultModel()]).then(([available, current]) => {
+      const model = current.model ? available.models.find((candidate) => candidate.provider === current.model?.provider && candidate.id === current.model?.id) : undefined;
+      if (model?.contextWindow) setModelWindow(model.contextWindow);
+    }).catch(() => {});
   }, []);
 
   const changeLanguage = async (lng: SupportedLanguage) => {
@@ -163,6 +170,26 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="settings-section" data-testid="settings-compaction">
+        <h2>{t('settings.compaction.title')}</h2>
+        <p className="settings-section-hint">{t('settings.compaction.desc')}</p>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('settings.compaction.reserveTokens')}</div>
+            <div className="settings-row-desc">{t('settings.compaction.reserveDesc')}</div>
+          </div>
+          <input className="settings-number" data-testid="compaction-reserve" type="number" min="0" step="256" value={compaction.reserveTokens} onChange={(e) => setCompaction((v) => ({ ...v, reserveTokens: Number(e.target.value) || 0 }))} onBlur={() => void hostApi.providers.setCompaction({ reserveTokens: compaction.reserveTokens })} />
+        </div>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('settings.compaction.keepRecentTokens')}</div>
+            <div className="settings-row-desc">{t('settings.compaction.keepRecentDesc')}</div>
+          </div>
+          <input className="settings-number" data-testid="compaction-keep-recent" type="number" min="0" step="256" value={compaction.keepRecentTokens} onChange={(e) => setCompaction((v) => ({ ...v, keepRecentTokens: Number(e.target.value) || 0 }))} onBlur={() => void hostApi.providers.setCompaction({ keepRecentTokens: compaction.keepRecentTokens })} />
+        </div>
+        <p className="settings-section-hint">{modelWindow ? t('settings.compaction.recommendation', { window: modelWindow.toLocaleString(), tokens: Math.round(modelWindow * 0.25).toLocaleString() }) : t('settings.compaction.recommendationGeneric')}</p>
       </section>
 
       <section className="settings-section">

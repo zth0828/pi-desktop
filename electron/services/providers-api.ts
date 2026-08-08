@@ -11,6 +11,9 @@ import type {
   PiProviderListResult,
   PiProviderRow,
   PiProviderSetKeyPayload,
+  PiProviderProbePayload,
+  PiProviderProbeResult,
+  PiCompactionSettings,
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
@@ -152,6 +155,96 @@ export const providersApi = {
       mkdirSync(agentDir, { recursive: true });
       writeFileSync(modelsPath, JSON.stringify(doc, null, 2));
       invalidateModelRuntime();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /** Probe wire protocols with tiny requests. This is deliberately raw fetch: it is a
+   * connection diagnostic and must not create a pi session or mutate provider state. */
+  probe: async (payload: PiProviderProbePayload): Promise<PiProviderProbeResult> => {
+    const base = payload.baseUrl.replace(/\/+$/, '');
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    if (payload.apiKey) {
+      headers.authorization = `Bearer ${payload.apiKey}`;
+      headers['x-api-key'] = payload.apiKey;
+    }
+    const readJson = async (response: Response): Promise<Record<string, unknown>> => {
+      const text = await response.text();
+      try { return JSON.parse(text) as Record<string, unknown>; } catch { return {}; }
+    };
+    const hasCache = (value: unknown): boolean => {
+      if (!value || typeof value !== 'object') return false;
+      if (Array.isArray(value)) return value.some(hasCache);
+      const record = value as Record<string, unknown>;
+      return Object.entries(record).some(([key, child]) =>
+        /cached[_-]?tokens|cacheRead|cache_read|cache[_-]?read/i.test(key) && Number(child) > 0,
+      ) || Object.values(record).some(hasCache);
+    };
+    const models: string[] = [];
+    try {
+      const response = await fetch(`${base}/models`, { headers, signal: AbortSignal.timeout(9000) });
+      if (response.ok) {
+        const json = await readJson(response);
+        const rows = Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : [];
+        for (const row of rows) {
+          const id = typeof row === 'object' && row ? String((row as Record<string, unknown>).id ?? '') : '';
+          if (id) models.push(id);
+        }
+      }
+    } catch { /* each protocol result reports its own failure */ }
+    const model = payload.model || models[0] || 'test-model';
+    const protocols: PiProviderProbeResult['protocols'] = [];
+    const requests: Array<{ api: string; url: string; body: Record<string, unknown>; headers?: Record<string, string> }> = [
+      { api: 'openai-completions', url: `${base}/chat/completions`, body: { model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 } },
+      { api: 'openai-responses', url: `${base}/responses`, body: { model, input: 'ping', max_output_tokens: 1 } },
+      { api: 'anthropic-messages', url: `${base.replace(/\/v1$/, '')}/messages`, body: { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }, headers: { ...headers, 'anthropic-version': '2023-06-01' } },
+      { api: 'google-generative-ai', url: `${base}/models/${encodeURIComponent(model)}:generateContent`, body: { contents: [{ parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } } },
+    ];
+    for (const request of requests) {
+      try {
+        const first = await fetch(request.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
+        const firstJson = await readJson(first);
+        let cacheStats = hasCache(firstJson);
+        if (first.ok) {
+          const second = await fetch(request.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
+          cacheStats ||= hasCache(await readJson(second));
+        }
+        protocols.push({ api: request.api, available: first.ok, cacheStats, error: first.ok ? undefined : `HTTP ${first.status}` });
+      } catch (error) {
+        protocols.push({ api: request.api, available: false, cacheStats: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    const recommendedApi = protocols.find((p) => p.available && p.cacheStats)?.api
+      ?? protocols.find((p) => p.available)?.api;
+    return { models, protocols, recommendedApi };
+  },
+
+  getCompaction: async (): Promise<PiCompactionSettings> => {
+    const sdk = await loadPiSdk();
+    const settingsManager = sdk.SettingsManager.create(await resolveStandaloneCwd(), sdk.getAgentDir());
+    return settingsManager.getCompactionSettings();
+  },
+
+  setCompaction: async (payload: { reserveTokens?: number; keepRecentTokens?: number; enabled?: boolean }): Promise<HostSuccess> => {
+    try {
+      const sdk = await loadPiSdk();
+      const agentDir = sdk.getAgentDir();
+      const settingsPath = path.join(agentDir, 'settings.json');
+      let doc: Record<string, unknown> = {};
+      if (existsSync(settingsPath)) {
+        try { doc = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>; } catch { doc = {}; }
+      }
+      const current = (doc.compaction && typeof doc.compaction === 'object' ? doc.compaction : {}) as Record<string, unknown>;
+      doc.compaction = {
+        ...current,
+        ...(payload.enabled === undefined ? {} : { enabled: payload.enabled }),
+        ...(payload.reserveTokens === undefined ? {} : { reserveTokens: payload.reserveTokens }),
+        ...(payload.keepRecentTokens === undefined ? {} : { keepRecentTokens: payload.keepRecentTokens }),
+      };
+      mkdirSync(agentDir, { recursive: true });
+      writeFileSync(settingsPath, JSON.stringify(doc, null, 2));
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };

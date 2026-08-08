@@ -25,7 +25,6 @@ function ProviderRow({ provider, models, defaultModel, onChanged }: ProviderRowP
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
-
   const setApiKey = async () => {
     setBusy(true);
     setMessage(undefined);
@@ -162,6 +161,23 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
   const [apiKey, setApiKey] = useState('');
   const [modelIds, setModelIds] = useState('');
   const [message, setMessage] = useState<string>();
+  const [probing, setProbing] = useState(false);
+  const [probeResult, setProbeResult] = useState<{ models: string[]; protocols: Array<{ api: string; available: boolean; cacheStats: boolean; error?: string }>; recommendedApi?: string }>();
+
+  const probe = async () => {
+    setProbing(true);
+    setMessage(undefined);
+    try {
+      const result = await hostApi.providers.probe({ baseUrl: baseUrl.trim(), apiKey: apiKey.trim() || undefined, model: modelIds.split(',')[0]?.trim() || undefined });
+      setProbeResult(result);
+      if (result.models.length > 0) setModelIds(result.models.join(', '));
+      if (result.recommendedApi) setApi(result.recommendedApi);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProbing(false);
+    }
+  };
 
   const submit = async () => {
     const models = modelIds
@@ -218,6 +234,20 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
         value={apiKey}
         onChange={(e) => setApiKey(e.target.value)}
       />
+      <button type="button" data-testid="probe-custom-provider" disabled={probing || !baseUrl.trim()} onClick={() => void probe()}>
+        {probing ? t('models.probing') : t('models.probe')}
+      </button>
+      {probeResult && (
+        <div className="probe-results" data-testid="probe-results">
+          {probeResult.protocols.map((protocol) => (
+            <div className="probe-result-row" key={protocol.api}>
+              <span>{protocol.api}</span>
+              <span className={protocol.available ? 'probe-ok' : 'probe-fail'}>{protocol.available ? t('models.probeAvailable') : t('models.probeUnavailable')}</span>
+              {protocol.available && <span className={protocol.cacheStats ? 'probe-ok' : 'hint'}>{protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')}</span>}
+            </div>
+          ))}
+        </div>
+      )}
       <input
         placeholder={t('models.customModels')}
         value={modelIds}

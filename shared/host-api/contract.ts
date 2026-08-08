@@ -78,7 +78,7 @@ export type PiRuntimePromptPayload = {
 export type PiRuntimeQueueKind = 'steering' | 'followUp';
 export type PiRuntimeQueueItemPayload = { kind: PiRuntimeQueueKind; index: number };
 
-export type PiRuntimeModelInfo = { provider: string; id: string; name?: string };
+export type PiRuntimeModelInfo = { provider: string; id: string; name?: string; reasoning?: boolean; contextWindow?: number };
 
 export type PiRuntimeContextUsage = {
   tokens: number | null;
@@ -92,6 +92,7 @@ export type PiRuntimeStateResult = {
   generation: number;
   model?: PiRuntimeModelInfo;
   thinkingLevel: string;
+  availableThinkingLevels: string[];
   isStreaming: boolean;
   /** pi AgentMessage[]，渲染层按结构渲染（user/assistant/toolResult） */
   messages: unknown[];
@@ -286,6 +287,28 @@ export type PiProviderAddCustomPayload = {
     contextWindow?: number;
     maxTokens?: number;
   }>;
+};
+export type PiProviderProbePayload = {
+  baseUrl: string;
+  apiKey?: string;
+  model?: string;
+};
+export type PiProviderProbeProtocol = {
+  api: string;
+  available: boolean;
+  cacheStats: boolean;
+  modelIds?: string[];
+  error?: string;
+};
+export type PiProviderProbeResult = {
+  models: string[];
+  protocols: PiProviderProbeProtocol[];
+  recommendedApi?: string;
+};
+export type PiCompactionSettings = {
+  reserveTokens: number;
+  keepRecentTokens: number;
+  enabled: boolean;
 };
 export type PiOAuthProgressEvent = {
   providerId: string;
@@ -566,6 +589,9 @@ export type HostApiContract = {
      * 无会话时经 pi SettingsManager 写 settings.json，新会话启动时应用。
      */
     setDefaultModel: (payload: PiDefaultModel) => HostSuccess;
+    probe: (payload: PiProviderProbePayload) => PiProviderProbeResult;
+    getCompaction: () => PiCompactionSettings;
+    setCompaction: (payload: Partial<PiCompactionSettings>) => HostSuccess;
   };
   piSessions: {
     /** 当前 workspace cwd 的会话列表（modified 倒序）。runtime 未启动时回退 settings.workspaceCwd。 */
