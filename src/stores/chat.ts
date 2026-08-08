@@ -146,6 +146,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   prompt: async (text, images, behavior) => {
+    // 启动竞态：start 还在进行时（页面已可输入但 runtime 未就绪）先等它结束，
+    // 否则用户秒发消息会吃到「session not started」
+    for (let i = 0; i < 100 && get().starting; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
     const result = await hostApi.piRuntime.prompt(text, images, behavior);
     if (!result.success) set({ startError: result.error });
   },
