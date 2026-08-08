@@ -40,6 +40,12 @@ pi 事件 → 壳事件契约的映射**只允许**在 `shared/pi-event-map.ts`�
 - 推翻文档决策时，body 引用 `docs/TECHNICAL-PLAN.md` 章节，并同步改文档（文档不入库，`docs/` 已被 gitignore）。
 - 禁止 `--amend`、force push、未经确认的 rebase。
 
+## 文档约定
+
+- 所有方案/计划/调研类 Markdown 文档一律放 `docs/`，**根目录只保留 `AGENTS.md`**（和 `README*`、`NOTICE` 等约定文件）。
+- 交接 prompt、验证记录、设计稿同样放 `docs/`（如 `docs/HANDOFF-PROMPT.md`）。
+- 根目录禁止新增 `*.md`；临时笔记用完即删或归入 `docs/`。
+
 ## 环境
 
 - 本项目不依赖任何数据库/中间件/nginx 等基础设施服务。
