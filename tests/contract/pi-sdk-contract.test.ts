@@ -168,4 +168,22 @@ describe('pi SDK 契约（pi 0.83.x + mock provider）', () => {
     expect(ended).toBe(true);
     runtime.dispose();
   });
+
+  it('斜杠命令映射依赖的 SDK 面：setSessionName / getSessionStats / reload / 扩展命令清单', async () => {
+    const runtime = await createRuntimeUnderTest();
+    const session = runtime.session;
+    // 扩展命令清单（/ 补全聚合来源；无扩展时为空数组）
+    expect(Array.isArray(session.extensionRunner.getRegisteredCommands())).toBe(true);
+    // /name：setSessionName → SessionManager.getSessionName 读回
+    session.setSessionName('contract-name');
+    expect(session.sessionManager.getSessionName()).toBe('contract-name');
+    // /session：getSessionStats 的字段形状
+    const stats = session.getSessionStats();
+    expect(stats.sessionId).toBe(session.sessionId);
+    expect(stats.totalMessages).toBeGreaterThanOrEqual(0);
+    expect(stats.tokens.total).toBeGreaterThanOrEqual(0);
+    // /reload：全量重载资源（无头模式可用）
+    await session.reload();
+    runtime.dispose();
+  });
 });

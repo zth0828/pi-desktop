@@ -239,11 +239,19 @@ export default function ModelsPage() {
   const [providers, setProviders] = useState<PiProviderRow[]>([]);
   const [models, setModels] = useState<PiModelRow[]>([]);
   const [defaultModel, setDefaultModel] = useState<PiDefaultModel | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>();
   const [query, setQuery] = useState('');
   const [oauthMessages, setOauthMessages] = useState<string[]>([]);
 
   const refresh = () => {
-    void hostApi.providers.list().then((r) => setProviders(r.providers));
+    setLoading(true);
+    setError(undefined);
+    void hostApi.providers
+      .list()
+      .then((r) => setProviders(r.providers))
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoading(false));
     void hostApi.providers.listModels().then((r) => setModels(r.models)).catch(() => {});
     void hostApi.providers.getDefaultModel().then((r) => setDefaultModel(r.model)).catch(() => {});
   };
@@ -272,6 +280,19 @@ export default function ModelsPage() {
       {oauthMessages.length > 0 && (
         <div className="hint" data-testid="oauth-progress">
           {t('models.oauthStarted')}
+        </div>
+      )}
+      {loading && (
+        <p className="hint" data-testid="models-loading">
+          {t('states.loading')}
+        </p>
+      )}
+      {error && (
+        <div data-testid="models-error">
+          <p className="error-text">{error}</p>
+          <button data-testid="models-retry" onClick={refresh}>
+            {t('states.retry')}
+          </button>
         </div>
       )}
       <div className="provider-list">

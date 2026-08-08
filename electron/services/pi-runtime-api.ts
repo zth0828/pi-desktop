@@ -16,7 +16,12 @@ import type {
   PiRuntimeTreeResult,
   PiRuntimeNavigatePayload,
   PiRuntimeNavigateResult,
+  PiRuntimeCompactPayload,
+  PiRuntimeExportPayload,
+  PiRuntimeSessionInfo,
+  PiSessionExportResult,
   PiUiResponsePayload,
+  PiRuntimeQueueItemPayload,
 } from '@shared/host-api/contract';
 import type {
   AgentSession,
@@ -281,6 +286,46 @@ function treeEntrySummary(entry: SessionEntry): { kind: PiRuntimeTreeNode['kind'
   return null;
 }
 
+/** 壳支持的 pi 内建斜杠命令（描述是英文回退，渲染层按名字走 i18n）。 */
+const SHELL_BUILTIN_COMMANDS: Array<{ name: string; description: string }> = [
+  { name: 'new', description: 'Start a new session' },
+  { name: 'compact', description: "Compact this chat's context" },
+  { name: 'tree', description: 'Navigate session branches' },
+  { name: 'model', description: 'Select model' },
+  { name: 'name', description: 'Set session display name' },
+  { name: 'copy', description: 'Copy last agent message to clipboard' },
+  { name: 'export', description: 'Export session to HTML' },
+  { name: 'session', description: 'Show session info and stats' },
+  { name: 'settings', description: 'Open settings' },
+  { name: 'login', description: 'Configure provider authentication' },
+  { name: 'logout', description: 'Remove provider authentication' },
+  { name: 'reload', description: 'Reload extensions, skills, prompts and context files' },
+  { name: 'resume', description: 'Resume a different session' },
+];
+
+/**
+ * 从 pi 队列移除单条消息并返回其文本（越界返回 null）。
+ * pi SDK 只有 clearQueue（全清）：快照两个队列 → 全清 → 按原顺序重放其余项，
+ * 保留各自的 steer/followUp 语义（不自造队列，壳只重放 pi 的入队 API）。
+ * 注意 session.clearQueue 只清 session 级跟踪数组，agent-core 内部的
+ * steeringQueue/followUpQueue 要一并 clearAllQueues，否则重放会重复入队。
+ */
+async function removeQueuedItem(
+  session: AgentSession,
+  payload: PiRuntimeQueueItemPayload,
+): Promise<string | null> {
+  const steering = [...session.getSteeringMessages()];
+  const followUp = [...session.getFollowUpMessages()];
+  const list = payload.kind === 'steering' ? steering : followUp;
+  if (payload.index < 0 || payload.index >= list.length) return null;
+  const [removed] = list.splice(payload.index, 1);
+  session.clearQueue();
+  session.agent.clearAllQueues();
+  for (const text of steering) await session.steer(text);
+  for (const text of followUp) await session.followUp(text);
+  return removed;
+}
+
 export const piRuntimeApi = {
   start: async (payload: PiRuntimeStartPayload): Promise<PiRuntimeStateResult> => {
     if (active && active.cwd === payload.cwd) return snapshotState(active);
@@ -320,9 +365,32 @@ export const piRuntimeApi = {
       const staged = (payload.images ?? []) as unknown[];
       await session.prompt(expanded.text, {
         images: [...expanded.images, ...staged] as never,
-        // 生成中提交 = steer（docs §4.1：输入框在生成中仍可提交，自动 steer）
-        ...(session.isStreaming ? { streamingBehavior: 'steer' as const } : {}),
+        // 流式中提交：默认 followUp（排队等当前 run 完成），behavior='steer' 时当前轮插入
+        ...(session.isStreaming
+          ? { streamingBehavior: payload.behavior ?? ('followUp' as const) }
+          : {}),
       });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  queueRemove: async (payload: PiRuntimeQueueItemPayload) => {
+    if (!active) return { success: false, error: 'session not started' };
+    const removed = await removeQueuedItem(active.runtime.session, payload);
+    return removed ? { success: true } : { success: false, error: 'queue index out of range' };
+  },
+
+  queueSteerNow: async (payload: PiRuntimeQueueItemPayload) => {
+    if (!active) return { success: false, error: 'session not started' };
+    const session = active.runtime.session;
+    const text = await removeQueuedItem(session, payload);
+    if (text == null) return { success: false, error: 'queue index out of range' };
+    try {
+      // 立即发送：流式中 = steer（当前轮工具间隙插入），空闲 = 直接开新轮
+      if (session.isStreaming) await session.steer(text);
+      else await session.prompt(text);
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -404,13 +472,81 @@ export const piRuntimeApi = {
     }
   },
 
-  compact: async () => {
+  compact: async (payload?: PiRuntimeCompactPayload) => {
     if (!active) return { success: false, error: 'session not started' };
     try {
-      await active.runtime.session.compact();
+      await active.runtime.session.compact(payload?.customInstructions);
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /** /name <text>：重命名当前会话（pi session.setSessionName，返回值是规范化后的名字）。 */
+  setSessionName: async (payload: { name: string }) => {
+    if (!active) return { success: false, error: 'session not started' };
+    const name = payload.name.trim();
+    if (!name) return { success: false, error: 'empty name' };
+    try {
+      active.runtime.session.setSessionName(name);
+      // 侧栏会话列表靠 sessionReplaced / isStreaming 翻转刷新；
+      // streaming 中推全量会丢 partial 消息，跳过（流结束时列表自会刷新）。
+      if (!active.runtime.session.isStreaming) {
+        sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));
+      }
+      return { success: true, name: active.runtime.session.sessionManager.getSessionName() };
+    } catch (err) {
+      return { success: false, error: toError(err) };
+    }
+  },
+
+  /** /session：会话信息（pi handleSessionCommand 的 getSessionStats + 会话名）。 */
+  getSessionInfo: (): PiRuntimeSessionInfo | null => {
+    if (!active) return null;
+    const session = active.runtime.session;
+    const stats = session.getSessionStats();
+    return {
+      name: session.sessionManager.getSessionName(),
+      sessionId: stats.sessionId,
+      sessionFile: stats.sessionFile,
+      model: session.model
+        ? { provider: session.model.provider, id: session.model.id, name: session.model.name }
+        : undefined,
+      totalMessages: stats.totalMessages,
+      userMessages: stats.userMessages,
+      assistantMessages: stats.assistantMessages,
+      toolCalls: stats.toolCalls,
+      toolResults: stats.toolResults,
+      tokens: { ...stats.tokens },
+      cost: stats.cost,
+    };
+  },
+
+  /** /reload：重载扩展/skills/prompts/主题/上下文文件（pi handleReloadCommand 语义）。 */
+  reload: async () => {
+    if (!active) return { success: false, error: 'session not started' };
+    const session = active.runtime.session;
+    // pi /reload：生成中/压缩中禁止
+    if (session.isStreaming) return { success: false, error: 'session is streaming' };
+    if (session.isCompacting) return { success: false, error: 'session is compacting' };
+    try {
+      await session.reload();
+      // TUI /reload 后 rebuildChatFromMessages + 重建补全源；壳推全量状态（渲染层重取命令列表）
+      sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: toError(err) };
+    }
+  },
+
+  /** /export [path]：导出当前会话 HTML（pi handleExportCommand；缺省导到会话同目录）。 */
+  exportHtml: async (payload?: PiRuntimeExportPayload): Promise<PiSessionExportResult> => {
+    if (!active) return { success: false, error: 'session not started' };
+    try {
+      const exported = await active.runtime.session.exportToHtml(payload?.outputPath);
+      return { success: true, path: exported };
+    } catch (err) {
+      return { success: false, error: toError(err) };
     }
   },
 
@@ -428,7 +564,11 @@ export const piRuntimeApi = {
     return { success: true };
   },
 
-  /** / 补全数据源：内置命令 + prompt 模板 + skills（docs §4.3）。 */
+  /**
+   * / 补全数据源：壳内建命令 + prompt 模板 + 扩展 registerCommand 命令 + skills（docs §4.3）。
+   * 扩展命令来源与 pi autocomplete 相同（extensionRunner.getRegisteredCommands），
+   * 与内建同名的被 pi 跳过/改名，对外用 invocationName（interactive-mode 同款过滤）。
+   */
   getCommands: () => {
     if (!active) return { commands: [] };
     const loader = active.runtime.services.resourceLoader;
@@ -442,12 +582,17 @@ export const piRuntimeApi = {
       description: s.description,
       source: `skill:${(s.sourceInfo as { label?: string } | undefined)?.label ?? ''}`,
     }));
-    const builtIns = [
-      { name: 'new', description: 'New session', source: 'built-in' },
-      { name: 'compact', description: 'Compact context', source: 'built-in' },
-      { name: 'tree', description: 'Navigate session branches', source: 'built-in' },
-    ];
-    return { commands: [...builtIns, ...prompts, ...skills] };
+    const builtinNames = new Set(SHELL_BUILTIN_COMMANDS.map((c) => c.name));
+    const extensionCommands = active.runtime.session.extensionRunner
+      .getRegisteredCommands()
+      .filter((c) => !builtinNames.has(c.name))
+      .map((c) => ({
+        name: c.invocationName,
+        description: c.description,
+        source: `extension:${(c.sourceInfo as { label?: string } | undefined)?.label ?? ''}`,
+      }));
+    const builtIns = SHELL_BUILTIN_COMMANDS.map((c) => ({ ...c, source: 'built-in' }));
+    return { commands: [...builtIns, ...prompts, ...extensionCommands, ...skills] };
   },
 
   /** 扩展 UI 对话框的用户响应（extension-ui.ts 里挂起的 Promise 按 requestId 配对 resolve）。 */

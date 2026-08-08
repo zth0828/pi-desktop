@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, ChevronDown, CircleGauge, Folder, Paperclip, Square } from 'lucide-react';
-import type { PiCommandRow, PiModelRow, PiRuntimeContextUsage } from '@shared/host-api/contract';
+import { ArrowUp, ChevronDown, CircleGauge, Folder, ListPlus, Paperclip, Square } from 'lucide-react';
+import type {
+  PiCommandRow,
+  PiModelRow,
+  PiRuntimeContextUsage,
+  PiRuntimeSessionInfo,
+} from '@shared/host-api/contract';
 import { formatFileBlock, isProbablyBinary, MAX_FILE_TEXT_BYTES } from '@shared/file-references';
 import { hostApi } from '../../lib/host-api';
 import { filterFiles } from '../../lib/file-search';
+import { navigateToPage } from '../../lib/app-navigation';
 import { cacheHitRate, formatCost, formatHitRate, summarizeUsage } from '../../lib/usage-stats';
-import { useChatStore } from '../../stores/chat';
+import { useChatStore, type ChatMessage } from '../../stores/chat';
+import { QueueList } from './QueueList';
 
 type StagedImage = { data: string; mediaType: string; previewUrl: string };
 type StagedFile = { name: string; text: string };
@@ -44,6 +51,44 @@ function fileToStagedImage(file: File): Promise<StagedImage> {
   });
 }
 
+/**
+ * 壳内建斜杠命令（与 main 侧 SHELL_BUILTIN_COMMANDS 对齐；pi TUI onSubmit 分发的壳映射）。
+ * 不在此集合里的 /xxx 原样发给 pi（prompt 模板 / skill / 扩展命令由 pi 展开执行）。
+ */
+const SHELL_BUILTIN_NAMES = new Set([
+  'new',
+  'compact',
+  'tree',
+  'model',
+  'name',
+  'copy',
+  'export',
+  'session',
+  'settings',
+  'login',
+  'logout',
+  'reload',
+  'resume',
+]);
+
+/** 带参数的命令：补全面板选中后填入输入框补参数，不直接执行 */
+const ARG_BUILTIN_COMMANDS = new Set(['model', 'name', 'export', 'compact']);
+
+/** pi session.getLastAssistantText 语义：最后一条 assistant 消息的文本块拼接。 */
+function lastAssistantText(messages: ChatMessage[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m.role !== 'assistant') continue;
+    const text = m.content
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text ?? '')
+      .join('\n')
+      .trim();
+    if (text) return text;
+  }
+  return null;
+}
+
 export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
@@ -60,7 +105,6 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const prompt = useChatStore((s) => s.prompt);
   const abort = useChatStore((s) => s.abort);
   const newSession = useChatStore((s) => s.newSession);
-  const compact = useChatStore((s) => s.compact);
   const setTreeOpen = useChatStore((s) => s.setTreeOpen);
   const inputDraft = useChatStore((s) => s.inputDraft);
   const model = useChatStore((s) => s.model);
@@ -69,7 +113,25 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const [modelKey, setModelKey] = useState('');
   const [contextUsage, setContextUsage] = useState<PiRuntimeContextUsage | null>(null);
   const [usageOpen, setUsageOpen] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<PiRuntimeSessionInfo | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const modelSelectRef = useRef<HTMLSelectElement>(null);
+  const noticeTimerRef = useRef<number | null>(null);
+
+  /** 命令执行的轻量确认（/name /copy /export /reload 等），5s 自动消失 */
+  const showNotice = (text: string) => {
+    setNotice(text);
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 5000);
+  };
+
+  useEffect(
+    () => () => {
+      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (started) {
@@ -117,6 +179,128 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const formatTokens = (value: number | null | undefined) =>
     value == null ? t('chat.tokenUnknown') : value.toLocaleString();
 
+  /** 模型下拉选中后的统一切换流程（onChange 与 /model <provider/id> 共用） */
+  const applyModelSelection = (next: string) => {
+    const previous = modelKey;
+    setModelKey(next);
+    const [provider, ...rest] = next.split('/');
+    void hostApi.piRuntime.setModel(provider, rest.join('/')).then(async (result) => {
+      if (!result.success) {
+        setModelKey(previous);
+        return;
+      }
+      const usage = await hostApi.piRuntime.getContextUsage();
+      setContextUsage(usage);
+    });
+  };
+
+  /** 补全面板里的命令描述：内建命令走 i18n；/compact 内联当前上下文用量（Codex 式 "…(87% full)"） */
+  const commandDescription = (cmd: PiCommandRow): string => {
+    if (cmd.source !== 'built-in') return cmd.description ?? '';
+    if (cmd.name === 'compact') {
+      return contextUsage?.tokens == null || contextPercent == null
+        ? t('chat.commands.compactUnknown')
+        : t('chat.commands.compact', { percent: Math.round(contextPercent) });
+    }
+    return t(`chat.commands.${cmd.name}`);
+  };
+
+  /** 壳内建命令分发（pi TUI onSubmit 的壳映射；动作类命令执行后给轻量确认） */
+  const runBuiltinCommand = async (name: string, arg: string) => {
+    switch (name) {
+      case 'new':
+        return void newSession();
+      case 'tree':
+        return void setTreeOpen(true);
+      case 'compact':
+        // pi /compact <instructions>：handleCompactCommand 的自定义压缩指令
+        return void hostApi.piRuntime.compact(arg || undefined);
+      case 'model': {
+        if (!arg) {
+          // pi /model 无参 = 打开模型选择器 → 壳聚焦并展开聊天页模型下拉
+          modelSelectRef.current?.focus();
+          modelSelectRef.current?.showPicker?.();
+          return;
+        }
+        const needle = arg.toLowerCase();
+        const target =
+          models.find((m) => `${m.provider}/${m.id}`.toLowerCase() === needle) ??
+          models.find(
+            (m) =>
+              `${m.provider}/${m.id}`.toLowerCase().includes(needle) ||
+              (m.name ?? '').toLowerCase().includes(needle),
+          );
+        if (!target) {
+          showNotice(t('chat.notice.modelNotFound', { model: arg }));
+          return;
+        }
+        applyModelSelection(`${target.provider}/${target.id}`);
+        showNotice(t('chat.notice.modelSet', { model: target.name ?? target.id }));
+        return;
+      }
+      case 'name': {
+        if (!arg) {
+          // pi /name 无参 = 显示当前会话名（未命名则提示用法）
+          const info = await hostApi.piRuntime.getSessionInfo().catch(() => null);
+          showNotice(
+            info?.name
+              ? t('chat.notice.currentName', { name: info.name })
+              : t('chat.notice.nameUsage'),
+          );
+          return;
+        }
+        const result = await hostApi.piRuntime.setSessionName(arg);
+        if (result.success) showNotice(t('chat.notice.renamed', { name: result.name ?? arg }));
+        else showNotice(t('chat.notice.renameFailed', { message: result.error ?? 'unknown' }));
+        return;
+      }
+      case 'copy': {
+        // pi /copy：session.getLastAssistantText → 剪贴板
+        const text = lastAssistantText(messages);
+        if (!text) {
+          showNotice(t('chat.notice.nothingToCopy'));
+          return;
+        }
+        await hostApi.app.writeClipboard(text);
+        showNotice(t('chat.notice.copied'));
+        return;
+      }
+      case 'export': {
+        const result = await hostApi.piRuntime.exportHtml(arg || undefined);
+        if (result.success) showNotice(t('chat.notice.exported', { path: result.path ?? '' }));
+        else showNotice(t('chat.notice.exportFailed', { message: result.error ?? 'unknown' }));
+        return;
+      }
+      case 'session': {
+        const info = await hostApi.piRuntime.getSessionInfo().catch(() => null);
+        if (info) setSessionInfo(info);
+        return;
+      }
+      case 'settings':
+        return navigateToPage('settings');
+      case 'login':
+      case 'logout':
+        // pi /login /logout = 供应商认证管理 → 壳的 Models 页
+        return navigateToPage('models');
+      case 'resume':
+        // pi /resume = 会话选择器 → 壳的 Sessions 页
+        return navigateToPage('sessions');
+      case 'reload': {
+        const result = await hostApi.piRuntime.reload();
+        if (result.success) {
+          showNotice(t('chat.notice.reloaded'));
+          // 扩展/skills/prompts 可能变化，重建命令补全列表（TUI setupAutocompleteProvider）
+          void hostApi.piRuntime.getCommands().then((r) => setCommands(r.commands));
+        } else {
+          showNotice(t('chat.notice.reloadFailed', { message: result.error ?? 'unknown' }));
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  };
+
   // / 补全面板：裸 '/' 只显示内置命令 + prompt 模板（skills 多，不打脸）；
   // 输入字符后再全量过滤，前缀匹配优先，built-in > prompt > skill 排序
   const query = value.startsWith('/') && !value.includes(' ') ? value.slice(1) : null;
@@ -124,18 +308,21 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
     source === 'built-in' ? 0 : source.startsWith('prompt') ? 1 : 2;
   const matches = query === null
     ? []
-    : commands
-        .filter((c) => {
-          if (query === '') return sourceRank(c.source) < 2;
-          return c.name.toLowerCase().includes(query.toLowerCase());
-        })
-        .sort((a, b) => {
-          const qa = query.toLowerCase();
-          const pa = a.name.toLowerCase().startsWith(qa) ? 0 : 1;
-          const pb = b.name.toLowerCase().startsWith(qa) ? 0 : 1;
-          return pa - pb || sourceRank(a.source) - sourceRank(b.source) || a.name.localeCompare(b.name);
-        })
-        .slice(0, 8);
+    : (() => {
+        const filtered = commands
+          .filter((c) => {
+            if (query === '') return sourceRank(c.source) < 2;
+            return c.name.toLowerCase().includes(query.toLowerCase());
+          })
+          .sort((a, b) => {
+            const qa = query.toLowerCase();
+            const pa = a.name.toLowerCase().startsWith(qa) ? 0 : 1;
+            const pb = b.name.toLowerCase().startsWith(qa) ? 0 : 1;
+            return pa - pb || sourceRank(a.source) - sourceRank(b.source) || a.name.localeCompare(b.name);
+          });
+        // 裸 '/' 全量展示内建 + prompt 模板（面板可滚动，对齐 TUI）；过滤时截断 8 条
+        return query === '' ? filtered : filtered.slice(0, 8);
+      })();
   const panelOpen = matches.length > 0;
 
   // @ 文件补全：panel 打开时拉一次候选列表（cwd 下相对路径），本地模糊过滤
@@ -147,7 +334,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const fileMatches = atActive ? filterFiles(fileList, atToken.query) : [];
   const filePanelOpen = fileMatches.length > 0;
 
-  const send = () => {
+  const send = (behavior?: 'steer' | 'followUp') => {
     const text = value.trim();
     if (!text && images.length === 0 && stagedFiles.length === 0) return;
     const outgoing = images;
@@ -156,14 +343,20 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
     setValue('');
     setImages([]);
     setStagedFiles([]);
-    // 壳内置命令直接执行，不发给 pi
-    if (text === '/new' && outgoing.length === 0 && stagedFiles.length === 0) return void newSession();
-    if (text === '/compact' && outgoing.length === 0 && stagedFiles.length === 0) return void compact();
-    if (text === '/tree' && outgoing.length === 0 && stagedFiles.length === 0) return void setTreeOpen(true);
+    // 壳内置命令直接执行，不发给 pi（其余 /xxx 由 pi 展开：prompt 模板/skill/扩展命令）
+    if (text.startsWith('/') && outgoing.length === 0 && stagedFiles.length === 0) {
+      const spaceIndex = text.indexOf(' ');
+      const name = (spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex)).toLowerCase();
+      if (SHELL_BUILTIN_NAMES.has(name)) {
+        void runBuiltinCommand(name, spaceIndex === -1 ? '' : text.slice(spaceIndex + 1).trim());
+        return;
+      }
+    }
     void prompt(
       filePrefix + text,
       // pi ImageContent 是扁平结构 {type:'image', data, mimeType}
       outgoing.map((img) => ({ type: 'image', data: img.data, mimeType: img.mediaType })),
+      behavior,
     );
   };
 
@@ -200,10 +393,14 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
 
   const pick = (cmd: PiCommandRow) => {
     if (cmd.source === 'built-in') {
+      // 带参命令填入输入框补参数（对齐 pi autocomplete 只补全不执行）；无参命令直接执行
+      if (ARG_BUILTIN_COMMANDS.has(cmd.name)) {
+        setValue(`/${cmd.name} `);
+        textareaRef.current?.focus();
+        return;
+      }
       setValue('');
-      if (cmd.name === 'new') void newSession();
-      if (cmd.name === 'compact') void compact();
-      if (cmd.name === 'tree') setTreeOpen(true);
+      void runBuiltinCommand(cmd.name, '');
       return;
     }
     setValue(`/${cmd.name} `);
@@ -266,12 +463,92 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
     }
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      send();
+      // 流式中：Enter = 排队（followUp，当前 run 完成后发送）；Alt+Enter = steer（当前轮插入）
+      send(e.altKey ? 'steer' : undefined);
     }
   };
 
   return (
     <div className="chat-input">
+      <QueueList />
+      {notice && (
+        <div className="chat-notice" data-testid="chat-notice">
+          {notice}
+        </div>
+      )}
+      {sessionInfo && (
+        <div
+          className="tree-overlay"
+          data-testid="session-info-dialog"
+          onClick={() => setSessionInfo(null)}
+        >
+          <div className="tree-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="tree-title">{t('chat.sessionInfo.title')}</div>
+            <div className="session-info-body">
+              {sessionInfo.name && (
+                <div className="usage-row">
+                  <span>{t('chat.sessionInfo.name')}</span>
+                  <strong>{sessionInfo.name}</strong>
+                </div>
+              )}
+              <div className="usage-row">
+                <span>{t('chat.sessionInfo.id')}</span>
+                <strong>{sessionInfo.sessionId}</strong>
+              </div>
+              <div className="usage-row">
+                <span>{t('chat.sessionInfo.file')}</span>
+                <strong>{sessionInfo.sessionFile ?? t('chat.sessionInfo.inMemory')}</strong>
+              </div>
+              {sessionInfo.model && (
+                <div className="usage-row">
+                  <span>{t('chat.sessionInfo.model')}</span>
+                  <strong>
+                    {sessionInfo.model.name ??
+                      `${sessionInfo.model.provider}/${sessionInfo.model.id}`}
+                  </strong>
+                </div>
+              )}
+              <div className="usage-row">
+                <span>{t('chat.sessionInfo.messages')}</span>
+                <strong>
+                  {t('chat.sessionInfo.messagesValue', {
+                    total: sessionInfo.totalMessages,
+                    user: sessionInfo.userMessages,
+                    assistant: sessionInfo.assistantMessages,
+                  })}
+                </strong>
+              </div>
+              <div className="usage-row">
+                <span>{t('chat.sessionInfo.tools')}</span>
+                <strong>
+                  {t('chat.sessionInfo.toolsValue', {
+                    calls: sessionInfo.toolCalls,
+                    results: sessionInfo.toolResults,
+                  })}
+                </strong>
+              </div>
+              <div className="usage-row">
+                <span>{t('chat.sessionInfo.input')}</span>
+                <strong>{formatTokens(sessionInfo.tokens.input)}</strong>
+              </div>
+              <div className="usage-row">
+                <span>{t('chat.sessionInfo.output')}</span>
+                <strong>{formatTokens(sessionInfo.tokens.output)}</strong>
+              </div>
+              <div className="usage-row">
+                <span>{t('chat.sessionInfo.total')}</span>
+                <strong>{formatTokens(sessionInfo.tokens.total)}</strong>
+              </div>
+              {sessionInfo.cost > 0 && (
+                <div className="usage-row">
+                  <span>{t('chat.sessionInfo.cost')}</span>
+                  <strong>{formatCost(sessionInfo.cost)}</strong>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {panelOpen && (
         <div className="command-panel" data-testid="command-panel">
           {matches.map((cmd, i) => (
@@ -285,7 +562,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
               }}
             >
               <span className="command-name">/{cmd.name}</span>
-              <span className="command-desc">{cmd.description ?? ''}</span>
+              <span className="command-desc">{commandDescription(cmd)}</span>
               <span className="command-source">{cmd.source}</span>
             </button>
           ))}
@@ -323,24 +600,12 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
           <span className="context-separator" aria-hidden="true" />
           {models.length > 0 ? (
             <select
+              ref={modelSelectRef}
               className="context-chip model-select"
               data-testid="model-select"
               aria-label={t('chat.model')}
               value={modelKey}
-              onChange={(e) => {
-                const previous = modelKey;
-                const next = e.target.value;
-                setModelKey(next);
-                const [provider, ...rest] = e.target.value.split('/');
-                void hostApi.piRuntime.setModel(provider, rest.join('/')).then(async (result) => {
-                  if (!result.success) {
-                    setModelKey(previous);
-                    return;
-                  }
-                  const usage = await hostApi.piRuntime.getContextUsage();
-                  setContextUsage(usage);
-                });
-              }}
+              onChange={(e) => applyModelSelection(e.target.value)}
             >
               {[...modelGroups.entries()].map(([provider, providerModels]) => (
                 <optgroup key={provider} label={provider}>
@@ -471,15 +736,32 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
             )}
           </div>
           {isStreaming ? (
-            <button data-testid="chat-stop" className="send-button stop" onClick={() => void abort()}>
-              <Square size={13} />
-            </button>
+            <>
+              <button
+                data-testid="chat-queue-send"
+                className="send-button"
+                onClick={(e) => send(e.altKey ? 'steer' : undefined)}
+                disabled={!value.trim() && images.length === 0}
+                title={t('chat.queueSendTip')}
+              >
+                <ListPlus size={15} />
+              </button>
+              <button
+                data-testid="chat-stop"
+                className="send-button stop"
+                onClick={() => void abort()}
+                title={t('chat.stopTip')}
+              >
+                <Square size={13} />
+              </button>
+            </>
           ) : (
             <button
               data-testid="chat-send"
               className="send-button"
-              onClick={send}
+              onClick={() => send()}
               disabled={!value.trim() && images.length === 0}
+              title={t('chat.sendTip')}
             >
               <ArrowUp size={15} />
             </button>

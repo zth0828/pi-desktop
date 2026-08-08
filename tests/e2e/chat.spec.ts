@@ -95,12 +95,9 @@ test('工具调用 → 工具卡片（运行中 → 完成，结果可展开）'
 
   const card = page.getByTestId('tool-card').last();
   await expect(card).toBeVisible({ timeout: 30_000 });
-  await expect(card.locator('.tool-name')).toHaveText('bash');
-  // header 摘要：bash 显示 $ command
-  await expect(card.locator('.tool-summary')).toHaveText('$ ls');
+  // 动词化一行文案（Codex 范式）：完成态 "Ran $ ls in X.Xs"
+  await expect(card.getByTestId('tool-line')).toContainText('Ran $ ls in', { timeout: 30_000 });
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
-  // 完成后显示耗时
-  await expect(card.locator('.tool-duration')).toContainText('Took');
 
   // 展开看结果
   await card.locator('.tool-card-header').click();
@@ -116,8 +113,7 @@ test('edit 工具 → 行级 diff 展示', async ({ launchElectronApp }) => {
   await page.getByTestId('chat-send').click();
 
   const card = page.getByTestId('tool-card').last();
-  await expect(card.locator('.tool-name')).toHaveText('edit', { timeout: 30_000 });
-  await expect(card.locator('.tool-summary')).toHaveText('e2e-edit-target.txt');
+  await expect(card.getByTestId('tool-line')).toContainText('Edited e2e-edit-target.txt', { timeout: 30_000 });
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
 
   // 折叠态即渲染 diff：删除红 / 新增绿
@@ -197,22 +193,30 @@ test('429 → 状态条重试倒计时，重试成功后拿到回复', async ({ 
   await expect(page.getByTestId('status-bar')).toHaveCount(0, { timeout: 30_000 });
 });
 
-test('生成中再发消息 → steer 排队 chip 可见', async ({ launchElectronApp }) => {
+test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当前轮插入', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
   await page.getByTestId('chat-input').fill('SLOW stream please');
   await page.getByTestId('chat-send').click();
+  // 流式中：发送按钮变为 Queue（入队 followUp）+ Stop 组合
   await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('chat-queue-send')).toBeVisible();
 
-  // 生成中提交 = steer，进入排队（queue_update → 排队 chip）。
-  // 生成中发送按钮被停止按钮替换，steer 走 Enter 键提交。
-  await page.getByTestId('chat-input').fill('steer me');
+  // Enter = 排队（followUp）：queue_update → followUp chip
+  await page.getByTestId('chat-input').fill('queue me');
   await page.getByTestId('chat-input').press('Enter');
-  const chip = page.getByTestId('queue-chip-steering');
-  await expect(chip).toBeVisible({ timeout: 30_000 });
-  await expect(chip).toContainText('steer me');
+  const followUpChip = page.getByTestId('queue-chip-followUp');
+  await expect(followUpChip).toBeVisible({ timeout: 30_000 });
+  await expect(followUpChip).toContainText('queue me');
+
+  // Alt+Enter = steer（当前轮插入）：queue_update → steering chip
+  await page.getByTestId('chat-input').fill('steer me');
+  await page.getByTestId('chat-input').press('Alt+Enter');
+  const steeringChip = page.getByTestId('queue-chip-steering');
+  await expect(steeringChip).toBeVisible({ timeout: 30_000 });
+  await expect(steeringChip).toContainText('steer me');
 });
 
 test('新会话 → 消息列表清空', async ({ launchElectronApp }) => {
@@ -234,6 +238,30 @@ test('新会话 → 消息列表清空', async ({ launchElectronApp }) => {
   await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
     timeout: 30_000,
   });
+});
+
+test('缓存失效 → assistant 尾部显示 cache miss 警告', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // mock CACHE_MISS 模式：第一轮 usage 全量 cache_write（上报过缓存），第二轮零缓存
+  await page.getByTestId('chat-input').fill('CACHE_MISS turn one');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
+    timeout: 30_000,
+  });
+  await page.getByTestId('chat-input').fill('CACHE_MISS turn two');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
+    timeout: 30_000,
+  });
+
+  // min(prev=6000, cur=6100) - cacheRead=0 = 6.0k tokens re-billed
+  const notice = page.getByTestId('cache-miss-notice');
+  await expect(notice).toBeVisible({ timeout: 30_000 });
+  await expect(notice).toContainText('Cache miss');
+  await expect(notice).toContainText('6.0k');
 });
 
 test('/compact → 压缩状态条，完成后消息列表刷新为摘要', async ({ launchElectronApp }) => {

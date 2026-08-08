@@ -5,6 +5,7 @@ import type { CompactionReason, PiRuntimeEventEnvelope } from '@shared/pi-event-
 import type { PiRuntimeStateResult, PiUiRequestPayload } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
+import { reportRunCompleted, reportUiRequest } from '../lib/notify';
 
 export type ContentBlock = {
   type: string;
@@ -87,8 +88,13 @@ type ChatState = {
   uiRequests: PiUiRequestPayload[];
 
   start: (cwd: string) => Promise<void>;
-  prompt: (text: string, images?: unknown[]) => Promise<void>;
+  /** behavior：流式中提交的排队方式（默认 followUp 排队；'steer' 当前轮插入） */
+  prompt: (text: string, images?: unknown[], behavior?: 'steer' | 'followUp') => Promise<void>;
   abort: () => Promise<void>;
+  /** 移除一条排队消息（queue_update 事件负责刷新列表） */
+  queueRemove: (kind: 'steering' | 'followUp', index: number) => Promise<void>;
+  /** 排队消息「立即发送」：移出队列后 steer（流式中）或直接 prompt（空闲时） */
+  queueSteerNow: (kind: 'steering' | 'followUp', index: number) => Promise<void>;
   newSession: () => Promise<void>;
   compact: () => Promise<void>;
   toggleToolsExpanded: () => void;
@@ -135,13 +141,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  prompt: async (text, images) => {
-    const result = await hostApi.piRuntime.prompt(text, images);
+  prompt: async (text, images, behavior) => {
+    const result = await hostApi.piRuntime.prompt(text, images, behavior);
     if (!result.success) set({ startError: result.error });
   },
 
   abort: async () => {
     await hostApi.piRuntime.abort();
+  },
+
+  queueRemove: async (kind, index) => {
+    const result = await hostApi.piRuntime.queueRemove(kind, index);
+    if (!result.success) set({ startError: result.error });
+  },
+
+  queueSteerNow: async (kind, index) => {
+    const result = await hostApi.piRuntime.queueSteerNow(kind, index);
+    if (!result.success) set({ startError: result.error });
   },
 
   newSession: async () => {
@@ -248,6 +264,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({ isStreaming: false, toolExecutions, retry: null });
         // 事件累积的新消息没有 entryId，从 runtime 对齐补齐（fork 按钮依赖）
         void get().refreshEntryIds();
+        // 系统通知（档位/焦点判定在 main）：正文取最后一条 assistant 消息摘要
+        const lastAssistant = [...get().messages]
+          .reverse()
+          .find((m) => m.role === 'assistant' && !m.streaming);
+        const summary = (lastAssistant?.content ?? [])
+          .filter((b) => b.type === 'text')
+          .map((b) => b.text ?? '')
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 120);
+        reportRunCompleted(summary || get().cwd || '');
         break;
       }
       case 'assistant.partial': {
@@ -359,6 +387,8 @@ export function bindChatEvents(): void {
     const s = useChatStore.getState();
     if (req.generation !== s.generation) return; // 过期会话的请求丢弃（main 侧会兜底取消）
     useChatStore.setState({ uiRequests: [...s.uiRequests, req] });
+    // 挂起的确认/输入请求也走系统通知（"需要确认/输入"类）
+    reportUiRequest(req.title);
   });
   onHostEvent('piRuntime', 'uiCancel', ({ requestId }) => {
     useChatStore.setState((s) => ({

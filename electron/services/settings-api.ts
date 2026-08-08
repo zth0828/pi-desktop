@@ -28,6 +28,7 @@ export const settingsApi = {
       language: store.get('language') as SettingsSnapshot['language'],
       workspaceCwd: store.get('workspaceCwd') as string | undefined,
       theme: store.get('theme') as SettingsSnapshot['theme'],
+      notifyMode: store.get('notifyMode') as SettingsSnapshot['notifyMode'],
     };
   },
   get: async (payload: SettingsGetPayload) => {

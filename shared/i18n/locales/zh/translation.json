@@ -56,6 +56,9 @@
     "placeholder": "给 pi 发消息…（Enter 发送，Shift+Enter 换行）",
     "send": "发送",
     "stop": "停止",
+    "sendTip": "发送（Enter）",
+    "queueSendTip": "排队（Enter）：当前回复完成后发送；Alt+Enter 立即插入当前轮（steer）",
+    "stopTip": "停止当前生成",
     "newSession": "新会话",
     "compact": "压缩上下文",
     "status": {
@@ -68,12 +71,22 @@
     },
     "queue": {
       "steering": "引导 ×{{count}}：{{preview}}",
-      "followUp": "排队 ×{{count}}：{{preview}}"
+      "followUp": "排队 ×{{count}}：{{preview}}",
+      "steeringLabel": "引导",
+      "followUpLabel": "排队",
+      "sendNow": "立即发送",
+      "sendNowTip": "移出队列，插入当前轮（steer，不打断当前回复）",
+      "removeTip": "从队列中移除"
     },
     "compactionSummary": "上下文已压缩 — 摘要",
     "thinking": "思考过程",
     "thinkingStreaming": "思考中…",
     "thinkingDone": "思考完成",
+    "thinkingTimed": "已思考 {{duration}}",
+    "cache": {
+      "miss": "缓存失效：{{tokens}} token 被重新计费",
+      "missIdle": "（闲置 {{minutes}} 分钟，缓存可能已过期）"
+    },
     "starting": "正在启动会话…",
     "empty": "还没有消息，和 pi 说点什么吧。",
     "workspace": {
@@ -88,7 +101,39 @@
       "args": "参数",
       "result": "结果",
       "interrupted": "已中断",
-      "took": "用时 {{duration}}",
+      "line": {
+        "inDuration": "，用时 {{duration}}",
+        "bash": {
+          "running": "正在运行命令…",
+          "done": "已运行 {{summary}}{{durationPart}}",
+          "stopped": "已停止"
+        },
+        "edit": {
+          "running": "正在编辑 {{summary}}…",
+          "done": "已编辑 {{summary}}{{durationPart}}",
+          "stopped": "已停止编辑"
+        },
+        "write": {
+          "running": "正在写入 {{summary}}…",
+          "done": "已写入 {{summary}}{{durationPart}}",
+          "stopped": "已停止写入"
+        },
+        "read": {
+          "running": "正在读取 {{summary}}…",
+          "done": "已读取 {{summary}}{{durationPart}}",
+          "stopped": "已停止读取"
+        },
+        "grep": {
+          "running": "正在搜索 {{summary}}…",
+          "done": "已搜索 {{summary}}{{durationPart}}",
+          "stopped": "已停止搜索"
+        },
+        "default": {
+          "running": "正在运行 {{tool}}…",
+          "done": "已运行 {{tool}}{{durationPart}}",
+          "stopped": "已停止 {{tool}}"
+        }
+      },
       "earlierLines": "…（更早还有 {{count}} 行）",
       "fullOutput": "完整输出：{{path}}",
       "truncatedLines": "输出被截断：仅显示 {{outputLines}} / {{totalLines}} 行",
@@ -124,7 +169,53 @@
     "cacheHitRateLast": "本轮命中率",
     "totalCost": "累计成本",
     "tokenUnknown": "—",
-    "greeting": "我能为你做些什么？"
+    "greeting": "我能为你做些什么？",
+    "commands": {
+      "new": "开始新会话",
+      "compact": "压缩当前会话的上下文（已用 {{percent}}%）",
+      "compactUnknown": "压缩当前会话的上下文",
+      "tree": "浏览会话分支",
+      "model": "选择模型",
+      "name": "设置会话显示名",
+      "copy": "复制最后一条助手回复到剪贴板",
+      "export": "导出会话为 HTML",
+      "session": "查看会话信息与统计",
+      "settings": "打开设置",
+      "login": "配置供应商认证",
+      "logout": "移除供应商认证",
+      "reload": "重新加载扩展、技能、提示词与上下文文件",
+      "resume": "恢复其他会话"
+    },
+    "notice": {
+      "renamed": "会话名已设置：{{name}}",
+      "currentName": "会话名：{{name}}",
+      "nameUsage": "用法：/name <名称>",
+      "renameFailed": "设置会话名失败：{{message}}",
+      "copied": "已复制最后一条助手回复",
+      "nothingToCopy": "还没有可复制的助手回复。",
+      "exported": "会话已导出到：{{path}}",
+      "exportFailed": "导出会话失败：{{message}}",
+      "reloaded": "已重新加载扩展、技能、提示词与上下文文件",
+      "reloadFailed": "重新加载失败：{{message}}",
+      "modelSet": "模型已切换：{{model}}",
+      "modelNotFound": "找不到模型：{{model}}"
+    },
+    "sessionInfo": {
+      "title": "会话信息",
+      "name": "名称",
+      "id": "ID",
+      "file": "文件",
+      "inMemory": "内存会话",
+      "model": "模型",
+      "messages": "消息",
+      "messagesValue": "{{total}}（用户 {{user}} / 助手 {{assistant}}）",
+      "tools": "工具",
+      "toolsValue": "{{calls}} 次调用，{{results}} 条结果",
+      "input": "输入",
+      "output": "输出",
+      "total": "总计",
+      "cost": "费用"
+    }
   },
   "models": {
     "title": "供应商与模型",
@@ -327,6 +418,24 @@
       "dark": "深色",
       "system": "跟随系统"
     }
+  },
+  "notify": {
+    "title": "通知",
+    "desc": "当一次运行完成或扩展需要你确认/输入时，发送系统通知。",
+    "mode": {
+      "always": "总是",
+      "unfocused": "仅窗口失焦时",
+      "off": "关闭"
+    },
+    "runCompleted": "运行完成",
+    "uiRequest": "需要你的确认或输入"
+  },
+  "states": {
+    "loading": "加载中…",
+    "retry": "重试"
+  },
+  "rail": {
+    "jumpTo": "跳转到你的第 {{index}} 条消息"
   },
   "list": {
     "search": "搜索…"

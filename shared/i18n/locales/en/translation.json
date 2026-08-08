@@ -56,6 +56,9 @@
     "placeholder": "Message pi…  (Enter to send, Shift+Enter for newline)",
     "send": "Send",
     "stop": "Stop",
+    "sendTip": "Send (Enter)",
+    "queueSendTip": "Queue (Enter): sent after the current reply; Alt+Enter inserts into the current turn (steer)",
+    "stopTip": "Stop the current run",
     "newSession": "New session",
     "compact": "Compact",
     "status": {
@@ -68,12 +71,22 @@
     },
     "queue": {
       "steering": "Steer ×{{count}}: {{preview}}",
-      "followUp": "Queued ×{{count}}: {{preview}}"
+      "followUp": "Queued ×{{count}}: {{preview}}",
+      "steeringLabel": "Steer",
+      "followUpLabel": "Queued",
+      "sendNow": "Send now",
+      "sendNowTip": "Remove from queue and insert into the current turn (steer, without interrupting)",
+      "removeTip": "Remove from queue"
     },
     "compactionSummary": "Context compacted — summary",
     "thinking": "Thinking",
     "thinkingStreaming": "Thinking…",
     "thinkingDone": "Thought",
+    "thinkingTimed": "Thought for {{duration}}",
+    "cache": {
+      "miss": "Cache miss: {{tokens}} tokens re-billed",
+      "missIdle": "(idle {{minutes}}m — cache likely expired)"
+    },
     "starting": "Starting session…",
     "empty": "No messages yet. Say something to pi.",
     "workspace": {
@@ -88,7 +101,39 @@
       "args": "Arguments",
       "result": "Result",
       "interrupted": "interrupted",
-      "took": "Took {{duration}}",
+      "line": {
+        "inDuration": " in {{duration}}",
+        "bash": {
+          "running": "Running command…",
+          "done": "Ran {{summary}}{{durationPart}}",
+          "stopped": "Stopped"
+        },
+        "edit": {
+          "running": "Editing {{summary}}…",
+          "done": "Edited {{summary}}{{durationPart}}",
+          "stopped": "Stopped editing"
+        },
+        "write": {
+          "running": "Writing {{summary}}…",
+          "done": "Wrote {{summary}}{{durationPart}}",
+          "stopped": "Stopped writing"
+        },
+        "read": {
+          "running": "Reading {{summary}}…",
+          "done": "Read {{summary}}{{durationPart}}",
+          "stopped": "Stopped reading"
+        },
+        "grep": {
+          "running": "Searching {{summary}}…",
+          "done": "Searched {{summary}}{{durationPart}}",
+          "stopped": "Stopped searching"
+        },
+        "default": {
+          "running": "Running {{tool}}…",
+          "done": "Ran {{tool}}{{durationPart}}",
+          "stopped": "Stopped {{tool}}"
+        }
+      },
       "earlierLines": "… ({{count}} earlier lines)",
       "fullOutput": "Full output: {{path}}",
       "truncatedLines": "Truncated: showing {{outputLines}} of {{totalLines}} lines",
@@ -124,7 +169,53 @@
     "cacheHitRateLast": "Last turn hit rate",
     "totalCost": "Session cost",
     "tokenUnknown": "—",
-    "greeting": "What can I do for you?"
+    "greeting": "What can I do for you?",
+    "commands": {
+      "new": "Start a new session",
+      "compact": "Compact this chat's context ({{percent}}% full)",
+      "compactUnknown": "Compact this chat's context",
+      "tree": "Navigate session branches",
+      "model": "Select model",
+      "name": "Set session display name",
+      "copy": "Copy last agent message to clipboard",
+      "export": "Export session to HTML",
+      "session": "Show session info and stats",
+      "settings": "Open settings",
+      "login": "Configure provider authentication",
+      "logout": "Remove provider authentication",
+      "reload": "Reload extensions, skills, prompts and context files",
+      "resume": "Resume a different session"
+    },
+    "notice": {
+      "renamed": "Session name set: {{name}}",
+      "currentName": "Session name: {{name}}",
+      "nameUsage": "Usage: /name <name>",
+      "renameFailed": "Failed to set session name: {{message}}",
+      "copied": "Copied last agent message to clipboard",
+      "nothingToCopy": "No agent messages to copy yet.",
+      "exported": "Session exported to: {{path}}",
+      "exportFailed": "Failed to export session: {{message}}",
+      "reloaded": "Reloaded extensions, skills, prompts and context files",
+      "reloadFailed": "Reload failed: {{message}}",
+      "modelSet": "Model set: {{model}}",
+      "modelNotFound": "Model not found: {{model}}"
+    },
+    "sessionInfo": {
+      "title": "Session Info",
+      "name": "Name",
+      "id": "ID",
+      "file": "File",
+      "inMemory": "In-memory",
+      "model": "Model",
+      "messages": "Messages",
+      "messagesValue": "{{total}} (user {{user}} / assistant {{assistant}})",
+      "tools": "Tools",
+      "toolsValue": "{{calls}} calls, {{results}} results",
+      "input": "Input",
+      "output": "Output",
+      "total": "Total",
+      "cost": "Cost"
+    }
   },
   "models": {
     "title": "Providers & Models",
@@ -327,6 +418,24 @@
       "dark": "Dark",
       "system": "System"
     }
+  },
+  "notify": {
+    "title": "Notifications",
+    "desc": "System notification when a run finishes or an extension needs your confirmation or input.",
+    "mode": {
+      "always": "Always",
+      "unfocused": "Only when unfocused",
+      "off": "Off"
+    },
+    "runCompleted": "Run finished",
+    "uiRequest": "Input needed"
+  },
+  "states": {
+    "loading": "Loading…",
+    "retry": "Retry"
+  },
+  "rail": {
+    "jumpTo": "Jump to your message {{index}}"
   },
   "list": {
     "search": "Search…"

@@ -37,7 +37,14 @@ export default function SkillsPage() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      {error && <p className="error-text" data-testid="skills-error">{error}</p>}
+      {error && (
+        <div data-testid="skills-error">
+          <p className="error-text">{error}</p>
+          <button data-testid="skills-retry" onClick={refresh}>
+            {t('states.retry')}
+          </button>
+        </div>
+      )}
       {!runtimeActive && !error ? (
         <p className="hint" data-testid="skills-no-runtime">{t('skills.noRuntime')}</p>
       ) : skills.length === 0 && !error ? (

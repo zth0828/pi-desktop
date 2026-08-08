@@ -13,6 +13,7 @@ import {
 import { bindPiSystemEvents, usePiSystemStore } from './stores/pi-system';
 import { bindChatEvents, useChatStore } from './stores/chat';
 import { hostApi } from './lib/host-api';
+import { onNavigateToPage } from './lib/app-navigation';
 import { initTheme } from './lib/theme';
 import { SessionList } from './components/SessionList';
 import { ExtensionUiDialog } from './components/ExtensionUiDialog';
@@ -54,6 +55,7 @@ export default function App() {
 
   useEffect(() => {
     const unbind = bindPiSystemEvents();
+    const unbindNavigate = onNavigateToPage(setPage);
     bindChatEvents();
     void detect();
     void initTheme();
@@ -62,7 +64,10 @@ export default function App() {
     void hostApi.settings.get('language').then((lng) => {
       if (lng && lng !== i18n.language) void i18n.changeLanguage(lng);
     });
-    return unbind;
+    return () => {
+      unbind();
+      unbindNavigate();
+    };
   }, [detect]);
 
   const isMac = platform === 'darwin';

@@ -151,17 +151,20 @@ type SessionsPageProps = {
 export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
   const { t } = useTranslation();
   const [sessions, setSessions] = useState<PiSessionRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [exported, setExported] = useState<string>();
 
   const refresh = useCallback(() => {
+    setLoading(true);
     hostApi.piSessions
       .list()
       .then((r) => {
         setSessions(r.sessions);
         setError(undefined);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(refresh, [refresh]);
@@ -169,13 +172,25 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
   return (
     <div className="sessions-page">
       <h2>{t('sessions.title')}</h2>
-      {error && <p className="error-text" data-testid="sessions-error">{error}</p>}
+      {loading && (
+        <p className="hint" data-testid="sessions-loading">
+          {t('states.loading')}
+        </p>
+      )}
+      {error && (
+        <div data-testid="sessions-error">
+          <p className="error-text">{error}</p>
+          <button data-testid="sessions-retry" onClick={refresh}>
+            {t('states.retry')}
+          </button>
+        </div>
+      )}
       {exported && (
         <p className="hint" data-testid="sessions-exported">
           {t('sessions.exported', { path: exported })}
         </p>
       )}
-      {sessions.length === 0 && !error ? (
+      {!loading && !error && sessions.length === 0 ? (
         <p className="hint" data-testid="sessions-empty">{t('sessions.empty')}</p>
       ) : (
         <div className="session-list">

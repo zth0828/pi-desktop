@@ -5,6 +5,7 @@ import { appApi } from './app-api';
 import { dialogApi } from './dialog-api';
 import { filesApi } from './files-api';
 import { mcpApi } from './mcp-api';
+import { notifyApi } from './notify-api';
 import { packagesApi } from './packages-api';
 import { piRuntimeApi } from './pi-runtime-api';
 import { piSystemApi } from './pi-system-api';
@@ -28,5 +29,6 @@ export function createHostServices(): HostServiceRegistry {
     piFiles: filesApi,
     settings: settingsApi,
     dialog: dialogApi,
+    notify: notifyApi,
   };
 }

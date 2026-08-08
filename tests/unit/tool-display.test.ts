@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   collectToolWarnings,
+  editPreviewDiff,
   extractResultText,
   formatDuration,
   parseDiffLines,
@@ -51,16 +52,30 @@ describe('toolSummary', () => {
 
   it('grep 显示 pattern，其他工具返回 null', () => {
     expect(toolSummary('grep', { pattern: 'foo.*bar' })).toBe('foo.*bar');
-    expect(toolSummary('mcp', { tool: 'ping' })).toBeNull();
+    expect(toolSummary('ls', { path: undefined })).toBeNull();
     expect(toolSummary('bash', undefined)).toBeNull();
     expect(toolSummary('bash', { command: '  ' })).toBeNull();
+  });
+
+  it('subagent：single 显示 agent 名，chain/parallel 显示模式与任务数', () => {
+    expect(toolSummary('subagent', { agent: 'reviewer', task: 'check' })).toBe('reviewer');
+    expect(toolSummary('subagent', { chain: [{ agent: 'a' }, { agent: 'b' }] })).toBe('chain ×2');
+    expect(toolSummary('subagent', { tasks: [{ agent: 'a' }] })).toBe('parallel ×1');
+    expect(toolSummary('subagent', {})).toBeNull();
+  });
+
+  it('mcp：拆 server/工具名，搜索模式显示 query', () => {
+    expect(toolSummary('mcp', { tool: 'mockmcp_ping', args: {} })).toBe('mockmcp · ping');
+    expect(toolSummary('mcp', { tool: 'ping' })).toBe('ping');
+    expect(toolSummary('mcp', { search: 'ping' })).toBe('search: ping');
+    expect(toolSummary('mcp', {})).toBeNull();
   });
 
   it('未知工具（扩展/MCP）按常见参数字段兜底摘要', () => {
     expect(toolSummary('mcp__fs__read', { path: '/tmp/a.txt' })).toBe('/tmp/a.txt');
     expect(toolSummary('web_search', { query: 'pi agent' })).toBe('pi agent');
     expect(toolSummary('fetch', { url: 'https://pi.dev' })).toBe('https://pi.dev');
-    expect(toolSummary('mcp', { tool: 'ping' })).toBeNull();
+    expect(toolSummary('custom_thing', { foo: 1 })).toBeNull();
   });
 });
 
@@ -115,6 +130,34 @@ describe('formatDuration', () => {
     expect(formatDuration(undefined, 100)).toBeNull();
     expect(formatDuration(100, undefined)).toBeNull();
     expect(formatDuration(200, 100)).toBeNull();
+  });
+});
+
+describe('editPreviewDiff', () => {
+  it('oldString/newString 形态：整段替换 diff（删行在前增行在后）', () => {
+    const diff = editPreviewDiff({ path: 'a.txt', oldString: 'alpha\ngamma', newString: 'beta\ngamma' });
+    expect(diff).toBe('- alpha\n- gamma\n+ beta\n+ gamma');
+    // 可被 parseDiffLines 直接渲染
+    const kinds = parseDiffLines(diff!).map((l) => l.kind);
+    expect(kinds).toEqual(['del', 'del', 'add', 'add']);
+  });
+
+  it('edits 数组形态（pi 0.83 edit args）：多段编辑依次拼接', () => {
+    const diff = editPreviewDiff({
+      path: 'a.txt',
+      edits: [
+        { oldText: 'alpha', newText: 'beta' },
+        { oldText: 'x', newText: 'y' },
+      ],
+    });
+    expect(diff).toBe('- alpha\n+ beta\n- x\n+ y');
+  });
+
+  it('args 不完整时返回 undefined（等执行结果的真实 diff）', () => {
+    expect(editPreviewDiff(undefined)).toBeUndefined();
+    expect(editPreviewDiff({ path: 'a.txt' })).toBeUndefined();
+    expect(editPreviewDiff({ oldString: 'a' })).toBeUndefined();
+    expect(editPreviewDiff({ edits: [{ oldText: 'a' }] })).toBeUndefined();
   });
 });
 

@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
 import { useChatStore } from '../../stores/chat';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
+import { MessageNavRail, type RailAnchor } from './MessageNavRail';
 import { StatusBar } from './StatusBar';
 import { TreeDialog } from './TreeDialog';
 
@@ -38,6 +40,17 @@ export default function ChatPage() {
   const activeCwd = useChatStore((s) => (s.started ? s.cwd : undefined));
   const effectiveCwd = activeCwd ?? cwd;
   const listRef = useRef<HTMLDivElement>(null);
+
+  // user 消息稳定锚点（消息列表在会话内只追加，index 锚点稳定）
+  const railAnchors = useMemo<RailAnchor[]>(() => {
+    let n = 0;
+    return messages.flatMap((m, i) =>
+      m.role === 'user' ? [{ id: `chat-msg-${i}`, n: (n += 1) }] : [],
+    );
+  }, [messages]);
+
+  // 缓存失效检测（pi cache-stats 口径）：按下标分发给 assistant 消息尾部警告
+  const cacheMisses = useMemo(() => collectCacheMisses(messages), [messages]);
 
   // 恢复上次的工作目录并启动会话
   useEffect(() => {
@@ -88,9 +101,15 @@ export default function ChatPage() {
             </div>
           )}
           {messages.map((m, i) => (
-            <MessageItem key={i} message={m} />
+            <MessageItem
+              key={i}
+              message={m}
+              anchorId={m.role === 'user' ? `chat-msg-${i}` : undefined}
+              cacheMiss={cacheMisses.get(i)}
+            />
           ))}
         </div>
+        <MessageNavRail anchors={railAnchors} listRef={listRef} />
 
         <StatusBar />
         <ChatInput

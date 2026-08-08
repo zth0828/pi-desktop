@@ -21,16 +21,26 @@ export const hostApi = {
     start: (cwd: string) => invokeHost('piRuntime', 'start', { cwd }),
     getState: () => invokeHost('piRuntime', 'getState'),
     getContextUsage: () => invokeHost('piRuntime', 'getContextUsage'),
-    prompt: (text: string, images?: unknown[]) =>
-      invokeHost('piRuntime', 'prompt', { text, images }),
+    prompt: (text: string, images?: unknown[], behavior?: 'steer' | 'followUp') =>
+      invokeHost('piRuntime', 'prompt', { text, images, behavior }),
     abort: () => invokeHost('piRuntime', 'abort'),
+    queueRemove: (kind: 'steering' | 'followUp', index: number) =>
+      invokeHost('piRuntime', 'queueRemove', { kind, index }),
+    queueSteerNow: (kind: 'steering' | 'followUp', index: number) =>
+      invokeHost('piRuntime', 'queueSteerNow', { kind, index }),
     newSession: () => invokeHost('piRuntime', 'newSession'),
-    compact: () => invokeHost('piRuntime', 'compact'),
+    compact: (customInstructions?: string) =>
+      invokeHost('piRuntime', 'compact', customInstructions ? { customInstructions } : undefined),
     fork: (entryId: string) => invokeHost('piRuntime', 'fork', { entryId }),
     getTree: () => invokeHost('piRuntime', 'getTree'),
     navigateTree: (targetId: string) => invokeHost('piRuntime', 'navigateTree', { targetId }),
     setThinkingLevel: (level: string) => invokeHost('piRuntime', 'setThinkingLevel', { level }),
     setModel: (provider: string, id: string) => invokeHost('piRuntime', 'setModel', { provider, id }),
+    setSessionName: (name: string) => invokeHost('piRuntime', 'setSessionName', { name }),
+    getSessionInfo: () => invokeHost('piRuntime', 'getSessionInfo'),
+    reload: () => invokeHost('piRuntime', 'reload'),
+    exportHtml: (outputPath?: string) =>
+      invokeHost('piRuntime', 'exportHtml', outputPath ? { outputPath } : undefined),
     getCommands: () => invokeHost('piRuntime', 'getCommands'),
     uiResponse: (payload: { requestId: string; value?: string | boolean; cancelled?: boolean }) =>
       invokeHost('piRuntime', 'uiResponse', payload),
@@ -114,9 +124,14 @@ export const hostApi = {
   },
   settings: {
     getAll: () => invokeHost('settings', 'getAll'),
-    get: (key: 'language' | 'workspaceCwd' | 'theme') => invokeHost('settings', 'get', { key }),
-    set: (key: 'language' | 'workspaceCwd' | 'theme', value: string | undefined) =>
+    get: (key: 'language' | 'workspaceCwd' | 'theme' | 'notifyMode') =>
+      invokeHost('settings', 'get', { key }),
+    set: (key: 'language' | 'workspaceCwd' | 'theme' | 'notifyMode', value: string | undefined) =>
       invokeHost('settings', 'set', { key, value }),
+  },
+  notify: {
+    dispatch: (payload: { kind: 'runCompleted' | 'uiRequest'; title: string; body?: string }) =>
+      invokeHost('notify', 'dispatch', payload),
   },
   dialog: {
     openDirectory: (title?: string, defaultPath?: string) =>

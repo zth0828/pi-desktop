@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   collectToolWarnings,
+  editPreviewDiff,
   extractResultText,
   formatDuration,
   parseDiffLines,
@@ -59,12 +60,31 @@ export function ToolCallCard({ execution }: { execution: ToolExecution }) {
 
   const summary = toolSummary(execution.toolName, execution.args);
   const details = resultDetails(execution.result);
-  const diff = typeof details?.diff === 'string' ? details.diff : undefined;
+  const realDiff = typeof details?.diff === 'string' ? details.diff : undefined;
+  // edit 执行前预览：args 流式完成（old/new 齐全）但结果未回时先渲染替换 diff；
+  // 真实 details.diff 到达后替换预览
+  const previewDiff =
+    !realDiff && execution.status === 'running' && execution.toolName === 'edit'
+      ? editPreviewDiff(execution.args)
+      : undefined;
+  const diff = realDiff ?? previewDiff;
   const warnings = collectToolWarnings(details);
   const duration = formatDuration(execution.startedAt, execution.endedAt);
   const statusLabel = execution.interrupted
     ? t('chat.tool.interrupted')
     : t(`chat.tool.${execution.status}`);
+
+  // 动词化一行文案（Codex 范式）：进行/完成/中止三态成对，如
+  // "Running command…" / "Ran $ ls in 1.2s" / "Stopped"；error 复用 done 模板（pill 标红）。
+  const lineState = execution.interrupted ? 'stopped' : execution.status === 'running' ? 'running' : 'done';
+  const verbTool = ['bash', 'edit', 'write', 'read', 'grep'].includes(execution.toolName)
+    ? execution.toolName
+    : 'default';
+  const line = t(`chat.tool.line.${verbTool}.${lineState}`, {
+    tool: execution.toolName,
+    summary: summary ?? execution.toolName,
+    durationPart: duration && lineState === 'done' ? t('chat.tool.line.inDuration', { duration }) : '',
+  });
 
   // 执行中显示流式 partialResult，完成后显示 result 文本
   const outputText =
@@ -76,14 +96,12 @@ export function ToolCallCard({ execution }: { execution: ToolExecution }) {
   return (
     <div className={`tool-card tool-${execution.status}`} data-testid="tool-card">
       <button className="tool-card-header" onClick={() => setLocalExpanded(!expanded)}>
-        <span className="tool-name">{execution.toolName}</span>
-        {summary ? <span className="tool-summary">{summary}</span> : <span className="spacer" />}
-        {duration && <span className="tool-duration">{t('chat.tool.took', { duration })}</span>}
+        <span className="tool-line" data-testid="tool-line">{line}</span>
         <span className={`tool-status tool-status-${execution.status}`}>{statusLabel}</span>
       </button>
 
       {!expanded && diff && (
-        <div className="tool-card-preview">
+        <div className="tool-card-preview" {...(previewDiff ? { 'data-testid': 'edit-diff-preview' } : {})}>
           <DiffView diff={diff} />
           <ToolWarnings warnings={warnings} />
         </div>
@@ -106,10 +124,10 @@ export function ToolCallCard({ execution }: { execution: ToolExecution }) {
               <pre>{JSON.stringify(execution.args, null, 2)}</pre>
             </>
           )}
-          {(diff || outputText) && (
+          {(realDiff || outputText) && (
             <>
               <div className="tool-section-title">{t('chat.tool.result')}</div>
-              {diff ? <DiffView diff={diff} /> : <pre>{outputText}</pre>}
+              {realDiff ? <DiffView diff={realDiff} /> : <pre>{outputText}</pre>}
             </>
           )}
           <ToolWarnings warnings={warnings} />

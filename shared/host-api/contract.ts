@@ -63,7 +63,20 @@ export type PiInstallResult = HostSuccess & {
 // —— piRuntime：SDK 会话运行时（M2）——
 
 export type PiRuntimeStartPayload = { cwd: string };
-export type PiRuntimePromptPayload = { text: string; images?: unknown[] };
+/**
+ * behavior：流式中提交的排队方式（pi streamingBehavior）。
+ * 'followUp'（默认）= 排队等当前 run 完成后发送；'steer' = 当前轮工具调用间隙插入。
+ */
+export type PiRuntimePromptPayload = {
+  text: string;
+  images?: unknown[];
+  behavior?: 'steer' | 'followUp';
+};
+
+// —— piRuntime 排队消息操作（steer/followUp 队列；pi 只有 clearQueue 全清，单条移除=快照后重排）——
+
+export type PiRuntimeQueueKind = 'steering' | 'followUp';
+export type PiRuntimeQueueItemPayload = { kind: PiRuntimeQueueKind; index: number };
 
 export type PiRuntimeModelInfo = { provider: string; id: string; name?: string };
 
@@ -118,6 +131,28 @@ export type PiRuntimeNavigateResult = HostSuccess & {
   editorText?: string;
 };
 
+// —— piRuntime 斜杠命令配套（TUI onSubmit 内建命令的壳映射）——
+
+/** /compact <instructions>：pi handleCompactCommand 的自定义压缩指令 */
+export type PiRuntimeCompactPayload = { customInstructions?: string };
+/** /export [path]：pi handleExportCommand（缺省导到会话同目录 HTML） */
+export type PiRuntimeExportPayload = { outputPath?: string };
+
+/** /session 展示的会话信息（pi getSessionStats + sessionName 的子集） */
+export type PiRuntimeSessionInfo = {
+  name?: string;
+  sessionId: string;
+  sessionFile?: string;
+  model?: PiRuntimeModelInfo;
+  totalMessages: number;
+  userMessages: number;
+  assistantMessages: number;
+  toolCalls: number;
+  toolResults: number;
+  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
+  cost: number;
+};
+
 // —— piRuntime 扩展 UI 桥（ctx.ui.confirm/select/input → 渲染层对话框）——
 
 export type PiUiRequestKind = 'confirm' | 'select' | 'input';
@@ -153,6 +188,8 @@ export type SettingsSnapshot = {
   language?: 'zh' | 'en';
   workspaceCwd?: string;
   theme?: 'light' | 'dark' | 'system';
+  /** 系统通知档位：always=总是，unfocused=仅窗口失焦（默认），off=关闭 */
+  notifyMode?: 'always' | 'unfocused' | 'off';
 };
 
 export type SettingsGetPayload = { key: keyof SettingsSnapshot };
@@ -166,6 +203,16 @@ export type DialogOpenPayload = {
   properties?: Array<'openFile' | 'openDirectory' | 'createDirectory'>;
 };
 export type DialogOpenResult = { canceled: boolean; filePaths: string[] };
+
+// —— notify：macOS 系统通知（渲染层只上报事件，焦点判定与弹通知都在 main）——
+
+export type NotifyKind = 'runCompleted' | 'uiRequest';
+export type NotifyDispatchPayload = {
+  kind: NotifyKind;
+  /** 已在渲染层本地化的标题/正文 */
+  title: string;
+  body?: string;
+};
 
 // —— providers：模型/供应商管理（M3）——
 
@@ -433,11 +480,16 @@ export type HostApiContract = {
     start: (payload: PiRuntimeStartPayload) => PiRuntimeStateResult;
     getState: () => PiRuntimeStateResult | null;
     getContextUsage: () => PiRuntimeContextUsage | null;
-    /** 生成中调用自动走 steer（§4.1）。 */
+    /** 生成中调用按 payload.behavior 排队：默认 followUp（排队），'steer' = 当前轮插入（§4.1）。 */
     prompt: (payload: PiRuntimePromptPayload) => HostSuccess;
     abort: () => HostSuccess;
+    /** 移除一条排队消息（pi 仅 clearQueue 全清：main 侧快照→全清→按原顺序重排其余项）。 */
+    queueRemove: (payload: PiRuntimeQueueItemPayload) => HostSuccess;
+    /** 排队消息「立即发送」：移出队列后 steer（流式中）或直接 prompt（空闲时）。 */
+    queueSteerNow: (payload: PiRuntimeQueueItemPayload) => HostSuccess;
     newSession: () => HostSuccess;
-    compact: () => HostSuccess;
+    /** /compact [instructions]：手动压缩上下文，可带 pi 的自定义压缩指令。 */
+    compact: (payload?: PiRuntimeCompactPayload) => HostSuccess;
     /** 消息级 fork：从某条历史 user 消息分叉出新会话并切过去（runtime.fork，TUI /fork 语义）。 */
     fork: (payload: PiRuntimeForkPayload) => PiRuntimeForkResult;
     /** 当前会话的分支树（SessionManager.getTree 拍平，供 /tree 面板展示）。 */
@@ -446,7 +498,15 @@ export type HostApiContract = {
     navigateTree: (payload: PiRuntimeNavigatePayload) => PiRuntimeNavigateResult;
     setThinkingLevel: (payload: { level: string }) => HostSuccess;
     setModel: (payload: { provider: string; id: string }) => HostSuccess;
-    /** / 补全：内置命令 + prompt 模板 + skills */
+    /** /name <text>：重命名当前会话（session.setSessionName；返回 pi 规范化后的名字）。 */
+    setSessionName: (payload: { name: string }) => HostSuccess & { name?: string };
+    /** /session：当前会话信息（getSessionStats + 会话名）。 */
+    getSessionInfo: () => PiRuntimeSessionInfo | null;
+    /** /reload：重载扩展/skills/prompts/上下文文件（session.reload；streaming/compacting 中拒绝）。 */
+    reload: () => HostSuccess;
+    /** /export [path]：导出当前会话 HTML（缺省导到会话同目录）。 */
+    exportHtml: (payload?: PiRuntimeExportPayload) => PiSessionExportResult;
+    /** / 补全：内置命令 + prompt 模板 + 扩展命令 + skills */
     getCommands: () => PiCommandListResult;
     /** 扩展 UI 对话框的用户响应（按 requestId 配对挂起的 confirm/select/input）。 */
     uiResponse: (payload: PiUiResponsePayload) => HostSuccess;
@@ -524,6 +584,10 @@ export type HostApiContract = {
   };
   dialog: {
     open: (payload: DialogOpenPayload) => DialogOpenResult;
+  };
+  notify: {
+    /** 渲染层上报可通知事件；main 按 settings.notifyMode + 窗口焦点决定是否弹系统通知。 */
+    dispatch: (payload: NotifyDispatchPayload) => HostSuccess;
   };
 };
 

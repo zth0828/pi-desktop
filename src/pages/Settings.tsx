@@ -12,11 +12,15 @@ const THEMES: Array<{ id: Theme; icon: typeof Sun }> = [
   { id: 'system', icon: Monitor },
 ];
 
+const NOTIFY_MODES = ['always', 'unfocused', 'off'] as const;
+type NotifyMode = (typeof NOTIFY_MODES)[number];
+
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const [appVersion, setAppVersion] = useState('');
   const [cwd, setCwd] = useState<string | undefined>();
   const [theme, setThemeState] = useState<Theme>('system');
+  const [notifyMode, setNotifyMode] = useState<NotifyMode>('unfocused');
   const env = usePiSystemStore((s) => s.env);
   const latestVersion = usePiSystemStore((s) => s.latestVersion);
   const detect = usePiSystemStore((s) => s.detect);
@@ -25,6 +29,7 @@ export default function SettingsPage() {
     void hostApi.app.version().then(setAppVersion);
     void hostApi.settings.get('workspaceCwd').then(setCwd);
     void hostApi.settings.get('theme').then((v) => setThemeState((v as Theme) ?? 'system'));
+    void hostApi.settings.get('notifyMode').then((v) => setNotifyMode((v as NotifyMode) ?? 'unfocused'));
   }, []);
 
   const changeLanguage = async (lng: SupportedLanguage) => {
@@ -97,6 +102,28 @@ export default function SettingsPage() {
           <button className="pill" onClick={() => void changeWorkspace()}>
             {t('chat.workspace.change')}
           </button>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('notify.title')}</div>
+            <div className="settings-row-desc">{t('notify.desc')}</div>
+          </div>
+          <div className="pill-group" data-testid="settings-notify-mode">
+            {NOTIFY_MODES.map((mode) => (
+              <button
+                key={mode}
+                data-testid={`notify-mode-${mode}`}
+                className={notifyMode === mode ? 'pill active' : 'pill'}
+                onClick={() => {
+                  setNotifyMode(mode);
+                  void hostApi.settings.set('notifyMode', mode);
+                }}
+              >
+                {t(`notify.mode.${mode}`)}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 

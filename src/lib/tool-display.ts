@@ -36,6 +36,25 @@ export function toolSummary(toolName: string, args: unknown): string | null {
       return str(a.path) ?? str(a.file_path);
     case 'grep':
       return str(a.pattern);
+    case 'subagent': {
+      // subagent 扩展：single {agent, task} / parallel {tasks:[…]} / chain {chain:[…]}
+      const agent = str(a.agent);
+      if (agent) return agent;
+      if (Array.isArray(a.chain)) return `chain ×${a.chain.length}`;
+      if (Array.isArray(a.tasks)) return `parallel ×${a.tasks.length}`;
+      return null;
+    }
+    case 'mcp': {
+      // pi-mcp-adapter 代理工具：{tool: "<server>_<name>", args} 或搜索模式 {search: query}
+      const tool = str(a.tool);
+      if (tool) {
+        // 命名约定 <server>_<tool>：按最后一个下划线拆 server / 工具名
+        const idx = tool.lastIndexOf('_');
+        return idx > 0 ? `${tool.slice(0, idx)} · ${tool.slice(idx + 1)}` : tool;
+      }
+      const search = str(a.search);
+      return search ? `search: ${search}` : null;
+    }
     default:
       // 扩展/MCP 等上游工具的通用兜底：不识别工具名，只按常见参数字段猜摘要，
       // 保证任何插件工具都有可读 header（壳只做展示，能力全来自 pi/插件）。
@@ -79,6 +98,45 @@ export function formatDuration(startedAt?: number, endedAt?: number): string | n
   const ms = endedAt - startedAt;
   if (!Number.isFinite(ms) || ms < 0) return null;
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** 预览 diff 单侧（删/增）最多展示的行数，超出补省略行（避免整文件替换刷屏） */
+const PREVIEW_DIFF_MAX_LINES = 60;
+
+function previewSide(lines: string[], sign: '+' | '-'): string[] {
+  const shown = lines.slice(0, PREVIEW_DIFF_MAX_LINES).map((l) => `${sign} ${l}`);
+  if (lines.length > PREVIEW_DIFF_MAX_LINES) shown.push('     ...');
+  return shown;
+}
+
+/**
+ * edit 工具执行前的预览 diff：args 流式完成（old/new 齐全）但结果未回时，
+ * 先按「整段替换」构造 pi diff 格式文本（"+ content" / "- content"，无行号），
+ * 交给 parseDiffLines 渲染；真实 details.diff 到了之后由调用方替换掉。
+ * 兼容两种 args 形态：{oldString, newString} 与 {edits: [{oldText, newText}, …]}。
+ */
+export function editPreviewDiff(args: unknown): string | undefined {
+  if (!args || typeof args !== 'object') return undefined;
+  const a = args as Record<string, unknown>;
+  const pairs: { oldText: string; newText: string }[] = [];
+  if (typeof a.oldString === 'string' && typeof a.newString === 'string') {
+    pairs.push({ oldText: a.oldString, newText: a.newString });
+  }
+  if (Array.isArray(a.edits)) {
+    for (const e of a.edits) {
+      if (!e || typeof e !== 'object') continue;
+      const edit = e as Record<string, unknown>;
+      const oldText = typeof edit.oldText === 'string' ? edit.oldText : undefined;
+      const newText = typeof edit.newText === 'string' ? edit.newText : undefined;
+      if (oldText !== undefined && newText !== undefined) pairs.push({ oldText, newText });
+    }
+  }
+  if (pairs.length === 0) return undefined;
+  const lines: string[] = [];
+  for (const { oldText, newText } of pairs) {
+    lines.push(...previewSide(oldText.split('\n'), '-'), ...previewSide(newText.split('\n'), '+'));
+  }
+  return lines.join('\n');
 }
 
 export type ToolWarning =
