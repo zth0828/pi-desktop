@@ -271,6 +271,7 @@ test('Token 上限随当前模型切换，不使用固定 128K', async ({ launch
   await page.getByTestId('token-usage').click();
   const popover = page.getByTestId('token-usage-popover');
   await expect(popover).toContainText('128,000');
+  await expect(popover).toContainText('4,096');
 
   await selector.selectOption('mock/mock-wide');
   await expect(popover).toContainText('200,000');

@@ -133,7 +133,20 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelSelectRef = useRef<HTMLSelectElement>(null);
+  const composerMenuRef = useRef<HTMLDivElement>(null);
+  const usageControlRef = useRef<HTMLDivElement>(null);
   const noticeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!composerMenuOpen && !usageOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (composerMenuOpen && !composerMenuRef.current?.contains(target)) setComposerMenuOpen(false);
+      if (usageOpen && !usageControlRef.current?.contains(target)) setUsageOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [composerMenuOpen, usageOpen]);
 
   /** 命令执行的轻量确认（/name /copy /export /reload 等），5s 自动消失 */
   const showNotice = (text: string) => {
@@ -730,7 +743,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
           rows={3}
         />
         <div className="chat-input-toolbar">
-          <div className="composer-menu-wrap">
+          <div className="composer-menu-wrap" ref={composerMenuRef}>
             <input id="chat-attach-input" type="file" accept="image/*,text/*,.md,.markdown,.json,.yaml,.yml,.toml,.xml,.csv,.log" multiple hidden data-testid="attach-input" onChange={(e) => { void stageFiles(Array.from(e.target.files ?? [])); e.target.value = ''; setComposerMenuOpen(false); }} />
             <button className="attach-button" data-testid="composer-menu" title={t('chat.composerMenu')} aria-expanded={composerMenuOpen} onClick={() => setComposerMenuOpen((open) => !open)}><Plus size={17} /></button>
             {composerMenuOpen && (
@@ -740,13 +753,15 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
                 </label>
                 <button className="composer-menu-item" data-testid="composer-file-reference" onClick={() => { setValue((current) => `${current}${current && !current.endsWith(' ') ? ' ' : ''}@`); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><AtSign size={15} /><span>{t('chat.fileReference')}</span></button>
                 <div className="composer-menu-section"><Sparkles size={14} /><span>{t('chat.skills')}</span></div>
-                {skills.length === 0 ? <div className="composer-menu-hint">{t('chat.noSkills')}</div> : skills.map((skill) => <button className="composer-menu-item" data-testid={`composer-skill-${skill.name}`} key={skill.name} onClick={() => { setValue(`/skill:${skill.name} `); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Sparkles size={14} /><span>{skill.name}</span></button>)}
+                <div className="composer-skills-list">
+                  {skills.length === 0 ? <div className="composer-menu-hint">{t('chat.noSkills')}</div> : skills.map((skill) => <button className="composer-menu-item" data-testid={`composer-skill-${skill.name}`} key={skill.name} onClick={() => { setValue(`/skill:${skill.name} `); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Sparkles size={14} /><span>{skill.name}</span></button>)}
+                </div>
                 <button className="composer-menu-item" data-testid="composer-plan-mode" disabled={!planAvailable} title={!planAvailable ? t('chat.planModeUnavailable') : undefined} onClick={() => { setValue('/plan '); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Brain size={15} /><span>{t('chat.planMode')}</span></button>
               </div>
             )}
           </div>
           <span className="spacer" />
-          <div className="usage-control">
+          <div className="usage-control" ref={usageControlRef}>
             <button
               className="usage-button"
               data-testid="token-usage"
@@ -762,6 +777,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
                 <div className="usage-popover-title">{t('chat.tokenUsage')}</div>
                 <div className="usage-row"><span>{t('chat.contextUsed')}</span><strong>{formatTokens(contextUsage?.tokens)}</strong></div>
                 <div className="usage-row"><span>{t('chat.contextWindow')}</span><strong>{formatTokens(contextWindow)}</strong></div>
+                {selectedModel?.maxTokens != null && <div className="usage-row"><span>{t('chat.maxOutputTokens')}</span><strong>{formatTokens(selectedModel.maxTokens)}</strong></div>}
                 <div className="usage-row"><span>{t('chat.inputTokens')}</span><strong>{formatTokens(usageTotals.input)}</strong></div>
                 <div className="usage-row"><span>{t('chat.outputTokens')}</span><strong>{formatTokens(usageTotals.output)}</strong></div>
                 {(usageTotals.cacheRead > 0 || usageTotals.cacheWrite > 0) && (

@@ -95,13 +95,20 @@ test('会话标题菜单、消息复制与 composer 加号菜单', async ({ laun
 
   await page.getByTestId('session-menu').click();
   await expect(page.getByTestId('open-review')).toBeVisible();
-  await page.getByTestId('session-menu').click();
+  await page.locator('.chat-input-card').click({ position: { x: 280, y: 18 } });
+  await expect(page.getByTestId('open-review')).toBeHidden();
   await page.getByTestId('message-assistant').last().hover();
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.getByTestId('copy-message').last().click();
   await expect.poll(() => page.evaluate(() => (navigator as Navigator & { clipboard: { readText: () => Promise<string> } }).clipboard.readText())).toContain('PONG');
   await page.getByTestId('composer-menu').click();
   await expect(page.getByTestId('composer-file-reference')).toBeVisible();
+  await page.getByTestId('chat-input').click();
+  await expect(page.getByTestId('composer-file-reference')).toBeHidden();
+  await page.getByTestId('token-usage').click();
+  await expect(page.getByTestId('token-usage-popover')).toBeVisible();
+  await page.getByTestId('chat-input').click();
+  await expect(page.getByTestId('token-usage-popover')).toBeHidden();
 });
 
 test('工具调用 → 工具卡片（运行中 → 完成，结果可展开）', async ({ launchElectronApp }) => {
