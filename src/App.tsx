@@ -15,6 +15,7 @@ import { bindChatEvents, useChatStore } from './stores/chat';
 import { hostApi } from './lib/host-api';
 import { initTheme } from './lib/theme';
 import { SessionList } from './components/SessionList';
+import { ExtensionUiDialog } from './components/ExtensionUiDialog';
 import Onboarding from './pages/Onboarding';
 import ChatPage from './pages/Chat';
 import ModelsPage from './pages/Models';
@@ -127,6 +128,7 @@ export default function App() {
           <SettingsPage />
         ) : null}
       </main>
+      <ExtensionUiDialog />
     </div>
   );
 }

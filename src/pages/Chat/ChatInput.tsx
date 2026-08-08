@@ -61,6 +61,8 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const abort = useChatStore((s) => s.abort);
   const newSession = useChatStore((s) => s.newSession);
   const compact = useChatStore((s) => s.compact);
+  const setTreeOpen = useChatStore((s) => s.setTreeOpen);
+  const inputDraft = useChatStore((s) => s.inputDraft);
   const model = useChatStore((s) => s.model);
   const messages = useChatStore((s) => s.messages);
   const [models, setModels] = useState<PiModelRow[]>([]);
@@ -85,6 +87,13 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   useEffect(() => {
     if (model) setModelKey(`${model.provider}/${model.id}`);
   }, [model]);
+
+  // fork / 跳分支后被选消息的文本回填输入框（TUI /fork、/tree 的 editorText 语义）
+  useEffect(() => {
+    if (!inputDraft) return;
+    setValue(inputDraft.text);
+    textareaRef.current?.focus();
+  }, [inputDraft]);
 
   const usageTotals = summarizeUsage(messages);
   const totalHitRate = cacheHitRate(usageTotals);
@@ -150,6 +159,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
     // 壳内置命令直接执行，不发给 pi
     if (text === '/new' && outgoing.length === 0 && stagedFiles.length === 0) return void newSession();
     if (text === '/compact' && outgoing.length === 0 && stagedFiles.length === 0) return void compact();
+    if (text === '/tree' && outgoing.length === 0 && stagedFiles.length === 0) return void setTreeOpen(true);
     void prompt(
       filePrefix + text,
       // pi ImageContent 是扁平结构 {type:'image', data, mimeType}
@@ -193,6 +203,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
       setValue('');
       if (cmd.name === 'new') void newSession();
       if (cmd.name === 'compact') void compact();
+      if (cmd.name === 'tree') setTreeOpen(true);
       return;
     }
     setValue(`/${cmd.name} `);

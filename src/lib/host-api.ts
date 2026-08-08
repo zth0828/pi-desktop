@@ -26,9 +26,14 @@ export const hostApi = {
     abort: () => invokeHost('piRuntime', 'abort'),
     newSession: () => invokeHost('piRuntime', 'newSession'),
     compact: () => invokeHost('piRuntime', 'compact'),
+    fork: (entryId: string) => invokeHost('piRuntime', 'fork', { entryId }),
+    getTree: () => invokeHost('piRuntime', 'getTree'),
+    navigateTree: (targetId: string) => invokeHost('piRuntime', 'navigateTree', { targetId }),
     setThinkingLevel: (level: string) => invokeHost('piRuntime', 'setThinkingLevel', { level }),
     setModel: (provider: string, id: string) => invokeHost('piRuntime', 'setModel', { provider, id }),
     getCommands: () => invokeHost('piRuntime', 'getCommands'),
+    uiResponse: (payload: { requestId: string; value?: string | boolean; cancelled?: boolean }) =>
+      invokeHost('piRuntime', 'uiResponse', payload),
   },
   providers: {
     list: () => invokeHost('providers', 'list'),

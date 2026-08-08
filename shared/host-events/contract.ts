@@ -7,6 +7,7 @@ import type {
   PiOAuthProgressEvent,
   PiPackageProgressEvent,
   PiRuntimeStateResult,
+  PiUiRequestPayload,
 } from '../host-api/contract';
 
 export type PiInstallProgressEvent = {
@@ -23,6 +24,10 @@ export type HostEventContract = {
     event: (payload: PiRuntimeEventEnvelope) => void;
     /** new/switch/fork 后推送全量新状态，渲染层清空重载 */
     sessionReplaced: (payload: PiRuntimeStateResult) => void;
+    /** 扩展 UI 请求（ctx.ui.confirm/select/input）：渲染层弹对话框，经 piRuntime.uiResponse 回传 */
+    uiRequest: (payload: PiUiRequestPayload) => void;
+    /** 扩展 UI 请求被取消（超时/signal abort/会话替换），渲染层移除对应对话框 */
+    uiCancel: (payload: { requestId: string }) => void;
   };
   providers: {
     /** OAuth 授权进度（授权 URL 等），由 pi provider-owned 流程发出 */
@@ -56,6 +61,8 @@ export const HOST_EVENT_CHANNELS = {
   piRuntime: {
     event: 'pi-runtime:event',
     sessionReplaced: 'pi-runtime:session-replaced',
+    uiRequest: 'pi-runtime:ui-request',
+    uiCancel: 'pi-runtime:ui-cancel',
   },
   providers: {
     oauthProgress: 'providers:oauth-progress',

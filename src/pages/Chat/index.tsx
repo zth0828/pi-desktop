@@ -5,14 +5,19 @@ import { useChatStore } from '../../stores/chat';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
 import { StatusBar } from './StatusBar';
+import { TreeDialog } from './TreeDialog';
 
-/** 消息列表工具栏：全局展开/折叠所有工具卡片 */
+/** 消息列表工具栏：全局展开/折叠所有工具卡片 + 分支树（/tree）入口 */
 function ChatToolbar() {
   const { t } = useTranslation();
   const toolsExpanded = useChatStore((s) => s.toolsExpanded);
   const toggleToolsExpanded = useChatStore((s) => s.toggleToolsExpanded);
+  const setTreeOpen = useChatStore((s) => s.setTreeOpen);
   return (
     <div className="chat-toolbar">
+      <button className="chat-toolbar-btn" data-testid="open-tree" onClick={() => setTreeOpen(true)}>
+        {t('chat.branches')}
+      </button>
       <button className="chat-toolbar-btn" data-testid="toggle-tools" onClick={toggleToolsExpanded}>
         {toolsExpanded ? t('chat.collapseTools') : t('chat.expandTools')}
       </button>
@@ -94,6 +99,7 @@ export default function ChatPage() {
           onNewSession={() => void newSession()}
         />
       </div>
+      <TreeDialog />
     </div>
   );
 }

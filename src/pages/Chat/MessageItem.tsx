@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { GitFork } from 'lucide-react';
 import { Markdown } from '../../components/Markdown';
 import { useChatStore, type ChatMessage, type ContentBlock } from '../../stores/chat';
 import { ToolCallCard } from './ToolCallCard';
@@ -33,6 +34,8 @@ function AssistantBlock({ block, streaming }: { block: ContentBlock; streaming?:
 
 export function MessageItem({ message }: { message: ChatMessage }) {
   const { t } = useTranslation();
+  const forkFrom = useChatStore((s) => s.forkFrom);
+  const isStreaming = useChatStore((s) => s.isStreaming);
   if (message.role === 'user') {
     const text = message.content
       .filter((b) => b.type === 'text')
@@ -41,6 +44,16 @@ export function MessageItem({ message }: { message: ChatMessage }) {
     const images = message.content.filter((b) => b.type === 'image');
     return (
       <div className="message message-user" data-testid="message-user">
+        {message.entryId && !isStreaming && (
+          <button
+            className="message-fork-btn"
+            data-testid="fork-message"
+            title={t('chat.forkFromHere')}
+            onClick={() => void forkFrom(message.entryId!)}
+          >
+            <GitFork size={14} />
+          </button>
+        )}
         <div className="message-bubble">
           {images.map((b, i) => {
             // pi 的 ImageContent 是扁平 {data, mimeType}；兼容壳早期误存的 source 嵌套格式

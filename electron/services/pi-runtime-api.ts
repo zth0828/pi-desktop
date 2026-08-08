@@ -10,12 +10,30 @@ import type {
   PiRuntimeStartPayload,
   PiRuntimeStateResult,
   PiRuntimeContextUsage,
+  PiRuntimeForkPayload,
+  PiRuntimeForkResult,
+  PiRuntimeTreeNode,
+  PiRuntimeTreeResult,
+  PiRuntimeNavigatePayload,
+  PiRuntimeNavigateResult,
+  PiUiResponsePayload,
 } from '@shared/host-api/contract';
-import type { AgentSession, AgentSessionRuntime, EventBus } from '@earendil-works/pi-coding-agent';
+import type {
+  AgentSession,
+  AgentSessionRuntime,
+  EventBus,
+  SessionEntry,
+  SessionTreeNode,
+} from '@earendil-works/pi-coding-agent';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { expandFileReferences } from '../utils/file-expand';
 import { detectPiEnvironment } from '../utils/pi-detector';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
+import {
+  cancelAllPendingUi,
+  createExtensionUIContext,
+  resolveUiResponse,
+} from './extension-ui';
 
 export type ActiveRuntime = {
   sdk: PiSdk;
@@ -45,6 +63,26 @@ export function getLatestMcpStatusSnapshot(): Record<string, unknown> | null {
   return latestMcpStatus;
 }
 
+/**
+ * 与 messages 平行的 entry id 序列（仅 user 消息 entry 有值）。
+ * pi 的 AgentMessage 不带 entryId；session.messages 与
+ * buildContextEntries().flatMap(sessionEntryToContextMessages) 一一对应，
+ * 按各 entry 产出的消息数重建对齐（流式中的 partial assistant 无 entry，尾部自然缺省）。
+ */
+function messageEntryIds(session: AgentSession): (string | null)[] {
+  const ids: (string | null)[] = [];
+  for (const entry of session.sessionManager.buildContextEntries()) {
+    const producesMessage =
+      entry.type === 'message' ||
+      entry.type === 'custom_message' ||
+      (entry.type === 'branch_summary' && Boolean(entry.summary)) ||
+      entry.type === 'compaction';
+    if (!producesMessage) continue;
+    ids.push(entry.type === 'message' && entry.message.role === 'user' ? entry.id : null);
+  }
+  return ids;
+}
+
 function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
   const session = runtime.runtime.session;
   const contextUsage = session.getContextUsage();
@@ -58,6 +96,7 @@ function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
     thinkingLevel: session.thinkingLevel,
     isStreaming: session.isStreaming,
     messages: session.messages as unknown[],
+    messageEntryIds: messageEntryIds(session),
     sessionFile: session.sessionFile,
     contextUsage: contextUsage
       ? {
@@ -88,8 +127,14 @@ async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
   const session = runtime.runtime.session;
   // Spike B 结论：不调 bindExtensions 扩展收不到 session_start（MCP 等全部失效）。
   // mode 用 'print'（无 TUI，与 pi 自己的 headless 模式一致）。
+  // uiContext 桥接 confirm/select/input 到渲染层对话框（electron/services/extension-ui.ts），
+  // 不传则 hasUI=false，权限确认/plan mode/question 类扩展无法工作。
   await session.bindExtensions({
     mode: 'print',
+    uiContext: createExtensionUIContext(() => ({
+      sessionId: runtime.sessionId,
+      generation: runtime.generation,
+    })),
     commandContextActions: {
       waitForIdle: () => session.waitForIdle(),
       newSession: async (options) => {
@@ -184,6 +229,8 @@ async function createRuntime(cwd: string): Promise<ActiveRuntime> {
 /** 会话替换（new/switch/fork）后的统一收尾：重绑 + 重订阅 + 通知渲染层清空。 */
 export async function afterSessionReplaced(runtime: ActiveRuntime): Promise<PiRuntimeStateResult> {
   runtime.unsubscribe();
+  // 旧会话挂起的扩展 UI 请求全部取消（渲染层同步移除对话框）
+  cancelAllPendingUi();
   runtime.generation += 1;
   runtime.sessionId = runtime.runtime.session.sessionId;
   await bindCurrentSession(runtime);
@@ -193,12 +240,54 @@ export async function afterSessionReplaced(runtime: ActiveRuntime): Promise<PiRu
   return state;
 }
 
+function toError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** 消息 content（string 或 content block 数组）→ 单行摘要文本。 */
+function contentSummaryText(content: unknown): string {
+  const raw =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content
+            .map((b) => {
+              const block = b as { type?: string; text?: string; name?: string };
+              if (block?.type === 'text') return block.text ?? '';
+              if (block?.type === 'toolCall') return `[${block.name ?? 'tool'}]`;
+              return '';
+            })
+            .filter(Boolean)
+            .join(' ')
+        : '';
+  return raw.replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
+/** 树节点的展示摘要；结构噪音 entry（model/thinking 变更、label 等）返回 null 跳过。 */
+function treeEntrySummary(entry: SessionEntry): { kind: PiRuntimeTreeNode['kind']; text: string } | null {
+  if (entry.type === 'message') {
+    const role = entry.message.role;
+    return {
+      kind: role === 'user' ? 'user' : role === 'assistant' ? 'assistant' : 'other',
+      text: contentSummaryText((entry.message as { content?: unknown }).content),
+    };
+  }
+  if (entry.type === 'custom_message') {
+    return { kind: 'user', text: contentSummaryText(entry.content) };
+  }
+  if (entry.type === 'compaction' || entry.type === 'branch_summary') {
+    return { kind: 'other', text: contentSummaryText(entry.summary) };
+  }
+  return null;
+}
+
 export const piRuntimeApi = {
   start: async (payload: PiRuntimeStartPayload): Promise<PiRuntimeStateResult> => {
     if (active && active.cwd === payload.cwd) return snapshotState(active);
     if (startInFlight) await startInFlight.catch(() => {});
     if (active && active.cwd !== payload.cwd) {
       active.unsubscribe();
+      cancelAllPendingUi();
       active.runtime.dispose();
       active = null;
     }
@@ -253,6 +342,68 @@ export const piRuntimeApi = {
     return { success: true };
   },
 
+  /** 消息级 fork（TUI /fork 选消息）：position='before'，新会话不含被选消息，文本回填编辑器。 */
+  fork: async (payload: PiRuntimeForkPayload): Promise<PiRuntimeForkResult> => {
+    if (!active) return { success: false, error: 'session not started' };
+    if (active.runtime.session.isStreaming) return { success: false, error: 'session is streaming' };
+    try {
+      const result = await active.runtime.fork(payload.entryId);
+      if (result.cancelled) return { success: false, error: 'cancelled' };
+      // fork 产生新会话文件并整体替换 runtime：走既有 sessionReplaced 刷新流程
+      await afterSessionReplaced(active);
+      return { success: true, selectedText: result.selectedText };
+    } catch (err) {
+      return { success: false, error: toError(err) };
+    }
+  },
+
+  getTree: (): PiRuntimeTreeResult => {
+    if (!active) return { nodes: [] };
+    const sm = active.runtime.session.sessionManager;
+    const leafId = sm.getLeafId();
+    // 当前分支路径（leaf 及其祖先链），面板里高亮用
+    const onPath = new Set<string>();
+    let cursor = leafId;
+    while (cursor) {
+      onPath.add(cursor);
+      cursor = sm.getEntry(cursor)?.parentId ?? null;
+    }
+    const nodes: PiRuntimeTreeNode[] = [];
+    const walk = (list: SessionTreeNode[], depth: number) => {
+      for (const node of list) {
+        const summary = treeEntrySummary(node.entry);
+        if (summary) {
+          nodes.push({
+            id: node.entry.id,
+            depth,
+            kind: summary.kind,
+            text: summary.text,
+            label: node.label,
+            isLeaf: node.entry.id === leafId,
+            onCurrentPath: onPath.has(node.entry.id),
+          });
+        }
+        // 被跳过的节点不占用缩进深度
+        walk(node.children, summary ? depth + 1 : depth);
+      }
+    };
+    walk(sm.getTree(), 0);
+    return { nodes };
+  },
+
+  /** 分支跳转（TUI /tree）：同会话文件内移动 leaf，session 对象不变，推全量状态刷新列表。 */
+  navigateTree: async (payload: PiRuntimeNavigatePayload): Promise<PiRuntimeNavigateResult> => {
+    if (!active) return { success: false, error: 'session not started' };
+    try {
+      const result = await active.runtime.session.navigateTree(payload.targetId);
+      if (result.cancelled) return { success: false, error: 'cancelled' };
+      sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));
+      return { success: true, editorText: result.editorText };
+    } catch (err) {
+      return { success: false, error: toError(err) };
+    }
+  },
+
   compact: async () => {
     if (!active) return { success: false, error: 'session not started' };
     try {
@@ -294,7 +445,11 @@ export const piRuntimeApi = {
     const builtIns = [
       { name: 'new', description: 'New session', source: 'built-in' },
       { name: 'compact', description: 'Compact context', source: 'built-in' },
+      { name: 'tree', description: 'Navigate session branches', source: 'built-in' },
     ];
     return { commands: [...builtIns, ...prompts, ...skills] };
   },
+
+  /** 扩展 UI 对话框的用户响应（extension-ui.ts 里挂起的 Promise 按 requestId 配对 resolve）。 */
+  uiResponse: (payload: PiUiResponsePayload) => resolveUiResponse(payload),
 };

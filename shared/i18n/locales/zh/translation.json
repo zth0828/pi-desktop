@@ -99,6 +99,18 @@
     "stopLength": "回复因达到长度上限而停止。",
     "expandTools": "展开全部工具",
     "collapseTools": "折叠全部工具",
+    "forkFromHere": "从此分叉",
+    "branches": "分支",
+    "tree": {
+      "title": "会话分支",
+      "empty": "还没有分支节点",
+      "current": "当前",
+      "kind": {
+        "user": "用户",
+        "assistant": "助手",
+        "other": "其他"
+      }
+    },
     "attachFile": "添加图片或文本文件",
     "model": "选择模型",
     "tokenUsage": "Token 使用情况",
@@ -280,6 +292,12 @@
   },
   "sidebar": {
     "newChat": "新会话"
+  },
+  "extui": {
+    "confirm": "确认",
+    "cancel": "取消",
+    "ok": "确定",
+    "countdown": "{{seconds}} 秒后自动取消"
   },
   "skills": {
     "title": "Skills",

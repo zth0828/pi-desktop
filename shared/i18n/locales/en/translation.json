@@ -99,6 +99,18 @@
     "stopLength": "Response stopped: length limit reached.",
     "expandTools": "Expand all tools",
     "collapseTools": "Collapse all tools",
+    "forkFromHere": "Fork from here",
+    "branches": "Branches",
+    "tree": {
+      "title": "Session branches",
+      "empty": "No branch entries yet",
+      "current": "current",
+      "kind": {
+        "user": "User",
+        "assistant": "Assistant",
+        "other": "Other"
+      }
+    },
     "attachFile": "Attach image or text file",
     "model": "Select model",
     "tokenUsage": "Token usage",
@@ -280,6 +292,12 @@
   },
   "sidebar": {
     "newChat": "New chat"
+  },
+  "extui": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "ok": "OK",
+    "countdown": "Auto-cancel in {{seconds}}s"
   },
   "skills": {
     "title": "Skills",

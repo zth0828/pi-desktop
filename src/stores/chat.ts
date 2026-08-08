@@ -2,7 +2,7 @@
 // Inspired by ClawX: src/stores/chat.ts 的 reducer 思路（按 pi 事件模型重写，§5.2）。
 import { create } from 'zustand';
 import type { CompactionReason, PiRuntimeEventEnvelope } from '@shared/pi-event-map';
-import type { PiRuntimeStateResult } from '@shared/host-api/contract';
+import type { PiRuntimeStateResult, PiUiRequestPayload } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 
@@ -20,6 +20,8 @@ export type ChatMessage = {
   content: ContentBlock[];
   streaming?: boolean;
   timestamp?: number;
+  /** 会话 entry id（仅 user 消息有，来自 state.messageEntryIds 对齐）；消息级 fork 的目标 */
+  entryId?: string;
   raw: unknown;
 };
 
@@ -77,6 +79,12 @@ type ChatState = {
   compaction: { reason: CompactionReason } | null;
   retry: RetryState | null;
   queue: QueueState;
+  /** 分支树面板（/tree）开关 */
+  treeOpen: boolean;
+  /** fork/跳分支后回填输入框的文本（nonce 保证同文本也触发） */
+  inputDraft: { text: string; nonce: number } | null;
+  /** 扩展 UI 请求队列（ctx.ui.confirm/select/input）；同一时间通常只有一个，设计上按队列 */
+  uiRequests: PiUiRequestPayload[];
 
   start: (cwd: string) => Promise<void>;
   prompt: (text: string, images?: unknown[]) => Promise<void>;
@@ -84,10 +92,19 @@ type ChatState = {
   newSession: () => Promise<void>;
   compact: () => Promise<void>;
   toggleToolsExpanded: () => void;
+  setTreeOpen: (open: boolean) => void;
+  /** 消息级 fork：从指定 user 消息分叉新会话（sessionReplaced 事件负责刷新列表） */
+  forkFrom: (entryId: string) => Promise<void>;
+  /** 跳分支：同会话文件内移动 leaf（navigateTree 后 main 推全量状态刷新） */
+  navigateTo: (targetId: string) => Promise<void>;
+  /** 扩展 UI 对话框的用户响应：出队 + 回传 main（value 缺省 = 取消） */
+  respondUi: (requestId: string, value?: string | boolean) => Promise<void>;
   applyState: (state: PiRuntimeStateResult) => void;
   applyEnvelope: (envelope: PiRuntimeEventEnvelope) => void;
   /** compaction 后从 runtime 重读 session 消息（pi 已重建上下文，本地事件累积列表失效） */
   refreshMessages: () => Promise<void>;
+  /** run 结束后补齐 entryId（事件累积的消息不带，fork 按钮依赖它） */
+  refreshEntryIds: () => Promise<void>;
 };
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -102,6 +119,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   compaction: null,
   retry: null,
   queue: { steering: [], followUp: [] },
+  treeOpen: false,
+  inputDraft: null,
+  uiRequests: [],
 
   start: async (cwd) => {
     if (get().starting) return;
@@ -135,6 +155,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   toggleToolsExpanded: () => set((s) => ({ toolsExpanded: !s.toolsExpanded })),
 
+  setTreeOpen: (open) => set({ treeOpen: open }),
+
+  forkFrom: async (entryId) => {
+    const result = await hostApi.piRuntime.fork(entryId);
+    if (!result.success) {
+      set({ startError: result.error });
+      return;
+    }
+    // sessionReplaced 事件刷新消息列表；被选消息文本回填输入框供编辑重发
+    if (result.selectedText) set({ inputDraft: { text: result.selectedText, nonce: Date.now() } });
+  },
+
+  navigateTo: async (targetId) => {
+    const result = await hostApi.piRuntime.navigateTree(targetId);
+    if (!result.success) {
+      set({ startError: result.error });
+      return;
+    }
+    // 目标是 user 消息时 pi 把文本退回编辑器（/tree 语义）
+    if (result.editorText) set({ inputDraft: { text: result.editorText, nonce: Date.now() } });
+  },
+
+  respondUi: async (requestId, value) => {
+    set((s) => ({ uiRequests: s.uiRequests.filter((r) => r.requestId !== requestId) }));
+    await hostApi.piRuntime.uiResponse({ requestId, value, cancelled: value === undefined });
+  },
+
   applyState: (state) => {
     set({
       cwd: state.cwd,
@@ -143,11 +190,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       model: state.model,
       thinkingLevel: state.thinkingLevel,
       isStreaming: state.isStreaming,
-      messages: state.messages.map((m) => asMessage(m)),
+      messages: state.messages.map((m, i) => ({
+        ...asMessage(m),
+        entryId: state.messageEntryIds?.[i] ?? undefined,
+      })),
       toolExecutions: {},
       compaction: null,
       retry: null,
       queue: { steering: [], followUp: [] },
+      uiRequests: [],
+    });
+  },
+
+  refreshEntryIds: async () => {
+    const state = await hostApi.piRuntime.getState().catch(() => null);
+    if (!state || state.generation !== get().generation) return; // 会话已替换，丢弃
+    const ids = state.messageEntryIds ?? [];
+    set({
+      messages: get().messages.map((m, i) =>
+        m.entryId === (ids[i] ?? undefined) ? m : { ...m, entryId: ids[i] ?? undefined },
+      ),
     });
   },
 
@@ -184,6 +246,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ),
         );
         set({ isStreaming: false, toolExecutions, retry: null });
+        // 事件累积的新消息没有 entryId，从 runtime 对齐补齐（fork 按钮依赖）
+        void get().refreshEntryIds();
         break;
       }
       case 'assistant.partial': {
@@ -290,5 +354,15 @@ export function bindChatEvents(): void {
   });
   onHostEvent('piRuntime', 'sessionReplaced', (state) => {
     useChatStore.getState().applyState(state);
+  });
+  onHostEvent('piRuntime', 'uiRequest', (req) => {
+    const s = useChatStore.getState();
+    if (req.generation !== s.generation) return; // 过期会话的请求丢弃（main 侧会兜底取消）
+    useChatStore.setState({ uiRequests: [...s.uiRequests, req] });
+  });
+  onHostEvent('piRuntime', 'uiCancel', ({ requestId }) => {
+    useChatStore.setState((s) => ({
+      uiRequests: s.uiRequests.filter((r) => r.requestId !== requestId),
+    }));
   });
 }

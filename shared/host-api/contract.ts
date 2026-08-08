@@ -82,8 +82,69 @@ export type PiRuntimeStateResult = {
   isStreaming: boolean;
   /** pi AgentMessage[]，渲染层按结构渲染（user/assistant/toolResult） */
   messages: unknown[];
+  /**
+   * 与 messages 平行的会话 entry id（仅 user 消息 entry 有值，其余为 null）。
+   * pi 的 AgentMessage 本身不带 entryId；这里按 buildSessionContext 的
+   * flatMap(sessionEntryToContextMessages) 对齐重建，供消息级 fork 使用。
+   */
+  messageEntryIds: (string | null)[];
   sessionFile?: string;
   contextUsage?: PiRuntimeContextUsage;
+};
+
+// —— piRuntime 消息级 fork / 分支导航（/tree）——
+
+export type PiRuntimeForkPayload = { entryId: string };
+export type PiRuntimeForkResult = HostSuccess & {
+  /** position='before' 语义：被选中 user 消息的文本（回填输入框供编辑重发） */
+  selectedText?: string;
+};
+
+export type PiRuntimeTreeNode = {
+  id: string;
+  /** 视觉缩进深度（结构噪音 entry 被跳过，子节点继承其深度） */
+  depth: number;
+  kind: 'user' | 'assistant' | 'other';
+  /** 节点摘要文本（已折叠空白并截断） */
+  text: string;
+  label?: string;
+  isLeaf: boolean;
+  onCurrentPath: boolean;
+};
+export type PiRuntimeTreeResult = { nodes: PiRuntimeTreeNode[] };
+export type PiRuntimeNavigatePayload = { targetId: string };
+export type PiRuntimeNavigateResult = HostSuccess & {
+  /** 目标是 user 消息时 pi 把文本退回编辑器（TUI /tree 语义） */
+  editorText?: string;
+};
+
+// —— piRuntime 扩展 UI 桥（ctx.ui.confirm/select/input → 渲染层对话框）——
+
+export type PiUiRequestKind = 'confirm' | 'select' | 'input';
+
+export type PiUiRequestPayload = {
+  /** 请求 id：响应按它配对，迟到/过期响应幂等忽略 */
+  requestId: string;
+  sessionId: string;
+  /** 会话 generation：会话替换后的渲染层据此丢弃过期请求 */
+  generation: number;
+  kind: PiUiRequestKind;
+  title: string;
+  /** confirm 的正文 */
+  message?: string;
+  /** select 的选项列表 */
+  options?: string[];
+  /** input 的占位符 */
+  placeholder?: string;
+  /** 扩展传入的超时（ExtensionUIDialogOptions.timeout），到期 main 侧按取消兜底 */
+  timeoutMs?: number;
+};
+
+export type PiUiResponsePayload = {
+  requestId: string;
+  /** confirm=boolean；select/input=用户文本；取消/超时/会话替换时缺省 */
+  value?: string | boolean;
+  cancelled?: boolean;
 };
 
 // —— settings：壳自身设置（electron-store 持久化）——
@@ -377,10 +438,18 @@ export type HostApiContract = {
     abort: () => HostSuccess;
     newSession: () => HostSuccess;
     compact: () => HostSuccess;
+    /** 消息级 fork：从某条历史 user 消息分叉出新会话并切过去（runtime.fork，TUI /fork 语义）。 */
+    fork: (payload: PiRuntimeForkPayload) => PiRuntimeForkResult;
+    /** 当前会话的分支树（SessionManager.getTree 拍平，供 /tree 面板展示）。 */
+    getTree: () => PiRuntimeTreeResult;
+    /** 同会话文件内跳分支（session.navigateTree，TUI /tree 语义）。 */
+    navigateTree: (payload: PiRuntimeNavigatePayload) => PiRuntimeNavigateResult;
     setThinkingLevel: (payload: { level: string }) => HostSuccess;
     setModel: (payload: { provider: string; id: string }) => HostSuccess;
     /** / 补全：内置命令 + prompt 模板 + skills */
     getCommands: () => PiCommandListResult;
+    /** 扩展 UI 对话框的用户响应（按 requestId 配对挂起的 confirm/select/input）。 */
+    uiResponse: (payload: PiUiResponsePayload) => HostSuccess;
   };
   providers: {
     list: () => PiProviderListResult;
