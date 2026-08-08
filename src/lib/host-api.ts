@@ -133,6 +133,13 @@ export const hostApi = {
     dispatch: (payload: { kind: 'runCompleted' | 'uiRequest'; title: string; body?: string }) =>
       invokeHost('notify', 'dispatch', payload),
   },
+  review: {
+    getSummary: () => invokeHost('review', 'getSummary'),
+    getFileDiff: (path: string) => invokeHost('review', 'getFileDiff', { path }),
+    revertFile: (path: string) => invokeHost('review', 'revertFile', { path }),
+    revertHunk: (path: string, patch: string) =>
+      invokeHost('review', 'revertHunk', { path, patch }),
+  },
   dialog: {
     openDirectory: (title?: string, defaultPath?: string) =>
       invokeHost('dialog', 'open', { title, defaultPath, properties: ['openDirectory', 'createDirectory'] }),

@@ -82,6 +82,8 @@ type ChatState = {
   queue: QueueState;
   /** 分支树面板（/tree）开关 */
   treeOpen: boolean;
+  /** Review 面板（会话改动评审）开关 */
+  reviewOpen: boolean;
   /** fork/跳分支后回填输入框的文本（nonce 保证同文本也触发） */
   inputDraft: { text: string; nonce: number } | null;
   /** 扩展 UI 请求队列（ctx.ui.confirm/select/input）；同一时间通常只有一个，设计上按队列 */
@@ -99,6 +101,7 @@ type ChatState = {
   compact: () => Promise<void>;
   toggleToolsExpanded: () => void;
   setTreeOpen: (open: boolean) => void;
+  setReviewOpen: (open: boolean) => void;
   /** 消息级 fork：从指定 user 消息分叉新会话（sessionReplaced 事件负责刷新列表） */
   forkFrom: (entryId: string) => Promise<void>;
   /** 跳分支：同会话文件内移动 leaf（navigateTree 后 main 推全量状态刷新） */
@@ -126,6 +129,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   retry: null,
   queue: { steering: [], followUp: [] },
   treeOpen: false,
+  reviewOpen: false,
   inputDraft: null,
   uiRequests: [],
 
@@ -172,6 +176,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   toggleToolsExpanded: () => set((s) => ({ toolsExpanded: !s.toolsExpanded })),
 
   setTreeOpen: (open) => set({ treeOpen: open }),
+
+  setReviewOpen: (open) => set({ reviewOpen: open }),
 
   forkFrom: async (entryId) => {
     const result = await hostApi.piRuntime.fork(entryId);

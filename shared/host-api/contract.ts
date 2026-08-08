@@ -182,6 +182,39 @@ export type PiUiResponsePayload = {
   cancelled?: boolean;
 };
 
+// —— review：会话改动评审（git baseline diff；非 git 目录降级为只读汇总）——
+
+export type ReviewFileStatus = 'modified' | 'added' | 'deleted';
+
+export type ReviewFileEntry = {
+  /** 相对 cwd 的路径 */
+  path: string;
+  status: ReviewFileStatus;
+  added: number;
+  deleted: number;
+};
+
+export type ReviewSummaryResult = {
+  /** git 评审是否可用（活动 runtime 的 cwd 是 git 仓库且 baseline 已建立） */
+  available: boolean;
+  /** 不可用原因：not-started / not-a-git-repo / git-error:<msg> */
+  reason?: string;
+  files: ReviewFileEntry[];
+};
+
+export type ReviewFileDiffPayload = { path: string };
+export type ReviewFileDiffResult = {
+  available: boolean;
+  reason?: string;
+  path: string;
+  /** 标准 unified diff（baseline tree ↔ 当前磁盘快照），空串 = 无差异 */
+  diff: string;
+};
+
+export type ReviewRevertFilePayload = { path: string };
+/** hunk 级回滚：渲染层把 diff 解析成 hunk、重建只含该 hunk 的合法 unified diff，main 侧 git apply -R */
+export type ReviewRevertHunkPayload = { path: string; patch: string };
+
 // —— settings：壳自身设置（electron-store 持久化）——
 
 export type SettingsSnapshot = {
@@ -584,6 +617,16 @@ export type HostApiContract = {
   };
   dialog: {
     open: (payload: DialogOpenPayload) => DialogOpenResult;
+  };
+  review: {
+    /** 当前会话改动汇总（baseline ↔ 当前磁盘快照）。非 git 目录 available=false，渲染层降级为只读汇总。 */
+    getSummary: () => ReviewSummaryResult;
+    /** 单文件 unified diff（活视图，每次调用重新对比当前磁盘）。 */
+    getFileDiff: (payload: ReviewFileDiffPayload) => ReviewFileDiffResult;
+    /** 文件级回滚：对该文件的 baseline→当前 diff 执行 git apply -R。 */
+    revertFile: (payload: ReviewRevertFilePayload) => HostSuccess;
+    /** hunk 级回滚：git apply -R 渲染层重建的单 hunk patch；apply 失败返回错误。 */
+    revertHunk: (payload: ReviewRevertHunkPayload) => HostSuccess;
   };
   notify: {
     /** 渲染层上报可通知事件；main 按 settings.notifyMode + 窗口焦点决定是否弹系统通知。 */

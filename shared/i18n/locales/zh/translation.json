@@ -439,5 +439,19 @@
   },
   "list": {
     "search": "搜索…"
+  },
+  "review": {
+    "title": "评审",
+    "refresh": "刷新",
+    "empty": "还没有改动",
+    "noDiff": "{{path}} 暂无差异",
+    "revertFile": "回滚此文件",
+    "revertHunk": "回滚此 hunk",
+    "confirm": "回滚",
+    "cancel": "取消",
+    "confirmFile": "回滚对 {{path}} 的全部改动？文件将恢复到本会话开始时的状态。",
+    "confirmHunk": "回滚 {{path}} 中的这个 hunk？",
+    "revertFailed": "回滚失败：{{error}}",
+    "fallbackHint": "当前目录不是 git 仓库——只读汇总 agent 改动过的文件，无法回滚。"
   }
 }

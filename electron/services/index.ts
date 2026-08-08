@@ -10,6 +10,7 @@ import { packagesApi } from './packages-api';
 import { piRuntimeApi } from './pi-runtime-api';
 import { piSystemApi } from './pi-system-api';
 import { providersApi } from './providers-api';
+import { reviewApi } from './review-api';
 import { sessionsApi } from './sessions-api';
 import { settingsApi } from './settings-api';
 import { shellApi } from './shell-api';
@@ -30,5 +31,6 @@ export function createHostServices(): HostServiceRegistry {
     settings: settingsApi,
     dialog: dialogApi,
     notify: notifyApi,
+    review: reviewApi,
   };
 }

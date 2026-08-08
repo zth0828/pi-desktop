@@ -39,6 +39,7 @@ import {
   createExtensionUIContext,
   resolveUiResponse,
 } from './extension-ui';
+import { captureReviewBaseline, clearReviewBaseline } from './review-api';
 
 export type ActiveRuntime = {
   sdk: PiSdk;
@@ -228,6 +229,9 @@ async function createRuntime(cwd: string): Promise<ActiveRuntime> {
   });
   await bindCurrentSession(active_);
   bridgeSessionEvents(active_);
+  // Review 面板 baseline：会话工作区快照（ghost commit），必须在首次 run 前完成；
+  // 非 git 目录内部降级为 null。失败不阻塞会话启动（面板按不可用降级）。
+  await captureReviewBaseline(cwd);
   return active_;
 }
 
@@ -335,6 +339,8 @@ export const piRuntimeApi = {
       cancelAllPendingUi();
       active.runtime.dispose();
       active = null;
+      // cwd 切换 = 新 review 上下文，旧 baseline 作废（createRuntime 会重建）
+      clearReviewBaseline();
     }
     startInFlight = (async () => {
       active = await createRuntime(payload.cwd);

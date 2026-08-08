@@ -439,5 +439,19 @@
   },
   "list": {
     "search": "Search…"
+  },
+  "review": {
+    "title": "Review",
+    "refresh": "Refresh",
+    "empty": "No changes yet",
+    "noDiff": "No diff for {{path}}",
+    "revertFile": "Revert file",
+    "revertHunk": "Revert hunk",
+    "confirm": "Revert",
+    "cancel": "Cancel",
+    "confirmFile": "Revert all changes to {{path}}? The file will be restored to its state when this session started.",
+    "confirmHunk": "Revert this hunk in {{path}}?",
+    "revertFailed": "Revert failed: {{error}}",
+    "fallbackHint": "Not a git repository — showing a read-only summary of files changed by the agent. Revert is unavailable."
   }
 }

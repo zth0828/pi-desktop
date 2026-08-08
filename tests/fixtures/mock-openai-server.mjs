@@ -3,6 +3,7 @@
 // 脚本协议（按最后一条 user 消息分派）：
 //   "USE_TOOL_LS" → 第一轮返回 tool_call(bash: ls)，之后回显工具结果
 //   "USE_TOOL_EDIT" → 第一轮返回 tool_call(edit: e2e-edit-target.txt alpha→beta)
+//   "USE_TOOL_WRITE" → 第一轮返回 tool_call(write: 新建 e2e-new-file.txt)
 //   "MCP_SEARCH"/"MCP_CALL" → 驱动 mcp 代理工具
 //   "SLOW ..." → 30 个 chunk × 100ms 慢速流（用于 abort 测试）
 //   "FLAKE_429" → 首次请求返回 429（触发 pi 自动重试），后续正常 PONG
@@ -33,6 +34,7 @@ const server = http.createServer((req, res) => {
     const hasToolResult = msgs.slice(lastUserIdx + 1).some((m) => m.role === "tool");
     const wantsTool = !hasToolResult && (
       lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") ||
+      lastUser.includes("USE_TOOL_WRITE") ||
       lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
     );
 
@@ -79,6 +81,12 @@ const server = http.createServer((req, res) => {
         args = JSON.stringify({
           path: "e2e-edit-target.txt",
           edits: [{ oldText: "alpha", newText: "beta" }],
+        });
+      } else if (lastUser.includes("USE_TOOL_WRITE")) {
+        toolName = "write";
+        args = JSON.stringify({
+          path: "e2e-new-file.txt",
+          content: "hello from agent\n",
         });
       } else if (lastUser.includes("MCP_CALL")) {
         toolName = "mcp";
