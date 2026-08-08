@@ -14,6 +14,7 @@ import type {
 import type { AgentSession, AgentSessionRuntime, EventBus } from '@earendil-works/pi-coding-agent';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { expandFileReferences } from '../utils/file-expand';
+import { detectPiEnvironment } from '../utils/pi-detector';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 
 export type ActiveRuntime = {
@@ -126,6 +127,10 @@ async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
 async function createRuntime(cwd: string): Promise<ActiveRuntime> {
   const sdk = await loadPiSdk();
   const agentDir = sdk.getAgentDir();
+  // 扩展 spawn pi 子进程时的入口约定（Electron 里 process.argv[1] 是壳的 main.js，
+  // 扩展按 CLI 假设会误 spawn 壳自身；如官方 subagent 示例）。检测到 pi 即写入。
+  const piBin = detectPiEnvironment().pi.binPath;
+  if (piBin) process.env.PI_CLI_PATH = piBin;
   const eventBus = sdk.createEventBus();
   const createFactory = async ({
     cwd: effectiveCwd,
