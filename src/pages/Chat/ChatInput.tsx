@@ -121,10 +121,8 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
     if (text === '/compact' && outgoing.length === 0) return void compact();
     void prompt(
       text,
-      outgoing.map((img) => ({
-        type: 'image',
-        source: { type: 'base64', mediaType: img.mediaType, data: img.data },
-      })),
+      // pi ImageContent 是扁平结构 {type:'image', data, mimeType}
+      outgoing.map((img) => ({ type: 'image', data: img.data, mimeType: img.mediaType })),
     );
   };
 

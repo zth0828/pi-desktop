@@ -43,8 +43,11 @@ export function MessageItem({ message }: { message: ChatMessage }) {
       <div className="message message-user" data-testid="message-user">
         <div className="message-bubble">
           {images.map((b, i) => {
-            const src = (b as { source?: { type?: string; mediaType?: string; data?: string } }).source;
-            const url = src?.type === 'base64' ? `data:${src.mediaType};base64,${src.data}` : undefined;
+            // pi 的 ImageContent 是扁平 {data, mimeType}；兼容壳早期误存的 source 嵌套格式
+            const block = b as { data?: string; mimeType?: string; source?: { mediaType?: string; data?: string } };
+            const data = block.data ?? block.source?.data;
+            const mimeType = block.mimeType ?? block.source?.mediaType;
+            const url = data ? `data:${mimeType ?? 'image/png'};base64,${data}` : undefined;
             return url ? <img key={i} className="message-image" data-testid="message-image" src={url} alt="" /> : null;
           })}
           {text}
