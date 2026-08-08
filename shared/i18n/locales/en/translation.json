@@ -99,7 +99,7 @@
     "stopLength": "Response stopped: length limit reached.",
     "expandTools": "Expand all tools",
     "collapseTools": "Collapse all tools",
-    "attachImage": "Attach image",
+    "attachFile": "Attach image or text file",
     "model": "Select model",
     "tokenUsage": "Token usage",
     "contextUsed": "Current context",

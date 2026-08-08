@@ -176,6 +176,11 @@ export type PiSessionRenamePayload = { path: string; name: string };
 export type PiSessionForkResult = HostSuccess & { path?: string };
 export type PiSessionExportResult = HostSuccess & { path?: string };
 
+// —— piFiles：@ 文件引用（补全候选；展开在 piRuntime.prompt 前处理，格式照 pi file-processor）——
+
+export type PiFileListPayload = { cwd: string };
+export type PiFileListResult = { files: string[] };
+
 // —— piSkills：技能列表（M5）——
 
 export type PiSkillSource = 'agentDir' | 'user' | 'project' | 'package';
@@ -413,6 +418,10 @@ export type HostApiContract = {
     getAll: () => SettingsSnapshot;
     get: (payload: SettingsGetPayload) => string | undefined;
     set: (payload: SettingsSetPayload) => HostSuccess;
+  };
+  piFiles: {
+    /** @ 补全候选：cwd 下递归列文件（相对路径，排除 .git/node_modules，上限 200 条）。 */
+    list: (payload: PiFileListPayload) => PiFileListResult;
   };
   piSkills: {
     /** 活动 runtime 的 skills（resourceLoader.getSkills()）；runtime 未启动返回空列表。 */

@@ -1098,6 +1098,25 @@ button.danger-outline {
   padding: 0 4px 8px;
 }
 
+.staged-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 4px 8px;
+}
+
+.staged-file {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+
 .staged-image {
   position: relative;
   display: inline-block;

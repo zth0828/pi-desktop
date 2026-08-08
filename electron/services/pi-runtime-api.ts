@@ -13,6 +13,7 @@ import type {
 } from '@shared/host-api/contract';
 import type { AgentSession, AgentSessionRuntime, EventBus } from '@earendil-works/pi-coding-agent';
 import { sendHostEvent } from '../main/ipc/host-events';
+import { expandFileReferences } from '../utils/file-expand';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 
 export type ActiveRuntime = {
@@ -220,8 +221,11 @@ export const piRuntimeApi = {
     if (!active) return { success: false, error: 'session not started' };
     const session = active.runtime.session;
     try {
-      await session.prompt(payload.text, {
-        images: payload.images as never,
+      // @path 就地展开为 <file> 块（pi file-processor 语义；图片转 images 通道）
+      const expanded = await expandFileReferences(payload.text, active.cwd);
+      const staged = (payload.images ?? []) as unknown[];
+      await session.prompt(expanded.text, {
+        images: [...expanded.images, ...staged] as never,
         // 生成中提交 = steer（docs §4.1：输入框在生成中仍可提交，自动 steer）
         ...(session.isStreaming ? { streamingBehavior: 'steer' as const } : {}),
       });

@@ -99,7 +99,7 @@
     "stopLength": "回复因达到长度上限而停止。",
     "expandTools": "展开全部工具",
     "collapseTools": "折叠全部工具",
-    "attachImage": "添加图片",
+    "attachFile": "添加图片或文本文件",
     "model": "选择模型",
     "tokenUsage": "Token 使用情况",
     "contextUsed": "当前上下文",

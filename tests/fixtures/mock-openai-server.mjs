@@ -6,6 +6,7 @@
 //   "MCP_SEARCH"/"MCP_CALL" → 驱动 mcp 代理工具
 //   "SLOW ..." → 30 个 chunk × 100ms 慢速流（用于 abort 测试）
 //   "FLAKE_429" → 首次请求返回 429（触发 pi 自动重试），后续正常 PONG
+//   "ECHO_USER" → 回显最后一条 user 消息（@文件 展开断言用）
 //   压缩摘要请求（含 "context checkpoint summary"）→ 12 个 chunk × 150ms 慢速流，
 //     给 compaction 状态条留出可观测窗口
 //   其他 → 流式返回 "PONG"
@@ -59,8 +60,18 @@ const server = http.createServer((req, res) => {
       sse(res, chunk);
     };
 
-    if (wantsTool) {
-      let toolName = "bash";
+    // ECHO_USER：回显最后一条 user 消息（断言 @文件 展开后的内容确实到了 provider）
+    if (lastUser.includes("ECHO_USER")) {
+      const text = "ECHO:" + lastUser.slice(0, 1200);
+      send({ role: "assistant", content: "" });
+      for (const ch of text) send({ content: ch });
+      send({}, "stop", { prompt_tokens: 10, completion_tokens: text.length, total_tokens: 10 + text.length });
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+    }
+
+    if (wantsTool) {      let toolName = "bash";
       let args = JSON.stringify({ command: "ls" });
       if (lastUser.includes("USE_TOOL_EDIT")) {
         toolName = "edit";

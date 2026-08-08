@@ -65,6 +65,9 @@ export const hostApi = {
   piSkills: {
     list: () => invokeHost('piSkills', 'list'),
   },
+  piFiles: {
+    list: (cwd: string) => invokeHost('piFiles', 'list', { cwd }),
+  },
   piPackages: {
     list: () => invokeHost('piPackages', 'list'),
     install: (source: string) => invokeHost('piPackages', 'install', { source }),
