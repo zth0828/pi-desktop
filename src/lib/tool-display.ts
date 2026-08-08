@@ -100,6 +100,20 @@ export function formatDuration(startedAt?: number, endedAt?: number): string | n
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/** 工作日志耗时（Codex "Worked for 1m 28s" 口径）：整秒取整，进位到分/时 */
+export function formatWorkDuration(startedAt?: number, endedAt?: number): string | null {
+  if (startedAt === undefined || endedAt === undefined) return null;
+  const ms = endedAt - startedAt;
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (totalMinutes < 60) return `${totalMinutes}m ${seconds}s`;
+  const hours = Math.floor(totalMinutes / 60);
+  return `${hours}h ${totalMinutes % 60}m`;
+}
+
 /** 预览 diff 单侧（删/增）最多展示的行数，超出补省略行（避免整文件替换刷屏） */
 const PREVIEW_DIFF_MAX_LINES = 60;
 

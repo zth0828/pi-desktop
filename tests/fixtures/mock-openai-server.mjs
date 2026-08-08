@@ -4,6 +4,7 @@
 //   "USE_TOOL_LS" → 第一轮返回 tool_call(bash: ls)，之后回显工具结果
 //   "USE_TOOL_EDIT" → 第一轮返回 tool_call(edit: e2e-edit-target.txt alpha→beta)
 //   "USE_TOOL_WRITE" → 第一轮返回 tool_call(write: 新建 e2e-new-file.txt)
+//   "USE_TOOL_EDIT_WRITE" → 第一轮返回两个并行 tool_call（edit + write 各一）
 //   "MCP_SEARCH"/"MCP_CALL" → 驱动 mcp 代理工具
 //   "SLOW ..." → 30 个 chunk × 100ms 慢速流（用于 abort 测试）
 //   "FLAKE_429" → 首次请求返回 429（触发 pi 自动重试），后续正常 PONG
@@ -18,6 +19,10 @@ const sse = (res, obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
 
 // FLAKE_429 只失败一次（触发 auto_retry_start 后第二次请求成功）
 let flaked429 = false;
+
+// tool_call id 全局递增：真实 provider 每次调用 id 唯一，mock 不能跨请求复用
+// （渲染层 toolExecutions 按 toolCallId  keyed，复用会互相覆盖）
+let callSeq = 0;
 
 const server = http.createServer((req, res) => {
   if (req.method !== "POST" || !req.url.includes("/chat/completions")) {
@@ -34,7 +39,7 @@ const server = http.createServer((req, res) => {
     const hasToolResult = msgs.slice(lastUserIdx + 1).some((m) => m.role === "tool");
     const wantsTool = !hasToolResult && (
       lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") ||
-      lastUser.includes("USE_TOOL_WRITE") ||
+      lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_EDIT_WRITE") ||
       lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
     );
 
@@ -74,7 +79,27 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    if (wantsTool) {      let toolName = "bash";
+    if (wantsTool) {
+      // 一轮双工具（并行 tool_calls）：edit + write，驱动聚合编辑卡 E2E
+      if (lastUser.includes("USE_TOOL_EDIT_WRITE")) {
+        const editArgs = JSON.stringify({
+          path: "e2e-edit-target.txt",
+          edits: [{ oldText: "alpha", newText: "beta" }],
+        });
+        const writeArgs = JSON.stringify({ path: "e2e-new-file.txt", content: "hello from agent\n" });
+        send({ role: "assistant", tool_calls: [
+          { index: 0, id: `call_mock_${++callSeq}`, type: "function", function: { name: "edit", arguments: "" } },
+          { index: 1, id: `call_mock_${++callSeq}`, type: "function", function: { name: "write", arguments: "" } },
+        ] });
+        send({ tool_calls: [
+          { index: 0, function: { arguments: editArgs } },
+          { index: 1, function: { arguments: writeArgs } },
+        ] }, "tool_calls", { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 });
+        res.write("data: [DONE]\n\n");
+        res.end();
+        return;
+      }
+      let toolName = "bash";
       let args = JSON.stringify({ command: "ls" });
       if (lastUser.includes("USE_TOOL_EDIT")) {
         toolName = "edit";
@@ -95,7 +120,7 @@ const server = http.createServer((req, res) => {
         toolName = "mcp";
         args = JSON.stringify({ search: "ping" });
       }
-      send({ role: "assistant", tool_calls: [{ index: 0, id: "call_mock_1", type: "function", function: { name: toolName, arguments: "" } }] });
+      send({ role: "assistant", tool_calls: [{ index: 0, id: `call_mock_${++callSeq}`, type: "function", function: { name: toolName, arguments: "" } }] });
       send({ tool_calls: [{ index: 0, function: { arguments: args.slice(0, 5) } }] });
       send({ tool_calls: [{ index: 0, function: { arguments: args.slice(5) } }] }, "tool_calls",
         { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 });

@@ -23,8 +23,8 @@ export type LaunchOptions = {
   withPi?: boolean;
   /** pi 的配置目录（models.json/sessions 隔离） */
   agentDir?: string;
-  /** 预置壳设置（如 workspaceCwd） */
-  seedSettings?: Record<string, string>;
+  /** 预置壳设置（如 workspaceCwd；布尔项如 preventSleep 直接给 boolean） */
+  seedSettings?: Record<string, unknown>;
   /** 官方 Package Catalog 的测试替身地址。 */
   packageCatalogUrl?: string;
   /** npm package 安装测试使用的 registry 地址。 */

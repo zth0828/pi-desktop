@@ -54,10 +54,13 @@
   },
   "chat": {
     "placeholder": "给 pi 发消息…（Enter 发送，Shift+Enter 换行）",
+    "placeholderCmdEnter": "给 pi 发消息…（Cmd/Ctrl+Enter 发送，Enter 换行）",
     "send": "发送",
     "stop": "停止",
     "sendTip": "发送（Enter）",
+    "sendTipCmdEnter": "发送（Cmd/Ctrl+Enter）",
     "queueSendTip": "排队（Enter）：当前回复完成后发送；Alt+Enter 立即插入当前轮（steer）",
+    "queueSendTipSteer": "插入（Enter）：立即插入当前轮（steer）；Alt+Enter 排队等当前回复完成后发送",
     "stopTip": "停止当前生成",
     "newSession": "新会话",
     "compact": "压缩上下文",
@@ -139,6 +142,17 @@
       "truncatedBytes": "输出超出大小上限，仅显示 {{outputLines}} 行",
       "matchLimit": "匹配数达到上限（{{limit}}）",
       "linesTruncated": "部分过长的行被截断"
+    },
+    "turnChanges": {
+      "title": "已编辑 {{count}} 个文件",
+      "revert": "撤销",
+      "reverting": "撤销中…",
+      "reverted": "已撤销",
+      "revertFailed": "撤销失败：{{error}}",
+      "review": "审核"
+    },
+    "workLog": {
+      "title": "已处理 {{duration}}"
     },
     "stopLength": "回复因达到长度上限而停止。",
     "expandTools": "展开全部工具",
@@ -416,6 +430,27 @@
       "light": "浅色",
       "dark": "深色",
       "system": "跟随系统"
+    },
+    "agent": "Agent",
+    "followupBehavior": "流式中跟进方式",
+    "followupBehaviorDesc": "生成中按 Enter 的默认行为；Alt+Enter 始终执行反向操作。",
+    "followupOptions": {
+      "queue": "排队等待",
+      "steer": "立即插入（steer）"
+    },
+    "sendWith": "发送快捷键",
+    "sendWithDesc": "选 Cmd/Ctrl+Enter 时，裸 Enter 换行。",
+    "sendWithOptions": {
+      "enter": "Enter 发送",
+      "cmdEnter": "Cmd/Ctrl+Enter 发送"
+    },
+    "preventSleep": "运行时防止休眠",
+    "preventSleepDesc": "agent 运行期间阻止显示器休眠（含自动重试等待）。",
+    "notifyUiRequest": "扩展请求通知",
+    "notifyUiRequestDesc": "扩展请求确认/输入时发送系统通知（独立于上方档位）。",
+    "toggle": {
+      "on": "开启",
+      "off": "关闭"
     }
   },
   "notify": {

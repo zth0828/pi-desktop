@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
+import { groupLogicalTurns, turnTimeRange } from '../../lib/turn-changes';
 import { useChatStore } from '../../stores/chat';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
+import type { TurnFold } from './MessageItem';
 import { MessageNavRail, type RailAnchor } from './MessageNavRail';
 import { StatusBar } from './StatusBar';
 import { ReviewPanel } from './ReviewPanel';
 import { TreeDialog } from './TreeDialog';
+import { TurnChangesCard } from './TurnChangesCard';
 
 /** 消息列表工具栏：全局展开/折叠所有工具卡片 + 分支树（/tree）+ Review 面板入口 */
 function ChatToolbar() {
@@ -39,12 +42,16 @@ export default function ChatPage() {
   const starting = useChatStore((s) => s.starting);
   const startError = useChatStore((s) => s.startError);
   const messages = useChatStore((s) => s.messages);
+  const toolExecutions = useChatStore((s) => s.toolExecutions);
+  const isStreaming = useChatStore((s) => s.isStreaming);
   const start = useChatStore((s) => s.start);
   const newSession = useChatStore((s) => s.newSession);
   // 跨项目切换会话时以 runtime 的实际 cwd 为准
   const activeCwd = useChatStore((s) => (s.started ? s.cwd : undefined));
   const effectiveCwd = activeCwd ?? cwd;
   const listRef = useRef<HTMLDivElement>(null);
+  // 工作日志折叠的手动覆盖（点开历史轮后保持展开）；默认历史轮折叠、最新完成轮展开
+  const [foldOverrides, setFoldOverrides] = useState<Record<number, boolean>>({});
 
   // user 消息稳定锚点（消息列表在会话内只追加，index 锚点稳定）
   const railAnchors = useMemo<RailAnchor[]>(() => {
@@ -56,6 +63,61 @@ export default function ChatPage() {
 
   // 缓存失效检测（pi cache-stats 口径）：按下标分发给 assistant 消息尾部警告
   const cacheMisses = useMemo(() => collectCacheMisses(messages), [messages]);
+
+  // 按逻辑轮（user 消息边界，pi 的 agent run 是模型往返粒度、不能直接当轮边界）：
+  // 已完成的历史轮折叠工具卡为「已处理 Xs」行，完成的轮尾部挂聚合编辑卡。
+  // 折叠只藏工具卡，user/assistant 文本消息位置不动（rail 锚点 chat-msg-<index> 不受影响）。
+  const { fold, turnCards } = useMemo(() => {
+    const logical = groupLogicalTurns(messages);
+    const lastIndex = logical.length - 1;
+    // 完成判定：后面已有新一轮，或不处于流式；且该轮没有仍在执行的工具（steer 插入
+    // 当前轮时 user 消息先到，上一轮的工具可能还在跑，不能折）
+    const completed = logical.map((turn, j) => {
+      if (turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running')) return false;
+      return j < lastIndex || !isStreaming;
+    });
+    // 最新完成且含工具的轮保持展开（Codex 观感：历史轮折叠、最新一轮展开）
+    let latestExpanded = -1;
+    for (let j = lastIndex; j >= 0; j -= 1) {
+      if (completed[j] && logical[j].toolCallIds.length > 0) {
+        latestExpanded = j;
+        break;
+      }
+    }
+    const hidden = new Set<string>();
+    const rows = new Map<string, { turn: number; startedAt?: number; endedAt?: number }>();
+    logical.forEach((turn, j) => {
+      if (!completed[j] || turn.toolCallIds.length === 0) return;
+      const collapsed = foldOverrides[j] ?? j !== latestExpanded;
+      if (!collapsed) return;
+      const { startedAt, endedAt } = turnTimeRange(toolExecutions, turn.toolCallIds);
+      turn.toolCallIds.forEach((id, k) => {
+        if (k === 0) rows.set(id, { turn: j, startedAt, endedAt });
+        else hidden.add(id);
+      });
+    });
+    const cards = new Map<number, string[][]>();
+    logical.forEach((turn, j) => {
+      if (!completed[j]) return;
+      // 只给含 edit/write 的轮挂卡（卡片自身还会按成功执行过滤，空轮不渲染）
+      const hasEdits = turn.toolCallIds.some((id) => {
+        const name = toolExecutions[id]?.toolName;
+        return name === 'edit' || name === 'write';
+      });
+      if (!hasEdits) return;
+      const list = cards.get(turn.endIndex) ?? [];
+      list.push(turn.toolCallIds);
+      cards.set(turn.endIndex, list);
+    });
+    return {
+      fold: {
+        hidden,
+        rows,
+        onExpand: (turn: number) => setFoldOverrides((prev) => ({ ...prev, [turn]: false })),
+      } satisfies TurnFold,
+      turnCards: cards,
+    };
+  }, [messages, toolExecutions, isStreaming, foldOverrides]);
 
   // 恢复上次的工作目录并启动会话
   useEffect(() => {
@@ -106,12 +168,17 @@ export default function ChatPage() {
             </div>
           )}
           {messages.map((m, i) => (
-            <MessageItem
-              key={i}
-              message={m}
-              anchorId={m.role === 'user' ? `chat-msg-${i}` : undefined}
-              cacheMiss={cacheMisses.get(i)}
-            />
+            <Fragment key={i}>
+              <MessageItem
+                message={m}
+                anchorId={m.role === 'user' ? `chat-msg-${i}` : undefined}
+                cacheMiss={cacheMisses.get(i)}
+                fold={fold}
+              />
+              {turnCards.get(i)?.map((toolCallIds, k) => (
+                <TurnChangesCard key={k} toolCallIds={toolCallIds} />
+              ))}
+            </Fragment>
           ))}
         </div>
         <MessageNavRail anchors={railAnchors} listRef={listRef} />

@@ -3,9 +3,39 @@ import { useTranslation } from 'react-i18next';
 import { GitFork } from 'lucide-react';
 import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
-import { formatDuration } from '../../lib/tool-display';
+import { formatDuration, formatWorkDuration } from '../../lib/tool-display';
 import { useChatStore, type ChatMessage, type ContentBlock } from '../../stores/chat';
 import { ToolCallCard } from './ToolCallCard';
+
+/**
+ * 「已处理 Xs」工作日志折叠的渲染指令（ChatPage 按逻辑轮计算后下发）：
+ * hidden 里的工具卡不渲染；rows 命中的工具卡位置渲染折叠行（该轮第一个工具卡）。
+ */
+export type TurnFold = {
+  hidden: Set<string>;
+  rows: Map<string, { turn: number; startedAt?: number; endedAt?: number }>;
+  onExpand: (turn: number) => void;
+};
+
+/** 折叠行：历史轮的工具卡序列收拢成「已处理 1m 28s ▸」，点击展开还原 */
+function WorkLogRow({
+  startedAt,
+  endedAt,
+  onExpand,
+}: {
+  startedAt?: number;
+  endedAt?: number;
+  onExpand: () => void;
+}) {
+  const { t } = useTranslation();
+  const duration = formatWorkDuration(startedAt, endedAt) ?? '0s';
+  return (
+    <button className="work-log-row" data-testid="work-log-row" onClick={onExpand}>
+      <span className="work-log-title">{t('chat.workLog.title', { duration })}</span>
+      <span className="work-log-chevron">▸</span>
+    </button>
+  );
+}
 
 /**
  * thinking 折叠块（Codex reasoningItem 范式）：流式中 "Thinking…"，
@@ -36,10 +66,12 @@ function AssistantBlock({
   block,
   streaming,
   active,
+  fold,
 }: {
   block: ContentBlock;
   streaming?: boolean;
   active?: boolean;
+  fold?: TurnFold;
 }) {
   const toolExecutions = useChatStore((s) => s.toolExecutions);
 
@@ -50,6 +82,20 @@ function AssistantBlock({
     return <ThinkingBlock thinking={block.thinking ?? ''} active={active ?? false} />;
   }
   if (block.type === 'toolCall' && block.id) {
+    // 历史轮折叠：该轮第一个工具卡位置渲染「已处理 Xs」行，其余工具卡隐藏
+    if (fold) {
+      const row = fold.rows.get(block.id);
+      if (row) {
+        return (
+          <WorkLogRow
+            startedAt={row.startedAt}
+            endedAt={row.endedAt}
+            onExpand={() => fold.onExpand(row.turn)}
+          />
+        );
+      }
+      if (fold.hidden.has(block.id)) return null;
+    }
     const execution = toolExecutions[block.id] ?? {
       toolCallId: block.id,
       toolName: block.name ?? 'unknown',
@@ -65,11 +111,14 @@ export function MessageItem({
   message,
   anchorId,
   cacheMiss,
+  fold,
 }: {
   message: ChatMessage;
   anchorId?: string;
   /** 本轮 assistant 消息的缓存失效检测结果（collectCacheMisses 按下标分发） */
   cacheMiss?: CacheMiss;
+  /** 工作日志折叠指令（仅 assistant 消息内的工具卡消费） */
+  fold?: TurnFold;
 }) {
   const { t } = useTranslation();
   const forkFrom = useChatStore((s) => s.forkFrom);
@@ -129,6 +178,7 @@ export function MessageItem({
           block={block}
           streaming={message.streaming}
           active={Boolean(message.streaming) && i === message.content.length - 1}
+          fold={fold}
         />
       ))}
       {message.streaming && <span className="cursor-blink">▍</span>}

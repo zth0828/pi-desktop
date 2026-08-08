@@ -35,6 +35,16 @@ type ChatInputProps = {
   onNewSession: () => void;
 };
 
+type FollowupBehavior = 'queue' | 'steer';
+type SendWith = 'enter' | 'cmdEnter';
+
+/** 流式中提交的排队方式：设置决定默认行为，Alt 反转（queue ↔ steer） */
+function resolveStreamBehavior(followupBehavior: FollowupBehavior, alt: boolean): 'steer' | 'followUp' {
+  const base: 'steer' | 'followUp' = followupBehavior === 'steer' ? 'steer' : 'followUp';
+  if (!alt) return base;
+  return base === 'steer' ? 'followUp' : 'steer';
+}
+
 function fileToStagedImage(file: File): Promise<StagedImage> {
   return new Promise((resolveFile, reject) => {
     const reader = new FileReader();
@@ -115,6 +125,8 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const [usageOpen, setUsageOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<PiRuntimeSessionInfo | null>(null);
+  const [followupBehavior, setFollowupBehavior] = useState<FollowupBehavior>('queue');
+  const [sendWith, setSendWith] = useState<SendWith>('enter');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelSelectRef = useRef<HTMLSelectElement>(null);
   const noticeTimerRef = useRef<number | null>(null);
@@ -145,6 +157,13 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
       return () => window.clearInterval(timer);
     }
   }, [started]);
+
+  useEffect(() => {
+    void hostApi.settings
+      .get('followupBehavior')
+      .then((v) => setFollowupBehavior(v === 'steer' ? 'steer' : 'queue'));
+    void hostApi.settings.get('sendWith').then((v) => setSendWith(v === 'cmdEnter' ? 'cmdEnter' : 'enter'));
+  }, []);
 
   useEffect(() => {
     if (model) setModelKey(`${model.provider}/${model.id}`);
@@ -461,10 +480,18 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
         return;
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+    if (sendWith === 'cmdEnter') {
+      // Cmd/Ctrl+Enter 发送；裸 Enter / Shift+Enter 换行
+      if (!e.metaKey && !e.ctrlKey) return;
       e.preventDefault();
-      // 流式中：Enter = 排队（followUp，当前 run 完成后发送）；Alt+Enter = steer（当前轮插入）
-      send(e.altKey ? 'steer' : undefined);
+      send(resolveStreamBehavior(followupBehavior, e.altKey));
+      return;
+    }
+    if (!e.shiftKey) {
+      e.preventDefault();
+      // 流式中：Enter 按设置的跟进方式分发（默认排队 followUp）；Alt+Enter 始终反向
+      send(resolveStreamBehavior(followupBehavior, e.altKey));
     }
   };
 
@@ -666,7 +693,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
           ref={textareaRef}
           data-testid="chat-input"
           value={value}
-          placeholder={t('chat.placeholder')}
+          placeholder={sendWith === 'cmdEnter' ? t('chat.placeholderCmdEnter') : t('chat.placeholder')}
           onChange={(e) => {
             setValue(e.target.value);
             setSelected(0);
@@ -740,9 +767,11 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
               <button
                 data-testid="chat-queue-send"
                 className="send-button"
-                onClick={(e) => send(e.altKey ? 'steer' : undefined)}
+                onClick={(e) => send(resolveStreamBehavior(followupBehavior, e.altKey))}
                 disabled={!value.trim() && images.length === 0}
-                title={t('chat.queueSendTip')}
+                title={
+                  followupBehavior === 'steer' ? t('chat.queueSendTipSteer') : t('chat.queueSendTip')
+                }
               >
                 <ListPlus size={15} />
               </button>
@@ -761,7 +790,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
               className="send-button"
               onClick={() => send()}
               disabled={!value.trim() && images.length === 0}
-              title={t('chat.sendTip')}
+              title={sendWith === 'cmdEnter' ? t('chat.sendTipCmdEnter') : t('chat.sendTip')}
             >
               <ArrowUp size={15} />
             </button>

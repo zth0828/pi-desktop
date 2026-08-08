@@ -223,10 +223,18 @@ export type SettingsSnapshot = {
   theme?: 'light' | 'dark' | 'system';
   /** 系统通知档位：always=总是，unfocused=仅窗口失焦（默认），off=关闭 */
   notifyMode?: 'always' | 'unfocused' | 'off';
+  /** 流式中提交的默认跟进方式：queue=排队等当前 run 完成（默认），steer=当前轮插入；Alt+Enter 始终反向 */
+  followupBehavior?: 'queue' | 'steer';
+  /** 扩展 UI 请求（确认/输入）是否弹系统通知（默认 true）；run 完成通知仍走 notifyMode 档位 */
+  notifyUiRequest?: boolean;
+  /** agent 运行期间阻止显示器/系统休眠（含自动重试等待；默认 false） */
+  preventSleep?: boolean;
+  /** 发送快捷键：enter=Enter 发送（默认），cmdEnter=Cmd/Ctrl+Enter 发送、Enter 换行 */
+  sendWith?: 'enter' | 'cmdEnter';
 };
 
 export type SettingsGetPayload = { key: keyof SettingsSnapshot };
-export type SettingsSetPayload = { key: keyof SettingsSnapshot; value: string | undefined };
+export type SettingsSetPayload = { key: keyof SettingsSnapshot; value: string | boolean | undefined };
 
 // —— dialog：系统对话框 ——
 
@@ -578,7 +586,7 @@ export type HostApiContract = {
   };
   settings: {
     getAll: () => SettingsSnapshot;
-    get: (payload: SettingsGetPayload) => string | undefined;
+    get: (payload: SettingsGetPayload) => string | boolean | undefined;
     set: (payload: SettingsSetPayload) => HostSuccess;
   };
   piFiles: {

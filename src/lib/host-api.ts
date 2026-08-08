@@ -1,6 +1,7 @@
 // Renderer 侧的 host-api 便捷封装：所有后端调用的唯一入口（AGENTS.md 边界规则）。
 // 新能力 = contract.ts 加类型 + services/ 加实现 + 这里加一行。
 import { invokeHost } from './host-api-client';
+import type { SettingsSnapshot } from '@shared/host-api/contract';
 
 export const hostApi = {
   app: {
@@ -124,9 +125,9 @@ export const hostApi = {
   },
   settings: {
     getAll: () => invokeHost('settings', 'getAll'),
-    get: (key: 'language' | 'workspaceCwd' | 'theme' | 'notifyMode') =>
-      invokeHost('settings', 'get', { key }),
-    set: (key: 'language' | 'workspaceCwd' | 'theme' | 'notifyMode', value: string | undefined) =>
+    get: <K extends keyof SettingsSnapshot>(key: K) =>
+      invokeHost('settings', 'get', { key }) as Promise<SettingsSnapshot[K]>,
+    set: (key: keyof SettingsSnapshot, value: string | boolean | undefined) =>
       invokeHost('settings', 'set', { key, value }),
   },
   notify: {

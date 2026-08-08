@@ -40,6 +40,7 @@ import {
   resolveUiResponse,
 } from './extension-ui';
 import { captureReviewBaseline, clearReviewBaseline } from './review-api';
+import { noteRunEnded, noteRunStarted } from './power-save';
 
 export type ActiveRuntime = {
   sdk: PiSdk;
@@ -119,6 +120,9 @@ function bridgeSessionEvents(runtime: ActiveRuntime): void {
   runtime.unsubscribe = session.subscribe((piEvent) => {
     const mapped = mapPiSessionEvent(piEvent);
     if (!mapped) return;
+    // 防休眠挂钩（main 侧自治）：run 期间顶住休眠，重试等待保持，结束/替换解除
+    if (mapped.type === 'run.started') noteRunStarted();
+    else if (mapped.type === 'run.ended') noteRunEnded(mapped.willRetry);
     const envelope: PiRuntimeEventEnvelope = {
       sessionId: runtime.sessionId,
       generation: runtime.generation,
@@ -240,6 +244,8 @@ export async function afterSessionReplaced(runtime: ActiveRuntime): Promise<PiRu
   runtime.unsubscribe();
   // 旧会话挂起的扩展 UI 请求全部取消（渲染层同步移除对话框）
   cancelAllPendingUi();
+  // 旧会话若在运行中被替换，其 run.ended 不会再到：兜底解除防休眠
+  noteRunEnded();
   runtime.generation += 1;
   runtime.sessionId = runtime.runtime.session.sessionId;
   await bindCurrentSession(runtime);
@@ -341,6 +347,8 @@ export const piRuntimeApi = {
       active = null;
       // cwd 切换 = 新 review 上下文，旧 baseline 作废（createRuntime 会重建）
       clearReviewBaseline();
+      // 运行时销毁：旧 run 的 ended 事件不再可达，兜底解除防休眠
+      noteRunEnded();
     }
     startInFlight = (async () => {
       active = await createRuntime(payload.cwd);

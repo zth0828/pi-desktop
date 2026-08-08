@@ -54,10 +54,13 @@
   },
   "chat": {
     "placeholder": "Message pi…  (Enter to send, Shift+Enter for newline)",
+    "placeholderCmdEnter": "Message pi…  (Cmd/Ctrl+Enter to send, Enter for newline)",
     "send": "Send",
     "stop": "Stop",
     "sendTip": "Send (Enter)",
+    "sendTipCmdEnter": "Send (Cmd/Ctrl+Enter)",
     "queueSendTip": "Queue (Enter): sent after the current reply; Alt+Enter inserts into the current turn (steer)",
+    "queueSendTipSteer": "Steer (Enter): insert into the current turn; Alt+Enter queues it for after the current reply",
     "stopTip": "Stop the current run",
     "newSession": "New session",
     "compact": "Compact",
@@ -139,6 +142,17 @@
       "truncatedBytes": "Output exceeded size limit, showing {{outputLines}} lines",
       "matchLimit": "Match limit reached ({{limit}})",
       "linesTruncated": "Some long lines were truncated"
+    },
+    "turnChanges": {
+      "title": "Edited {{count}} files",
+      "revert": "Revert",
+      "reverting": "Reverting…",
+      "reverted": "Reverted",
+      "revertFailed": "Revert failed: {{error}}",
+      "review": "Review"
+    },
+    "workLog": {
+      "title": "Worked for {{duration}}"
     },
     "stopLength": "Response stopped: length limit reached.",
     "expandTools": "Expand all tools",
@@ -416,6 +430,27 @@
       "light": "Light",
       "dark": "Dark",
       "system": "System"
+    },
+    "agent": "Agent",
+    "followupBehavior": "Follow-up while streaming",
+    "followupBehaviorDesc": "What Enter does during generation; Alt+Enter always does the opposite.",
+    "followupOptions": {
+      "queue": "Queue",
+      "steer": "Steer (insert now)"
+    },
+    "sendWith": "Send shortcut",
+    "sendWithDesc": "With Cmd/Ctrl+Enter, plain Enter inserts a newline.",
+    "sendWithOptions": {
+      "enter": "Enter to send",
+      "cmdEnter": "Cmd/Ctrl+Enter to send"
+    },
+    "preventSleep": "Prevent sleep while running",
+    "preventSleepDesc": "Keep the display awake while the agent is running (including auto-retry waits).",
+    "notifyUiRequest": "Extension request notifications",
+    "notifyUiRequestDesc": "Notify when an extension asks for confirmation or input (independent of the mode above).",
+    "toggle": {
+      "on": "On",
+      "off": "Off"
     }
   },
   "notify": {

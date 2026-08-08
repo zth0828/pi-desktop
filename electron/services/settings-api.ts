@@ -1,7 +1,6 @@
 // settings 模块：壳自身设置（electron-store 持久化，仅存壳的设置；
 // pi 的 settings.json 由 pi 的 SettingsManager 管，壳不碰）。
 import type {
-  SettingsGetPayload,
   SettingsSetPayload,
   SettingsSnapshot,
 } from '@shared/host-api/contract';
@@ -29,11 +28,17 @@ export const settingsApi = {
       workspaceCwd: store.get('workspaceCwd') as string | undefined,
       theme: store.get('theme') as SettingsSnapshot['theme'],
       notifyMode: store.get('notifyMode') as SettingsSnapshot['notifyMode'],
+      followupBehavior: store.get('followupBehavior') as SettingsSnapshot['followupBehavior'],
+      notifyUiRequest: store.get('notifyUiRequest') as SettingsSnapshot['notifyUiRequest'],
+      preventSleep: store.get('preventSleep') as SettingsSnapshot['preventSleep'],
+      sendWith: store.get('sendWith') as SettingsSnapshot['sendWith'],
     };
   },
-  get: async (payload: SettingsGetPayload) => {
+  get: async <K extends keyof SettingsSnapshot>(
+    payload: { key: K },
+  ): Promise<SettingsSnapshot[K]> => {
     const store = await getStore();
-    return store.get(payload.key) as string | undefined;
+    return store.get(payload.key) as SettingsSnapshot[K];
   },
   set: async (payload: SettingsSetPayload) => {
     const store = await getStore();

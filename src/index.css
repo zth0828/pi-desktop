@@ -740,6 +740,131 @@ button.danger-outline {
   border-top: 1px solid var(--border);
 }
 
+/* 「已处理 Xs」工作日志折叠行（历史轮工具卡收拢） */
+
+.work-log-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  margin: 4px 0;
+  padding: 6px 13px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.work-log-row:hover {
+  background: var(--bg-hover);
+}
+
+.work-log-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-log-chevron {
+  color: var(--text-tertiary);
+}
+
+/* 聚合编辑卡（「已编辑 N 个文件 +x -y」） */
+
+.turn-changes {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.turn-changes-header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 13px;
+  font-size: 13px;
+}
+
+.turn-changes-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.turn-changes-stats {
+  display: flex;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.turn-stat-add {
+  color: var(--success);
+}
+
+.turn-stat-del {
+  color: var(--danger);
+}
+
+.turn-changes-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.turn-changes-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.turn-changes-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.turn-changes-reverted {
+  font-size: 12px;
+  color: var(--success);
+}
+
+.turn-changes-error {
+  padding: 4px 13px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.turn-changes-files {
+  border-top: 1px solid var(--border);
+}
+
+.turn-changes-file {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 13px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.turn-changes-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
 /* 折叠态输出预览：尾部 N 行 + 截断警告 */
 
 .tool-card-preview {
