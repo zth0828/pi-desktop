@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitFork } from 'lucide-react';
+import { Check, Copy, FileText, GitFork } from 'lucide-react';
 import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
 import { formatDuration, formatWorkDuration } from '../../lib/tool-display';
+import { hostApi } from '../../lib/host-api';
 import { useChatStore, type ChatMessage, type ContentBlock } from '../../stores/chat';
 import { ToolCallCard } from './ToolCallCard';
 
@@ -123,6 +124,7 @@ export function MessageItem({
   const { t } = useTranslation();
   const forkFrom = useChatStore((s) => s.forkFrom);
   const isStreaming = useChatStore((s) => s.isStreaming);
+  const [copied, setCopied] = useState<'text' | 'markdown' | null>(null);
   if (message.role === 'user') {
     const text = message.content
       .filter((b) => b.type === 'text')
@@ -170,6 +172,24 @@ export function MessageItem({
   }
   const raw = message.raw as { stopReason?: string; errorMessage?: string } | undefined;
   const showTail = !message.streaming;
+  const markdownText = message.content
+    .filter((b) => b.type === 'text' || b.type === 'thinking')
+    .map((b) => b.type === 'thinking' ? `> ${b.thinking ?? ''}` : b.text ?? '')
+    .join('\n\n')
+    .trim();
+  const plainText = message.content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
+  const copy = async (kind: 'text' | 'markdown') => {
+    const value = kind === 'text' ? plainText : markdownText;
+    if (!value) return;
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
+      else await hostApi.app.writeClipboard(value);
+    } catch {
+      await hostApi.app.writeClipboard(value);
+    }
+    setCopied(kind);
+    window.setTimeout(() => setCopied((current) => current === kind ? null : current), 1200);
+  };
   return (
     <div className="message message-assistant" data-testid="message-assistant">
       {message.content.map((block, i) => (
@@ -197,6 +217,16 @@ export function MessageItem({
       {showTail && raw?.errorMessage && (
         <div className="message-notice error" data-testid="message-error">
           {raw.errorMessage}
+        </div>
+      )}
+      {showTail && plainText && (
+        <div className="message-actions" data-testid="message-actions">
+          <button data-testid="copy-message" title={t('chat.copy')} onClick={() => void copy('text')}>
+            {copied === 'text' ? <Check size={13} /> : <Copy size={13} />} {copied === 'text' ? t('chat.copied') : t('chat.copy')}
+          </button>
+          <button data-testid="copy-markdown" title={t('chat.copyMarkdown')} onClick={() => void copy('markdown')}>
+            <FileText size={13} /> {t('chat.copyMarkdown')}
+          </button>
         </div>
       )}
     </div>

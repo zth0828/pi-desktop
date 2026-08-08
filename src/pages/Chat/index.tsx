@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Check, MoreHorizontal, Pencil, X } from 'lucide-react';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
 import { groupLogicalTurns, turnTimeRange } from '../../lib/turn-changes';
@@ -13,24 +14,55 @@ import { ReviewPanel } from './ReviewPanel';
 import { TreeDialog } from './TreeDialog';
 import { TurnChangesCard } from './TurnChangesCard';
 
-/** 消息列表工具栏：全局展开/折叠所有工具卡片 + 分支树（/tree）+ Review 面板入口 */
-function ChatToolbar() {
+function SessionTitleBar() {
   const { t } = useTranslation();
   const toolsExpanded = useChatStore((s) => s.toolsExpanded);
   const toggleToolsExpanded = useChatStore((s) => s.toggleToolsExpanded);
   const setTreeOpen = useChatStore((s) => s.setTreeOpen);
   const setReviewOpen = useChatStore((s) => s.setReviewOpen);
+  const started = useChatStore((s) => s.started);
+  const sessionId = useChatStore((s) => s.sessionId);
+  const [name, setName] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  useEffect(() => {
+    if (!started) return;
+    void hostApi.piRuntime.getSessionInfo().then((info) => setName(info?.name ?? t('chat.untitled')));
+  }, [started, sessionId, t]);
+  const beginRename = () => { setDraft(name === t('chat.untitled') ? '' : name); setEditing(true); };
+  const saveRename = async () => {
+    const next = draft.trim();
+    if (!next) { setEditing(false); return; }
+    const result = await hostApi.piRuntime.setSessionName(next);
+    if (result.success) setName(result.name ?? next);
+    setEditing(false);
+  };
+  const closeMenu = (event: MouseEvent<HTMLButtonElement>) => {
+    event.currentTarget.closest('details')?.removeAttribute('open');
+  };
   return (
-    <div className="chat-toolbar">
-      <button className="chat-toolbar-btn" data-testid="open-review" onClick={() => setReviewOpen(true)}>
-        {t('review.title')}
-      </button>
-      <button className="chat-toolbar-btn" data-testid="open-tree" onClick={() => setTreeOpen(true)}>
-        {t('chat.branches')}
-      </button>
-      <button className="chat-toolbar-btn" data-testid="toggle-tools" onClick={toggleToolsExpanded}>
-        {toolsExpanded ? t('chat.collapseTools') : t('chat.expandTools')}
-      </button>
+    <div className="session-titlebar" data-testid="session-titlebar">
+      <div className="session-title">
+        {editing ? (
+          <>
+            <input autoFocus value={draft} aria-label={t('chat.renameSession')} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void saveRename(); if (e.key === 'Escape') setEditing(false); }} />
+            <button className="icon-button" title={t('chat.saveRename')} onClick={() => void saveRename()}><Check size={15} /></button>
+            <button className="icon-button" title={t('chat.cancelRename')} onClick={() => setEditing(false)}><X size={15} /></button>
+          </>
+        ) : (
+          <button className="session-title-button" onClick={beginRename} title={t('chat.renameSession')}>
+            <span>{name || t('chat.untitled')}</span><Pencil size={13} />
+          </button>
+        )}
+      </div>
+      <details className="session-menu">
+        <summary className="icon-button" data-testid="session-menu" title={t('chat.sessionMenu')}><MoreHorizontal size={18} /></summary>
+        <div className="session-menu-popover">
+          <button data-testid="open-review" onClick={(event) => { closeMenu(event); setReviewOpen(true); }}>{t('review.title')}</button>
+          <button data-testid="open-tree" onClick={(event) => { closeMenu(event); setTreeOpen(true); }}>{t('chat.branches')}</button>
+          <button data-testid="toggle-tools" onClick={(event) => { closeMenu(event); toggleToolsExpanded(); }}>{toolsExpanded ? t('chat.collapseTools') : t('chat.expandTools')}</button>
+        </div>
+      </details>
     </div>
   );
 }
@@ -160,7 +192,7 @@ export default function ChatPage() {
       {starting && <div className="chat-empty">{t('chat.starting')}</div>}
 
       <div className="chat-column">
-        {started && messages.length > 0 && <ChatToolbar />}
+        {started && <SessionTitleBar />}
         <div className="message-list" ref={listRef} data-testid="message-list">
           {started && messages.length === 0 && (
             <div className="chat-greeting" data-testid="chat-greeting">

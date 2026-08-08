@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, ChevronDown, CircleGauge, Folder, ListPlus, Paperclip, Square } from 'lucide-react';
+import { ArrowUp, AtSign, Brain, ChevronDown, CircleGauge, Folder, ListPlus, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
 import type {
   PiCommandRow,
   PiModelRow,
@@ -118,6 +118,8 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const setTreeOpen = useChatStore((s) => s.setTreeOpen);
   const inputDraft = useChatStore((s) => s.inputDraft);
   const model = useChatStore((s) => s.model);
+  const thinkingLevel = useChatStore((s) => s.thinkingLevel);
+  const availableThinkingLevels = useChatStore((s) => s.availableThinkingLevels);
   const messages = useChatStore((s) => s.messages);
   const [models, setModels] = useState<PiModelRow[]>([]);
   const [modelKey, setModelKey] = useState('');
@@ -127,6 +129,8 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const [sessionInfo, setSessionInfo] = useState<PiRuntimeSessionInfo | null>(null);
   const [followupBehavior, setFollowupBehavior] = useState<FollowupBehavior>('queue');
   const [sendWith, setSendWith] = useState<SendWith>('enter');
+  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelSelectRef = useRef<HTMLSelectElement>(null);
   const noticeTimerRef = useRef<number | null>(null);
@@ -149,6 +153,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
     if (started) {
       void hostApi.piRuntime.getCommands().then((r) => setCommands(r.commands));
       void hostApi.providers.listModels().then((r) => setModels(r.models)).catch(() => {});
+      void hostApi.piSkills.list().then((r) => setSkills(r.skills)).catch(() => setSkills([]));
       const refreshUsage = () => {
         void hostApi.piRuntime.getContextUsage().then(setContextUsage).catch(() => setContextUsage(null));
       };
@@ -179,7 +184,10 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const usageTotals = summarizeUsage(messages);
   const totalHitRate = cacheHitRate(usageTotals);
   const lastTurnHitRate = usageTotals.lastTurn ? cacheHitRate(usageTotals.lastTurn) : null;
+  const cacheStatsAvailable = usageTotals.cacheRead + usageTotals.cacheWrite > 0;
   const selectedModel = models.find((candidate) => `${candidate.provider}/${candidate.id}` === modelKey);
+  const reasoning = Boolean(selectedModel?.reasoning ?? model?.reasoning);
+  const planAvailable = commands.some((command) => /(^|[-_])plan([-_]|$)/i.test(command.name));
   // 模型下拉按供应商分组（optgroup），供应商顺序保持 listModels 的首现顺序
   const modelGroups = new Map<string, PiModelRow[]>();
   for (const m of models) {
@@ -649,6 +657,17 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
               {model.name ?? model.id}
             </span>
           ) : null}
+          {reasoning && availableThinkingLevels.length > 0 && (
+            <select
+              className="context-chip thinking-select"
+              data-testid="thinking-level-select"
+              aria-label={t('chat.thinkingLevel')}
+              value={thinkingLevel}
+              onChange={(e) => { void hostApi.piRuntime.setThinkingLevel(e.target.value); }}
+            >
+              {availableThinkingLevels.map((level) => <option key={level} value={level}>{t(`chat.thinkingLevels.${level}`, { defaultValue: level })}</option>)}
+            </select>
+          )}
           <span className="spacer" />
           <button
             className="context-action"
@@ -711,20 +730,21 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
           rows={3}
         />
         <div className="chat-input-toolbar">
-          <label className="attach-button" data-testid="attach-image" title={t('chat.attachFile')}>
-            <Paperclip size={16} />
-            <input
-              type="file"
-              accept="image/*,text/*,.md,.markdown,.json,.yaml,.yml,.toml,.xml,.csv,.log"
-              multiple
-              hidden
-              data-testid="attach-input"
-              onChange={(e) => {
-                void stageFiles(Array.from(e.target.files ?? []));
-                e.target.value = '';
-              }}
-            />
-          </label>
+          <div className="composer-menu-wrap">
+            <input id="chat-attach-input" type="file" accept="image/*,text/*,.md,.markdown,.json,.yaml,.yml,.toml,.xml,.csv,.log" multiple hidden data-testid="attach-input" onChange={(e) => { void stageFiles(Array.from(e.target.files ?? [])); e.target.value = ''; setComposerMenuOpen(false); }} />
+            <button className="attach-button" data-testid="composer-menu" title={t('chat.composerMenu')} aria-expanded={composerMenuOpen} onClick={() => setComposerMenuOpen((open) => !open)}><Plus size={17} /></button>
+            {composerMenuOpen && (
+              <div className="composer-menu" role="menu">
+                <label className="composer-menu-item" data-testid="attach-image" htmlFor="chat-attach-input" title={t('chat.attachFile')}>
+                  <Paperclip size={15} /><span>{t('chat.attachFile')}</span>
+                </label>
+                <button className="composer-menu-item" data-testid="composer-file-reference" onClick={() => { setValue((current) => `${current}${current && !current.endsWith(' ') ? ' ' : ''}@`); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><AtSign size={15} /><span>{t('chat.fileReference')}</span></button>
+                <div className="composer-menu-section"><Sparkles size={14} /><span>{t('chat.skills')}</span></div>
+                {skills.length === 0 ? <div className="composer-menu-hint">{t('chat.noSkills')}</div> : skills.map((skill) => <button className="composer-menu-item" data-testid={`composer-skill-${skill.name}`} key={skill.name} onClick={() => { setValue(`/skill:${skill.name} `); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Sparkles size={14} /><span>{skill.name}</span></button>)}
+                <button className="composer-menu-item" data-testid="composer-plan-mode" disabled={!planAvailable} title={!planAvailable ? t('chat.planModeUnavailable') : undefined} onClick={() => { setValue('/plan '); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Brain size={15} /><span>{t('chat.planMode')}</span></button>
+              </div>
+            )}
+          </div>
           <span className="spacer" />
           <div className="usage-control">
             <button
@@ -750,15 +770,16 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
                     <div className="usage-row"><span>{t('chat.cacheWrite')}</span><strong>{formatTokens(usageTotals.cacheWrite)}</strong></div>
                   </>
                 )}
-                {totalHitRate != null && (
+                {cacheStatsAvailable && totalHitRate != null && (
                   <div className="usage-row"><span>{t('chat.cacheHitRate')}</span><strong>{formatHitRate(totalHitRate)}</strong></div>
                 )}
-                {lastTurnHitRate != null && (
+                {cacheStatsAvailable && lastTurnHitRate != null && (
                   <div className="usage-row"><span>{t('chat.cacheHitRateLast')}</span><strong>{formatHitRate(lastTurnHitRate)}</strong></div>
                 )}
                 {usageTotals.cost > 0 && (
                   <div className="usage-row"><span>{t('chat.totalCost')}</span><strong>{formatCost(usageTotals.cost)}</strong></div>
                 )}
+                <div className="usage-note">{t('chat.cacheStatsNote')}</div>
               </div>
             )}
           </div>

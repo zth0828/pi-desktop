@@ -118,6 +118,7 @@ test('/tree 分支导航：跳到历史节点开新分支，再跳回原分支',
   await expect(page.getByTestId('message-user')).toHaveCount(2);
 
   // 打开分支树：两轮对话 = 4 个消息节点
+  await page.getByTestId('session-menu').click();
   await page.getByTestId('open-tree').click();
   await expect(page.getByTestId('tree-dialog')).toBeVisible();
   await expect(page.getByTestId('tree-node')).toHaveCount(4);
@@ -133,6 +134,7 @@ test('/tree 分支导航：跳到历史节点开新分支，再跳回原分支',
   await expect(page.getByTestId('message-user')).toHaveCount(1);
 
   // 树里同时看到两条分支的 user 节点
+  await page.getByTestId('session-menu').click();
   await page.getByTestId('open-tree').click();
   await expect(page.getByTestId('tree-dialog')).toBeVisible();
   await expect(

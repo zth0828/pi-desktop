@@ -104,6 +104,7 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
 
   await runTool(page, 'USE_TOOL_EDIT now');
 
+  await page.getByTestId('session-menu').click();
   await page.getByTestId('open-review').click();
   const panel = page.getByTestId('review-panel');
   await expect(panel).toBeVisible();
@@ -138,6 +139,7 @@ test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文�
   await runTool(page, 'USE_TOOL_WRITE now');
   expect(existsSync(path.join(repoWorkspace, 'e2e-new-file.txt'))).toBe(true);
 
+  await page.getByTestId('session-menu').click();
   await page.getByTestId('open-review').click();
   const panel = page.getByTestId('review-panel');
   const fileRow = panel.getByTestId('review-file').filter({ hasText: 'e2e-new-file.txt' });
@@ -163,6 +165,7 @@ test('非 git 目录：降级为只读汇总（无回滚按钮）', async ({ lau
 
   await runTool(page, 'USE_TOOL_EDIT now');
 
+  await page.getByTestId('session-menu').click();
   await page.getByTestId('open-review').click();
   const fallback = page.getByTestId('review-fallback');
   await expect(fallback).toBeVisible({ timeout: 30_000 });
