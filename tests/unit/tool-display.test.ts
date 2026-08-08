@@ -55,6 +55,13 @@ describe('toolSummary', () => {
     expect(toolSummary('bash', undefined)).toBeNull();
     expect(toolSummary('bash', { command: '  ' })).toBeNull();
   });
+
+  it('未知工具（扩展/MCP）按常见参数字段兜底摘要', () => {
+    expect(toolSummary('mcp__fs__read', { path: '/tmp/a.txt' })).toBe('/tmp/a.txt');
+    expect(toolSummary('web_search', { query: 'pi agent' })).toBe('pi agent');
+    expect(toolSummary('fetch', { url: 'https://pi.dev' })).toBe('https://pi.dev');
+    expect(toolSummary('mcp', { tool: 'ping' })).toBeNull();
+  });
 });
 
 describe('tailLines', () => {

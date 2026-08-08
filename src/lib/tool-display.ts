@@ -37,7 +37,9 @@ export function toolSummary(toolName: string, args: unknown): string | null {
     case 'grep':
       return str(a.pattern);
     default:
-      return null;
+      // 扩展/MCP 等上游工具的通用兜底：不识别工具名，只按常见参数字段猜摘要，
+      // 保证任何插件工具都有可读 header（壳只做展示，能力全来自 pi/插件）。
+      return str(a.path) ?? str(a.file) ?? str(a.command) ?? str(a.query) ?? str(a.url);
   }
 }
 
