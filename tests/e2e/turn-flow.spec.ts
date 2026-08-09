@@ -1,8 +1,7 @@
 // 消息流核心交互 E2E（Codex 对齐批次 1，真 pi + mock provider，不烧 API quota）：
 // 1) 聚合编辑卡：一轮 edit+write → 「Edited N files +x -y」卡 → 撤销（git）→ 磁盘复原；
 //    非 git 目录保留清单但无撤销入口；「Review」按钮打开 Review 面板。
-// 2) 「已处理 Xs」工作日志折叠：历史轮工具卡收拢为一行，点击展开还原；
-//    user 消息与 rail 锚点原位不动，assistant 文本不折进工具行。
+// 2) 完成轮的执行过程聚合为步骤摘要，点击展开还原；最终答复与 user 锚点原位不动。
 import { execFileSync } from 'node:child_process';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -102,6 +101,9 @@ async function sendPrompt(page: import('@playwright/test').Page, prompt: string)
 
 /** 等当前轮所有工具卡完成 */
 async function waitToolsDone(page: import('@playwright/test').Page, count: number) {
+  const summary = page.getByTestId('work-log-row').last();
+  await expect(summary).toBeVisible({ timeout: 30_000 });
+  await summary.click();
   await expect(page.getByTestId('tool-card')).toHaveCount(count, { timeout: 30_000 });
   for (const card of await page.getByTestId('tool-card').all()) {
     await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
@@ -162,37 +164,39 @@ test('非 Git 目录：聚合编辑卡可回滚，Review 按钮打开完整评�
   await expect(page.getByTestId('review-file')).toHaveCount(2);
 });
 
-test('历史轮折叠为「已处理 Xs」行，点击展开还原；user 消息与文本原位不动', async ({
+test('完成轮聚合为步骤摘要，点击展开还原；最终答复与 user 消息原位不动', async ({
   launchElectronApp,
 }) => {
   const app = await launchElectronApp(launchOptions(foldWorkspace));
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  // 第一轮（edit）：最新完成轮，保持展开
+  // 第一轮完成后立即聚合，只保留最终答复与步骤摘要。
   await sendPrompt(page, 'USE_TOOL_EDIT now');
-  await waitToolsDone(page, 1);
-  await expect(page.getByTestId('work-log-row')).toHaveCount(0);
+  await expect(page.getByTestId('work-log-row')).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.getByTestId('tool-card')).toHaveCount(0);
 
-  // 第二轮（write）结束后：第一轮收拢为工作日志行，只留第二轮的工具卡
+  // 第二轮完成后也独立聚合，页面不会随执行次数持续铺开。
   await sendPrompt(page, 'USE_TOOL_WRITE now');
   // 等第二轮真正结束（两轮的聚合编辑卡都挂上 = 两轮 run.ended 都已处理）
   await expect(page.getByTestId('turn-changes')).toHaveCount(2, { timeout: 30_000 });
-  const row = page.getByTestId('work-log-row');
-  await expect(row).toHaveCount(1);
-  await expect(row).toContainText(/Worked for|已处理/);
-  await expect(page.getByTestId('tool-card')).toHaveCount(1);
+  const rows = page.getByTestId('work-log-row');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.last()).toContainText(/Completed 1 step|已完成 1 个步骤/);
+  await expect(page.getByTestId('tool-card')).toHaveCount(0);
 
-  // user 消息原位（rail 锚点与 messages 下标对齐）、assistant 文本不折进工具行
+  // user 消息原位（rail 锚点与 messages 下标对齐），最终文本仍完整显示。
   await expect(page.getByTestId('message-user')).toHaveCount(2);
   await expect(page.locator('#chat-msg-0')).toContainText('USE_TOOL_EDIT');
   await expect(
     page.getByTestId('message-user').filter({ hasText: 'USE_TOOL_WRITE' }),
   ).toHaveAttribute('id', /^chat-msg-\d+$/);
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'FINAL:' })).toHaveCount(2);
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(0);
 
-  // 点击展开：第一轮工具卡还原，折叠行消失
-  await row.click();
-  await expect(page.getByTestId('tool-card')).toHaveCount(2);
-  await expect(page.getByTestId('work-log-row')).toHaveCount(0);
+  // 点击展开：对应轮的工具卡还原，其他轮仍保持聚合。
+  await rows.first().click();
+  await expect(page.getByTestId('tool-card')).toHaveCount(1);
+  await expect(page.getByTestId('work-log-row')).toHaveCount(1);
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(1);
 });

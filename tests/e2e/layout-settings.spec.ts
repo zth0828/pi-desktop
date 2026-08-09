@@ -133,6 +133,10 @@ test('图片输入：附件入列 → 随消息发送 → 用户消息渲染图�
     buffer: TINY_PNG,
   });
   await expect(page.getByTestId('staged-images').locator('img')).toHaveCount(1);
+  await page.getByTestId('staged-image-preview').click();
+  await expect(page.getByTestId('image-lightbox')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('image-lightbox')).toHaveCount(0);
 
   await page.getByTestId('chat-input').fill('what is this image');
   await page.getByTestId('chat-send').click();

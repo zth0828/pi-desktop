@@ -103,7 +103,7 @@ const server = http.createServer((req, res) => {
           edits: [{ oldText: "alpha", newText: "beta" }],
         });
         const writeArgs = JSON.stringify({ path: "e2e-new-file.txt", content: "hello from agent\n" });
-        send({ role: "assistant", tool_calls: [
+        send({ role: "assistant", content: "PROCESS: preparing edits", tool_calls: [
           { index: 0, id: `call_mock_${++callSeq}`, type: "function", function: { name: "edit", arguments: "" } },
           { index: 1, id: `call_mock_${++callSeq}`, type: "function", function: { name: "write", arguments: "" } },
         ] });
@@ -139,7 +139,7 @@ const server = http.createServer((req, res) => {
         toolName = "mcp";
         args = JSON.stringify({ search: "ping" });
       }
-      send({ role: "assistant", tool_calls: [{ index: 0, id: `call_mock_${++callSeq}`, type: "function", function: { name: toolName, arguments: "" } }] });
+      send({ role: "assistant", content: `PROCESS: running ${toolName}`, tool_calls: [{ index: 0, id: `call_mock_${++callSeq}`, type: "function", function: { name: toolName, arguments: "" } }] });
       send({ tool_calls: [{ index: 0, function: { arguments: args.slice(0, 5) } }] });
       send({ tool_calls: [{ index: 0, function: { arguments: args.slice(5) } }] }, "tool_calls",
         { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 });

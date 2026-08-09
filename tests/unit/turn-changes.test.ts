@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectTurnChanges, groupLogicalTurns, turnTimeRange } from '../../src/lib/turn-changes';
+import { collectTurnChanges, groupLogicalTurns, turnFinalResponseIndex, turnTimeRange } from '../../src/lib/turn-changes';
 import { formatWorkDuration } from '../../src/lib/tool-display';
 import type { ChatMessage, ToolExecution } from '../../src/lib/chat-types';
 
@@ -120,18 +120,37 @@ describe('groupLogicalTurns', () => {
     ];
     const turns = groupLogicalTurns(messages);
     expect(turns).toEqual([
-      { toolCallIds: ['call1', 'call2'], endIndex: 3 },
-      { toolCallIds: [], endIndex: 5 },
+      { startIndex: 0, toolCallIds: ['call1', 'call2'], endIndex: 3 },
+      { startIndex: 4, toolCallIds: [], endIndex: 5 },
     ]);
   });
 
   it('首条 user 之前的消息不属于任何轮', () => {
     const messages = [msg('assistant', ['call0']), msg('user'), msg('assistant', ['call1'])];
-    expect(groupLogicalTurns(messages)).toEqual([{ toolCallIds: ['call1'], endIndex: 2 }]);
+    expect(groupLogicalTurns(messages)).toEqual([{ startIndex: 1, toolCallIds: ['call1'], endIndex: 2 }]);
   });
 
   it('user 消息自成一轮（尚无回复时 endIndex 指向自己）', () => {
-    expect(groupLogicalTurns([msg('user')])).toEqual([{ toolCallIds: [], endIndex: 0 }]);
+    expect(groupLogicalTurns([msg('user')])).toEqual([{ startIndex: 0, toolCallIds: [], endIndex: 0 }]);
+  });
+});
+
+describe('turnFinalResponseIndex', () => {
+  it('返回工具执行后不再发起工具调用的最终文本消息', () => {
+    const messages = [
+      msg('user'),
+      { ...msg('assistant', ['call1']), content: [{ type: 'text', text: 'Checking' }, { type: 'toolCall', id: 'call1', name: 'read' }] },
+      msg('toolResult'),
+      { ...msg('assistant'), content: [{ type: 'text', text: 'Final answer' }] },
+    ];
+    const [turn] = groupLogicalTurns(messages);
+    expect(turnFinalResponseIndex(messages, turn)).toBe(3);
+  });
+
+  it('中断轮没有最终文本时不聚合', () => {
+    const messages = [msg('user'), msg('assistant', ['call1']), msg('toolResult')];
+    const [turn] = groupLogicalTurns(messages);
+    expect(turnFinalResponseIndex(messages, turn)).toBeUndefined();
   });
 });
 

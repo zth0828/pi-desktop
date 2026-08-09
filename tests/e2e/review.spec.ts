@@ -39,7 +39,7 @@ test.beforeAll(async () => {
   // edit 工具 E2E 的目标文件（mock 会把 alpha → beta）；git 仓库含一个初始 commit
   await writeFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
   await mkdir(path.join(repoWorkspace, 'src'));
-  await writeFile(path.join(repoWorkspace, 'src', 'preview.ts'), 'export const answer = 42;\n');
+  await writeFile(path.join(repoWorkspace, 'src', 'preview.ts'), `export const answer = 42;\n// ${'adaptive-preview-'.repeat(30)}\n`);
   await writeFile(
     path.join(repoWorkspace, 'preview.png'),
     Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'),
@@ -99,9 +99,10 @@ async function waitSessionReady(page: import('@playwright/test').Page) {
 async function runTool(page: import('@playwright/test').Page, prompt: string) {
   await page.getByTestId('chat-input').fill(prompt);
   await page.getByTestId('chat-send').click();
-  await expect(page.getByTestId('tool-card').last().locator('.tool-status')).toHaveText('done', {
-    timeout: 30_000,
-  });
+  const summary = page.getByTestId('work-log-row').last();
+  await expect(summary).toBeVisible({ timeout: 30_000 });
+  await summary.click();
+  await expect(page.getByTestId('tool-card').last().locator('.tool-status')).toHaveText('done');
 }
 
 test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘复原', async ({ launchElectronApp }) => {
@@ -145,6 +146,7 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   const app = await launchElectronApp(launchOptions(repoWorkspace));
   const page = await app.firstWindow();
   await waitSessionReady(page);
+  await page.setViewportSize({ width: 1440, height: 800 });
 
   await page.getByTestId('workspace-toggle').click();
   const panel = page.getByTestId('review-panel');
@@ -161,13 +163,35 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await page.mouse.up();
   await expect.poll(async () => (await panel.boundingBox())!.width).toBeLessThan(initialWidth - 40);
 
+  // 默认/窄窗口自动切成完整工作台，不要求用户手动拖宽。
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await expect(handle).toBeHidden();
+  await expect.poll(async () => {
+    const panelWidth = (await panel.boundingBox())!.width;
+    const pageWidth = (await page.locator('.chat-page').boundingBox())!.width;
+    return Math.abs(panelWidth - pageWidth);
+  }).toBeLessThan(2);
+
   await panel.getByTestId('workspace-directory').filter({ hasText: 'src' }).click();
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.ts' }).click();
-  await expect(panel.getByTestId('workspace-text-preview')).toContainText('answer = 42');
+  const textPreview = panel.getByTestId('workspace-text-preview');
+  await expect(textPreview).toContainText('answer = 42');
+  await expect.poll(() => textPreview.locator('pre').evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  const previewColors = await panel.evaluate((node) => {
+    const preview = node.querySelector('.workspace-text-preview');
+    const view = node.ownerDocument.defaultView!;
+    return [view.getComputedStyle(node).backgroundColor, preview ? view.getComputedStyle(preview).backgroundColor : ''];
+  });
+  expect(previewColors[1]).toBe(previewColors[0]);
 
   await panel.getByTestId('workspace-files-tab').click();
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.png' }).click();
   await expect(panel.getByTestId('workspace-image-preview').locator('img')).toBeVisible();
+  await expect(panel.getByTestId('workspace-file-tab')).toHaveCount(2);
+  await expect(panel.getByTestId('workspace-close-all')).toBeVisible();
+  await panel.getByTestId('workspace-close-all').click();
+  await expect(panel.getByTestId('workspace-file-tab')).toHaveCount(0);
+  await expect(panel.getByTestId('workspace-preview')).toContainText(/Select a file|选择文件/);
 
   // Review 与 Files 可反复切换，不会被 reviewOpen effect 弹回。
   await panel.getByTestId('workspace-review-tab').click();

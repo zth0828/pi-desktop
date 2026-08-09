@@ -111,7 +111,7 @@ test('会话标题菜单、消息复制与 composer 加号菜单', async ({ laun
   await expect(page.getByTestId('token-usage-popover')).toBeHidden();
 });
 
-test('工具调用 → 工具卡片（运行中 → 完成，结果可展开）', async ({ launchElectronApp }) => {
+test('工具调用 → 完成后聚合，展开摘要可查看工具结果', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
@@ -119,8 +119,11 @@ test('工具调用 → 工具卡片（运行中 → 完成，结果可展开）'
   await page.getByTestId('chat-input').fill('USE_TOOL_LS now');
   await page.getByTestId('chat-send').click();
 
+  const summary = page.getByTestId('work-log-row').last();
+  await expect(summary).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('tool-card')).toHaveCount(0);
+  await summary.click();
   const card = page.getByTestId('tool-card').last();
-  await expect(card).toBeVisible({ timeout: 30_000 });
   // 动词化一行文案（Codex 范式）：完成态 "Ran $ ls in X.Xs"
   await expect(card.getByTestId('tool-line')).toContainText('Ran $ ls in', { timeout: 30_000 });
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
@@ -138,6 +141,8 @@ test('edit 工具 → 行级 diff 展示', async ({ launchElectronApp }) => {
   await page.getByTestId('chat-input').fill('USE_TOOL_EDIT now');
   await page.getByTestId('chat-send').click();
 
+  await expect(page.getByTestId('work-log-row').last()).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('work-log-row').last().click();
   const card = page.getByTestId('tool-card').last();
   await expect(card.getByTestId('tool-line')).toContainText('Edited e2e-edit-target.txt', { timeout: 30_000 });
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
@@ -157,6 +162,8 @@ test('全局展开/折叠工具卡片', async ({ launchElectronApp }) => {
   await page.getByTestId('chat-input').fill('USE_TOOL_LS now');
   await page.getByTestId('chat-send').click();
 
+  await expect(page.getByTestId('work-log-row').last()).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('work-log-row').last().click();
   const card = page.getByTestId('tool-card').last();
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
   await expect(card.locator('.tool-card-body')).toHaveCount(0);
