@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronDown,
@@ -13,6 +13,7 @@ import {
   PanelRightClose,
   RefreshCw,
   Search,
+  SquareX,
   X,
 } from 'lucide-react';
 import type {
@@ -37,6 +38,15 @@ type PendingRevert =
   | { kind: 'file'; path: string }
   | { kind: 'hunk'; path: string; patch: string };
 type WorkbenchTab = 'files' | 'review' | `file:${string}`;
+
+const WORKSPACE_PANEL_MIN = 620;
+const CHAT_COLUMN_MIN = 420;
+
+function clampPanelWidth(width: number): number {
+  const maximum = Math.max(320, window.innerWidth - CHAT_COLUMN_MIN);
+  const minimum = Math.min(WORKSPACE_PANEL_MIN, maximum);
+  return Math.min(maximum, Math.max(minimum, width));
+}
 
 function FallbackView() {
   const { t } = useTranslation();
@@ -316,8 +326,7 @@ export function ReviewPanel() {
   useEffect(() => {
     if (!resizing) return;
     const resize = (event: PointerEvent) => {
-      const maximum = Math.max(440, window.innerWidth - 460);
-      setPanelWidth(Math.min(maximum, Math.max(440, window.innerWidth - event.clientX)));
+      setPanelWidth(clampPanelWidth(window.innerWidth - event.clientX));
     };
     const stop = () => setResizing(false);
     window.addEventListener('pointermove', resize);
@@ -327,18 +336,42 @@ export function ReviewPanel() {
       window.removeEventListener('pointerup', stop);
     };
   }, [resizing]);
+  useEffect(() => {
+    const adaptToWindow = () => setPanelWidth((current) => current === undefined ? current : clampPanelWidth(current));
+    window.addEventListener('resize', adaptToWindow);
+    return () => window.removeEventListener('resize', adaptToWindow);
+  }, []);
   const chooseFile = (path: string) => {
     setSelectedFile(path);
     setOpenFiles((current) => current.includes(path) ? current : [...current, path]);
     setTab(`file:${path}`);
   };
   const close = () => { setReviewOpen(false); setWorkspaceOpen(false); };
+  const closeFile = (path: string) => {
+    const index = openFiles.indexOf(path);
+    const remaining = openFiles.filter((item) => item !== path);
+    setOpenFiles(remaining);
+    if (tab === `file:${path}`) {
+      const next = remaining[Math.min(Math.max(index, 0), remaining.length - 1)];
+      setSelectedFile(next ?? null);
+      setTab(next ? `file:${next}` : 'files');
+    }
+  };
+  const closeAllFiles = () => {
+    setOpenFiles([]);
+    setSelectedFile(null);
+    if (tab.startsWith('file:')) setTab('files');
+  };
   const fileTab = tab.startsWith('file:') ? tab.slice(5) : null;
   const activeFile = fileTab ?? selectedFile;
   const titleFor = (path: string) => path.split('/').pop() ?? path;
   if (!open) return null;
   return (
-    <aside className={`workspace-panel${resizing ? ' resizing' : ''}`} data-testid="review-panel" style={panelWidth ? { width: panelWidth } : undefined}>
+    <aside
+      className={`workspace-panel${tab === 'review' ? ' review-active' : ''}${resizing ? ' resizing' : ''}`}
+      data-testid="review-panel"
+      style={panelWidth ? { '--workspace-panel-width': `${panelWidth}px` } as CSSProperties : undefined}
+    >
       <div
         className="workspace-resize-handle"
         data-testid="workspace-resize-handle"
@@ -350,24 +383,31 @@ export function ReviewPanel() {
         onKeyDown={(event) => {
           if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
           event.preventDefault();
-          const current = panelWidth ?? Math.min(820, window.innerWidth * 0.5);
+          const current = panelWidth ?? Math.min(960, window.innerWidth * 0.64);
           const delta = event.key === 'ArrowLeft' ? 24 : -24;
-          setPanelWidth(Math.min(Math.max(440, window.innerWidth - 460), Math.max(440, current + delta)));
+          setPanelWidth(clampPanelWidth(current + delta));
         }}
       />
       <div className="workspace-tabs">
-        <button className={`workspace-tab${tab === 'files' ? ' active' : ''}`} data-testid="workspace-files-tab" onClick={() => { setWorkspaceOpen(true); setTab('files'); }}><Files size={14} />{t('workspace.files')}</button>
-        {openFiles.map((path) => (
-          <button className={`workspace-tab${tab === `file:${path}` ? ' active' : ''}`} key={path} title={path} onClick={() => { setWorkspaceOpen(true); setTab(`file:${path}`); }}>{titleFor(path)}<X size={12} onClick={(event) => { event.stopPropagation(); setOpenFiles((current) => current.filter((item) => item !== path)); if (tab === `file:${path}`) setTab('files'); }} /></button>
-        ))}
-        <button className={`workspace-tab${tab === 'review' ? ' active' : ''}`} data-testid="workspace-review-tab" onClick={() => { setReviewOpen(true); setTab('review'); }}><FileCode2 size={14} />{t('review.title')}</button>
-        <span className="spacer" />
-        <button className="icon-button" data-testid="workspace-close" title={t('workspace.close')} onClick={close}><PanelRightClose size={16} /></button>
+        <div className="workspace-tabs-scroll" role="tablist">
+          <button className={`workspace-tab${tab === 'files' ? ' active' : ''}`} role="tab" aria-selected={tab === 'files'} data-testid="workspace-files-tab" onClick={() => { setWorkspaceOpen(true); setTab('files'); }}><Files size={14} />{t('workspace.files')}</button>
+          {openFiles.map((path) => (
+            <div className={`workspace-file-tab${tab === `file:${path}` ? ' active' : ''}`} data-testid="workspace-file-tab" key={path} title={path}>
+              <button className="workspace-file-tab-main" role="tab" aria-selected={tab === `file:${path}`} onClick={() => { setWorkspaceOpen(true); setSelectedFile(path); setTab(`file:${path}`); }}>{titleFor(path)}</button>
+              <button className="workspace-file-tab-close" aria-label={t('workspace.closeFile', { name: titleFor(path) })} onClick={() => closeFile(path)}><X size={12} /></button>
+            </div>
+          ))}
+          <button className={`workspace-tab${tab === 'review' ? ' active' : ''}`} role="tab" aria-selected={tab === 'review'} data-testid="workspace-review-tab" onClick={() => { setReviewOpen(true); setTab('review'); }}><FileCode2 size={14} />{t('review.title')}</button>
+        </div>
+        <div className="workspace-tab-actions">
+          {openFiles.length > 0 && <button className="icon-button" data-testid="workspace-close-all" title={t('workspace.closeAll')} aria-label={t('workspace.closeAll')} onClick={closeAllFiles}><SquareX size={16} /></button>}
+          <button className="icon-button" data-testid="workspace-close" title={t('workspace.close')} onClick={close}><PanelRightClose size={16} /></button>
+        </div>
       </div>
       {tab === 'review' ? <ReviewWorkspace /> : (
         <div className="workspace-browser">
           <FileExplorer selected={activeFile} onSelect={chooseFile} />
-          <main className="workspace-preview">
+          <main className="workspace-preview" data-testid="workspace-preview">
             {activeFile ? <FilePreview path={activeFile} /> : <div className="workspace-empty">{t('workspace.selectFile')}</div>}
           </main>
         </div>

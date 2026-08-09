@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Check, MoreHorizontal, PanelRight, Pencil, X } from 'lucide-react';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
-import { groupLogicalTurns, turnTimeRange } from '../../lib/turn-changes';
+import { groupLogicalTurns, turnFinalResponseIndex, turnTimeRange } from '../../lib/turn-changes';
 import { useChatStore } from '../../stores/chat';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
@@ -97,14 +97,17 @@ export default function ChatPage() {
   const messages = useChatStore((s) => s.messages);
   const toolExecutions = useChatStore((s) => s.toolExecutions);
   const isStreaming = useChatStore((s) => s.isStreaming);
+  const sessionId = useChatStore((s) => s.sessionId);
+  const workspaceVisible = useChatStore((s) => s.workspaceOpen || s.reviewOpen);
   const start = useChatStore((s) => s.start);
   const newSession = useChatStore((s) => s.newSession);
   // 跨项目切换会话时以 runtime 的实际 cwd 为准
   const activeCwd = useChatStore((s) => (s.started ? s.cwd : undefined));
   const effectiveCwd = activeCwd ?? cwd;
   const listRef = useRef<HTMLDivElement>(null);
-  // 工作日志折叠的手动覆盖（点开历史轮后保持展开）；默认历史轮折叠、最新完成轮展开
+  // 工作日志折叠的手动覆盖（点开后保持展开）；有最终答复的完成轮默认聚合执行过程
   const [foldOverrides, setFoldOverrides] = useState<Record<number, boolean>>({});
+  useEffect(() => setFoldOverrides({}), [sessionId]);
 
   // user 消息稳定锚点（消息列表在会话内只追加，index 锚点稳定）
   const railAnchors = useMemo<RailAnchor[]>(() => {
@@ -118,9 +121,9 @@ export default function ChatPage() {
   const cacheMisses = useMemo(() => collectCacheMisses(messages), [messages]);
 
   // 按逻辑轮（user 消息边界，pi 的 agent run 是模型往返粒度、不能直接当轮边界）：
-  // 已完成的历史轮折叠工具卡为「已处理 Xs」行，完成的轮尾部挂聚合编辑卡。
-  // 折叠只藏工具卡，user/assistant 文本消息位置不动（rail 锚点 chat-msg-<index> 不受影响）。
-  const { fold, turnCards } = useMemo(() => {
+  // 已完成且已有最终答复的轮，把阶段文本和工具卡聚合成步骤摘要；中断/异常轮保持原样。
+  // user 与最终答复位置不动（rail 锚点 chat-msg-<index> 不受影响），编辑结果另挂聚合卡。
+  const { fold, collapsedProcessMessages, turnCards } = useMemo(() => {
     const logical = groupLogicalTurns(messages);
     const lastIndex = logical.length - 1;
     // 完成判定：后面已有新一轮，或不处于流式；且该轮没有仍在执行的工具（steer 插入
@@ -129,23 +132,22 @@ export default function ChatPage() {
       if (turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running')) return false;
       return j < lastIndex || !isStreaming;
     });
-    // 最新完成且含工具的轮保持展开（Codex 观感：历史轮折叠、最新一轮展开）
-    let latestExpanded = -1;
-    for (let j = lastIndex; j >= 0; j -= 1) {
-      if (completed[j] && logical[j].toolCallIds.length > 0) {
-        latestExpanded = j;
-        break;
-      }
-    }
     const hidden = new Set<string>();
-    const rows = new Map<string, { turn: number; startedAt?: number; endedAt?: number }>();
+    const rows = new Map<string, { turn: number; count: number; startedAt?: number; endedAt?: number }>();
+    const collapsedMessages = new Set<number>();
     logical.forEach((turn, j) => {
       if (!completed[j] || turn.toolCallIds.length === 0) return;
-      const collapsed = foldOverrides[j] ?? j !== latestExpanded;
+      const finalResponseIndex = turnFinalResponseIndex(messages, turn);
+      // 没有最终答复通常意味着中断或异常，保留过程内容，避免把唯一的解释藏起来。
+      if (finalResponseIndex === undefined) return;
+      const collapsed = foldOverrides[j] ?? true;
       if (!collapsed) return;
+      for (let i = turn.startIndex + 1; i < finalResponseIndex; i += 1) {
+        if (messages[i]?.role === 'assistant') collapsedMessages.add(i);
+      }
       const { startedAt, endedAt } = turnTimeRange(toolExecutions, turn.toolCallIds);
       turn.toolCallIds.forEach((id, k) => {
-        if (k === 0) rows.set(id, { turn: j, startedAt, endedAt });
+        if (k === 0) rows.set(id, { turn: j, count: turn.toolCallIds.length, startedAt, endedAt });
         else hidden.add(id);
       });
     });
@@ -168,6 +170,7 @@ export default function ChatPage() {
         rows,
         onExpand: (turn: number) => setFoldOverrides((prev) => ({ ...prev, [turn]: false })),
       } satisfies TurnFold,
+      collapsedProcessMessages: collapsedMessages,
       turnCards: cards,
     };
   }, [messages, toolExecutions, isStreaming, foldOverrides]);
@@ -208,7 +211,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="chat-page">
+    <div className={`chat-page${workspaceVisible ? ' workspace-visible' : ''}`}>
       {startError && <div className="error-banner">{startError}</div>}
       {starting && <div className="chat-empty">{t('chat.starting')}</div>}
 
@@ -227,6 +230,7 @@ export default function ChatPage() {
                 anchorId={m.role === 'user' ? `chat-msg-${i}` : undefined}
                 cacheMiss={cacheMisses.get(i)}
                 fold={fold}
+                processCollapsed={collapsedProcessMessages.has(i)}
               />
               {turnCards.get(i)?.map((toolCallIds, k) => (
                 <TurnChangesCard key={k} toolCallIds={toolCallIds} />

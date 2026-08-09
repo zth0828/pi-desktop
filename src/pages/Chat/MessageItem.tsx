@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Copy, FileText, GitFork, X } from 'lucide-react';
+import { Check, Copy, FileText, GitFork } from 'lucide-react';
 import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
 import { formatDuration, formatWorkDuration } from '../../lib/tool-display';
 import { hostApi } from '../../lib/host-api';
 import { useChatStore, type ChatMessage, type ContentBlock } from '../../stores/chat';
+import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
 
 /**
@@ -14,7 +15,7 @@ import { ToolCallCard } from './ToolCallCard';
  */
 export type TurnFold = {
   hidden: Set<string>;
-  rows: Map<string, { turn: number; startedAt?: number; endedAt?: number }>;
+  rows: Map<string, { turn: number; count: number; startedAt?: number; endedAt?: number }>;
   onExpand: (turn: number) => void;
 };
 
@@ -22,17 +23,23 @@ export type TurnFold = {
 function WorkLogRow({
   startedAt,
   endedAt,
+  count,
   onExpand,
 }: {
   startedAt?: number;
   endedAt?: number;
+  count: number;
   onExpand: () => void;
 }) {
   const { t } = useTranslation();
-  const duration = formatWorkDuration(startedAt, endedAt) ?? '0s';
+  const duration = formatWorkDuration(startedAt, endedAt);
   return (
     <button className="work-log-row" data-testid="work-log-row" onClick={onExpand}>
-      <span className="work-log-title">{t('chat.workLog.title', { duration })}</span>
+      <span className="work-log-title">
+        {duration
+          ? t('chat.workLog.title', { count, duration })
+          : t('chat.workLog.titleNoDuration', { count })}
+      </span>
       <span className="work-log-chevron">▸</span>
     </button>
   );
@@ -91,6 +98,7 @@ function AssistantBlock({
           <WorkLogRow
             startedAt={row.startedAt}
             endedAt={row.endedAt}
+            count={row.count}
             onExpand={() => fold.onExpand(row.turn)}
           />
         );
@@ -113,6 +121,7 @@ export function MessageItem({
   anchorId,
   cacheMiss,
   fold,
+  processCollapsed = false,
 }: {
   message: ChatMessage;
   anchorId?: string;
@@ -120,20 +129,14 @@ export function MessageItem({
   cacheMiss?: CacheMiss;
   /** 工作日志折叠指令（仅 assistant 消息内的工具卡消费） */
   fold?: TurnFold;
+  /** 已有最终答复时收起该轮的阶段文本，只在首个工具位置保留摘要行。 */
+  processCollapsed?: boolean;
 }) {
   const { t } = useTranslation();
   const forkFrom = useChatStore((s) => s.forkFrom);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const [copied, setCopied] = useState<'text' | 'markdown' | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  useEffect(() => {
-    if (!previewImage) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPreviewImage(null);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [previewImage]);
   if (message.role === 'user') {
     const text = message.content
       .filter((b) => b.type === 'text')
@@ -167,12 +170,7 @@ export function MessageItem({
           })}
           {text}
         </div>
-        {previewImage && (
-          <div className="image-lightbox" data-testid="image-lightbox" role="dialog" aria-label={t('chat.imagePreview')} onClick={() => setPreviewImage(null)}>
-            <button className="image-lightbox-close" title={t('chat.closeImagePreview')} aria-label={t('chat.closeImagePreview')} onClick={() => setPreviewImage(null)}><X size={18} /></button>
-            <img src={previewImage} alt={t('chat.imagePreview')} onClick={(event) => event.stopPropagation()} />
-          </div>
-        )}
+        {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
       </div>
     );
   }
@@ -197,6 +195,15 @@ export function MessageItem({
     .join('\n\n')
     .trim();
   const plainText = message.content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
+  if (processCollapsed) {
+    const summaryBlock = message.content.find((block) => block.type === 'toolCall' && block.id && fold?.rows.has(block.id));
+    if (!summaryBlock) return null;
+    return (
+      <div className="message message-assistant message-process-summary" data-testid="message-assistant">
+        <AssistantBlock block={summaryBlock} fold={fold} />
+      </div>
+    );
+  }
   const copy = async (kind: 'text' | 'markdown') => {
     const value = kind === 'text' ? plainText : markdownText;
     if (!value) return;

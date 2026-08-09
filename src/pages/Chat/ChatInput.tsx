@@ -13,6 +13,7 @@ import { filterFiles } from '../../lib/file-search';
 import { navigateToPage } from '../../lib/app-navigation';
 import { cacheHitRate, formatCost, formatHitRate } from '../../lib/usage-stats';
 import { useChatStore, type ChatMessage } from '../../stores/chat';
+import { ImageLightbox } from './ImageLightbox';
 import { QueueList } from './QueueList';
 
 type StagedImage = { data: string; mediaType: string; previewUrl: string };
@@ -114,6 +115,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const { t } = useTranslation();
   const [value, setValue] = useState('');
   const [images, setImages] = useState<StagedImage[]>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [commands, setCommands] = useState<PiCommandRow[]>([]);
   const [selected, setSelected] = useState(0);
@@ -728,12 +730,20 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
           <div className="staged-images" data-testid="staged-images">
             {images.map((img, i) => (
               <span key={i} className="staged-image">
-                <img src={img.previewUrl} alt="" />
+                <button
+                  className="staged-image-preview"
+                  data-testid="staged-image-preview"
+                  aria-label={t('chat.imagePreview')}
+                  onClick={() => setPreviewImage(img.previewUrl)}
+                >
+                  <img src={img.previewUrl} alt={t('chat.imagePreview')} />
+                </button>
                 <button
                   className="staged-remove"
+                  aria-label={t('chat.removeAttachment')}
                   onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
                 >
-                  ×
+                  <span aria-hidden="true">×</span>
                 </button>
               </span>
             ))}
@@ -854,6 +864,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
           )}
         </div>
       </div>
+      {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
     </div>
   );
 }

@@ -153,7 +153,10 @@
       "review": "审核"
     },
     "workLog": {
-      "title": "已处理 {{duration}}"
+      "title_one": "已完成 {{count}} 个步骤 · {{duration}}",
+      "title_other": "已完成 {{count}} 个步骤 · {{duration}}",
+      "titleNoDuration_one": "已完成 {{count}} 个步骤",
+      "titleNoDuration_other": "已完成 {{count}} 个步骤"
     },
     "stopLength": "回复因达到长度上限而停止。",
     "expandTools": "展开全部工具",
@@ -171,6 +174,7 @@
       }
     },
     "attachFile": "添加图片或文本文件",
+    "removeAttachment": "移除附件",
     "model": "选择模型",
     "tokenUsage": "Token 使用情况",
     "currentModelUsage": "当前模型",
@@ -546,6 +550,8 @@
     "resize": "调整工作台宽度",
     "toggle": "切换文件工作台",
     "close": "关闭文件工作台",
+    "closeAll": "关闭全部文件预览",
+    "closeFile": "关闭 {{name}}",
     "files": "文件",
     "filter": "筛选文件…",
     "selectFile": "选择文件以预览",

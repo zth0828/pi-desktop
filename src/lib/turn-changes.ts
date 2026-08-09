@@ -10,6 +10,8 @@ import { parseDiffLines, resultDetails } from './tool-display';
  * 渲染层统一按 user 消息位置归组（折叠/聚合卡的共同口径）。
  */
 export type LogicalTurn = {
+  /** 该轮 user 消息的下标 */
+  startIndex: number;
   /** 该轮内的 toolCall block id（按消息顺序） */
   toolCallIds: string[];
   /** 该轮最后一条消息的下标（聚合编辑卡插入点） */
@@ -22,7 +24,7 @@ export function groupLogicalTurns(messages: ChatMessage[]): LogicalTurn[] {
   let current: LogicalTurn | null = null;
   messages.forEach((m, i) => {
     if (m.role === 'user') {
-      current = { toolCallIds: [], endIndex: i };
+      current = { startIndex: i, toolCallIds: [], endIndex: i };
       turns.push(current);
       return;
     }
@@ -33,6 +35,21 @@ export function groupLogicalTurns(messages: ChatMessage[]): LogicalTurn[] {
     }
   });
   return turns;
+}
+
+/**
+ * 一轮完成后可视为最终答复的 assistant 消息：包含非空文本，且自身不再发起工具调用。
+ * 壳只依赖 pi 的原始消息结构判断，不分析或改写模型语义。
+ */
+export function turnFinalResponseIndex(messages: ChatMessage[], turn: LogicalTurn): number | undefined {
+  for (let i = turn.endIndex; i > turn.startIndex; i -= 1) {
+    const message = messages[i];
+    if (message.role !== 'assistant') continue;
+    const hasText = message.content.some((block) => block.type === 'text' && block.text?.trim());
+    const hasToolCall = message.content.some((block) => block.type === 'toolCall');
+    if (hasText && !hasToolCall) return i;
+  }
+  return undefined;
 }
 
 /** 一轮的耗时范围：该轮工具执行的 min(startedAt) → max(endedAt)；无时间戳则为空 */

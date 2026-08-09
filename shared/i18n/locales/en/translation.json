@@ -153,7 +153,10 @@
       "review": "Review"
     },
     "workLog": {
-      "title": "Worked for {{duration}}"
+      "title_one": "Completed {{count}} step · {{duration}}",
+      "title_other": "Completed {{count}} steps · {{duration}}",
+      "titleNoDuration_one": "Completed {{count}} step",
+      "titleNoDuration_other": "Completed {{count}} steps"
     },
     "stopLength": "Response stopped: length limit reached.",
     "expandTools": "Expand all tools",
@@ -171,6 +174,7 @@
       }
     },
     "attachFile": "Attach image or text file",
+    "removeAttachment": "Remove attachment",
     "model": "Select model",
     "tokenUsage": "Token usage",
     "currentModelUsage": "Current model",
@@ -546,6 +550,8 @@
     "resize": "Resize workspace panel",
     "toggle": "Toggle workspace panel",
     "close": "Close workspace panel",
+    "closeAll": "Close all file previews",
+    "closeFile": "Close {{name}}",
     "files": "Files",
     "filter": "Filter files…",
     "selectFile": "Select a file to preview",
