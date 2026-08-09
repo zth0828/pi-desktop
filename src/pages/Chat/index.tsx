@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, MoreHorizontal, Pencil, X } from 'lucide-react';
+import { Check, MoreHorizontal, PanelRight, Pencil, X } from 'lucide-react';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
 import { groupLogicalTurns, turnTimeRange } from '../../lib/turn-changes';
@@ -20,6 +20,9 @@ function SessionTitleBar() {
   const toggleToolsExpanded = useChatStore((s) => s.toggleToolsExpanded);
   const setTreeOpen = useChatStore((s) => s.setTreeOpen);
   const setReviewOpen = useChatStore((s) => s.setReviewOpen);
+  const workspaceOpen = useChatStore((s) => s.workspaceOpen);
+  const reviewOpen = useChatStore((s) => s.reviewOpen);
+  const setWorkspaceOpen = useChatStore((s) => s.setWorkspaceOpen);
   const started = useChatStore((s) => s.started);
   const sessionId = useChatStore((s) => s.sessionId);
   const [name, setName] = useState('');
@@ -63,6 +66,15 @@ function SessionTitleBar() {
         )}
       </div>
       <div className="session-menu" ref={menuRef}>
+        <button
+          className={`icon-button${workspaceOpen || reviewOpen ? ' active' : ''}`}
+          data-testid="workspace-toggle"
+          title={t('workspace.toggle')}
+          aria-pressed={workspaceOpen || reviewOpen}
+          onClick={() => setWorkspaceOpen(!(workspaceOpen || reviewOpen))}
+        >
+          <PanelRight size={17} />
+        </button>
         <button className="icon-button" data-testid="session-menu" title={t('chat.sessionMenu')} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal size={18} /></button>
         {menuOpen && (
         <div className="session-menu-popover">

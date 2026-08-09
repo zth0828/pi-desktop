@@ -15,6 +15,7 @@ import { sessionsApi } from './sessions-api';
 import { settingsApi } from './settings-api';
 import { shellApi } from './shell-api';
 import { skillsApi } from './skills-api';
+import { workspaceApi } from './workspace-api';
 
 export function createHostServices(): HostServiceRegistry {
   return {
@@ -32,5 +33,6 @@ export function createHostServices(): HostServiceRegistry {
     dialog: dialogApi,
     notify: notifyApi,
     review: reviewApi,
+    workspace: workspaceApi,
   };
 }

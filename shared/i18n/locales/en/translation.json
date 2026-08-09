@@ -172,6 +172,8 @@
     "attachFile": "Attach image or text file",
     "model": "Select model",
     "tokenUsage": "Token usage",
+    "currentModelUsage": "Current model",
+    "sessionTotals": "Whole session",
     "contextUsed": "Current context",
     "contextWindow": "Context window",
     "maxOutputTokens": "Max output tokens",
@@ -276,6 +278,9 @@
     "probeUnavailable": "Unavailable",
     "probeCache": "Reports cache",
     "probeNoCache": "No cache stats",
+    "probeContext": "Detected context: {{count}}",
+    "customContextWindow": "Context window",
+    "customMaxTokens": "Max output tokens",
     "cancel": "Cancel",
     "configured": "Configured",
     "notConfigured": "Not configured",
@@ -528,6 +533,22 @@
     "confirmFile": "Revert all changes to {{path}}? The file will be restored to its state when this session started.",
     "confirmHunk": "Revert this hunk in {{path}}?",
     "revertFailed": "Revert failed: {{error}}",
-    "fallbackHint": "Not a git repository — showing a read-only summary of files changed by the agent. Revert is unavailable."
+    "fallbackHint": "Not a git repository — showing a read-only summary of files changed by the agent. Revert is unavailable.",
+    "split": "Side-by-side diff",
+    "unified": "Unified diff",
+    "showFiles": "Show changed files",
+    "hideFiles": "Hide changed files"
+  },
+  "workspace": {
+    "toggle": "Toggle workspace panel",
+    "close": "Close workspace panel",
+    "files": "Files",
+    "filter": "Filter files…",
+    "selectFile": "Select a file to preview",
+    "loading": "Loading preview…",
+    "readFailed": "This file could not be read.",
+    "binary": "Binary file · {{size}} bytes",
+    "tooLarge": "Preview unavailable · {{size}} bytes",
+    "truncated": "Preview truncated at 1 MB"
   }
 }

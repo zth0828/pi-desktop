@@ -160,9 +160,11 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
   const [api, setApi] = useState<string>(CUSTOM_API_TYPES[0]);
   const [apiKey, setApiKey] = useState('');
   const [modelIds, setModelIds] = useState('');
+  const [contextWindow, setContextWindow] = useState('');
+  const [maxTokens, setMaxTokens] = useState('8192');
   const [message, setMessage] = useState<string>();
   const [probing, setProbing] = useState(false);
-  const [probeResult, setProbeResult] = useState<{ models: string[]; protocols: Array<{ api: string; available: boolean; cacheStats: boolean; error?: string }>; recommendedApi?: string }>();
+  const [probeResult, setProbeResult] = useState<{ models: string[]; modelDetails?: Array<{ id: string; contextWindow?: number }>; protocols: Array<{ api: string; available: boolean; cacheStats: boolean; error?: string }>; recommendedApi?: string }>();
 
   const probe = async () => {
     setProbing(true);
@@ -171,6 +173,8 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       const result = await hostApi.providers.probe({ baseUrl: baseUrl.trim(), apiKey: apiKey.trim() || undefined, model: modelIds.split(',')[0]?.trim() || undefined });
       setProbeResult(result);
       if (result.models.length > 0) setModelIds(result.models.join(', '));
+      const detectedContext = result.modelDetails?.find((model) => model.contextWindow)?.contextWindow;
+      if (detectedContext) setContextWindow(String(detectedContext));
       if (result.recommendedApi) setApi(result.recommendedApi);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -184,7 +188,11 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
-      .map((mid) => ({ id: mid }));
+      .map((mid) => ({
+        id: mid,
+        ...(Number(contextWindow) > 0 ? { contextWindow: Number(contextWindow) } : {}),
+        ...(Number(maxTokens) > 0 ? { maxTokens: Number(maxTokens) } : {}),
+      }));
     const result = await hostApi.providers.addCustom({
       id: id.trim(),
       baseUrl: baseUrl.trim(),
@@ -246,6 +254,12 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
               {protocol.available && <span className={protocol.cacheStats ? 'probe-ok' : 'hint'}>{protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')}</span>}
             </div>
           ))}
+          {probeResult.modelDetails?.filter((model) => model.contextWindow).map((model) => (
+            <div className="probe-result-row" data-testid="probe-model-context" key={`context-${model.id}`}>
+              <span>{model.id}</span>
+              <span className="probe-ok">{t('models.probeContext', { count: model.contextWindow?.toLocaleString() })}</span>
+            </div>
+          ))}
         </div>
       )}
       <input
@@ -253,6 +267,10 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
         value={modelIds}
         onChange={(e) => setModelIds(e.target.value)}
       />
+      <div className="form-row">
+        <input data-testid="custom-context-window" inputMode="numeric" placeholder={t('models.customContextWindow')} value={contextWindow} onChange={(e) => setContextWindow(e.target.value.replace(/\D/g, ''))} />
+        <input data-testid="custom-max-tokens" inputMode="numeric" placeholder={t('models.customMaxTokens')} value={maxTokens} onChange={(e) => setMaxTokens(e.target.value.replace(/\D/g, ''))} />
+      </div>
       <div className="actions">
         <button className="primary" disabled={!id.trim() || !baseUrl.trim() || !modelIds.trim()} onClick={() => void submit()}>
           {t('models.saveCustom')}

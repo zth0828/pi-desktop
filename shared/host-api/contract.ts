@@ -78,12 +78,45 @@ export type PiRuntimePromptPayload = {
 export type PiRuntimeQueueKind = 'steering' | 'followUp';
 export type PiRuntimeQueueItemPayload = { kind: PiRuntimeQueueKind; index: number };
 
-export type PiRuntimeModelInfo = { provider: string; id: string; name?: string; reasoning?: boolean; contextWindow?: number };
+export type PiRuntimeModelInfo = {
+  provider: string;
+  id: string;
+  name?: string;
+  reasoning?: boolean;
+  contextWindow?: number;
+  /** Maximum generated tokens for one response. This is not the context window. */
+  maxTokens?: number;
+};
 
 export type PiRuntimeContextUsage = {
   tokens: number | null;
   contextWindow: number;
   percent: number | null;
+};
+
+export type PiRuntimeUsageTurn = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  cost: number;
+  provider?: string;
+  model?: string;
+};
+
+/** Active context is model-scoped; totals are canonical whole-session pi stats. */
+export type PiRuntimeUsageResult = {
+  context: PiRuntimeContextUsage | null;
+  model?: PiRuntimeModelInfo;
+  session: PiRuntimeUsageTurn;
+  latestTurn: PiRuntimeUsageTurn | null;
+};
+
+export type PiRuntimeModelUpdateResult = HostSuccess & {
+  model?: PiRuntimeModelInfo;
+  thinkingLevel?: string;
+  availableThinkingLevels?: string[];
+  contextUsage?: PiRuntimeContextUsage;
 };
 
 export type PiRuntimeStateResult = {
@@ -216,6 +249,28 @@ export type ReviewRevertFilePayload = { path: string };
 /** hunk 级回滚：渲染层把 diff 解析成 hunk、重建只含该 hunk 的合法 unified diff，main 侧 git apply -R */
 export type ReviewRevertHunkPayload = { path: string; patch: string };
 
+// —— workspace：活动 runtime cwd 内的安全文件浏览与预览 ——
+
+export type WorkspaceEntry = {
+  name: string;
+  path: string;
+  kind: 'file' | 'directory';
+  size?: number;
+};
+export type WorkspaceListPayload = { path?: string };
+export type WorkspaceListResult = { path: string; entries: WorkspaceEntry[] };
+export type WorkspaceReadPayload = { path: string };
+export type WorkspaceReadResult = {
+  path: string;
+  name: string;
+  size: number;
+  kind: 'text' | 'image' | 'binary';
+  mimeType?: string;
+  text?: string;
+  data?: string;
+  truncated: boolean;
+};
+
 // —— settings：壳自身设置（electron-store 持久化）——
 
 export type SettingsSnapshot = {
@@ -302,6 +357,7 @@ export type PiProviderProbeProtocol = {
 };
 export type PiProviderProbeResult = {
   models: string[];
+  modelDetails?: Array<{ id: string; contextWindow?: number }>;
   protocols: PiProviderProbeProtocol[];
   recommendedApi?: string;
 };
@@ -544,6 +600,7 @@ export type HostApiContract = {
     start: (payload: PiRuntimeStartPayload) => PiRuntimeStateResult;
     getState: () => PiRuntimeStateResult | null;
     getContextUsage: () => PiRuntimeContextUsage | null;
+    getUsage: () => PiRuntimeUsageResult | null;
     /** 生成中调用按 payload.behavior 排队：默认 followUp（排队），'steer' = 当前轮插入（§4.1）。 */
     prompt: (payload: PiRuntimePromptPayload) => HostSuccess;
     abort: () => HostSuccess;
@@ -560,8 +617,8 @@ export type HostApiContract = {
     getTree: () => PiRuntimeTreeResult;
     /** 同会话文件内跳分支（session.navigateTree，TUI /tree 语义）。 */
     navigateTree: (payload: PiRuntimeNavigatePayload) => PiRuntimeNavigateResult;
-    setThinkingLevel: (payload: { level: string }) => HostSuccess;
-    setModel: (payload: { provider: string; id: string }) => HostSuccess;
+    setThinkingLevel: (payload: { level: string }) => PiRuntimeModelUpdateResult;
+    setModel: (payload: { provider: string; id: string }) => PiRuntimeModelUpdateResult;
     /** /name <text>：重命名当前会话（session.setSessionName；返回 pi 规范化后的名字）。 */
     setSessionName: (payload: { name: string }) => HostSuccess & { name?: string };
     /** /session：当前会话信息（getSessionStats + 会话名）。 */
@@ -618,6 +675,10 @@ export type HostApiContract = {
   piFiles: {
     /** @ 补全候选：cwd 下递归列文件（相对路径，排除 .git/node_modules，上限 200 条）。 */
     list: (payload: PiFileListPayload) => PiFileListResult;
+  };
+  workspace: {
+    listChildren: (payload: WorkspaceListPayload) => WorkspaceListResult;
+    readFile: (payload: WorkspaceReadPayload) => WorkspaceReadResult;
   };
   piSkills: {
     /** 活动 runtime 的 skills（resourceLoader.getSkills()）；runtime 未启动返回空列表。 */

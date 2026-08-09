@@ -3,7 +3,7 @@
 // agent 新建文件（untracked）纳入清单；非 git 目录降级只读汇总。
 import { execFileSync } from 'node:child_process';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -38,6 +38,12 @@ test.beforeAll(async () => {
 
   // edit 工具 E2E 的目标文件（mock 会把 alpha → beta）；git 仓库含一个初始 commit
   await writeFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
+  await mkdir(path.join(repoWorkspace, 'src'));
+  await writeFile(path.join(repoWorkspace, 'src', 'preview.ts'), 'export const answer = 42;\n');
+  await writeFile(
+    path.join(repoWorkspace, 'preview.png'),
+    Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'),
+  );
   git(repoWorkspace, ['init']);
   git(repoWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '.']);
   git(repoWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'init']);
@@ -120,6 +126,9 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
   await expect(diff).toBeVisible();
   await expect(diff.locator('.diff-del')).toContainText('alpha');
   await expect(diff.locator('.diff-add')).toContainText('beta');
+  await expect(panel.getByTestId('diff-split')).toBeVisible();
+  await panel.getByTestId('review-toggle-mode').click();
+  await expect(panel.getByTestId('diff-unified')).toBeVisible();
 
   // 文件级回滚：确认对话框 → git apply -R → 磁盘复原、清单清空
   await fileRow.getByTestId('revert-file').click();
@@ -129,6 +138,28 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
   await expect(panel.getByTestId('review-file')).toHaveCount(0, { timeout: 30_000 });
   const content = await readFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'utf-8');
   expect(content).toBe('alpha\ngamma\n');
+});
+
+test('右侧工作台：按需展开目录并预览文本和图片', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('workspace-toggle').click();
+  const panel = page.getByTestId('review-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByTestId('workspace-tree')).toBeVisible();
+
+  await panel.getByTestId('workspace-directory').filter({ hasText: 'src' }).click();
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.ts' }).click();
+  await expect(panel.getByTestId('workspace-text-preview')).toContainText('answer = 42');
+
+  await panel.getByTestId('workspace-files-tab').click();
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.png' }).click();
+  await expect(panel.getByTestId('workspace-image-preview').locator('img')).toBeVisible();
+
+  await panel.getByTestId('workspace-close').click();
+  await expect(panel).toBeHidden();
 });
 
 test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文件删除', async ({ launchElectronApp }) => {

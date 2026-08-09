@@ -4,14 +4,14 @@ import { ArrowUp, AtSign, Brain, ChevronDown, CircleGauge, Folder, ListPlus, Pap
 import type {
   PiCommandRow,
   PiModelRow,
-  PiRuntimeContextUsage,
   PiRuntimeSessionInfo,
+  PiRuntimeUsageResult,
 } from '@shared/host-api/contract';
 import { formatFileBlock, isProbablyBinary, MAX_FILE_TEXT_BYTES } from '@shared/file-references';
 import { hostApi } from '../../lib/host-api';
 import { filterFiles } from '../../lib/file-search';
 import { navigateToPage } from '../../lib/app-navigation';
-import { cacheHitRate, formatCost, formatHitRate, summarizeUsage } from '../../lib/usage-stats';
+import { cacheHitRate, formatCost, formatHitRate } from '../../lib/usage-stats';
 import { useChatStore, type ChatMessage } from '../../stores/chat';
 import { QueueList } from './QueueList';
 
@@ -123,7 +123,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const messages = useChatStore((s) => s.messages);
   const [models, setModels] = useState<PiModelRow[]>([]);
   const [modelKey, setModelKey] = useState('');
-  const [contextUsage, setContextUsage] = useState<PiRuntimeContextUsage | null>(null);
+  const [usage, setUsage] = useState<PiRuntimeUsageResult | null>(null);
   const [usageOpen, setUsageOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<PiRuntimeSessionInfo | null>(null);
@@ -168,7 +168,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
       void hostApi.providers.listModels().then((r) => setModels(r.models)).catch(() => {});
       void hostApi.piSkills.list().then((r) => setSkills(r.skills)).catch(() => setSkills([]));
       const refreshUsage = () => {
-        void hostApi.piRuntime.getContextUsage().then(setContextUsage).catch(() => setContextUsage(null));
+        void hostApi.piRuntime.getUsage().then(setUsage).catch(() => setUsage(null));
       };
       refreshUsage();
       const timer = window.setInterval(refreshUsage, 1000);
@@ -194,9 +194,10 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
     textareaRef.current?.focus();
   }, [inputDraft]);
 
-  const usageTotals = summarizeUsage(messages);
+  const contextUsage = usage?.context ?? null;
+  const usageTotals = usage?.session ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
   const totalHitRate = cacheHitRate(usageTotals);
-  const lastTurnHitRate = usageTotals.lastTurn ? cacheHitRate(usageTotals.lastTurn) : null;
+  const lastTurnHitRate = usage?.latestTurn ? cacheHitRate(usage.latestTurn) : null;
   const cacheStatsAvailable = usageTotals.cacheRead + usageTotals.cacheWrite > 0;
   const selectedModel = models.find((candidate) => `${candidate.provider}/${candidate.id}` === modelKey);
   const reasoning = Boolean(selectedModel?.reasoning ?? model?.reasoning);
@@ -208,7 +209,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
     if (group) group.push(m);
     else modelGroups.set(m.provider, [m]);
   }
-  const contextWindow = selectedModel?.contextWindow
+  const contextWindow = model?.contextWindow ?? selectedModel?.contextWindow
     ?? (contextUsage?.contextWindow && contextUsage.contextWindow > 0 ? contextUsage.contextWindow : null);
   const contextPercent = contextUsage?.tokens != null && contextWindow
     ? (contextUsage.tokens / contextWindow) * 100
@@ -229,8 +230,8 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
         setModelKey(previous);
         return;
       }
-      const usage = await hostApi.piRuntime.getContextUsage();
-      setContextUsage(usage);
+      useChatStore.getState().applyModelUpdate(result);
+      setUsage(await hostApi.piRuntime.getUsage());
     });
   };
 
@@ -676,7 +677,12 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
               data-testid="thinking-level-select"
               aria-label={t('chat.thinkingLevel')}
               value={thinkingLevel}
-              onChange={(e) => { void hostApi.piRuntime.setThinkingLevel(e.target.value); }}
+              onChange={(e) => {
+                void hostApi.piRuntime.setThinkingLevel(e.target.value).then((result) => {
+                  useChatStore.getState().applyModelUpdate(result);
+                });
+              }}
+              disabled={isStreaming}
             >
               {availableThinkingLevels.map((level) => <option key={level} value={level}>{t(`chat.thinkingLevels.${level}`, { defaultValue: level })}</option>)}
             </select>
@@ -775,10 +781,12 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
             {usageOpen && (
               <div className="usage-popover" role="dialog" data-testid="token-usage-popover">
                 <div className="usage-popover-title">{t('chat.tokenUsage')}</div>
+                <div className="usage-section-label">{t('chat.currentModelUsage')}</div>
                 <div className="usage-row"><span>{t('chat.contextUsed')}</span><strong>{formatTokens(contextUsage?.tokens)}</strong></div>
-                <div className="usage-row"><span>{t('chat.contextWindow')}</span><strong>{formatTokens(contextWindow)}</strong></div>
-                {selectedModel?.maxTokens != null && <div className="usage-row"><span>{t('chat.maxOutputTokens')}</span><strong>{formatTokens(selectedModel.maxTokens)}</strong></div>}
-                <div className="usage-row"><span>{t('chat.inputTokens')}</span><strong>{formatTokens(usageTotals.input)}</strong></div>
+                <div className="usage-row" data-testid="usage-context-window"><span>{t('chat.contextWindow')}</span><strong>{formatTokens(contextWindow)}</strong></div>
+                {(model?.maxTokens ?? selectedModel?.maxTokens) != null && <div className="usage-row" data-testid="usage-max-output"><span>{t('chat.maxOutputTokens')}</span><strong>{formatTokens(model?.maxTokens ?? selectedModel?.maxTokens)}</strong></div>}
+                <div className="usage-section-label">{t('chat.sessionTotals')}</div>
+                <div className="usage-row" data-testid="usage-session-input"><span>{t('chat.inputTokens')}</span><strong>{formatTokens(usageTotals.input)}</strong></div>
                 <div className="usage-row"><span>{t('chat.outputTokens')}</span><strong>{formatTokens(usageTotals.output)}</strong></div>
                 {(usageTotals.cacheRead > 0 || usageTotals.cacheWrite > 0) && (
                   <>

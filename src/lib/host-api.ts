@@ -22,6 +22,7 @@ export const hostApi = {
     start: (cwd: string) => invokeHost('piRuntime', 'start', { cwd }),
     getState: () => invokeHost('piRuntime', 'getState'),
     getContextUsage: () => invokeHost('piRuntime', 'getContextUsage'),
+    getUsage: () => invokeHost('piRuntime', 'getUsage'),
     prompt: (text: string, images?: unknown[], behavior?: 'steer' | 'followUp') =>
       invokeHost('piRuntime', 'prompt', { text, images, behavior }),
     abort: () => invokeHost('piRuntime', 'abort'),
@@ -145,6 +146,10 @@ export const hostApi = {
     revertFile: (path: string) => invokeHost('review', 'revertFile', { path }),
     revertHunk: (path: string, patch: string) =>
       invokeHost('review', 'revertHunk', { path, patch }),
+  },
+  workspace: {
+    listChildren: (path = '') => invokeHost('workspace', 'listChildren', { path }),
+    readFile: (path: string) => invokeHost('workspace', 'readFile', { path }),
   },
   dialog: {
     openDirectory: (title?: string, defaultPath?: string) =>

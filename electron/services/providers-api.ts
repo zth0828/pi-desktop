@@ -183,6 +183,7 @@ export const providersApi = {
       ) || Object.values(record).some(hasCache);
     };
     const models: string[] = [];
+    const modelDetails: Array<{ id: string; contextWindow?: number }> = [];
     try {
       const response = await fetch(`${base}/models`, { headers, signal: AbortSignal.timeout(9000) });
       if (response.ok) {
@@ -194,6 +195,31 @@ export const providersApi = {
         }
       }
     } catch { /* each protocol result reports its own failure */ }
+    // LM Studio's OpenAI-compatible /models currently omits loaded context metadata.
+    // Its native endpoint exposes both the model maximum and the active instance value.
+    try {
+      const nativeBase = base.replace(/\/v1$/, '');
+      const response = await fetch(`${nativeBase}/api/v1/models`, {
+        headers,
+        signal: AbortSignal.timeout(4000),
+      });
+      if (response.ok) {
+        const json = await readJson(response);
+        const rows = Array.isArray(json.models) ? json.models : Array.isArray(json.data) ? json.data : [];
+        for (const raw of rows) {
+          if (!raw || typeof raw !== 'object') continue;
+          const row = raw as Record<string, unknown>;
+          const id = String(row.key ?? row.id ?? row.model ?? '');
+          if (!id) continue;
+          const instances = Array.isArray(row.loaded_instances) ? row.loaded_instances : [];
+          const first = instances[0] as { config?: { context_length?: unknown } } | undefined;
+          const loaded = Number(first?.config?.context_length ?? 0);
+          const maximum = Number(row.max_context_length ?? 0);
+          modelDetails.push({ id, ...(loaded > 0 || maximum > 0 ? { contextWindow: loaded || maximum } : {}) });
+          if (!models.includes(id)) models.push(id);
+        }
+      }
+    } catch { /* Native metadata is optional and only available on LM Studio. */ }
     const model = payload.model || models[0] || 'test-model';
     const protocols: PiProviderProbeResult['protocols'] = [];
     const requests: Array<{ api: string; url: string; body: Record<string, unknown>; headers?: Record<string, string> }> = [
@@ -218,7 +244,7 @@ export const providersApi = {
     }
     const recommendedApi = protocols.find((p) => p.available && p.cacheStats)?.api
       ?? protocols.find((p) => p.available)?.api;
-    return { models, protocols, recommendedApi };
+    return { models, modelDetails, protocols, recommendedApi };
   },
 
   getCompaction: async (): Promise<PiCompactionSettings> => {

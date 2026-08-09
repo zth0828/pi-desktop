@@ -2,7 +2,12 @@
 // Inspired by ClawX: src/stores/chat.ts 的 reducer 思路（按 pi 事件模型重写，§5.2）。
 import { create } from 'zustand';
 import type { CompactionReason, PiRuntimeEventEnvelope } from '@shared/pi-event-map';
-import type { PiRuntimeStateResult, PiUiRequestPayload } from '@shared/host-api/contract';
+import type {
+  PiRuntimeModelInfo,
+  PiRuntimeModelUpdateResult,
+  PiRuntimeStateResult,
+  PiUiRequestPayload,
+} from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { reportRunCompleted, reportUiRequest } from '../lib/notify';
@@ -40,7 +45,7 @@ type ChatState = {
   cwd?: string;
   sessionId?: string;
   generation: number;
-  model?: { provider: string; id: string; name?: string; reasoning?: boolean; contextWindow?: number };
+  model?: PiRuntimeModelInfo;
   thinkingLevel: string;
   availableThinkingLevels: string[];
   isStreaming: boolean;
@@ -55,6 +60,8 @@ type ChatState = {
   treeOpen: boolean;
   /** Review 面板（会话改动评审）开关 */
   reviewOpen: boolean;
+  /** Workspace 文件预览面板开关（与 Review 共用右侧工作台）。 */
+  workspaceOpen: boolean;
   /** fork/跳分支后回填输入框的文本（nonce 保证同文本也触发） */
   inputDraft: { text: string; nonce: number } | null;
   /** 扩展 UI 请求队列（ctx.ui.confirm/select/input）；同一时间通常只有一个，设计上按队列 */
@@ -73,6 +80,7 @@ type ChatState = {
   toggleToolsExpanded: () => void;
   setTreeOpen: (open: boolean) => void;
   setReviewOpen: (open: boolean) => void;
+  setWorkspaceOpen: (open: boolean) => void;
   /** 消息级 fork：从指定 user 消息分叉新会话（sessionReplaced 事件负责刷新列表） */
   forkFrom: (entryId: string) => Promise<void>;
   /** 跳分支：同会话文件内移动 leaf（navigateTree 后 main 推全量状态刷新） */
@@ -80,6 +88,7 @@ type ChatState = {
   /** 扩展 UI 对话框的用户响应：出队 + 回传 main（value 缺省 = 取消） */
   respondUi: (requestId: string, value?: string | boolean) => Promise<void>;
   applyState: (state: PiRuntimeStateResult) => void;
+  applyModelUpdate: (result: PiRuntimeModelUpdateResult) => void;
   applyEnvelope: (envelope: PiRuntimeEventEnvelope) => void;
   /** compaction 后从 runtime 重读 session 消息（pi 已重建上下文，本地事件累积列表失效） */
   refreshMessages: () => Promise<void>;
@@ -102,6 +111,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   queue: { steering: [], followUp: [] },
   treeOpen: false,
   reviewOpen: false,
+  workspaceOpen: false,
   inputDraft: null,
   uiRequests: [],
 
@@ -154,7 +164,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setTreeOpen: (open) => set({ treeOpen: open }),
 
-  setReviewOpen: (open) => set({ reviewOpen: open }),
+  setReviewOpen: (open) => set({ reviewOpen: open, ...(open ? { workspaceOpen: false } : {}) }),
+
+  setWorkspaceOpen: (open) => set({ workspaceOpen: open, ...(open ? { reviewOpen: false } : {}) }),
 
   forkFrom: async (entryId) => {
     const result = await hostApi.piRuntime.fork(entryId);
@@ -200,6 +212,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       queue: { steering: [], followUp: [] },
       uiRequests: [],
     });
+  },
+
+  applyModelUpdate: (result) => {
+    if (!result.success) return;
+    set((state) => ({
+      model: result.model ?? state.model,
+      thinkingLevel: result.thinkingLevel ?? state.thinkingLevel,
+      availableThinkingLevels:
+        result.availableThinkingLevels ?? state.availableThinkingLevels,
+    }));
   },
 
   refreshEntryIds: async () => {

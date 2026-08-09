@@ -43,6 +43,58 @@ export function parseUnifiedDiff(diff: string): ParsedFileDiff | null {
 
 export type ReviewDiffLineKind = 'add' | 'del' | 'context' | 'marker';
 
+export type SplitDiffCell = {
+  kind: 'add' | 'del' | 'context' | 'empty';
+  lineNumber: number | null;
+  content: string;
+};
+export type SplitDiffRow = { old: SplitDiffCell; next: SplitDiffCell };
+
+function hunkStarts(header: string): { old: number; next: number } {
+  const match = header.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+  return { old: Number(match?.[1] ?? 1), next: Number(match?.[2] ?? 1) };
+}
+
+/** Align delete/add runs into two columns while preserving context line numbers. */
+export function buildSplitDiffRows(hunk: ReviewHunk): SplitDiffRow[] {
+  const rows: SplitDiffRow[] = [];
+  let { old: oldLine, next: nextLine } = hunkStarts(hunk.header);
+  for (let index = 0; index < hunk.lines.length;) {
+    const line = hunk.lines[index];
+    if (line.startsWith('\\')) {
+      index += 1;
+      continue;
+    }
+    if (line.startsWith(' ')) {
+      rows.push({
+        old: { kind: 'context', lineNumber: oldLine++, content: line.slice(1) },
+        next: { kind: 'context', lineNumber: nextLine++, content: line.slice(1) },
+      });
+      index += 1;
+      continue;
+    }
+    const deleted: string[] = [];
+    const added: string[] = [];
+    while (index < hunk.lines.length && !hunk.lines[index].startsWith(' ')) {
+      const changed = hunk.lines[index];
+      if (changed.startsWith('-')) deleted.push(changed.slice(1));
+      else if (changed.startsWith('+')) added.push(changed.slice(1));
+      index += 1;
+    }
+    for (let offset = 0; offset < Math.max(deleted.length, added.length); offset += 1) {
+      rows.push({
+        old: deleted[offset] === undefined
+          ? { kind: 'empty', lineNumber: null, content: '' }
+          : { kind: 'del', lineNumber: oldLine++, content: deleted[offset] },
+        next: added[offset] === undefined
+          ? { kind: 'empty', lineNumber: null, content: '' }
+          : { kind: 'add', lineNumber: nextLine++, content: added[offset] },
+      });
+    }
+  }
+  return rows;
+}
+
 /** hunk 内容行的展示分类（'\' 标记行单独一类，不配色） */
 export function hunkLineKind(line: string): ReviewDiffLineKind {
   if (line.startsWith('+')) return 'add';

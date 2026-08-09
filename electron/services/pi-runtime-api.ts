@@ -10,6 +10,10 @@ import type {
   PiRuntimeStartPayload,
   PiRuntimeStateResult,
   PiRuntimeContextUsage,
+  PiRuntimeModelInfo,
+  PiRuntimeModelUpdateResult,
+  PiRuntimeUsageResult,
+  PiRuntimeUsageTurn,
   PiRuntimeForkPayload,
   PiRuntimeForkResult,
   PiRuntimeTreeNode,
@@ -90,36 +94,84 @@ function messageEntryIds(session: AgentSession): (string | null)[] {
   return ids;
 }
 
+function modelInfo(session: AgentSession): PiRuntimeModelInfo | undefined {
+  const model = session.model;
+  return model
+    ? {
+        provider: model.provider,
+        id: model.id,
+        name: model.name,
+        reasoning: model.reasoning,
+        contextWindow: model.contextWindow,
+        maxTokens: model.maxTokens,
+      }
+    : undefined;
+}
+
+function availableThinkingLevels(session: AgentSession): string[] {
+  try {
+    const getter = (session as unknown as { getAvailableThinkingLevels?: () => string[] })
+      .getAvailableThinkingLevels;
+    return typeof getter === 'function' ? getter.call(session) : [];
+  } catch {
+    return [];
+  }
+}
+
+function contextUsage(session: AgentSession): PiRuntimeContextUsage | undefined {
+  const usage = session.getContextUsage();
+  return usage
+    ? { tokens: usage.tokens, contextWindow: usage.contextWindow, percent: usage.percent }
+    : undefined;
+}
+
+function latestAssistantUsage(session: AgentSession): PiRuntimeUsageTurn | null {
+  for (let index = session.messages.length - 1; index >= 0; index -= 1) {
+    const message = session.messages[index] as unknown as {
+      role?: string;
+      provider?: string;
+      model?: string;
+      usage?: Record<string, unknown>;
+    };
+    if (message.role !== 'assistant' || !message.usage) continue;
+    const cost = message.usage.cost as { total?: unknown } | undefined;
+    return {
+      input: Number(message.usage.input ?? message.usage.prompt_tokens ?? 0),
+      output: Number(message.usage.output ?? message.usage.completion_tokens ?? 0),
+      cacheRead: Number(message.usage.cacheRead ?? 0),
+      cacheWrite: Number(message.usage.cacheWrite ?? 0),
+      cost: Number(cost?.total ?? 0),
+      provider: message.provider,
+      model: message.model,
+    };
+  }
+  return null;
+}
+
+function modelUpdate(session: AgentSession): PiRuntimeModelUpdateResult {
+  return {
+    success: true,
+    model: modelInfo(session),
+    thinkingLevel: session.thinkingLevel,
+    availableThinkingLevels: availableThinkingLevels(session),
+    contextUsage: contextUsage(session),
+  };
+}
+
 function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
   const session = runtime.runtime.session;
-  const contextUsage = session.getContextUsage();
   return {
     sessionId: session.sessionId,
     cwd: runtime.cwd,
     generation: runtime.generation,
-    model: session.model
-      ? { provider: session.model.provider, id: session.model.id, name: session.model.name, reasoning: session.model.reasoning, contextWindow: session.model.contextWindow }
-      : undefined,
+    model: modelInfo(session),
     thinkingLevel: session.thinkingLevel,
-    availableThinkingLevels: (() => {
-      try {
-        const levels = (session as unknown as { getAvailableThinkingLevels?: () => string[] }).getAvailableThinkingLevels;
-        return typeof levels === 'function' ? levels.call(session) : [];
-      } catch {
-        return [];
-      }
-    })(),
+    availableThinkingLevels: availableThinkingLevels(session),
     isStreaming: session.isStreaming,
     messages: session.messages as unknown[],
     messageEntryIds: messageEntryIds(session),
     sessionFile: session.sessionFile,
-    contextUsage: contextUsage
-      ? {
-          tokens: contextUsage.tokens,
-          contextWindow: contextUsage.contextWindow,
-          percent: contextUsage.percent,
-        }
-      : undefined,
+    contextUsage: contextUsage(session),
   };
 }
 
@@ -378,6 +430,24 @@ export const piRuntimeApi = {
       : null;
   },
 
+  getUsage: (): PiRuntimeUsageResult | null => {
+    if (!active) return null;
+    const session = active.runtime.session;
+    const stats = session.getSessionStats();
+    return {
+      context: contextUsage(session) ?? null,
+      model: modelInfo(session),
+      session: {
+        input: stats.tokens.input,
+        output: stats.tokens.output,
+        cacheRead: stats.tokens.cacheRead,
+        cacheWrite: stats.tokens.cacheWrite,
+        cost: stats.cost,
+      },
+      latestTurn: latestAssistantUsage(session),
+    };
+  },
+
   prompt: async (payload: PiRuntimePromptPayload) => {
     if (!active) return { success: false, error: 'session not started' };
     const session = active.runtime.session;
@@ -575,7 +645,7 @@ export const piRuntimeApi = {
   setThinkingLevel: async (payload: { level: string }) => {
     if (!active) return { success: false, error: 'session not started' };
     active.runtime.session.setThinkingLevel(payload.level as never);
-    return { success: true };
+    return modelUpdate(active.runtime.session);
   },
 
   setModel: async (payload: { provider: string; id: string }) => {
@@ -583,7 +653,7 @@ export const piRuntimeApi = {
     const model = active.runtime.services.modelRuntime.getModel(payload.provider, payload.id);
     if (!model) return { success: false, error: `model not found: ${payload.provider}/${payload.id}` };
     await active.runtime.session.setModel(model);
-    return { success: true };
+    return modelUpdate(active.runtime.session);
   },
 
   /**

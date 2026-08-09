@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildHunkPatch,
+  buildSplitDiffRows,
   collectFallbackFiles,
   hunkLineKind,
   parseUnifiedDiff,
@@ -75,6 +76,34 @@ describe('hunkLineKind', () => {
     expect(hunkLineKind('-x')).toBe('del');
     expect(hunkLineKind(' x')).toBe('context');
     expect(hunkLineKind('\\ No newline at end of file')).toBe('marker');
+  });
+});
+
+describe('buildSplitDiffRows', () => {
+  it('pairs replacement lines and preserves both line number streams', () => {
+    const parsed = parseUnifiedDiff(SAMPLE_DIFF)!;
+    expect(buildSplitDiffRows(parsed.hunks[0])).toEqual([
+      {
+        old: { kind: 'context', lineNumber: 1, content: 'a' },
+        next: { kind: 'context', lineNumber: 1, content: 'a' },
+      },
+      {
+        old: { kind: 'del', lineNumber: 2, content: 'b' },
+        next: { kind: 'add', lineNumber: 2, content: 'B' },
+      },
+      {
+        old: { kind: 'context', lineNumber: 3, content: 'c' },
+        next: { kind: 'context', lineNumber: 3, content: 'c' },
+      },
+    ]);
+  });
+
+  it('uses an empty cell when only one side has a line', () => {
+    const parsed = parseUnifiedDiff(`diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -4,0 +4,1 @@\n+new\n`)!;
+    expect(buildSplitDiffRows(parsed.hunks[0])[0]).toEqual({
+      old: { kind: 'empty', lineNumber: null, content: '' },
+      next: { kind: 'add', lineNumber: 4, content: 'new' },
+    });
   });
 });
 

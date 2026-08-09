@@ -274,5 +274,24 @@ test('Token 上限随当前模型切换，不使用固定 128K', async ({ launch
   await expect(popover).toContainText('4,096');
 
   await selector.selectOption('mock/mock-wide');
-  await expect(popover).toContainText('200,000');
+  await expect(popover.getByTestId('usage-context-window')).toContainText('200,000');
+  await expect(popover.getByTestId('usage-max-output')).toContainText('8,192');
+});
+
+test('模型切换只更新当前模型参数，会话累计 usage 保持不变', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('chat-input').fill('Say PONG');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+
+  await page.getByTestId('token-usage').click();
+  const inputTotal = page.getByTestId('usage-session-input');
+  await expect.poll(async () => Number((await inputTotal.locator('strong').textContent())?.replaceAll(',', '') ?? 0)).toBeGreaterThan(0);
+  const before = await inputTotal.locator('strong').textContent();
+  await selector.selectOption('mock/mock-wide');
+  await expect(page.getByTestId('usage-context-window')).toContainText('200,000');
+  await expect(inputTotal.locator('strong')).toHaveText(before ?? '');
 });
