@@ -38,6 +38,7 @@ import { sendHostEvent } from '../main/ipc/host-events';
 import { expandFileReferences } from '../utils/file-expand';
 import { detectPiEnvironment } from '../utils/pi-detector';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
+import { syncLmStudioModels } from '../utils/lmstudio-models';
 import {
   cancelAllPendingUi,
   createExtensionUIContext,
@@ -66,6 +67,12 @@ let latestMcpStatus: Record<string, unknown> | null = null;
 
 /** 当前活动运行时（供 piSessions 等兄弟服务复用；只读使用，替换会话须走 afterSessionReplaced）。 */
 export function getActiveRuntime(): ActiveRuntime | null {
+  return active;
+}
+
+/** 模型/设置页可能在初始 runtime 尚未落到 active 时操作；只等待已有启动，不主动创建。 */
+export async function getActiveRuntimeReady(): Promise<ActiveRuntime | null> {
+  if (startInFlight) await startInFlight.catch(() => {});
   return active;
 }
 
@@ -242,6 +249,9 @@ async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
 async function createRuntime(cwd: string): Promise<ActiveRuntime> {
   const sdk = await loadPiSdk();
   const agentDir = sdk.getAgentDir();
+  // LM Studio 的原生目录包含视觉能力和真实上下文；先同步到 pi 的公开模型配置，
+  // 再让 pi 创建会话服务，模型选择与图片能力判定仍完全由 pi 负责。
+  await syncLmStudioModels(agentDir);
   // 扩展 spawn pi 子进程时的入口约定（Electron 里 process.argv[1] 是壳的 main.js，
   // 扩展按 CLI 假设会误 spawn 壳自身；如官方 subagent 示例）。检测到 pi 即写入。
   const piBin = detectPiEnvironment().pi.binPath;

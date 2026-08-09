@@ -216,7 +216,7 @@ export type PiUiResponsePayload = {
   cancelled?: boolean;
 };
 
-// —— review：会话改动评审（git baseline diff；非 git 目录降级为只读汇总）——
+// —— review：会话改动评审（会话 baseline diff；非 Git 项目使用临时 object store）——
 
 export type ReviewFileStatus = 'modified' | 'added' | 'deleted';
 
@@ -229,7 +229,7 @@ export type ReviewFileEntry = {
 };
 
 export type ReviewSummaryResult = {
-  /** git 评审是否可用（活动 runtime 的 cwd 是 git 仓库且 baseline 已建立） */
+  /** baseline 评审是否可用（Git 与非 Git 工作区都支持） */
   available: boolean;
   /** 不可用原因：not-started / not-a-git-repo / git-error:<msg> */
   reason?: string;
@@ -324,9 +324,11 @@ export type PiProviderListResult = { providers: PiProviderRow[] };
 export type PiProviderSetKeyPayload = { providerId: string; apiKey: string };
 export type PiModelRow = {
   provider: string;
+  providerLabel?: string;
   id: string;
   name?: string;
   reasoning?: boolean;
+  input?: string[];
   contextWindow?: number;
   maxTokens?: number;
 };

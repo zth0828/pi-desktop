@@ -4,6 +4,7 @@
 //   "USE_TOOL_LS" → 第一轮返回 tool_call(bash: ls)，之后回显工具结果
 //   "USE_TOOL_EDIT" → 第一轮返回 tool_call(edit: e2e-edit-target.txt alpha→beta)
 //   "USE_TOOL_WRITE" → 第一轮返回 tool_call(write: 新建 e2e-new-file.txt)
+//   "USE_TOOL_READ_IMAGE" → 第一轮返回 tool_call(read: preview.png)
 //   "USE_TOOL_EDIT_WRITE" → 第一轮返回两个并行 tool_call（edit + write 各一）
 //   "MCP_SEARCH"/"MCP_CALL" → 驱动 mcp 代理工具
 //   "SLOW ..." → 30 个 chunk × 100ms 慢速流（用于 abort 测试）
@@ -25,6 +26,21 @@ let flaked429 = false;
 let callSeq = 0;
 
 const server = http.createServer((req, res) => {
+  if (req.method === "GET" && req.url.includes("/api/v1/models")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ models: [
+      {
+        key: "qwen/qwen3.5-9b",
+        display_name: "Qwen3.5 9B (LM Studio)",
+        type: "llm",
+        max_context_length: 131072,
+        capabilities: { vision: true, reasoning: true },
+        loaded_instances: [{ config: { context_length: 262144 } }],
+      },
+      { key: "nomic-embed", type: "embedding" },
+    ] }));
+    return;
+  }
   if (req.method !== "POST" || !req.url.includes("/chat/completions")) {
     res.writeHead(404).end("not found");
     return;
@@ -39,7 +55,7 @@ const server = http.createServer((req, res) => {
     const hasToolResult = msgs.slice(lastUserIdx + 1).some((m) => m.role === "tool");
     const wantsTool = !hasToolResult && (
       lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") ||
-      lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_EDIT_WRITE") ||
+      lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_EDIT_WRITE") ||
       lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
     );
 
@@ -113,6 +129,9 @@ const server = http.createServer((req, res) => {
           path: "e2e-new-file.txt",
           content: "hello from agent\n",
         });
+      } else if (lastUser.includes("USE_TOOL_READ_IMAGE")) {
+        toolName = "read";
+        args = JSON.stringify({ path: "preview.png" });
       } else if (lastUser.includes("MCP_CALL")) {
         toolName = "mcp";
         args = JSON.stringify({ tool: "mockmcp_ping", args: { message: "hello" } });

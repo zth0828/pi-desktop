@@ -17,7 +17,8 @@ import type {
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
-import { getActiveRuntime, piRuntimeApi } from './pi-runtime-api';
+import { syncLmStudioModels } from '../utils/lmstudio-models';
+import { getActiveRuntime, getActiveRuntimeReady, piRuntimeApi } from './pi-runtime-api';
 import { settingsApi } from './settings-api';
 
 type ModelRuntime = Awaited<ReturnType<PiSdk['ModelRuntime']['create']>>;
@@ -26,8 +27,32 @@ let runtimePromise: Promise<ModelRuntime> | null = null;
 
 async function getModelRuntime(): Promise<{ sdk: PiSdk; runtime: ModelRuntime }> {
   const sdk = await loadPiSdk();
+  if (await syncLmStudioModels(sdk.getAgentDir())) runtimePromise = null;
   runtimePromise ??= sdk.ModelRuntime.create();
   return { sdk, runtime: await runtimePromise };
+}
+
+function configuredProviders(agentDir: string): Record<string, { baseUrl?: string }> {
+  try {
+    const doc = JSON.parse(readFileSync(path.join(agentDir, 'models.json'), 'utf8')) as {
+      providers?: Record<string, { baseUrl?: string }>;
+    };
+    return doc.providers ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function providerLabel(id: string, name: string, baseUrl?: string): string {
+  if (/lm[ -]?studio/i.test(id) || /lm[ -]?studio/i.test(name)) return 'LM Studio';
+  if (baseUrl) {
+    try {
+      const host = new URL(baseUrl).hostname;
+      const local = ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(host);
+      if (host && (!local || id.toLowerCase() === 'relay')) return host;
+    } catch { /* retain the pi provider name */ }
+  }
+  return name || id;
 }
 
 /** 凭证变化后调用：下次使用时重建 ModelRuntime。 */
@@ -45,7 +70,8 @@ async function resolveStandaloneCwd(): Promise<string> {
 
 export const providersApi = {
   list: async (): Promise<PiProviderListResult> => {
-    const { runtime } = await getModelRuntime();
+    const { sdk, runtime } = await getModelRuntime();
+    const configuredProvidersById = configuredProviders(sdk.getAgentDir());
     const rows: PiProviderRow[] = [];
     for (const provider of runtime.getProviders()) {
       let configured = false;
@@ -57,7 +83,7 @@ export const providersApi = {
       const auth = provider.auth as { apiKey?: unknown; oauth?: unknown };
       rows.push({
         id: provider.id,
-        name: provider.name,
+        name: providerLabel(provider.id, provider.name, configuredProvidersById[provider.id]?.baseUrl),
         authMethods: [auth.apiKey ? 'api_key' : null, auth.oauth ? 'oauth' : null].filter(
           (m): m is string => m !== null,
         ),
@@ -69,14 +95,22 @@ export const providersApi = {
   },
 
   listModels: async () => {
-    const { runtime } = await getModelRuntime();
+    const { sdk, runtime } = await getModelRuntime();
+    const configuredProvidersById = configuredProviders(sdk.getAgentDir());
+    const providerNames = new Map(runtime.getProviders().map((provider) => [provider.id, provider.name]));
     const available = await runtime.getAvailable();
     return {
       models: available.map((m) => ({
         provider: m.provider,
+        providerLabel: providerLabel(
+          m.provider,
+          providerNames.get(m.provider) ?? m.provider,
+          configuredProvidersById[m.provider]?.baseUrl,
+        ),
         id: m.id,
         name: m.name,
         reasoning: m.reasoning,
+        input: m.input,
         contextWindow: m.contextWindow,
         maxTokens: m.maxTokens,
       })),
@@ -300,7 +334,7 @@ export const providersApi = {
    * SettingsManager 写同一份 settings.json，语义完全一致。
    */
   setDefaultModel: async (payload: PiDefaultModel): Promise<HostSuccess> => {
-    const active = getActiveRuntime();
+    const active = await getActiveRuntimeReady();
     if (active) return piRuntimeApi.setModel(payload);
     try {
       const sdk = await loadPiSdk();

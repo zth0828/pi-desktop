@@ -38,6 +38,17 @@ type ChatInputProps = {
 type FollowupBehavior = 'queue' | 'steer';
 type SendWith = 'enter' | 'cmdEnter';
 
+function modelDisplayName(model: PiModelRow): string {
+  let name = model.name ?? model.id;
+  for (const suffix of [model.provider, model.providerLabel]) {
+    if (!suffix) continue;
+    if (name.toLowerCase().endsWith(` (${suffix.toLowerCase()})`)) {
+      name = name.slice(0, -(suffix.length + 3));
+    }
+  }
+  return name;
+}
+
 /** 流式中提交的排队方式：设置决定默认行为，Alt 反转（queue ↔ steer） */
 function resolveStreamBehavior(followupBehavior: FollowupBehavior, alt: boolean): 'steer' | 'followUp' {
   const base: 'steer' | 'followUp' = followupBehavior === 'steer' ? 'steer' : 'followUp';
@@ -205,9 +216,10 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   // 模型下拉按供应商分组（optgroup），供应商顺序保持 listModels 的首现顺序
   const modelGroups = new Map<string, PiModelRow[]>();
   for (const m of models) {
-    const group = modelGroups.get(m.provider);
+    const label = m.providerLabel ?? m.provider;
+    const group = modelGroups.get(label);
     if (group) group.push(m);
-    else modelGroups.set(m.provider, [m]);
+    else modelGroups.set(label, [m]);
   }
   const contextWindow = model?.contextWindow ?? selectedModel?.contextWindow
     ?? (contextUsage?.contextWindow && contextUsage.contextWindow > 0 ? contextUsage.contextWindow : null);
@@ -660,7 +672,7 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
                 <optgroup key={provider} label={provider}>
                   {providerModels.map((m) => (
                     <option key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
-                      {m.name ?? m.id}
+                      {modelDisplayName(m)}
                     </option>
                   ))}
                 </optgroup>

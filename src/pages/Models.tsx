@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { PiDefaultModel, PiModelRow, PiProviderRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
+import { useChatStore } from '../stores/chat';
 
 const CUSTOM_API_TYPES = [
   'openai-completions',
@@ -17,9 +18,21 @@ type ProviderRowProps = {
   models: PiModelRow[];
   defaultModel: PiDefaultModel | null;
   onChanged: () => void;
+  onDefaultChanged: (model: PiDefaultModel) => void;
 };
 
-function ProviderRow({ provider, models, defaultModel, onChanged }: ProviderRowProps) {
+function modelDisplayName(model: PiModelRow, provider: PiProviderRow): string {
+  let name = model.name ?? model.id;
+  for (const suffix of [provider.id, provider.name, model.providerLabel]) {
+    if (!suffix) continue;
+    if (name.toLowerCase().endsWith(` (${suffix.toLowerCase()})`)) {
+      name = name.slice(0, -(suffix.length + 3));
+    }
+  }
+  return name;
+}
+
+function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChanged }: ProviderRowProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [key, setKey] = useState('');
@@ -56,7 +69,17 @@ function ProviderRow({ provider, models, defaultModel, onChanged }: ProviderRowP
     const result = await hostApi.providers.setDefaultModel(provider.id, modelId);
     setBusy(false);
     if (result.success) {
-      onChanged();
+      const runtimeState = await hostApi.piRuntime.getState().catch(() => null);
+      if (runtimeState?.model) {
+        useChatStore.getState().applyModelUpdate({
+          success: true,
+          model: runtimeState.model,
+          thinkingLevel: runtimeState.thinkingLevel,
+          availableThinkingLevels: runtimeState.availableThinkingLevels,
+          contextUsage: runtimeState.contextUsage,
+        });
+      }
+      onDefaultChanged({ provider: provider.id, id: modelId });
     } else {
       setMessage(result.error);
     }
@@ -121,7 +144,7 @@ function ProviderRow({ provider, models, defaultModel, onChanged }: ProviderRowP
                     key={m.id}
                     data-testid={`provider-model-${provider.id}-${m.id}`}
                   >
-                    <span className="provider-model-name">{m.name ?? m.id}</span>
+                    <span className="provider-model-name">{modelDisplayName(m, provider)}</span>
                     {m.name && m.name !== m.id && <span className="hint">{m.id}</span>}
                     <span className="spacer" />
                     {isDefault(m.id) ? (
@@ -358,6 +381,7 @@ export default function ModelsPage() {
             models={models.filter((m) => m.provider === p.id)}
             defaultModel={defaultModel}
             onChanged={refresh}
+            onDefaultChanged={setDefaultModel}
           />
         ))}
       </div>

@@ -80,6 +80,22 @@ test.beforeEach(async () => {
             },
           ],
         },
+        lmstudio: {
+          baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+          api: 'openai-completions',
+          apiKey: 'lm-studio',
+          models: [
+            {
+              id: 'stale-manual-model',
+              name: 'Stale manual model (LM Studio)',
+              reasoning: false,
+              input: ['text'],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 32768,
+              maxTokens: 8192,
+            },
+          ],
+        },
       },
     }),
   );
@@ -192,6 +208,29 @@ test('聊天页模型下拉按供应商分组（optgroup）', async ({ launchEle
   await expect(selector).toBeVisible({ timeout: 30_000 });
   await expect(selector.locator('optgroup[label="mock"]')).toHaveCount(1);
   await expect(selector.locator('optgroup[label="mock"] option')).toHaveCount(2);
+});
+
+test('LM Studio：自动发现模型并同步视觉能力与真实上下文', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  const group = selector.locator('optgroup[label="LM Studio"]');
+  await expect(group).toHaveCount(1);
+  await expect(group.locator('option')).toHaveText(['Qwen3.5 9B']);
+
+  await expect.poll(async () => {
+    const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+      providers: { lmstudio: { models: Array<{ id: string; input: string[]; reasoning: boolean; contextWindow: number }> } };
+    };
+    return doc.providers.lmstudio.models[0];
+  }).toMatchObject({
+    id: 'qwen/qwen3.5-9b',
+    input: ['text', 'image'],
+    reasoning: true,
+    contextWindow: 262144,
+  });
 });
 
 test('Models 页：自定义供应商表单的 API 类型可选', async ({ launchElectronApp }) => {
