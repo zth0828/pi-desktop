@@ -141,7 +141,7 @@ test('一轮 edit+write → 聚合编辑卡（清单 + 增删统计）→ 撤销
   expect(existsSync(path.join(repoWorkspace, 'e2e-new-file.txt'))).toBe(false);
 });
 
-test('非 git 目录：聚合编辑卡保留清单但无撤销按钮，Review 按钮打开评审面板', async ({
+test('非 Git 目录：聚合编辑卡可回滚，Review 按钮打开完整评审面板', async ({
   launchElectronApp,
 }) => {
   const app = await launchElectronApp(launchOptions(plainWorkspace));
@@ -154,11 +154,12 @@ test('非 git 目录：聚合编辑卡保留清单但无撤销按钮，Review �
   const card = page.getByTestId('turn-changes');
   await expect(card).toBeVisible({ timeout: 30_000 });
   await expect(card.getByTestId('turn-changes-file')).toHaveCount(2);
-  await expect(card.getByTestId('turn-changes-revert')).toHaveCount(0);
+  await expect(card.getByTestId('turn-changes-revert')).toBeVisible();
 
   await card.getByTestId('turn-changes-review').click();
   await expect(page.getByTestId('review-panel')).toBeVisible();
-  await expect(page.getByTestId('review-fallback')).toBeVisible();
+  await expect(page.getByTestId('review-fallback')).toHaveCount(0);
+  await expect(page.getByTestId('review-file')).toHaveCount(2);
 });
 
 test('历史轮折叠为「已处理 Xs」行，点击展开还原；user 消息与文本原位不动', async ({

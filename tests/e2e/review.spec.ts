@@ -1,6 +1,6 @@
 // Review 面板 E2E（真 pi + mock provider + 临时 git repo workspace，不烧 API quota）。
 // 覆盖：baseline 捕获（runtime 创建时）→ 改动文件列表 → diff 渲染 → 文件级回滚后磁盘复原；
-// agent 新建文件（untracked）纳入清单；非 git 目录降级只读汇总。
+// agent 新建文件（untracked）纳入清单；非 Git 目录也使用临时 baseline 完整评审。
 import { execFileSync } from 'node:child_process';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -14,7 +14,7 @@ let mockPort: number;
 let agentDir: string;
 /** git 仓库 workspace（评审主路径） */
 let repoWorkspace: string;
-/** 非 git workspace（降级只读路径） */
+/** 非 Git workspace（临时 object store 路径） */
 let plainWorkspace: string;
 
 const git = (cwd: string, args: string[]) =>
@@ -49,6 +49,7 @@ test.beforeAll(async () => {
   git(repoWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'init']);
 
   await writeFile(path.join(plainWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
+  await writeFile(path.join(plainWorkspace, 'delete-me.txt'), 'remove me\n');
 
   await writeFile(
     path.join(agentDir, 'models.json'),
@@ -150,6 +151,16 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await expect(panel).toBeVisible();
   await expect(panel.getByTestId('workspace-tree')).toBeVisible();
 
+  const initialWidth = (await panel.boundingBox())!.width;
+  const handle = panel.getByTestId('workspace-resize-handle');
+  const handleBox = await handle.boundingBox();
+  expect(handleBox).not.toBeNull();
+  await page.mouse.move(handleBox!.x + 4, handleBox!.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(handleBox!.x + 70, handleBox!.y + 100);
+  await page.mouse.up();
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBeLessThan(initialWidth - 40);
+
   await panel.getByTestId('workspace-directory').filter({ hasText: 'src' }).click();
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.ts' }).click();
   await expect(panel.getByTestId('workspace-text-preview')).toContainText('answer = 42');
@@ -158,8 +169,30 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.png' }).click();
   await expect(panel.getByTestId('workspace-image-preview').locator('img')).toBeVisible();
 
+  // Review 与 Files 可反复切换，不会被 reviewOpen effect 弹回。
+  await panel.getByTestId('workspace-review-tab').click();
+  await expect(panel.locator('.review-workspace')).toBeVisible();
+  await panel.getByTestId('workspace-files-tab').click();
+  await expect(panel.getByTestId('workspace-tree')).toBeVisible();
+  await panel.getByTestId('workspace-review-tab').click();
+  await panel.getByTestId('workspace-files-tab').click();
+  await expect(panel.getByTestId('workspace-tree')).toBeVisible();
+
   await panel.getByTestId('workspace-close').click();
   await expect(panel).toBeHidden();
+});
+
+test('read 图片工具卡：预览按钮直达右侧图片查看器', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await runTool(page, 'USE_TOOL_READ_IMAGE now');
+  const card = page.getByTestId('tool-card').last();
+  await card.getByTestId('tool-preview-file').click();
+  const panel = page.getByTestId('review-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByTestId('workspace-image-preview').locator('img')).toBeVisible();
 });
 
 test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文件删除', async ({ launchElectronApp }) => {
@@ -189,19 +222,30 @@ test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文�
   expect(existsSync(path.join(repoWorkspace, 'e2e-new-file.txt'))).toBe(false);
 });
 
-test('非 git 目录：降级为只读汇总（无回滚按钮）', async ({ launchElectronApp }) => {
+test('非 Git 目录：新增/修改/删除进入评审并可回滚', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions(plainWorkspace));
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
   await runTool(page, 'USE_TOOL_EDIT now');
+  await writeFile(path.join(plainWorkspace, 'plain-new.txt'), 'new file\n');
+  await rm(path.join(plainWorkspace, 'delete-me.txt'), { force: true });
 
   await page.getByTestId('session-menu').click();
   await page.getByTestId('open-review').click();
-  const fallback = page.getByTestId('review-fallback');
-  await expect(fallback).toBeVisible({ timeout: 30_000 });
-  await expect(fallback).toContainText('e2e-edit-target.txt');
-  // 降级视图无回滚入口
-  await expect(page.getByTestId('revert-file')).toHaveCount(0);
-  await expect(page.getByTestId('revert-hunk')).toHaveCount(0);
+  const panel = page.getByTestId('review-panel');
+  await expect(panel.getByTestId('review-fallback')).toHaveCount(0);
+  await expect(panel.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' })).toBeVisible({ timeout: 30_000 });
+  await expect(panel.getByTestId('review-file').filter({ hasText: 'plain-new.txt' })).toBeVisible();
+  await expect(panel.getByTestId('review-file').filter({ hasText: 'delete-me.txt' })).toBeVisible();
+
+  for (const name of ['e2e-edit-target.txt', 'plain-new.txt', 'delete-me.txt']) {
+    const row = panel.getByTestId('review-file').filter({ hasText: name });
+    await row.getByTestId('revert-file').click();
+    await page.getByTestId('review-confirm-ok').click();
+    await expect(row).toHaveCount(0, { timeout: 15_000 });
+  }
+  await expect(readFile(path.join(plainWorkspace, 'e2e-edit-target.txt'), 'utf8')).resolves.toBe('alpha\ngamma\n');
+  expect(existsSync(path.join(plainWorkspace, 'plain-new.txt'))).toBe(false);
+  await expect(readFile(path.join(plainWorkspace, 'delete-me.txt'), 'utf8')).resolves.toBe('remove me\n');
 });

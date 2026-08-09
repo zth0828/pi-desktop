@@ -74,8 +74,8 @@ async function isGitRepo(cwd: string): Promise<boolean> {
   }
 }
 
-async function headRef(cwd: string): Promise<string | null> {
-  const r = await runGit(cwd, ['rev-parse', '--verify', 'HEAD']);
+async function headRef(cwd: string, gitEnv?: NodeJS.ProcessEnv): Promise<string | null> {
+  const r = await runGit(cwd, ['rev-parse', '--verify', 'HEAD'], { env: gitEnv });
   return r.code === 0 ? r.stdout.trim() : null;
 }
 
@@ -83,11 +83,15 @@ async function headRef(cwd: string): Promise<string | null> {
  * 用临时 index 把当前磁盘状态（含 untracked、排除 ignored）写成一个 tree 对象。
  * 不碰真实 index/工作区；返回 tree oid。
  */
-async function snapshotTree(cwd: string): Promise<string> {
+async function snapshotTree(
+  cwd: string,
+  gitEnv?: NodeJS.ProcessEnv,
+  seedRef?: string | null,
+): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), 'pi-desktop-review-'));
-  const env = { ...GHOST_IDENTITY_ENV, GIT_INDEX_FILE: join(dir, 'index') };
+  const env = { ...GHOST_IDENTITY_ENV, ...gitEnv, GIT_INDEX_FILE: join(dir, 'index') };
   try {
-    const head = await headRef(cwd);
+    const head = seedRef === undefined ? await headRef(cwd, gitEnv) : seedRef;
     // 以 HEAD（或空 tree）为底，add -A 叠加当前磁盘；空仓库（无 commit）走 --empty
     const readTree = await runGit(cwd, head ? ['read-tree', head] : ['read-tree', '--empty'], { env });
     if (readTree.code !== 0) throw new Error(readTree.stderr.trim() || 'git read-tree failed');
@@ -101,34 +105,53 @@ async function snapshotTree(cwd: string): Promise<string> {
   }
 }
 
-type Baseline = { cwd: string; ref: string };
+type Baseline = {
+  cwd: string;
+  ref: string;
+  gitEnv?: NodeJS.ProcessEnv;
+  /** 非 Git 项目的临时 object store；baseline 清理时一并删除。 */
+  ownedDir?: string;
+};
 let baseline: Baseline | null = null;
-/** capture 失败原因（not-a-git-repo / git-error:…），供 getSummary 降级展示 */
+/** capture 失败原因（git-error:…），供 getSummary 降级展示 */
 let baselineFailure: string | null = null;
+
+function disposeBaseline(): void {
+  if (baseline?.ownedDir) rmSync(baseline.ownedDir, { recursive: true, force: true });
+  baseline = null;
+}
 
 /**
  * 为会话建 baseline（runtime 创建时调用；同一 cwd 重复调用直接复用）。
- * 非 git 目录 → baseline=null，Review 面板降级为只读汇总。
+ * 非 Git 目录使用临时 bare object store，项目目录本身不会出现 .git。
  */
 export async function captureReviewBaseline(cwd: string): Promise<void> {
   if (baseline?.cwd === cwd) return;
-  baseline = null;
+  disposeBaseline();
   baselineFailure = null;
+  let ownedDir: string | undefined;
   try {
-    if (!(await isGitRepo(cwd))) {
-      baselineFailure = 'not-a-git-repo';
-      return;
+    let gitEnv: NodeJS.ProcessEnv | undefined;
+    let parent: string | null = null;
+    if (await isGitRepo(cwd)) {
+      parent = await headRef(cwd);
+    } else {
+      ownedDir = mkdtempSync(join(tmpdir(), 'pi-desktop-review-repo-'));
+      const gitDir = join(ownedDir, 'objects.git');
+      const init = await runGit(cwd, ['init', '--bare', gitDir]);
+      if (init.code !== 0) throw new Error(init.stderr.trim() || 'git init failed');
+      gitEnv = { GIT_DIR: gitDir, GIT_WORK_TREE: cwd };
     }
-    const tree = await snapshotTree(cwd);
-    const head = await headRef(cwd);
+    const tree = await snapshotTree(cwd, gitEnv, parent);
     const commit = await runGit(
       cwd,
-      ['commit-tree', tree, ...(head ? ['-p', head] : []), '-m', 'pi-desktop review baseline'],
-      { env: GHOST_IDENTITY_ENV },
+      ['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', 'pi-desktop review baseline'],
+      { env: { ...GHOST_IDENTITY_ENV, ...gitEnv } },
     );
     if (commit.code !== 0) throw new Error(commit.stderr.trim() || 'git commit-tree failed');
-    baseline = { cwd, ref: commit.stdout.trim() };
+    baseline = { cwd, ref: commit.stdout.trim(), gitEnv, ownedDir };
   } catch (err) {
+    if (ownedDir) rmSync(ownedDir, { recursive: true, force: true });
     baseline = null;
     baselineFailure = `git-error:${err instanceof Error ? err.message : String(err)}`;
   }
@@ -136,7 +159,7 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
 
 /** runtime 销毁（cwd 切换）时清掉旧 baseline，避免串项目。 */
 export function clearReviewBaseline(): void {
-  baseline = null;
+  disposeBaseline();
   baselineFailure = null;
 }
 
@@ -152,8 +175,8 @@ function unavailable(reason: string): ReviewSummaryResult {
 }
 
 /** --name-status（--no-renames：M/A/D 单字母） */
-async function diffNameStatus(cwd: string, base: string, cur: string): Promise<Map<string, ReviewFileEntry['status']>> {
-  const r = await runGit(cwd, ['diff', '--no-renames', '--name-status', base, cur]);
+async function diffNameStatus(cwd: string, base: string, cur: string, env?: NodeJS.ProcessEnv): Promise<Map<string, ReviewFileEntry['status']>> {
+  const r = await runGit(cwd, ['diff', '--no-renames', '--name-status', base, cur], { env });
   const map = new Map<string, ReviewFileEntry['status']>();
   if (r.code !== 0) throw new Error(r.stderr.trim() || 'git diff failed');
   for (const line of r.stdout.split('\n')) {
@@ -166,8 +189,8 @@ async function diffNameStatus(cwd: string, base: string, cur: string): Promise<M
 }
 
 /** --numstat：added/deleted 行数（binary 显示 '-'，按 0 计） */
-async function diffNumstat(cwd: string, base: string, cur: string): Promise<Map<string, { added: number; deleted: number }>> {
-  const r = await runGit(cwd, ['diff', '--no-renames', '--numstat', base, cur]);
+async function diffNumstat(cwd: string, base: string, cur: string, env?: NodeJS.ProcessEnv): Promise<Map<string, { added: number; deleted: number }>> {
+  const r = await runGit(cwd, ['diff', '--no-renames', '--numstat', base, cur], { env });
   const map = new Map<string, { added: number; deleted: number }>();
   if (r.code !== 0) throw new Error(r.stderr.trim() || 'git diff failed');
   for (const line of r.stdout.split('\n')) {
@@ -190,10 +213,10 @@ export const reviewApi = {
     const base = currentBaseline();
     if (!base) return unavailable(baselineFailure ?? 'not-a-git-repo');
     try {
-      const cur = await snapshotTree(active.cwd);
+      const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
       const [statuses, stats] = await Promise.all([
-        diffNameStatus(active.cwd, base.ref, cur),
-        diffNumstat(active.cwd, base.ref, cur),
+        diffNameStatus(active.cwd, base.ref, cur, base.gitEnv),
+        diffNumstat(active.cwd, base.ref, cur, base.gitEnv),
       ]);
       const files: ReviewFileEntry[] = [];
       for (const [path, status] of statuses) {
@@ -214,8 +237,8 @@ export const reviewApi = {
       return { available: false, reason: baselineFailure ?? 'not-started', path: payload.path, diff: '' };
     }
     try {
-      const cur = await snapshotTree(active.cwd);
-      const r = await runGit(active.cwd, ['diff', '--no-renames', base.ref, cur, '--', payload.path]);
+      const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
+      const r = await runGit(active.cwd, ['diff', '--no-renames', base.ref, cur, '--', payload.path], { env: base.gitEnv });
       if (r.code !== 0) throw new Error(r.stderr.trim() || 'git diff failed');
       return { available: true, path: payload.path, diff: r.stdout };
     } catch (err) {
@@ -234,11 +257,11 @@ export const reviewApi = {
     const base = currentBaseline();
     if (!active || !base) return { success: false, error: baselineFailure ?? 'not-started' };
     try {
-      const cur = await snapshotTree(active.cwd);
-      const diff = await runGit(active.cwd, ['diff', '--no-renames', base.ref, cur, '--', payload.path]);
+      const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
+      const diff = await runGit(active.cwd, ['diff', '--no-renames', base.ref, cur, '--', payload.path], { env: base.gitEnv });
       if (diff.code !== 0) throw new Error(diff.stderr.trim() || 'git diff failed');
       if (!diff.stdout.trim()) return { success: false, error: 'no changes to revert' };
-      const apply = await runGit(active.cwd, ['apply', '-R'], { input: diff.stdout });
+      const apply = await runGit(active.cwd, ['apply', '-R'], { env: base.gitEnv, input: diff.stdout });
       if (apply.code !== 0) return { success: false, error: apply.stderr.trim() || 'git apply failed' };
       return { success: true };
     } catch (err) {
@@ -249,10 +272,11 @@ export const reviewApi = {
   /** hunk 级回滚：渲染层重建的单 hunk patch，直接 git apply -R（失败原文返回给 UI）。 */
   revertHunk: async (payload: ReviewRevertHunkPayload): Promise<HostSuccess> => {
     const active = getActiveRuntime();
-    if (!active || !currentBaseline()) return { success: false, error: baselineFailure ?? 'not-started' };
+    const base = currentBaseline();
+    if (!active || !base) return { success: false, error: baselineFailure ?? 'not-started' };
     if (!payload.patch.trim()) return { success: false, error: 'empty patch' };
     try {
-      const apply = await runGit(active.cwd, ['apply', '-R'], { input: payload.patch });
+      const apply = await runGit(active.cwd, ['apply', '-R'], { env: base.gitEnv, input: payload.patch });
       if (apply.code !== 0) return { success: false, error: apply.stderr.trim() || 'git apply failed' };
       return { success: true };
     } catch (err) {
