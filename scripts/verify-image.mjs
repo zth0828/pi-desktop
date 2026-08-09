@@ -21,7 +21,7 @@ await mkdir(workspace, { recursive: true });
 await cp(join(realHome, '.pi/agent/models.json'), join(agentDir, 'models.json'));
 await writeFile(
   join(agentDir, 'settings.json'),
-  JSON.stringify({ defaultProvider: 'lmstudio', defaultModel: 'zai-org/glm-4.6v-flash' }),
+  JSON.stringify({ defaultProvider: 'lmstudio', defaultModel: 'qwen/qwen3.5-9b' }),
 );
 await mkdir(join(homeDir, 'user-data'), { recursive: true });
 await writeFile(join(homeDir, 'user-data/config.json'), JSON.stringify({ workspaceCwd: workspace }));
