@@ -102,6 +102,7 @@
       "success": "完成",
       "error": "出错",
       "result": "结果",
+      "previewFile": "预览文件",
       "interrupted": "已中断",
       "line": {
         "inDuration": "，用时 {{duration}}",
@@ -193,6 +194,8 @@
     "cancelRename": "取消重命名",
     "copy": "复制",
     "copyMarkdown": "复制 Markdown",
+    "imagePreview": "图片预览",
+    "closeImagePreview": "关闭图片预览",
     "copied": "已复制",
     "thinkingLevel": "思考深度",
     "thinkingLevels": {
@@ -540,6 +543,7 @@
     "hideFiles": "隐藏改动文件"
   },
   "workspace": {
+    "resize": "调整工作台宽度",
     "toggle": "切换文件工作台",
     "close": "关闭文件工作台",
     "files": "文件",

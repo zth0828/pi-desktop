@@ -102,6 +102,7 @@
       "success": "done",
       "error": "error",
       "result": "Result",
+      "previewFile": "Preview file",
       "interrupted": "interrupted",
       "line": {
         "inDuration": " in {{duration}}",
@@ -193,6 +194,8 @@
     "cancelRename": "Cancel rename",
     "copy": "Copy",
     "copyMarkdown": "Copy Markdown",
+    "imagePreview": "Image preview",
+    "closeImagePreview": "Close image preview",
     "copied": "Copied",
     "thinkingLevel": "Thinking depth",
     "thinkingLevels": {
@@ -540,6 +543,7 @@
     "hideFiles": "Hide changed files"
   },
   "workspace": {
+    "resize": "Resize workspace panel",
     "toggle": "Toggle workspace panel",
     "close": "Close workspace panel",
     "files": "Files",

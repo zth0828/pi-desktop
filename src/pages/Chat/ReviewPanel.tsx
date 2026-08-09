@@ -298,11 +298,35 @@ export function ReviewPanel() {
   const workspaceOpen = useChatStore((s) => s.workspaceOpen);
   const setReviewOpen = useChatStore((s) => s.setReviewOpen);
   const setWorkspaceOpen = useChatStore((s) => s.setWorkspaceOpen);
+  const workspaceFileRequest = useChatStore((s) => s.workspaceFileRequest);
   const [tab, setTab] = useState<WorkbenchTab>('files');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
+  const [panelWidth, setPanelWidth] = useState<number>();
+  const [resizing, setResizing] = useState(false);
   const open = reviewOpen || workspaceOpen;
   useEffect(() => { if (reviewOpen) setTab('review'); else if (workspaceOpen && tab === 'review') setTab('files'); }, [reviewOpen, workspaceOpen, tab]);
+  useEffect(() => {
+    if (!workspaceFileRequest) return;
+    const { path } = workspaceFileRequest;
+    setSelectedFile(path);
+    setOpenFiles((current) => current.includes(path) ? current : [...current, path]);
+    setTab(`file:${path}`);
+  }, [workspaceFileRequest]);
+  useEffect(() => {
+    if (!resizing) return;
+    const resize = (event: PointerEvent) => {
+      const maximum = Math.max(440, window.innerWidth - 460);
+      setPanelWidth(Math.min(maximum, Math.max(440, window.innerWidth - event.clientX)));
+    };
+    const stop = () => setResizing(false);
+    window.addEventListener('pointermove', resize);
+    window.addEventListener('pointerup', stop, { once: true });
+    return () => {
+      window.removeEventListener('pointermove', resize);
+      window.removeEventListener('pointerup', stop);
+    };
+  }, [resizing]);
   const chooseFile = (path: string) => {
     setSelectedFile(path);
     setOpenFiles((current) => current.includes(path) ? current : [...current, path]);
@@ -314,11 +338,27 @@ export function ReviewPanel() {
   const titleFor = (path: string) => path.split('/').pop() ?? path;
   if (!open) return null;
   return (
-    <aside className="workspace-panel" data-testid="review-panel">
+    <aside className={`workspace-panel${resizing ? ' resizing' : ''}`} data-testid="review-panel" style={panelWidth ? { width: panelWidth } : undefined}>
+      <div
+        className="workspace-resize-handle"
+        data-testid="workspace-resize-handle"
+        role="separator"
+        aria-label={t('workspace.resize')}
+        aria-orientation="vertical"
+        tabIndex={0}
+        onPointerDown={(event) => { event.preventDefault(); setResizing(true); }}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          const current = panelWidth ?? Math.min(820, window.innerWidth * 0.5);
+          const delta = event.key === 'ArrowLeft' ? 24 : -24;
+          setPanelWidth(Math.min(Math.max(440, window.innerWidth - 460), Math.max(440, current + delta)));
+        }}
+      />
       <div className="workspace-tabs">
-        <button className={`workspace-tab${tab === 'files' ? ' active' : ''}`} data-testid="workspace-files-tab" onClick={() => setTab('files')}><Files size={14} />{t('workspace.files')}</button>
+        <button className={`workspace-tab${tab === 'files' ? ' active' : ''}`} data-testid="workspace-files-tab" onClick={() => { setWorkspaceOpen(true); setTab('files'); }}><Files size={14} />{t('workspace.files')}</button>
         {openFiles.map((path) => (
-          <button className={`workspace-tab${tab === `file:${path}` ? ' active' : ''}`} key={path} title={path} onClick={() => setTab(`file:${path}`)}>{titleFor(path)}<X size={12} onClick={(event) => { event.stopPropagation(); setOpenFiles((current) => current.filter((item) => item !== path)); if (tab === `file:${path}`) setTab('files'); }} /></button>
+          <button className={`workspace-tab${tab === `file:${path}` ? ' active' : ''}`} key={path} title={path} onClick={() => { setWorkspaceOpen(true); setTab(`file:${path}`); }}>{titleFor(path)}<X size={12} onClick={(event) => { event.stopPropagation(); setOpenFiles((current) => current.filter((item) => item !== path)); if (tab === `file:${path}`) setTab('files'); }} /></button>
         ))}
         <button className={`workspace-tab${tab === 'review' ? ' active' : ''}`} data-testid="workspace-review-tab" onClick={() => { setReviewOpen(true); setTab('review'); }}><FileCode2 size={14} />{t('review.title')}</button>
         <span className="spacer" />

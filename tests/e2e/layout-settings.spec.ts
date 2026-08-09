@@ -140,6 +140,13 @@ test('图片输入：附件入列 → 随消息发送 → 用户消息渲染图�
   await expect(page.getByTestId('message-user').last().getByTestId('message-image')).toBeVisible({
     timeout: 15_000,
   });
+  await page.getByTestId('message-image').last().click();
+  await expect(page.getByTestId('image-lightbox')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('image-lightbox')).toHaveCount(0);
+  await page.getByTestId('message-image').last().click();
+  await page.getByTestId('image-lightbox').click({ position: { x: 6, y: 6 } });
+  await expect(page.getByTestId('image-lightbox')).toHaveCount(0);
   await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
     timeout: 30_000,
   });

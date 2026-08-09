@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Copy, FileText, GitFork } from 'lucide-react';
+import { Check, Copy, FileText, GitFork, X } from 'lucide-react';
 import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
 import { formatDuration, formatWorkDuration } from '../../lib/tool-display';
@@ -125,6 +125,15 @@ export function MessageItem({
   const forkFrom = useChatStore((s) => s.forkFrom);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const [copied, setCopied] = useState<'text' | 'markdown' | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  useEffect(() => {
+    if (!previewImage) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPreviewImage(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [previewImage]);
   if (message.role === 'user') {
     const text = message.content
       .filter((b) => b.type === 'text')
@@ -150,10 +159,20 @@ export function MessageItem({
             const data = block.data ?? block.source?.data;
             const mimeType = block.mimeType ?? block.source?.mediaType;
             const url = data ? `data:${mimeType ?? 'image/png'};base64,${data}` : undefined;
-            return url ? <img key={i} className="message-image" data-testid="message-image" src={url} alt="" /> : null;
+            return url ? (
+              <button className="message-image-button" key={i} onClick={() => setPreviewImage(url)}>
+                <img className="message-image" data-testid="message-image" src={url} alt={t('chat.imagePreview')} />
+              </button>
+            ) : null;
           })}
           {text}
         </div>
+        {previewImage && (
+          <div className="image-lightbox" data-testid="image-lightbox" role="dialog" aria-label={t('chat.imagePreview')} onClick={() => setPreviewImage(null)}>
+            <button className="image-lightbox-close" title={t('chat.closeImagePreview')} aria-label={t('chat.closeImagePreview')} onClick={() => setPreviewImage(null)}><X size={18} /></button>
+            <img src={previewImage} alt={t('chat.imagePreview')} onClick={(event) => event.stopPropagation()} />
+          </div>
+        )}
       </div>
     );
   }

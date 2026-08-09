@@ -97,6 +97,19 @@ test('设置页：四个新设置项渲染 + 切换后落盘 config.json', async
   await expect(page.getByTestId('settings-compaction')).toBeVisible();
   await expect(page.getByTestId('compaction-reserve')).toHaveValue('16384');
   await expect(page.getByTestId('compaction-keep-recent')).toHaveValue('20000');
+  const sectionBorders = await page.locator('.settings-section').evaluateAll((sections) =>
+    sections.slice(0, 2).map((section) =>
+      section.ownerDocument.defaultView?.getComputedStyle(section).borderColor ?? '',
+    ),
+  );
+  expect(sectionBorders[1]).toBe(sectionBorders[0]);
+
+  const settingsPage = page.locator('.settings-page');
+  await expect(settingsPage).toHaveCSS('scrollbar-width', 'none');
+  await settingsPage.evaluate((element) => { element.scrollTop = 0; });
+  await settingsPage.hover();
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => settingsPage.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
   // 切换 → 落盘（electron-store：<userData>/config.json）
   await page.getByTestId('followup-steer').click();

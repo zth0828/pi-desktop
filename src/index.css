@@ -289,7 +289,6 @@ button.danger-outline {
   padding: 0 2px;
   min-height: 0;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
 }
 
 .sidebar-session {
@@ -461,10 +460,6 @@ button.danger-outline {
 
 .settings-page .pill-group {
   flex-shrink: 0;
-}
-
-.settings-page .settings-section[data-testid='settings-compaction'] {
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
 }
 
 @media (max-width: 680px) {
@@ -738,6 +733,48 @@ button.danger-outline {
   font-size: 14px;
 }
 
+.message-image-button {
+  display: block;
+  max-width: 100%;
+  margin-bottom: 7px;
+  overflow: hidden;
+  border-radius: 8px;
+  cursor: zoom-in;
+}
+
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  padding: 42px;
+  background: rgba(0, 0, 0, 0.78);
+  cursor: zoom-out;
+}
+
+.image-lightbox img {
+  max-width: min(100%, 1280px);
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
+  cursor: default;
+}
+
+.image-lightbox-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.34);
+}
+
 .message-assistant {
   font-size: 14px;
   line-height: 1.7;
@@ -808,12 +845,32 @@ button.danger-outline {
 
 .tool-card-header {
   display: flex;
+  flex: 1;
+  min-width: 0;
   gap: 10px;
   align-items: center;
   width: 100%;
   padding: 8px 13px;
   font-size: 13px;
   text-align: left;
+}
+
+.tool-card-header-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.tool-file-preview {
+  width: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.tool-file-preview:hover {
+  color: var(--text);
+  background: var(--bg-hover);
 }
 
 .tool-card-header:hover {
@@ -1415,6 +1472,11 @@ button.danger-outline {
   border-radius: 8px;
   color: var(--text-secondary);
   font-size: 12.5px;
+}
+
+.context-action {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .context-chip:hover,
@@ -2627,13 +2689,6 @@ button.danger-outline {
   padding: 40px;
 }
 
-/* 布局稳定性：滚动条出现/消失不引起横向跳动 */
-.message-list,
-.sidebar-sessions,
-.page {
-  scrollbar-gutter: stable;
-}
-
 /* 侧栏项目分组（Codex 式） */
 .session-group {
   display: flex;
@@ -3176,9 +3231,39 @@ button.danger-outline {
   background: var(--bg-raised);
   border-left: 1px solid var(--border);
   -webkit-app-region: no-drag;
+  position: relative;
 }
 
 .workspace-panel * { -webkit-app-region: no-drag; }
+
+.workspace-resize-handle {
+  position: absolute;
+  inset: 0 auto 0 -4px;
+  z-index: 130;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.workspace-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 3px;
+  width: 1px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.workspace-resize-handle:hover::after,
+.workspace-resize-handle:focus-visible::after,
+.workspace-panel.resizing .workspace-resize-handle::after {
+  background: var(--accent);
+}
+
+.workspace-panel.resizing {
+  user-select: none;
+}
 
 .workspace-tabs {
   min-height: 48px;
@@ -3288,26 +3373,18 @@ button.danger-outline {
 .split-hunk-header .review-revert-btn { opacity: 0; }
 .split-hunk:hover .review-revert-btn { opacity: 1; }
 
-.workspace-tree-scroll,
-.workspace-preview,
-.review-file-list,
-.review-diff-pane,
-.page,
-.sidebar-sessions,
-.message-list {
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
+/* 所有滚动容器保留滚轮/触控板/键盘滚动，但不展示平台滚动条。 */
+* {
+  scrollbar-width: none;
 }
-.workspace-tree-scroll:hover,
-.workspace-preview:hover,
-.review-file-list:hover,
-.review-diff-pane:hover,
-.page:hover,
-.sidebar-sessions:hover,
-.message-list:hover {
-  scrollbar-color: var(--border-strong) transparent;
+
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 @media (max-width: 980px) {
   .workspace-panel { position: absolute; inset: 0 0 0 auto; width: 100%; min-width: 0; z-index: 110; }
+  .workspace-resize-handle { display: none; }
 }

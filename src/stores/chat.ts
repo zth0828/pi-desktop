@@ -62,6 +62,8 @@ type ChatState = {
   reviewOpen: boolean;
   /** Workspace 文件预览面板开关（与 Review 共用右侧工作台）。 */
   workspaceOpen: boolean;
+  /** 工具卡请求打开工作区文件（nonce 保证重复点击同一路径也能激活）。 */
+  workspaceFileRequest: { path: string; nonce: number } | null;
   /** fork/跳分支后回填输入框的文本（nonce 保证同文本也触发） */
   inputDraft: { text: string; nonce: number } | null;
   /** 扩展 UI 请求队列（ctx.ui.confirm/select/input）；同一时间通常只有一个，设计上按队列 */
@@ -81,6 +83,7 @@ type ChatState = {
   setTreeOpen: (open: boolean) => void;
   setReviewOpen: (open: boolean) => void;
   setWorkspaceOpen: (open: boolean) => void;
+  openWorkspaceFile: (path: string) => void;
   /** 消息级 fork：从指定 user 消息分叉新会话（sessionReplaced 事件负责刷新列表） */
   forkFrom: (entryId: string) => Promise<void>;
   /** 跳分支：同会话文件内移动 leaf（navigateTree 后 main 推全量状态刷新） */
@@ -112,6 +115,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   treeOpen: false,
   reviewOpen: false,
   workspaceOpen: false,
+  workspaceFileRequest: null,
   inputDraft: null,
   uiRequests: [],
 
@@ -167,6 +171,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setReviewOpen: (open) => set({ reviewOpen: open, ...(open ? { workspaceOpen: false } : {}) }),
 
   setWorkspaceOpen: (open) => set({ workspaceOpen: open, ...(open ? { reviewOpen: false } : {}) }),
+
+  openWorkspaceFile: (rawPath) => {
+    const cwd = get().cwd?.replace(/\/$/, '');
+    const normalized = rawPath.replace(/\\/g, '/');
+    const path = cwd && normalized.startsWith(`${cwd}/`)
+      ? normalized.slice(cwd.length + 1)
+      : normalized;
+    set({
+      workspaceOpen: true,
+      reviewOpen: false,
+      workspaceFileRequest: { path, nonce: (get().workspaceFileRequest?.nonce ?? 0) + 1 },
+    });
+  },
 
   forkFrom: async (entryId) => {
     const result = await hostApi.piRuntime.fork(entryId);

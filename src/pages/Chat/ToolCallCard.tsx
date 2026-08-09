@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Eye } from 'lucide-react';
 import {
   collectToolWarnings,
   editPreviewDiff,
@@ -54,6 +55,7 @@ function ToolWarnings({ warnings }: { warnings: ToolWarning[] }) {
 export function ToolCallCard({ execution }: { execution: ToolExecution }) {
   const { t } = useTranslation();
   const toolsExpanded = useChatStore((s) => s.toolsExpanded);
+  const openWorkspaceFile = useChatStore((s) => s.openWorkspaceFile);
   // null = 跟随全局开关；单独点击后为本地覆盖
   const [localExpanded, setLocalExpanded] = useState<boolean | null>(null);
   const expanded = localExpanded ?? toolsExpanded;
@@ -92,13 +94,27 @@ export function ToolCallCard({ execution }: { execution: ToolExecution }) {
       ? extractResultText(execution.partialResult)
       : extractResultText(execution.result);
   const preview = !expanded && !diff && outputText ? tailLines(outputText, PREVIEW_LINES) : null;
+  const previewPath = ['read', 'edit', 'write'].includes(execution.toolName) ? summary : null;
 
   return (
     <div className={`tool-card tool-${execution.status}`} data-testid="tool-card">
-      <button className="tool-card-header" onClick={() => setLocalExpanded(!expanded)}>
-        <span className="tool-line" data-testid="tool-line">{line}</span>
-        <span className={`tool-status tool-status-${execution.status}`}>{statusLabel}</span>
-      </button>
+      <div className="tool-card-header-row">
+        <button className="tool-card-header" onClick={() => setLocalExpanded(!expanded)}>
+          <span className="tool-line" data-testid="tool-line">{line}</span>
+          <span className={`tool-status tool-status-${execution.status}`}>{statusLabel}</span>
+        </button>
+        {previewPath && (
+          <button
+            className="tool-file-preview"
+            data-testid="tool-preview-file"
+            title={t('chat.tool.previewFile')}
+            aria-label={t('chat.tool.previewFile')}
+            onClick={() => openWorkspaceFile(previewPath)}
+          >
+            <Eye size={14} />
+          </button>
+        )}
+      </div>
 
       {!expanded && diff && (
         <div className="tool-card-preview" {...(previewDiff ? { 'data-testid': 'edit-diff-preview' } : {})}>
