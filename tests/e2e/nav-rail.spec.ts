@@ -97,6 +97,11 @@ test('rail 圆点 = user 消息数；悬浮显示原问题，点击跳转并高�
     .poll(() => list.evaluate((el) => el.scrollTop), { timeout: 10_000 })
     .toBeLessThan(60);
   await expect(page.locator('#chat-msg-0')).toBeInViewport();
+  // 只允许滚动消息列表；不能让 scrollIntoView 带动外层 content，
+  // 否则标题栏会被推离视口，composer 下方出现大片空白。
+  await expect.poll(() => page.locator('.content').evaluate((el) => el.scrollTop)).toBe(0);
+  await expect(page.getByTestId('session-titlebar')).toBeInViewport();
+  await expect(page.getByTestId('chat-input')).toBeInViewport();
   // 高亮跟随可视区：顶部位置高亮前几条的圆点之一（TOC 语义：读线之上最后一条）
   await expect(rail.locator('.msg-rail-dot.active')).toHaveCount(1);
   const activeId = await rail.locator('.msg-rail-dot.active').getAttribute('data-testid');

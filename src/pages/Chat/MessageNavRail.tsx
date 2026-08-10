@@ -58,6 +58,18 @@ export function MessageNavRail({ anchors, listRef }: Props) {
 
   if (anchors.length < 2) return null;
 
+  const jumpTo = (anchorId: string) => {
+    const list = listRef.current;
+    const target = document.getElementById(anchorId);
+    if (!list || !target) return;
+    const listRect = list.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    list.scrollTo({
+      top: Math.max(0, list.scrollTop + targetRect.top - listRect.top - 20),
+      behavior: 'smooth',
+    });
+  };
+
   return (
     <div className="msg-rail" data-testid="msg-rail">
       {anchors.map((anchor) => (
@@ -66,11 +78,7 @@ export function MessageNavRail({ anchors, listRef }: Props) {
           className={activeId === anchor.id ? 'msg-rail-dot active' : 'msg-rail-dot'}
           data-testid={`msg-rail-dot-${anchor.id}`}
           aria-label={t('rail.jumpTo', { index: anchor.n })}
-          onClick={() =>
-            document
-              .getElementById(anchor.id)
-              ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          }
+          onClick={() => jumpTo(anchor.id)}
         >
           <span className="msg-rail-tooltip" data-testid="msg-rail-tooltip">
             {anchor.question || t('rail.attachmentQuestion')}
