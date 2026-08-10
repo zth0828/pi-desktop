@@ -10,14 +10,14 @@ import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
 
 /**
- * 「已处理 Xs」工作日志折叠的渲染指令（ChatPage 按逻辑轮计算后下发）：
- * hidden 里的工具卡不渲染；rows 命中的工具卡位置渲染折叠行（该轮第一个工具卡）。
+ * 工作日志折叠的渲染指令（ChatPage 按逻辑轮的「无输出区段」计算后下发）：
+ * hidden 里的工具卡不渲染；rows 命中的工具卡位置渲染折叠行（区段第一个工具卡），
  * expanded 行是展开态的「收起」锚点，保证展开后还能折回去。
  */
 export type TurnFold = {
   hidden: Set<string>;
-  rows: Map<string, { turn: number; count: number; startedAt?: number; endedAt?: number; expanded?: boolean }>;
-  onToggle: (turn: number, nextCollapsed: boolean) => void;
+  rows: Map<string, { run: string; count: number; startedAt?: number; endedAt?: number; expanded?: boolean }>;
+  onToggle: (run: string, nextCollapsed: boolean) => void;
 };
 
 /** 折叠行：历史轮的工具卡序列收拢成「已处理 1m 28s ▸」，点击展开；展开后变为 ▾，再点收起 */
@@ -115,7 +115,7 @@ function AssistantBlock({
           endedAt={row.endedAt}
           count={row.count}
           expanded={row.expanded}
-          onToggle={() => fold.onToggle(row.turn, Boolean(row.expanded))}
+          onToggle={() => fold.onToggle(row.run, Boolean(row.expanded))}
         />
       );
       if (row.expanded) {
@@ -139,7 +139,6 @@ export function MessageItem({
   anchorId,
   cacheMiss,
   fold,
-  processCollapsed = false,
 }: {
   message: ChatMessage;
   anchorId?: string;
@@ -147,8 +146,6 @@ export function MessageItem({
   cacheMiss?: CacheMiss;
   /** 工作日志折叠指令（仅 assistant 消息内的工具卡消费） */
   fold?: TurnFold;
-  /** 已有最终答复时收起该轮的阶段文本，只在首个工具位置保留摘要行。 */
-  processCollapsed?: boolean;
 }) {
   const { t } = useTranslation();
   const forkFrom = useChatStore((s) => s.forkFrom);
@@ -213,15 +210,10 @@ export function MessageItem({
     .join('\n\n')
     .trim();
   const plainText = message.content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
-  if (processCollapsed) {
-    const summaryBlock = message.content.find((block) => block.type === 'toolCall' && block.id && fold?.rows.has(block.id));
-    if (!summaryBlock) return null;
-    return (
-      <div className="message message-assistant message-process-summary" data-testid="message-assistant">
-        <AssistantBlock block={summaryBlock} fold={fold} />
-      </div>
-    );
-  }
+  // 整条消息的工具卡都被折叠隐藏时不渲染空容器（避免消息间距出现空白带）
+  const allHidden = message.content.length > 0
+    && message.content.every((b) => b.type === 'toolCall' && b.id && fold?.hidden.has(b.id));
+  if (allHidden) return null;
   const copy = async (kind: 'text' | 'markdown') => {
     const value = kind === 'text' ? plainText : markdownText;
     if (!value) return;

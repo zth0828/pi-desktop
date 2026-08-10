@@ -164,14 +164,14 @@ test('非 Git 目录：聚合编辑卡可回滚，Review 按钮打开完整评�
   await expect(page.getByTestId('review-file')).toHaveCount(2);
 });
 
-test('完成轮聚合为步骤摘要，点击展开还原；最终答复与 user 消息原位不动', async ({
+test('完成轮无输出区段聚合为步骤摘要，可展开/收起；文本输出原位不动', async ({
   launchElectronApp,
 }) => {
   const app = await launchElectronApp(launchOptions(foldWorkspace));
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  // 第一轮完成后立即聚合，只保留最终答复与步骤摘要。
+  // 第一轮完成后立即聚合：工具卡收成步骤摘要行，阶段文本保持可见。
   await sendPrompt(page, 'USE_TOOL_EDIT now');
   await expect(page.getByTestId('work-log-row')).toHaveCount(1, { timeout: 30_000 });
   await expect(page.getByTestId('tool-card')).toHaveCount(0);
@@ -185,27 +185,28 @@ test('完成轮聚合为步骤摘要，点击展开还原；最终答复与 user
   await expect(rows.last()).toContainText(/Completed 1 step|已完成 1 个步骤/);
   await expect(page.getByTestId('tool-card')).toHaveCount(0);
 
-  // user 消息原位（rail 锚点与 messages 下标对齐），最终文本仍完整显示。
+  // user 消息原位（rail 锚点与 messages 下标对齐），最终文本仍完整显示；
+  // 模型的阶段文本输出（PROCESS:）任何状态下都保持可见，只有无输出区段被折叠。
   await expect(page.getByTestId('message-user')).toHaveCount(2);
   await expect(page.locator('#chat-msg-0')).toContainText('USE_TOOL_EDIT');
   await expect(
     page.getByTestId('message-user').filter({ hasText: 'USE_TOOL_WRITE' }),
   ).toHaveAttribute('id', /^chat-msg-\d+$/);
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'FINAL:' })).toHaveCount(2);
-  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(0);
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(2);
 
-  // 点击展开：对应轮的工具卡还原，展开行保留为「收起」锚点，其他轮仍保持聚合。
+  // 点击展开：对应区段的工具卡还原，展开行保留为「收起」锚点，其他区段仍保持聚合。
   await rows.first().click();
   await expect(page.getByTestId('tool-card')).toHaveCount(1);
   await expect(page.getByTestId('work-log-row')).toHaveCount(2);
   const expandedRow = page.locator('[data-testid="work-log-row"][aria-expanded="true"]');
   await expect(expandedRow).toHaveCount(1);
-  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(1);
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(2);
 
   // 再点同一行收起：回到全聚合状态
   await expandedRow.click();
   await expect(page.getByTestId('tool-card')).toHaveCount(0);
   await expect(page.getByTestId('work-log-row')).toHaveCount(2);
   await expect(page.locator('[data-testid="work-log-row"][aria-expanded="true"]')).toHaveCount(0);
-  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(0);
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(2);
 });
