@@ -17,6 +17,13 @@ import { useChatStore, type ToolExecution } from '../../stores/chat';
 /** 折叠态输出预览保留的尾部行数（pi bash 折叠态口径） */
 const PREVIEW_LINES = 5;
 
+/** 带行号的文件内容视图：构造 pi diff 格式的 context 行（" <linenum> content"）复用 DiffView */
+function contentToPseudoDiff(content: string, startLine = 1): string {
+  const lines = content.split('\n');
+  if (lines[lines.length - 1] === '') lines.pop(); // 末尾换行不多算一行
+  return lines.map((line, i) => ` ${startLine + i} ${line}`).join('\n');
+}
+
 function DiffView({ diff }: { diff: string }) {
   return (
     <pre className="diff-view" data-testid="diff-view">
@@ -63,13 +70,19 @@ export function ToolCallCard({ execution }: { execution: ToolExecution }) {
   const summary = toolSummary(execution.toolName, execution.args);
   const details = resultDetails(execution.result);
   const realDiff = typeof details?.diff === 'string' ? details.diff : undefined;
-  // edit 执行前预览：args 流式完成（old/new 齐全）但结果未回时先渲染替换 diff；
-  // 真实 details.diff 到达后替换预览
+  // edit 缺真实 diff 时按「整段替换」从 args 构造预览：执行中是流式预览，
+  // 完成/恢复会话没有 details.diff 时同样兜底，而不是什么都不显示
   const previewDiff =
-    !realDiff && execution.status === 'running' && execution.toolName === 'edit'
+    !realDiff && execution.toolName === 'edit'
       ? editPreviewDiff(execution.args)
       : undefined;
   const diff = realDiff ?? previewDiff;
+  // write 的内容在 args.content：预览/展开直接展示写入内容（带行号），
+  // 比结果文本（"Wrote N bytes" 之类）有信息量
+  const writeRaw = execution.toolName === 'write'
+    ? (execution.args as { content?: unknown } | undefined)?.content
+    : undefined;
+  const writeContent = typeof writeRaw === 'string' && writeRaw.trim().length > 0 ? writeRaw : null;
   const warnings = collectToolWarnings(details);
   const duration = formatDuration(execution.startedAt, execution.endedAt);
   const statusLabel = execution.interrupted
@@ -93,7 +106,11 @@ export function ToolCallCard({ execution }: { execution: ToolExecution }) {
     execution.status === 'running' && execution.partialResult !== undefined
       ? extractResultText(execution.partialResult)
       : extractResultText(execution.result);
-  const preview = !expanded && !diff && outputText ? tailLines(outputText, PREVIEW_LINES) : null;
+  const writeTail = !expanded && !diff && writeContent !== null
+    ? tailLines(writeContent.trimEnd(), PREVIEW_LINES)
+    : null;
+  const writeTotalLines = writeTail ? writeTail.lines.length + writeTail.hidden : 0;
+  const preview = !expanded && !diff && writeContent === null && outputText ? tailLines(outputText, PREVIEW_LINES) : null;
   const previewPath = ['read', 'edit', 'write'].includes(execution.toolName) ? summary : null;
 
   return (
@@ -122,6 +139,15 @@ export function ToolCallCard({ execution }: { execution: ToolExecution }) {
           <ToolWarnings warnings={warnings} />
         </div>
       )}
+      {writeTail && (
+        <div className="tool-card-preview" data-testid="write-content-preview">
+          {writeTail.hidden > 0 && (
+            <div className="tool-preview-more">{t('chat.tool.earlierLines', { count: writeTail.hidden })}</div>
+          )}
+          <DiffView diff={contentToPseudoDiff(writeTail.lines.join('\n'), writeTotalLines - writeTail.lines.length + 1)} />
+          <ToolWarnings warnings={warnings} />
+        </div>
+      )}
       {preview && (
         <div className="tool-card-preview">
           {preview.hidden > 0 && (
@@ -135,11 +161,15 @@ export function ToolCallCard({ execution }: { execution: ToolExecution }) {
       {expanded && (
         <div className="tool-card-body">
           {/* 对齐 Codex：参数 JSON 不展示（header 摘要已含命令/路径等关键信息），
-              展开只看结果（输出/diff） */}
-          {(realDiff || outputText) && (
+              展开只看结果（输出/diff/写入内容） */}
+          {(realDiff || writeContent !== null || outputText) && (
             <>
               <div className="tool-section-title">{t('chat.tool.result')}</div>
-              {realDiff ? <DiffView diff={realDiff} /> : <pre>{outputText}</pre>}
+              {realDiff
+                ? <DiffView diff={realDiff} />
+                : writeContent !== null
+                  ? <DiffView diff={contentToPseudoDiff(writeContent.trimEnd())} />
+                  : <pre>{outputText}</pre>}
             </>
           )}
           <ToolWarnings warnings={warnings} />
