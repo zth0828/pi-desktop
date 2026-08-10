@@ -232,4 +232,17 @@ test('thinking 与最终文本在同一消息时，折叠只保留最终答复',
   await expect(page.locator('.thinking-block pre')).toContainText('THOUGHT: inspect the request');
   await expect(page.locator('.thinking-block')).toHaveAttribute('open', '');
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'FINAL: reasoning complete' })).toBeVisible();
+
+  // 完全退出并重启后，pi session 历史里的 thinking 仍应进入同一回合折叠，
+  // 不能只在实时事件累积的内存消息中可见。
+  await app.close();
+  const restoredApp = await launchElectronApp(launchOptions(foldWorkspace));
+  const restoredPage = await restoredApp.firstWindow();
+  await waitSessionReady(restoredPage);
+  await restoredPage.locator('.sidebar-session').filter({ hasText: 'REASONING_TURN' }).click();
+  await expect(restoredPage.getByTestId('message-assistant').filter({ hasText: 'FINAL: reasoning complete' })).toBeVisible({ timeout: 30_000 });
+  const restoredToggle = restoredPage.getByTestId('turn-fold-toggle').last();
+  await expect(restoredToggle).toBeVisible();
+  await restoredToggle.click();
+  await expect(restoredPage.locator('.thinking-block pre')).toContainText('THOUGHT: inspect the request');
 });
