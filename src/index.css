@@ -820,6 +820,7 @@ button.danger-outline {
   background: var(--overlay-backdrop);
   backdrop-filter: blur(14px);
   cursor: zoom-out;
+  -webkit-app-region: no-drag;
 }
 
 .image-lightbox img {
@@ -836,6 +837,7 @@ button.danger-outline {
   position: absolute;
   top: 18px;
   right: 18px;
+  z-index: 1;
   width: 34px;
   height: 34px;
   display: grid;

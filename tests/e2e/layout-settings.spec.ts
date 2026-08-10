@@ -146,6 +146,9 @@ test('图片输入：附件入列 → 随消息发送 → 用户消息渲染图�
   });
   await page.getByTestId('message-image').last().click();
   await expect(page.getByTestId('image-lightbox')).toBeVisible();
+  await page.getByTestId('image-lightbox-close').click();
+  await expect(page.getByTestId('image-lightbox')).toHaveCount(0);
+  await page.getByTestId('message-image').last().click();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('image-lightbox')).toHaveCount(0);
   await page.getByTestId('message-image').last().click();

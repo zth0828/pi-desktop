@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
@@ -30,7 +31,7 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
     };
   }, []);
 
-  return (
+  return createPortal(
     <div
       className="image-lightbox"
       data-testid="image-lightbox"
@@ -40,15 +41,21 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
       onClick={onClose}
     >
       <button
+        type="button"
         ref={closeRef}
         className="image-lightbox-close"
+        data-testid="image-lightbox-close"
         title={t('chat.closeImagePreview')}
         aria-label={t('chat.closeImagePreview')}
-        onClick={onClose}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose();
+        }}
       >
         <X size={18} />
       </button>
       <img src={src} alt={t('chat.imagePreview')} onClick={(event) => event.stopPropagation()} />
-    </div>
+    </div>,
+    document.body,
   );
 }
