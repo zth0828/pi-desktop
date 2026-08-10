@@ -23,10 +23,11 @@ registerHostInvokeHandler(hostRegistry);
 
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
+    width: 1280,
+    height: 840,
+    // 侧栏 + 聊天列(420) + 右侧面板的最小可用宽度；窄于此面板自动转覆盖层（CSS 媒体查询）
+    minWidth: 960,
+    minHeight: 640,
     title: 'Pi Desktop',
     // 让 macOS 原生红黄绿按钮叠在应用内容上，避免额外占一整行标题栏。
     ...(process.platform === 'darwin'

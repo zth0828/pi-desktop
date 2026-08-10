@@ -42,8 +42,13 @@ type WorkbenchTab = 'files' | 'review' | `file:${string}`;
 const WORKSPACE_PANEL_MIN = 620;
 const CHAT_COLUMN_MIN = 420;
 
+/** 可用宽度必须是聊天页容器（已扣除侧栏），用 window.innerWidth 会把侧栏宽度算进来挤掉聊天列 */
+function availablePanelSpace(): number {
+  return document.querySelector('.chat-page')?.clientWidth ?? window.innerWidth;
+}
+
 function clampPanelWidth(width: number): number {
-  const maximum = Math.max(320, window.innerWidth - CHAT_COLUMN_MIN);
+  const maximum = Math.max(320, availablePanelSpace() - CHAT_COLUMN_MIN);
   const minimum = Math.min(WORKSPACE_PANEL_MIN, maximum);
   return Math.min(maximum, Math.max(minimum, width));
 }
@@ -383,7 +388,7 @@ export function ReviewPanel() {
         onKeyDown={(event) => {
           if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
           event.preventDefault();
-          const current = panelWidth ?? Math.min(960, window.innerWidth * 0.64);
+          const current = panelWidth ?? Math.min(960, availablePanelSpace() * 0.64);
           const delta = event.key === 'ArrowLeft' ? 24 : -24;
           setPanelWidth(clampPanelWidth(current + delta));
         }}

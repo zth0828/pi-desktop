@@ -117,6 +117,13 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
   const panel = page.getByTestId('review-panel');
   await expect(panel).toBeVisible();
 
+  // 评审态下标题栏开关同样能收起面板（回归：reviewOpen 时开关曾失效）
+  await page.getByTestId('workspace-toggle').click();
+  await expect(panel).toBeHidden();
+  await page.getByTestId('session-menu').click();
+  await page.getByTestId('open-review').click();
+  await expect(panel).toBeVisible();
+
   // 文件清单：e2e-edit-target.txt，+1/-1
   const fileRow = panel.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' });
   await expect(fileRow).toBeVisible({ timeout: 30_000 });
@@ -163,14 +170,25 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await page.mouse.up();
   await expect.poll(async () => (await panel.boundingBox())!.width).toBeLessThan(initialWidth - 40);
 
-  // 默认/窄窗口自动切成完整工作台，不要求用户手动拖宽。
-  await page.setViewportSize({ width: 1000, height: 800 });
+  // 过窄窗口自动切成覆盖层工作台，不要求用户手动拖宽（≥960px 时停靠并排）。
+  await page.setViewportSize({ width: 900, height: 800 });
   await expect(handle).toBeHidden();
   await expect.poll(async () => {
     const panelWidth = (await panel.boundingBox())!.width;
     const pageWidth = (await page.locator('.chat-page').boundingBox())!.width;
     return Math.abs(panelWidth - pageWidth);
   }).toBeLessThan(2);
+
+  // 拖出覆盖层断点后又回到停靠模式
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await expect(handle).toBeVisible();
+  // 覆盖层期间宽度被钳到最小，拖宽后再继续树/预览断言
+  const dockedBox = await handle.boundingBox();
+  await page.mouse.move(dockedBox!.x + 4, dockedBox!.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(dockedBox!.x - 300, dockedBox!.y + 100);
+  await page.mouse.up();
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBeGreaterThan(500);
 
   await panel.getByTestId('workspace-directory').filter({ hasText: 'src' }).click();
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.ts' }).click();

@@ -3464,7 +3464,8 @@ button.danger-outline {
   height: 0;
 }
 
-@media (max-width: 1280px) {
+/* 视口过窄（扣除 224px 侧栏后放不下 聊天420 + 面板320）时面板转覆盖层，避免挤没聊天列 */
+@media (max-width: 960px) {
   .workspace-panel { position: absolute; inset: 0 0 0 auto; width: 100%; min-width: 0; z-index: 110; }
   .workspace-resize-handle { display: none; }
 }

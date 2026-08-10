@@ -71,7 +71,15 @@ function SessionTitleBar() {
           data-testid="workspace-toggle"
           title={t('workspace.toggle')}
           aria-pressed={workspaceOpen || reviewOpen}
-          onClick={() => setWorkspaceOpen(!(workspaceOpen || reviewOpen))}
+          onClick={() => {
+            // 两个面板共用右侧工作台：任一开着的收起要同时关掉，否则评审开着时按钮失效
+            if (workspaceOpen || reviewOpen) {
+              setWorkspaceOpen(false);
+              setReviewOpen(false);
+            } else {
+              setWorkspaceOpen(true);
+            }
+          }}
         >
           <PanelRight size={17} />
         </button>
