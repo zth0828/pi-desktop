@@ -156,7 +156,9 @@
       "title_one": "Completed {{count}} step · {{duration}}",
       "title_other": "Completed {{count}} steps · {{duration}}",
       "titleNoDuration_one": "Completed {{count}} step",
-      "titleNoDuration_other": "Completed {{count}} steps"
+      "titleNoDuration_other": "Completed {{count}} steps",
+      "expand": "Expand work log",
+      "collapse": "Collapse work log"
     },
     "stopLength": "Response stopped: length limit reached.",
     "expandTools": "Expand all tools",

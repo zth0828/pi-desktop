@@ -12,35 +12,44 @@ import { ToolCallCard } from './ToolCallCard';
 /**
  * 「已处理 Xs」工作日志折叠的渲染指令（ChatPage 按逻辑轮计算后下发）：
  * hidden 里的工具卡不渲染；rows 命中的工具卡位置渲染折叠行（该轮第一个工具卡）。
+ * expanded 行是展开态的「收起」锚点，保证展开后还能折回去。
  */
 export type TurnFold = {
   hidden: Set<string>;
-  rows: Map<string, { turn: number; count: number; startedAt?: number; endedAt?: number }>;
-  onExpand: (turn: number) => void;
+  rows: Map<string, { turn: number; count: number; startedAt?: number; endedAt?: number; expanded?: boolean }>;
+  onToggle: (turn: number, nextCollapsed: boolean) => void;
 };
 
-/** 折叠行：历史轮的工具卡序列收拢成「已处理 1m 28s ▸」，点击展开还原 */
+/** 折叠行：历史轮的工具卡序列收拢成「已处理 1m 28s ▸」，点击展开；展开后变为 ▾，再点收起 */
 function WorkLogRow({
   startedAt,
   endedAt,
   count,
-  onExpand,
+  expanded = false,
+  onToggle,
 }: {
   startedAt?: number;
   endedAt?: number;
   count: number;
-  onExpand: () => void;
+  expanded?: boolean;
+  onToggle: () => void;
 }) {
   const { t } = useTranslation();
   const duration = formatWorkDuration(startedAt, endedAt);
   return (
-    <button className="work-log-row" data-testid="work-log-row" onClick={onExpand}>
+    <button
+      className={`work-log-row${expanded ? ' expanded' : ''}`}
+      data-testid="work-log-row"
+      aria-expanded={expanded}
+      title={expanded ? t('chat.workLog.collapse') : t('chat.workLog.expand')}
+      onClick={onToggle}
+    >
       <span className="work-log-title">
         {duration
           ? t('chat.workLog.title', { count, duration })
           : t('chat.workLog.titleNoDuration', { count })}
       </span>
-      <span className="work-log-chevron">▸</span>
+      <span className="work-log-chevron">{expanded ? '▾' : '▸'}</span>
     </button>
   );
 }
@@ -90,27 +99,36 @@ function AssistantBlock({
     return <ThinkingBlock thinking={block.thinking ?? ''} active={active ?? false} />;
   }
   if (block.type === 'toolCall' && block.id) {
-    // 历史轮折叠：该轮第一个工具卡位置渲染「已处理 Xs」行，其余工具卡隐藏
-    if (fold) {
-      const row = fold.rows.get(block.id);
-      if (row) {
-        return (
-          <WorkLogRow
-            startedAt={row.startedAt}
-            endedAt={row.endedAt}
-            count={row.count}
-            onExpand={() => fold.onExpand(row.turn)}
-          />
-        );
-      }
-      if (fold.hidden.has(block.id)) return null;
-    }
     const execution = toolExecutions[block.id] ?? {
       toolCallId: block.id,
       toolName: block.name ?? 'unknown',
       args: block.arguments,
       status: 'running' as const,
     };
+    // 历史轮折叠：该轮第一个工具卡位置渲染「已处理 Xs」行，其余工具卡隐藏；
+    // 展开态在该轮首卡前额外挂「收起」锚点行（卡片本身照常渲染，保证能折回去）
+    const row = fold?.rows.get(block.id);
+    if (row && fold) {
+      const logRow = (
+        <WorkLogRow
+          startedAt={row.startedAt}
+          endedAt={row.endedAt}
+          count={row.count}
+          expanded={row.expanded}
+          onToggle={() => fold.onToggle(row.turn, Boolean(row.expanded))}
+        />
+      );
+      if (row.expanded) {
+        return (
+          <>
+            {logRow}
+            <ToolCallCard execution={execution} />
+          </>
+        );
+      }
+      return logRow;
+    }
+    if (fold?.hidden.has(block.id)) return null;
     return <ToolCallCard execution={execution} />;
   }
   return null;

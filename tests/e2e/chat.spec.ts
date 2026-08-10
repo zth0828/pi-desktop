@@ -131,6 +131,11 @@ test('工具调用 → 完成后聚合，展开摘要可查看工具结果', asy
   // 展开看结果
   await card.locator('.tool-card-header').click();
   await expect(card.locator('.tool-card-body pre').last()).toBeVisible();
+
+  // 再点摘要行可折回（展开态保留「收起」锚点）
+  await summary.click();
+  await expect(page.getByTestId('tool-card')).toHaveCount(0);
+  await expect(page.getByTestId('work-log-row')).toHaveCount(1);
 });
 
 test('edit 工具 → 行级 diff 展示', async ({ launchElectronApp }) => {

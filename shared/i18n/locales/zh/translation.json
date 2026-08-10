@@ -156,7 +156,9 @@
       "title_one": "已完成 {{count}} 个步骤 · {{duration}}",
       "title_other": "已完成 {{count}} 个步骤 · {{duration}}",
       "titleNoDuration_one": "已完成 {{count}} 个步骤",
-      "titleNoDuration_other": "已完成 {{count}} 个步骤"
+      "titleNoDuration_other": "已完成 {{count}} 个步骤",
+      "expand": "展开工作日志",
+      "collapse": "收起工作日志"
     },
     "stopLength": "回复因达到长度上限而停止。",
     "expandTools": "展开全部工具",

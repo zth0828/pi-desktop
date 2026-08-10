@@ -194,9 +194,18 @@ test('完成轮聚合为步骤摘要，点击展开还原；最终答复与 user
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'FINAL:' })).toHaveCount(2);
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(0);
 
-  // 点击展开：对应轮的工具卡还原，其他轮仍保持聚合。
+  // 点击展开：对应轮的工具卡还原，展开行保留为「收起」锚点，其他轮仍保持聚合。
   await rows.first().click();
   await expect(page.getByTestId('tool-card')).toHaveCount(1);
-  await expect(page.getByTestId('work-log-row')).toHaveCount(1);
+  await expect(page.getByTestId('work-log-row')).toHaveCount(2);
+  const expandedRow = page.locator('[data-testid="work-log-row"][aria-expanded="true"]');
+  await expect(expandedRow).toHaveCount(1);
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(1);
+
+  // 再点同一行收起：回到全聚合状态
+  await expandedRow.click();
+  await expect(page.getByTestId('tool-card')).toHaveCount(0);
+  await expect(page.getByTestId('work-log-row')).toHaveCount(2);
+  await expect(page.locator('[data-testid="work-log-row"][aria-expanded="true"]')).toHaveCount(0);
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(0);
 });

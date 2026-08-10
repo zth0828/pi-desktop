@@ -133,19 +133,23 @@ export default function ChatPage() {
       return j < lastIndex || !isStreaming;
     });
     const hidden = new Set<string>();
-    const rows = new Map<string, { turn: number; count: number; startedAt?: number; endedAt?: number }>();
+    const rows = new Map<string, { turn: number; count: number; startedAt?: number; endedAt?: number; expanded?: boolean }>();
     const collapsedMessages = new Set<number>();
     logical.forEach((turn, j) => {
       if (!completed[j] || turn.toolCallIds.length === 0) return;
       const finalResponseIndex = turnFinalResponseIndex(messages, turn);
       // 没有最终答复通常意味着中断或异常，保留过程内容，避免把唯一的解释藏起来。
       if (finalResponseIndex === undefined) return;
+      const { startedAt, endedAt } = turnTimeRange(toolExecutions, turn.toolCallIds);
       const collapsed = foldOverrides[j] ?? true;
-      if (!collapsed) return;
+      if (!collapsed) {
+        // 展开态在该轮首个工具卡位置挂「收起」行，保证能折回去
+        rows.set(turn.toolCallIds[0], { turn: j, count: turn.toolCallIds.length, startedAt, endedAt, expanded: true });
+        return;
+      }
       for (let i = turn.startIndex + 1; i < finalResponseIndex; i += 1) {
         if (messages[i]?.role === 'assistant') collapsedMessages.add(i);
       }
-      const { startedAt, endedAt } = turnTimeRange(toolExecutions, turn.toolCallIds);
       turn.toolCallIds.forEach((id, k) => {
         if (k === 0) rows.set(id, { turn: j, count: turn.toolCallIds.length, startedAt, endedAt });
         else hidden.add(id);
@@ -168,7 +172,8 @@ export default function ChatPage() {
       fold: {
         hidden,
         rows,
-        onExpand: (turn: number) => setFoldOverrides((prev) => ({ ...prev, [turn]: false })),
+        onToggle: (turn: number, nextCollapsed: boolean) =>
+          setFoldOverrides((prev) => ({ ...prev, [turn]: nextCollapsed })),
       } satisfies TurnFold,
       collapsedProcessMessages: collapsedMessages,
       turnCards: cards,
