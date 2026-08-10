@@ -606,7 +606,7 @@ export const piRuntimeApi = {
   },
 
   /** /name <text>：重命名当前会话（pi session.setSessionName，返回值是规范化后的名字）。 */
-  setSessionName: async (payload: { name: string }) => {
+  setSessionName: async (payload: { name: string; notify?: boolean }) => {
     if (!active) return { success: false, error: 'session not started' };
     const name = payload.name.trim();
     if (!name) return { success: false, error: 'empty name' };
@@ -614,7 +614,7 @@ export const piRuntimeApi = {
       active.runtime.session.setSessionName(name);
       // 侧栏会话列表靠 sessionReplaced / isStreaming 翻转刷新；
       // streaming 中推全量会丢 partial 消息，跳过（流结束时列表自会刷新）。
-      if (!active.runtime.session.isStreaming) {
+      if (payload.notify !== false && !active.runtime.session.isStreaming) {
         sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));
       }
       return { success: true, name: active.runtime.session.sessionManager.getSessionName() };

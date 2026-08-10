@@ -56,7 +56,7 @@ test.afterAll(async () => {
   await rm(workspace, { recursive: true, force: true });
 });
 
-test('rail 圆点 = user 消息数；点击跳转到对应消息并高亮', async ({ launchElectronApp }) => {
+test('rail 圆点 = user 消息数；悬浮显示原问题，点击跳转并高亮', async ({ launchElectronApp }) => {
   const app = await launchElectronApp({
     withPi: true,
     agentDir,
@@ -79,6 +79,12 @@ test('rail 圆点 = user 消息数；点击跳转到对应消息并高亮', asyn
   const rail = page.getByTestId('msg-rail');
   await expect(rail).toBeVisible();
   await expect(rail.locator('.msg-rail-dot')).toHaveCount(rounds);
+
+  const thirdDot = page.getByTestId('msg-rail-dot-chat-msg-4');
+  await thirdDot.hover();
+  await expect(thirdDot.getByTestId('msg-rail-tooltip')).toBeVisible();
+  await expect(thirdDot.getByTestId('msg-rail-tooltip')).toHaveText('Say PONG 3');
+  await page.screenshot({ path: 'output/playwright/nav-rail-tooltip.png', fullPage: false });
 
   // 新消息自动滚到底 → 列表已溢出、末位圆点高亮
   const list = page.getByTestId('message-list');

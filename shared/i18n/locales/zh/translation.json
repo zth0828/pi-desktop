@@ -162,12 +162,16 @@
       "expand": "展开工作日志",
       "collapse": "收起工作日志"
     },
+    "turnFold": {
+      "expand": "展开本轮过程",
+      "collapse": "收起本轮过程"
+    },
     "taskList": {
       "title": "任务",
       "progress": "已完成 {{completed}}/{{total}}"
     },
     "turnStats": {
-      "tokens": "本轮 {{tokens}} token · {{input}} 输入 / {{output}} 输出",
+      "tokens": "本轮合计 {{tokens}} token · {{input}} 输入 / {{output}} 输出",
       "cache": "缓存命中 {{rate}}%",
       "durationSeconds": "{{seconds}} 秒",
       "durationMinutes": "{{minutes}} 分 {{seconds}} 秒",
@@ -207,6 +211,7 @@
     "tokenUnknown": "—",
     "greeting": "我能为你做些什么？",
     "untitled": "未命名会话",
+    "imageSessionTitle": "图片会话",
     "sessionMenu": "会话操作",
     "renameSession": "重命名会话",
     "saveRename": "保存会话名",
@@ -544,7 +549,8 @@
     "retry": "重试"
   },
   "rail": {
-    "jumpTo": "跳转到你的第 {{index}} 条消息"
+    "jumpTo": "跳转到你的第 {{index}} 条消息",
+    "attachmentQuestion": "附件问题"
   },
   "list": {
     "search": "搜索…"

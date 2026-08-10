@@ -622,7 +622,7 @@ export type HostApiContract = {
     setThinkingLevel: (payload: { level: string }) => PiRuntimeModelUpdateResult;
     setModel: (payload: { provider: string; id: string }) => PiRuntimeModelUpdateResult;
     /** /name <text>：重命名当前会话（session.setSessionName；返回 pi 规范化后的名字）。 */
-    setSessionName: (payload: { name: string }) => HostSuccess & { name?: string };
+    setSessionName: (payload: { name: string; notify?: boolean }) => HostSuccess & { name?: string };
     /** /session：当前会话信息（getSessionStats + 会话名）。 */
     getSessionInfo: () => PiRuntimeSessionInfo | null;
     /** /reload：重载扩展/skills/prompts/上下文文件（session.reload；streaming/compacting 中拒绝）。 */

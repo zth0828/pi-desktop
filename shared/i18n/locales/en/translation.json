@@ -162,12 +162,16 @@
       "expand": "Expand work log",
       "collapse": "Collapse work log"
     },
+    "turnFold": {
+      "expand": "Show turn process",
+      "collapse": "Hide turn process"
+    },
     "taskList": {
       "title": "Tasks",
       "progress": "{{completed}}/{{total}} complete"
     },
     "turnStats": {
-      "tokens": "{{tokens}} tokens · {{input}} in / {{output}} out",
+      "tokens": "Turn total {{tokens}} tokens · {{input}} in / {{output}} out",
       "cache": "Cache hit {{rate}}%",
       "durationSeconds": "{{seconds}}s",
       "durationMinutes": "{{minutes}}m {{seconds}}s",
@@ -207,6 +211,7 @@
     "tokenUnknown": "—",
     "greeting": "What can I do for you?",
     "untitled": "Untitled session",
+    "imageSessionTitle": "Image conversation",
     "sessionMenu": "Session actions",
     "renameSession": "Rename session",
     "saveRename": "Save session name",
@@ -544,7 +549,8 @@
     "retry": "Retry"
   },
   "rail": {
-    "jumpTo": "Jump to your message {{index}}"
+    "jumpTo": "Jump to your message {{index}}",
+    "attachmentQuestion": "Attachment question"
   },
   "list": {
     "search": "Search…"

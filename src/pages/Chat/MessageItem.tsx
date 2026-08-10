@@ -3,63 +3,18 @@ import { useTranslation } from 'react-i18next';
 import { Check, Copy, FileText, GitFork } from 'lucide-react';
 import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
-import { formatDuration, formatWorkDuration } from '../../lib/tool-display';
+import { formatDuration } from '../../lib/tool-display';
 import { hostApi } from '../../lib/host-api';
 import { useChatStore, type ChatMessage, type ContentBlock, type TurnStats } from '../../stores/chat';
 import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
 
 /**
- * 工作日志折叠的渲染指令（ChatPage 按逻辑轮的「无输出区段」计算后下发）：
- * hidden 里的工具卡不渲染；rows 命中的工具卡位置渲染折叠行（区段第一个工具卡），
- * expanded 行是展开态的「收起」锚点，保证展开后还能折回去。
- */
-export type TurnFold = {
-  hidden: Set<string>;
-  rows: Map<string, { run: string; count: number; startedAt?: number; endedAt?: number; expanded?: boolean }>;
-  onToggle: (run: string, nextCollapsed: boolean) => void;
-};
-
-/** 折叠行：历史轮的工具卡序列收拢成「已处理 1m 28s ▸」，点击展开；展开后变为 ▾，再点收起 */
-function WorkLogRow({
-  startedAt,
-  endedAt,
-  count,
-  expanded = false,
-  onToggle,
-}: {
-  startedAt?: number;
-  endedAt?: number;
-  count: number;
-  expanded?: boolean;
-  onToggle: () => void;
-}) {
-  const { t } = useTranslation();
-  const duration = formatWorkDuration(startedAt, endedAt);
-  return (
-    <button
-      className={`work-log-row${expanded ? ' expanded' : ''}`}
-      data-testid="work-log-row"
-      aria-expanded={expanded}
-      title={expanded ? t('chat.workLog.collapse') : t('chat.workLog.expand')}
-      onClick={onToggle}
-    >
-      <span className="work-log-title">
-        {duration
-          ? t('chat.workLog.title', { count, duration })
-          : t('chat.workLog.titleNoDuration', { count })}
-      </span>
-      <span className="work-log-chevron">{expanded ? '▾' : '▸'}</span>
-    </button>
-  );
-}
-
-/**
  * thinking 折叠块（Codex reasoningItem 范式）：流式中 "Thinking…"，
  * 结束后 "Thought for 3.2s"。计时时戳用 ref 记录（流式 partial 替换消息对象
  * 但组件实例随列表位置保持），历史消息没有计时时回退到通用完成文案。
  */
-function ThinkingBlock({ thinking, active }: { thinking: string; active: boolean }) {
+function ThinkingBlock({ thinking, active, expanded }: { thinking: string; active: boolean; expanded?: boolean }) {
   const { t } = useTranslation();
   const startedRef = useRef<number | null>(null);
   const endedRef = useRef<number | null>(null);
@@ -70,7 +25,7 @@ function ThinkingBlock({ thinking, active }: { thinking: string; active: boolean
       ? formatDuration(startedRef.current, endedRef.current)
       : null;
   return (
-    <details className={`thinking-block${active ? ' streaming' : ''}`}>
+    <details className={`thinking-block${active ? ' streaming' : ''}`} open={expanded || active}>
       <summary>
         {active ? t('chat.thinkingStreaming') : duration ? t('chat.thinkingTimed', { duration }) : t('chat.thinkingDone')}
       </summary>
@@ -83,12 +38,12 @@ function AssistantBlock({
   block,
   streaming,
   active,
-  fold,
+  expandThinking,
 }: {
   block: ContentBlock;
   streaming?: boolean;
   active?: boolean;
-  fold?: TurnFold;
+  expandThinking?: boolean;
 }) {
   const toolExecutions = useChatStore((s) => s.toolExecutions);
 
@@ -96,7 +51,7 @@ function AssistantBlock({
     return <Markdown text={block.text ?? ''} streaming={streaming} />;
   }
   if (block.type === 'thinking') {
-    return <ThinkingBlock thinking={block.thinking ?? ''} active={active ?? false} />;
+    return <ThinkingBlock thinking={block.thinking ?? ''} active={active ?? false} expanded={expandThinking} />;
   }
   if (block.type === 'toolCall' && block.id) {
     const execution = toolExecutions[block.id] ?? {
@@ -105,30 +60,6 @@ function AssistantBlock({
       args: block.arguments,
       status: 'running' as const,
     };
-    // 历史轮折叠：该轮第一个工具卡位置渲染「已处理 Xs」行，其余工具卡隐藏；
-    // 展开态在该轮首卡前额外挂「收起」锚点行（卡片本身照常渲染，保证能折回去）
-    const row = fold?.rows.get(block.id);
-    if (row && fold) {
-      const logRow = (
-        <WorkLogRow
-          startedAt={row.startedAt}
-          endedAt={row.endedAt}
-          count={row.count}
-          expanded={row.expanded}
-          onToggle={() => fold.onToggle(row.run, Boolean(row.expanded))}
-        />
-      );
-      if (row.expanded) {
-        return (
-          <>
-            {logRow}
-            <ToolCallCard execution={execution} />
-          </>
-        );
-      }
-      return logRow;
-    }
-    if (fold?.hidden.has(block.id)) return null;
     return <ToolCallCard execution={execution} />;
   }
   return null;
@@ -138,17 +69,23 @@ export function MessageItem({
   message,
   anchorId,
   cacheMiss,
-  fold,
   turnStats,
+  contentOverride,
+  expandThinking,
+  suppressTail,
 }: {
   message: ChatMessage;
   anchorId?: string;
   /** 本轮 assistant 消息的缓存失效检测结果（collectCacheMisses 按下标分发） */
   cacheMiss?: CacheMiss;
-  /** 工作日志折叠指令（仅 assistant 消息内的工具卡消费） */
-  fold?: TurnFold;
   /** 仅当前实时完成回合的收尾统计；恢复会话时为空。 */
   turnStats?: TurnStats | null;
+  /** 回合折叠将最终答复与其他 block 分开渲染时使用。 */
+  contentOverride?: ContentBlock[];
+  /** 回合展开后 thinking 内容也同步展开。 */
+  expandThinking?: boolean;
+  /** 最终 assistant 消息被拆成「过程 block」与「答复文本」时，尾部元数据只渲染一次。 */
+  suppressTail?: boolean;
 }) {
   const { t } = useTranslation();
   const forkFrom = useChatStore((s) => s.forkFrom);
@@ -205,18 +142,16 @@ export function MessageItem({
       </details>
     );
   }
+  const content = contentOverride ?? message.content;
   const raw = message.raw as { stopReason?: string; errorMessage?: string } | undefined;
-  const showTail = !message.streaming;
-  const markdownText = message.content
+  const showTail = !message.streaming && !suppressTail;
+  const markdownText = content
     .filter((b) => b.type === 'text' || b.type === 'thinking')
     .map((b) => b.type === 'thinking' ? `> ${b.thinking ?? ''}` : b.text ?? '')
     .join('\n\n')
     .trim();
-  const plainText = message.content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
-  // 整条消息的工具卡都被折叠隐藏时不渲染空容器（避免消息间距出现空白带）
-  const allHidden = message.content.length > 0
-    && message.content.every((b) => b.type === 'toolCall' && b.id && fold?.hidden.has(b.id));
-  if (allHidden) return null;
+  const plainText = content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
+  if (content.length === 0) return null;
   const copy = async (kind: 'text' | 'markdown') => {
     const value = kind === 'text' ? plainText : markdownText;
     if (!value) return;
@@ -231,13 +166,13 @@ export function MessageItem({
   };
   return (
     <div className="message message-assistant" data-testid="message-assistant">
-      {message.content.map((block, i) => (
+      {content.map((block, i) => (
         <AssistantBlock
           key={i}
           block={block}
           streaming={message.streaming}
-          active={Boolean(message.streaming) && i === message.content.length - 1}
-          fold={fold}
+          active={Boolean(message.streaming) && i === content.length - 1}
+          expandThinking={expandThinking}
         />
       ))}
       {message.streaming && <span className="cursor-blink">▍</span>}
@@ -285,7 +220,12 @@ function TurnStatsCard({ stats }: { stats: TurnStats }) {
   const cost = stats.cost >= 1 ? stats.cost.toFixed(2) : stats.cost.toFixed(4);
   return (
     <div className="turn-stats-card" data-testid="turn-stats">
-      <span>{t('chat.turnStats.tokens', {
+      <span
+        data-testid="turn-stats-tokens"
+        data-total={totalTokens}
+        data-input={stats.input}
+        data-output={stats.output}
+      >{t('chat.turnStats.tokens', {
         tokens: totalTokens.toLocaleString(),
         input: stats.input.toLocaleString(),
         output: stats.output.toLocaleString(),

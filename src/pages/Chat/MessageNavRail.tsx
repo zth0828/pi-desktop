@@ -8,6 +8,8 @@ export type RailAnchor = {
   id: string;
   /** 在 user 消息中的序号（1 起，aria-label 用） */
   n: number;
+  /** 用户当时的问题（悬浮预览） */
+  question: string;
 };
 
 type Props = {
@@ -69,7 +71,11 @@ export function MessageNavRail({ anchors, listRef }: Props) {
               .getElementById(anchor.id)
               ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
           }
-        />
+        >
+          <span className="msg-rail-tooltip" data-testid="msg-rail-tooltip">
+            {anchor.question || t('rail.attachmentQuestion')}
+          </span>
+        </button>
       ))}
     </div>
   );

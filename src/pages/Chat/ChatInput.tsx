@@ -12,6 +12,7 @@ import { hostApi } from '../../lib/host-api';
 import { filterFiles } from '../../lib/file-search';
 import { navigateToPage } from '../../lib/app-navigation';
 import { cacheHitRate, formatCost, formatHitRate } from '../../lib/usage-stats';
+import { sessionTitleFromQuestion } from '../../lib/session-title';
 import { useChatStore, type ChatMessage } from '../../stores/chat';
 import { ImageLightbox } from './ImageLightbox';
 import { QueueList } from './QueueList';
@@ -419,12 +420,20 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         return;
       }
     }
+    const autoTitle = messages.length === 0
+      ? sessionTitleFromQuestion(text, t('chat.imageSessionTitle'))
+      : null;
     void prompt(
       filePrefix + text,
       // pi ImageContent 是扁平结构 {type:'image', data, mimeType}
       outgoing.map((img) => ({ type: 'image', data: img.data, mimeType: img.mediaType })),
       behavior,
-    );
+    ).then(async () => {
+      // 等 prompt 返回后再持久化，避免 sessionReplaced 与扩展 UI 请求竞态。
+      if (!autoTitle) return;
+      const info = await hostApi.piRuntime.getSessionInfo().catch(() => null);
+      if (!info?.name) await hostApi.piRuntime.setSessionName(autoTitle, false).catch(() => {});
+    });
   };
 
   const stageFiles = async (files: Iterable<File>) => {
@@ -856,7 +865,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
               <div className="usage-popover" role="dialog" data-testid="token-usage-popover">
                 <div className="usage-popover-title">{t('chat.tokenUsage')}</div>
                 <div className="usage-section-label">{t('chat.currentModelUsage')}</div>
-                <div className="usage-row"><span>{t('chat.contextUsed')}</span><strong>{formatTokens(contextUsage?.tokens)}</strong></div>
+                <div className="usage-row" data-testid="usage-context-used"><span>{t('chat.contextUsed')}</span><strong>{formatTokens(contextUsage?.tokens)}</strong></div>
                 <div className="usage-row" data-testid="usage-context-window"><span>{t('chat.contextWindow')}</span><strong>{formatTokens(contextWindow)}</strong></div>
                 {(model?.maxTokens ?? selectedModel?.maxTokens) != null && <div className="usage-row" data-testid="usage-max-output"><span>{t('chat.maxOutputTokens')}</span><strong>{formatTokens(model?.maxTokens ?? selectedModel?.maxTokens)}</strong></div>}
                 <div className="usage-section-label">{t('chat.sessionTotals')}</div>

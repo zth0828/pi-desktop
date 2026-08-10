@@ -1,7 +1,7 @@
 // 消息流核心交互 E2E（Codex 对齐批次 1，真 pi + mock provider，不烧 API quota）：
 // 1) 聚合编辑卡：一轮 edit+write → 「Edited N files +x -y」卡 → 撤销（git）→ 磁盘复原；
 //    非 git 目录保留清单但无撤销入口；「Review」按钮打开 Review 面板。
-// 2) 完成轮的执行过程聚合为步骤摘要，点击展开还原；最终答复与 user 锚点原位不动。
+// 2) 完成轮的 thinking/阶段文本/工具统一收进回合折叠，最终答复保持可见。
 import { execFileSync } from 'node:child_process';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -101,8 +101,9 @@ async function sendPrompt(page: import('@playwright/test').Page, prompt: string)
 
 /** 等当前轮所有工具卡完成 */
 async function waitToolsDone(page: import('@playwright/test').Page, count: number) {
-  const summary = page.getByTestId('work-log-row').last();
+  const summary = page.getByTestId('turn-fold-toggle').last();
   await expect(summary).toBeVisible({ timeout: 30_000 });
+  await expect(summary).toHaveAttribute('aria-expanded', 'false');
   await summary.click();
   await expect(page.getByTestId('tool-card')).toHaveCount(count, { timeout: 30_000 });
   for (const card of await page.getByTestId('tool-card').all()) {
@@ -164,49 +165,71 @@ test('非 Git 目录：聚合编辑卡可回滚，Review 按钮打开完整评�
   await expect(page.getByTestId('review-file')).toHaveCount(2);
 });
 
-test('完成轮无输出区段聚合为步骤摘要，可展开/收起；文本输出原位不动', async ({
+test('完成回合整体折叠过程内容，展开恢复阶段文本与工具，最终答复始终可见', async ({
   launchElectronApp,
 }) => {
   const app = await launchElectronApp(launchOptions(foldWorkspace));
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  // 第一轮完成后立即聚合：工具卡收成步骤摘要行，阶段文本保持可见。
+  // 第一轮完成后立即收起：过程文本与工具卡都不在可见树中。
   await sendPrompt(page, 'USE_TOOL_EDIT now');
-  await expect(page.getByTestId('work-log-row')).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.getByTestId('turn-fold-toggle')).toHaveCount(1, { timeout: 30_000 });
   await expect(page.getByTestId('tool-card')).toHaveCount(0);
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(0);
 
   // 第二轮完成后也独立聚合，页面不会随执行次数持续铺开。
   await sendPrompt(page, 'USE_TOOL_WRITE now');
   // 等第二轮真正结束（两轮的聚合编辑卡都挂上 = 两轮 run.ended 都已处理）
   await expect(page.getByTestId('turn-changes')).toHaveCount(2, { timeout: 30_000 });
-  const rows = page.getByTestId('work-log-row');
+  const rows = page.getByTestId('turn-fold-toggle');
   await expect(rows).toHaveCount(2);
-  await expect(rows.last()).toContainText(/Completed 1 step|已完成 1 个步骤/);
+  await expect(rows.last()).toContainText(/Show turn process|展开本轮过程/);
   await expect(page.getByTestId('tool-card')).toHaveCount(0);
 
   // user 消息原位（rail 锚点与 messages 下标对齐），最终文本仍完整显示；
-  // 模型的阶段文本输出（PROCESS:）任何状态下都保持可见，只有无输出区段被折叠。
+  // 每轮最终答复保持可见，阶段文本默认不渲染。
   await expect(page.getByTestId('message-user')).toHaveCount(2);
   await expect(page.locator('#chat-msg-0')).toContainText('USE_TOOL_EDIT');
   await expect(
     page.getByTestId('message-user').filter({ hasText: 'USE_TOOL_WRITE' }),
   ).toHaveAttribute('id', /^chat-msg-\d+$/);
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'FINAL:' })).toHaveCount(2);
-  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(2);
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(0);
+  await page.screenshot({ path: 'output/playwright/turn-fold-collapsed.png', fullPage: false });
 
-  // 点击展开：对应区段的工具卡还原，展开行保留为「收起」锚点，其他区段仍保持聚合。
+  // 点击展开：该轮阶段文本和工具卡同时还原，其他轮仍收起。
   await rows.first().click();
   await expect(page.getByTestId('tool-card')).toHaveCount(1);
-  await expect(page.getByTestId('work-log-row')).toHaveCount(2);
-  const expandedRow = page.locator('[data-testid="work-log-row"][aria-expanded="true"]');
+  await expect(page.getByTestId('turn-fold-toggle')).toHaveCount(2);
+  const expandedRow = page.locator('[data-testid="turn-fold-toggle"][aria-expanded="true"]');
   await expect(expandedRow).toHaveCount(1);
-  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(2);
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(1);
+  await page.screenshot({ path: 'output/playwright/turn-fold-expanded.png', fullPage: false });
 
   // 再点同一行收起：回到全聚合状态
   await expandedRow.click();
   await expect(page.getByTestId('tool-card')).toHaveCount(0);
-  await expect(page.getByTestId('work-log-row')).toHaveCount(2);
-  await expect(page.locator('[data-testid="work-log-row"][aria-expanded="true"]')).toHaveCount(0);
-  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(2);
+  await expect(page.getByTestId('turn-fold-toggle')).toHaveCount(2);
+  await expect(page.locator('[data-testid="turn-fold-toggle"][aria-expanded="true"]')).toHaveCount(0);
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(0);
+});
+
+test('thinking 与最终文本在同一消息时，折叠只保留最终答复', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions(foldWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendPrompt(page, 'REASONING_TURN');
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'FINAL: reasoning complete' })).toBeVisible({ timeout: 30_000 });
+  const toggle = page.getByTestId('turn-fold-toggle');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.thinking-block')).toHaveCount(0);
+
+  await toggle.click();
+  await expect(page.locator('.thinking-block pre')).toContainText('THOUGHT: inspect the request');
+  await expect(page.locator('.thinking-block')).toHaveAttribute('open', '');
+  await expect(page.getByTestId('message-assistant').filter({ hasText: 'FINAL: reasoning complete' })).toBeVisible();
 });

@@ -99,7 +99,7 @@ async function waitSessionReady(page: import('@playwright/test').Page) {
 async function runTool(page: import('@playwright/test').Page, prompt: string) {
   await page.getByTestId('chat-input').fill(prompt);
   await page.getByTestId('chat-send').click();
-  const summary = page.getByTestId('work-log-row').last();
+  const summary = page.getByTestId('turn-fold-toggle').last();
   await expect(summary).toBeVisible({ timeout: 30_000 });
   await summary.click();
   await expect(page.getByTestId('tool-card').last().locator('.tool-status')).toHaveText('done');
@@ -163,8 +163,8 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   // Long tool output must scroll inside the chat column and never push the panel beyond the viewport.
   await page.getByTestId('chat-input').fill('USE_TOOL_LONG now');
   await page.getByTestId('chat-send').click();
-  await expect(page.getByTestId('work-log-row')).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId('work-log-row').click();
+  await expect(page.getByTestId('turn-fold-toggle')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('turn-fold-toggle').click();
   const viewport = page.viewportSize();
   const panelBox = await panel.boundingBox();
   expect(panelBox).not.toBeNull();

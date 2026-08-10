@@ -38,7 +38,7 @@ export const hostApi = {
     navigateTree: (targetId: string) => invokeHost('piRuntime', 'navigateTree', { targetId }),
     setThinkingLevel: (level: string) => invokeHost('piRuntime', 'setThinkingLevel', { level }),
     setModel: (provider: string, id: string) => invokeHost('piRuntime', 'setModel', { provider, id }),
-    setSessionName: (name: string) => invokeHost('piRuntime', 'setSessionName', { name }),
+    setSessionName: (name: string, notify = true) => invokeHost('piRuntime', 'setSessionName', { name, notify }),
     getSessionInfo: () => invokeHost('piRuntime', 'getSessionInfo'),
     reload: () => invokeHost('piRuntime', 'reload'),
     exportHtml: (outputPath?: string) =>

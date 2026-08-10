@@ -1,13 +1,13 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, MoreHorizontal, PanelRight, Pencil, X } from 'lucide-react';
+import { Check, ChevronRight, MoreHorizontal, PanelRight, Pencil, X } from 'lucide-react';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
-import { groupLogicalTurns, turnFinalResponseIndex, turnTimeRange } from '../../lib/turn-changes';
+import { sessionTitleFromQuestion } from '../../lib/session-title';
+import { groupLogicalTurns, turnFinalResponseIndex } from '../../lib/turn-changes';
 import { useChatStore } from '../../stores/chat';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
-import type { TurnFold } from './MessageItem';
 import { MessageNavRail, type RailAnchor } from './MessageNavRail';
 import { StatusBar } from './StatusBar';
 import { ReviewPanel } from './ReviewPanel';
@@ -25,6 +25,11 @@ function SessionTitleBar() {
   const setWorkspaceOpen = useChatStore((s) => s.setWorkspaceOpen);
   const started = useChatStore((s) => s.started);
   const sessionId = useChatStore((s) => s.sessionId);
+  const firstUserMessage = useChatStore((s) => s.messages.find((entry) => entry.role === 'user'));
+  const firstUserQuestion = firstUserMessage?.content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text ?? '')
+    .join(' ') ?? '';
   const [name, setName] = useState('');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -32,9 +37,17 @@ function SessionTitleBar() {
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!started) return;
-    void hostApi.piRuntime.getSessionInfo().then((info) => setName(info?.name ?? t('chat.untitled')));
-  }, [started, sessionId, t]);
-  const beginRename = () => { setDraft(name === t('chat.untitled') ? '' : name); setEditing(true); };
+    const refresh = () => {
+      void hostApi.piRuntime.getSessionInfo().then((info) => setName(info?.name ?? ''));
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 1000);
+    return () => window.clearInterval(timer);
+  }, [started, sessionId]);
+  const displayName = name || (firstUserMessage
+    ? sessionTitleFromQuestion(firstUserQuestion, t('chat.imageSessionTitle'))
+    : t('chat.untitled'));
+  const beginRename = () => { setDraft(name || (firstUserMessage ? displayName : '')); setEditing(true); };
   const saveRename = async () => {
     const next = draft.trim();
     if (!next) { setEditing(false); return; }
@@ -60,8 +73,8 @@ function SessionTitleBar() {
             <button className="icon-button" title={t('chat.cancelRename')} onClick={() => setEditing(false)}><X size={15} /></button>
           </>
         ) : (
-          <button className="session-title-button" onClick={beginRename} title={t('chat.renameSession')}>
-            <span>{name || t('chat.untitled')}</span><Pencil size={13} />
+          <button className="session-title-button" data-testid="session-title-button" onClick={beginRename} title={t('chat.renameSession')}>
+            <span>{displayName}</span><Pencil size={13} />
           </button>
         )}
       </div>
@@ -113,47 +126,29 @@ export default function ChatPage() {
   const activeCwd = useChatStore((s) => (s.started ? s.cwd : undefined));
   const effectiveCwd = activeCwd ?? cwd;
   const listRef = useRef<HTMLDivElement>(null);
-  // 工作日志折叠的手动覆盖（点开后保持展开）；key 为无输出区段首个工具调用 id
-  const [foldOverrides, setFoldOverrides] = useState<Record<string, boolean>>({});
-  useEffect(() => setFoldOverrides({}), [sessionId]);
+  // 一个 user 问题对应一个完整回合；完成后默认收起 thinking/阶段文本/工具调用。
+  const [expandedTurns, setExpandedTurns] = useState<Record<number, boolean>>({});
+  useEffect(() => setExpandedTurns({}), [sessionId]);
 
   // user 消息稳定锚点（消息列表在会话内只追加，index 锚点稳定）
   const railAnchors = useMemo<RailAnchor[]>(() => {
     let n = 0;
     return messages.flatMap((m, i) =>
-      m.role === 'user' ? [{ id: `chat-msg-${i}`, n: (n += 1) }] : [],
+      m.role === 'user' ? [{
+        id: `chat-msg-${i}`,
+        n: (n += 1),
+        question: m.content
+          .filter((block) => block.type === 'text')
+          .map((block) => block.text ?? '')
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim(),
+      }] : [],
     );
   }, [messages]);
 
   // 缓存失效检测（pi cache-stats 口径）：按下标分发给 assistant 消息尾部警告
   const cacheMisses = useMemo(() => collectCacheMisses(messages), [messages]);
-
-  // pi 可能把连续 reasoningItem 拆成多条 thinking-only 消息。渲染时合并为一条，
-  // 保留每个 thinking block 的独立 details，同时消除消息级 16px 间隔。
-  const displayMessages = useMemo(() => {
-    const result: Array<{ message: (typeof messages)[number]; sourceIndex: number }> = [];
-    for (let i = 0; i < messages.length; i += 1) {
-      const message = messages[i];
-      const thinkingOnly = message.role === 'assistant'
-        && message.content.length > 0
-        && message.content.every((block) => block.type === 'thinking');
-      if (!thinkingOnly) {
-        result.push({ message, sourceIndex: i });
-        continue;
-      }
-      const content = [...message.content];
-      let end = i;
-      while (end + 1 < messages.length) {
-        const next = messages[end + 1];
-        if (next.role !== 'assistant' || next.content.length === 0 || !next.content.every((block) => block.type === 'thinking')) break;
-        content.push(...next.content);
-        end += 1;
-      }
-      result.push({ message: { ...message, content, streaming: messages.slice(i, end + 1).some((entry) => entry.streaming) }, sourceIndex: i });
-      i = end;
-    }
-    return result;
-  }, [messages]);
 
   const latestFinalResponseIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -163,75 +158,7 @@ export default function ChatPage() {
     return -1;
   }, [messages]);
 
-  // 按逻辑轮（user 消息边界，pi 的 agent run 是模型往返粒度、不能直接当轮边界）：
-  // 完成轮里「没有文本输出」的连续工具段各自聚合成步骤摘要行（段首位置）；
-  // 模型的文本输出（阶段文本/最终答复）始终原位可见，不参与折叠。
-  const { fold, turnCards } = useMemo(() => {
-    const logical = groupLogicalTurns(messages);
-    const lastIndex = logical.length - 1;
-    // 完成判定：后面已有新一轮，或不处于流式；且该轮没有仍在执行的工具（steer 插入
-    // 当前轮时 user 消息先到，上一轮的工具可能还在跑，不能折）
-    const completed = logical.map((turn, j) => {
-      if (turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running')) return false;
-      return j < lastIndex || !isStreaming;
-    });
-    const hidden = new Set<string>();
-    const rows = new Map<string, { run: string; count: number; startedAt?: number; endedAt?: number; expanded?: boolean }>();
-    logical.forEach((turn, j) => {
-      if (!completed[j] || turn.toolCallIds.length === 0) return;
-      // 没有最终答复通常意味着中断或异常，保留过程内容，避免把唯一的解释藏起来。
-      if (turnFinalResponseIndex(messages, turn) === undefined) return;
-      // 无输出区段切分：含文本的 assistant 消息是输出，保持可见并作为分段边界；
-      // 段内连续的 toolCall 归一组（一轮可有多段：思考/工具 → 输出 → 再工具 …）
-      const runs: string[][] = [];
-      let current: string[] | null = null;
-      for (let i = turn.startIndex + 1; i <= turn.endIndex; i += 1) {
-        const m = messages[i];
-        if (!m || m.role !== 'assistant') continue;
-        const hasText = m.content.some((b) => b.type === 'text' && b.text?.trim());
-        if (hasText) current = null;
-        const ids = m.content
-          .filter((b) => b.type === 'toolCall' && b.id)
-          .map((b) => b.id as string);
-        if (ids.length > 0) {
-          if (!current) {
-            current = [];
-            runs.push(current);
-          }
-          current.push(...ids);
-        }
-      }
-      for (const ids of runs) {
-        const key = ids[0];
-        const { startedAt, endedAt } = turnTimeRange(toolExecutions, ids);
-        const collapsed = foldOverrides[key] ?? true;
-        rows.set(key, { run: key, count: ids.length, startedAt, endedAt, expanded: !collapsed });
-        if (collapsed) ids.slice(1).forEach((id) => hidden.add(id));
-      }
-    });
-    const cards = new Map<number, string[][]>();
-    logical.forEach((turn, j) => {
-      if (!completed[j]) return;
-      // 只给含 edit/write 的轮挂卡（卡片自身还会按成功执行过滤，空轮不渲染）
-      const hasEdits = turn.toolCallIds.some((id) => {
-        const name = toolExecutions[id]?.toolName;
-        return name === 'edit' || name === 'write';
-      });
-      if (!hasEdits) return;
-      const list = cards.get(turn.endIndex) ?? [];
-      list.push(turn.toolCallIds);
-      cards.set(turn.endIndex, list);
-    });
-    return {
-      fold: {
-        hidden,
-        rows,
-        onToggle: (run: string, nextCollapsed: boolean) =>
-          setFoldOverrides((prev) => ({ ...prev, [run]: nextCollapsed })),
-      } satisfies TurnFold,
-      turnCards: cards,
-    };
-  }, [messages, toolExecutions, isStreaming, foldOverrides]);
+  const logicalTurns = useMemo(() => groupLogicalTurns(messages), [messages]);
 
   // 恢复上次的工作目录并启动会话
   useEffect(() => {
@@ -255,6 +182,95 @@ export default function ChatPage() {
     await hostApi.settings.set('workspaceCwd', dir);
     setCwd(dir);
     void start(dir);
+  };
+
+  const renderTurn = (turn: (typeof logicalTurns)[number], turnIndex: number) => {
+    const finalIndex = turnFinalResponseIndex(messages, turn);
+    const completed = !turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running')
+      && (turnIndex < logicalTurns.length - 1 || !isStreaming);
+    // 异常/中断轮可能没有最终答复，这时全量展示，避免隐藏唯一的错误信息。
+    const canFold = completed && finalIndex !== undefined;
+    const expanded = expandedTurns[turn.startIndex] ?? false;
+    const hasEdits = completed && turn.toolCallIds.some((id) => {
+      const name = toolExecutions[id]?.toolName;
+      return name === 'edit' || name === 'write';
+    });
+
+    if (!canFold || finalIndex === undefined) {
+      return (
+        <Fragment key={turn.startIndex}>
+          {Array.from({ length: turn.endIndex - turn.startIndex + 1 }, (_, offset) => turn.startIndex + offset).map((i) => (
+            <MessageItem
+              key={i}
+              message={messages[i]}
+              anchorId={i === turn.startIndex ? `chat-msg-${i}` : undefined}
+              cacheMiss={cacheMisses.get(i)}
+              turnStats={i === latestFinalResponseIndex ? turnStats : null}
+              expandThinking
+            />
+          ))}
+          {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
+        </Fragment>
+      );
+    }
+
+    const finalMessage = messages[finalIndex];
+    const finalText = finalMessage.content.filter((block) => block.type === 'text');
+    const finalProcess = finalMessage.content.filter((block) => block.type !== 'text');
+    const processIndices = Array.from(
+      { length: turn.endIndex - turn.startIndex },
+      (_, offset) => turn.startIndex + 1 + offset,
+    ).filter((i) => i !== finalIndex);
+    const hasProcess = processIndices.some((i) => messages[i].role !== 'toolResult') || finalProcess.length > 0;
+
+    return (
+      <Fragment key={turn.startIndex}>
+        <MessageItem message={messages[turn.startIndex]} anchorId={`chat-msg-${turn.startIndex}`} />
+        {hasProcess && (
+          <section className={`turn-fold${expanded ? ' expanded' : ''}`} data-testid="turn-fold">
+            <button
+              className="turn-fold-toggle"
+              data-testid="turn-fold-toggle"
+              aria-expanded={expanded}
+              onClick={() => setExpandedTurns((current) => ({
+                ...current,
+                [turn.startIndex]: !expanded,
+              }))}
+            >
+              <ChevronRight size={14} aria-hidden="true" />
+              <span>{expanded ? t('chat.turnFold.collapse') : t('chat.turnFold.expand')}</span>
+            </button>
+            {expanded && (
+              <div className="turn-fold-content" data-testid="turn-fold-content">
+                {processIndices.map((i) => (
+                  <MessageItem
+                    key={i}
+                    message={messages[i]}
+                    cacheMiss={cacheMisses.get(i)}
+                    expandThinking
+                  />
+                ))}
+                {finalProcess.length > 0 && (
+                  <MessageItem
+                    message={finalMessage}
+                    contentOverride={finalProcess}
+                    expandThinking
+                    suppressTail
+                  />
+                )}
+              </div>
+            )}
+          </section>
+        )}
+        <MessageItem
+          message={finalMessage}
+          contentOverride={finalText}
+          cacheMiss={cacheMisses.get(finalIndex)}
+          turnStats={finalIndex === latestFinalResponseIndex ? turnStats : null}
+        />
+        {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
+      </Fragment>
+    );
   };
 
   if (!effectiveCwd) {
@@ -292,20 +308,10 @@ export default function ChatPage() {
               <h1>{t('chat.greeting')}</h1>
             </div>
           )}
-          {displayMessages.map(({ message: m, sourceIndex: i }) => (
-            <Fragment key={i}>
-              <MessageItem
-                message={m}
-                anchorId={m.role === 'user' ? `chat-msg-${i}` : undefined}
-                cacheMiss={cacheMisses.get(i)}
-                fold={fold}
-                turnStats={i === latestFinalResponseIndex ? turnStats : null}
-              />
-              {turnCards.get(i)?.map((toolCallIds, k) => (
-                <TurnChangesCard key={k} toolCallIds={toolCallIds} />
-              ))}
-            </Fragment>
+          {messages.slice(0, logicalTurns[0]?.startIndex ?? messages.length).map((message, i) => (
+            <MessageItem key={i} message={message} cacheMiss={cacheMisses.get(i)} />
           ))}
+          {logicalTurns.map(renderTurn)}
         </div>
         <MessageNavRail anchors={railAnchors} listRef={listRef} />
 

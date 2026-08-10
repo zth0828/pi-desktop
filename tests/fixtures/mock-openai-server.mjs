@@ -11,6 +11,7 @@
 //   "FLAKE_429" → 首次请求返回 429（触发 pi 自动重试），后续正常 PONG
 //   "ECHO_USER" → 回显最后一条 user 消息（@文件 展开断言用）
 //   "CACHE_MISS" → 第一轮 usage 全量 cache_write，第二轮零缓存（缓存失效警告断言用）
+//   "REASONING_TURN" → 同一 assistant 消息返回 thinking + 最终文本（整回合折叠断言用）
 //   压缩摘要请求（含 "context checkpoint summary"）→ 12 个 chunk × 150ms 慢速流，
 //     给 compaction 状态条留出可观测窗口
 //   其他 → 流式返回 "PONG"
@@ -102,6 +103,16 @@ const server = http.createServer((req, res) => {
       send({ role: "assistant", content: "" });
       for (const ch of text) send({ content: ch });
       send({}, "stop", { prompt_tokens: 12, completion_tokens: text.length, total_tokens: 12 + text.length });
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+    }
+
+    if (lastUser.includes("REASONING_TURN")) {
+      const text = "FINAL: reasoning complete";
+      send({ role: "assistant", reasoning_content: "THOUGHT: inspect the request before answering" });
+      for (const ch of text) send({ content: ch });
+      send({}, "stop", { prompt_tokens: 10, completion_tokens: text.length, total_tokens: 10 + text.length });
       res.write("data: [DONE]\n\n");
       res.end();
       return;
