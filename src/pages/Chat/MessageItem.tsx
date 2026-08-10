@@ -5,7 +5,7 @@ import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
 import { formatDuration, formatWorkDuration } from '../../lib/tool-display';
 import { hostApi } from '../../lib/host-api';
-import { useChatStore, type ChatMessage, type ContentBlock } from '../../stores/chat';
+import { useChatStore, type ChatMessage, type ContentBlock, type TurnStats } from '../../stores/chat';
 import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
 
@@ -139,6 +139,7 @@ export function MessageItem({
   anchorId,
   cacheMiss,
   fold,
+  turnStats,
 }: {
   message: ChatMessage;
   anchorId?: string;
@@ -146,6 +147,8 @@ export function MessageItem({
   cacheMiss?: CacheMiss;
   /** 工作日志折叠指令（仅 assistant 消息内的工具卡消费） */
   fold?: TurnFold;
+  /** 仅当前实时完成回合的收尾统计；恢复会话时为空。 */
+  turnStats?: TurnStats | null;
 }) {
   const { t } = useTranslation();
   const forkFrom = useChatStore((s) => s.forkFrom);
@@ -265,6 +268,31 @@ export function MessageItem({
           </button>
         </div>
       )}
+      {showTail && plainText && turnStats && <TurnStatsCard stats={turnStats} />}
+    </div>
+  );
+}
+
+function TurnStatsCard({ stats }: { stats: TurnStats }) {
+  const { t } = useTranslation();
+  const totalTokens = stats.input + stats.output;
+  const denominator = stats.input + stats.cacheRead + stats.cacheWrite;
+  const hitRate = denominator > 0 ? Math.round((stats.cacheRead / denominator) * 100) : null;
+  const totalSeconds = Math.max(0, Math.round(stats.durationMs / 1000));
+  const duration = totalSeconds >= 60
+    ? t('chat.turnStats.durationMinutes', { minutes: Math.floor(totalSeconds / 60), seconds: totalSeconds % 60 })
+    : t('chat.turnStats.durationSeconds', { seconds: totalSeconds });
+  const cost = stats.cost >= 1 ? stats.cost.toFixed(2) : stats.cost.toFixed(4);
+  return (
+    <div className="turn-stats-card" data-testid="turn-stats">
+      <span>{t('chat.turnStats.tokens', {
+        tokens: totalTokens.toLocaleString(),
+        input: stats.input.toLocaleString(),
+        output: stats.output.toLocaleString(),
+      })}</span>
+      {hitRate != null && <span>{t('chat.turnStats.cache', { rate: hitRate })}</span>}
+      <span>{duration}</span>
+      {stats.cost > 0 && <span>{t('chat.turnStats.cost', { cost: `$${cost}` })}</span>}
     </div>
   );
 }

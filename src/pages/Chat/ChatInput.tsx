@@ -893,6 +893,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 }
               >
                 <ListPlus size={15} />
+                <span>{followupBehavior === 'steer' ? t('chat.steerSend') : t('chat.queueSend')}</span>
               </button>
               <button
                 data-testid="chat-stop"

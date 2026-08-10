@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import type { CompactionReason, PiRuntimeEventEnvelope } from '@shared/pi-event-map';
 import type {
+  PiRuntimeUsageTurn,
   PiRuntimeModelInfo,
   PiRuntimeModelUpdateResult,
   PiRuntimeStateResult,
@@ -42,6 +43,7 @@ export type RetryState = {
 
 /** steer/followUp 排队快照（queue_update 透传） */
 export type QueueState = { steering: string[]; followUp: string[] };
+export type TurnStats = PiRuntimeUsageTurn & { durationMs: number };
 
 type ChatState = {
   started: boolean;
@@ -54,6 +56,8 @@ type ChatState = {
   thinkingLevel: string;
   availableThinkingLevels: string[];
   isStreaming: boolean;
+  runStartedAt: number | null;
+  turnStats: TurnStats | null;
   messages: ChatMessage[];
   toolExecutions: Record<string, ToolExecution>;
   /** 全局展开/折叠所有工具卡片（卡片仍可单独点击覆盖） */
@@ -111,6 +115,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   thinkingLevel: 'off',
   availableThinkingLevels: [],
   isStreaming: false,
+  runStartedAt: null,
+  turnStats: null,
   messages: [],
   toolExecutions: {},
   toolsExpanded: false,
@@ -238,6 +244,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       thinkingLevel: state.thinkingLevel,
       availableThinkingLevels: state.availableThinkingLevels ?? [],
       isStreaming: state.isStreaming,
+      runStartedAt: null,
+      turnStats: null,
       messages,
       // 恢复/切换会话：事件累积的执行表为空，从消息历史重建（结果 + 中断标记）
       toolExecutions: rebuildToolExecutionsFromMessages(messages),
@@ -285,7 +293,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { event } = envelope;
     switch (event.type) {
       case 'run.started':
-        set({ isStreaming: true, retry: null, queue: { steering: [], followUp: [] } });
+        set({ isStreaming: true, runStartedAt: Date.now(), turnStats: null, retry: null, queue: { steering: [], followUp: [] } });
         break;
       case 'run.ended': {
         // 收尾：run 结束时仍在 running 的工具（abort/error 中断）标记为中断，
@@ -295,6 +303,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           break;
         }
         const now = Date.now();
+        const durationMs = s.runStartedAt == null ? 0 : Math.max(0, now - s.runStartedAt);
         const toolExecutions = Object.fromEntries(
           Object.entries(s.toolExecutions).map(([id, ex]) =>
             ex.status === 'running'
@@ -302,7 +311,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
               : [id, ex],
           ),
         );
-        set({ isStreaming: false, toolExecutions, retry: null });
+        set({ isStreaming: false, runStartedAt: null, toolExecutions, retry: null });
+        void hostApi.piRuntime.getUsage().then((usage) => {
+          if (usage?.latestTurn && get().generation === envelope.generation && get().runStartedAt === null && get().turnStats === null) {
+            set({ turnStats: { ...usage.latestTurn, durationMs } });
+          }
+        }).catch(() => {});
         // 事件累积的新消息没有 entryId，从 runtime 对齐补齐（fork 按钮依赖）
         void get().refreshEntryIds();
         // 系统通知（档位/焦点判定在 main）：正文取最后一条 assistant 消息摘要

@@ -61,6 +61,8 @@
     "sendTipCmdEnter": "发送（Cmd/Ctrl+Enter）",
     "queueSendTip": "排队（Enter）：当前回复完成后发送；Alt+Enter 立即插入当前轮（steer）",
     "queueSendTipSteer": "插入（Enter）：立即插入当前轮（steer）；Alt+Enter 排队等当前回复完成后发送",
+    "queueSend": "排队",
+    "steerSend": "插队",
     "stopTip": "停止当前生成",
     "newSession": "新会话",
     "compact": "压缩上下文",
@@ -159,6 +161,17 @@
       "titleNoDuration_other": "已完成 {{count}} 个步骤",
       "expand": "展开工作日志",
       "collapse": "收起工作日志"
+    },
+    "taskList": {
+      "title": "任务",
+      "progress": "已完成 {{completed}}/{{total}}"
+    },
+    "turnStats": {
+      "tokens": "本轮 {{tokens}} token · {{input}} 输入 / {{output}} 输出",
+      "cache": "缓存命中 {{rate}}%",
+      "durationSeconds": "{{seconds}} 秒",
+      "durationMinutes": "{{minutes}} 分 {{seconds}} 秒",
+      "cost": "费用 {{cost}}"
     },
     "stopLength": "回复因达到长度上限而停止。",
     "expandTools": "展开全部工具",

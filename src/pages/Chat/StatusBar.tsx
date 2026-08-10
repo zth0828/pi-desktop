@@ -72,15 +72,20 @@ export function StatusBar() {
 
   return (
     <div className="status-bar" data-testid="status-bar">
-      {status && (
-        <span className="status-bar-indicator" data-testid={status.testid} title={status.title}>
-          <span className="status-bar-spinner" aria-hidden="true" />
-          {status.text}
-        </span>
+      <div className="status-bar-center">
+        {status && (
+          <span className="status-bar-indicator" data-testid={status.testid} title={status.title}>
+            <span className="status-bar-spinner" aria-hidden="true" />
+            {status.text}
+          </span>
+        )}
+      </div>
+      {hasQueue && (
+        <div className="status-bar-queue">
+          <QueueChip kind="steering" items={queue.steering} />
+          <QueueChip kind="followUp" items={queue.followUp} />
+        </div>
       )}
-      <span className="spacer" />
-      <QueueChip kind="steering" items={queue.steering} />
-      <QueueChip kind="followUp" items={queue.followUp} />
     </div>
   );
 }

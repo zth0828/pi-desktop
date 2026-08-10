@@ -160,6 +160,17 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await expect(panel).toBeVisible();
   await expect(panel.getByTestId('workspace-tree')).toBeVisible();
 
+  // Long tool output must scroll inside the chat column and never push the panel beyond the viewport.
+  await page.getByTestId('chat-input').fill('USE_TOOL_LONG now');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('work-log-row')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('work-log-row').click();
+  const viewport = page.viewportSize();
+  const panelBox = await panel.boundingBox();
+  expect(panelBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+
   const initialWidth = (await panel.boundingBox())!.width;
   const handle = panel.getByTestId('workspace-resize-handle');
   const handleBox = await handle.boundingBox();

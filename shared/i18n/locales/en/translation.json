@@ -61,6 +61,8 @@
     "sendTipCmdEnter": "Send (Cmd/Ctrl+Enter)",
     "queueSendTip": "Queue (Enter): sent after the current reply; Alt+Enter inserts into the current turn (steer)",
     "queueSendTipSteer": "Steer (Enter): insert into the current turn; Alt+Enter queues it for after the current reply",
+    "queueSend": "Queue",
+    "steerSend": "Steer",
     "stopTip": "Stop the current run",
     "newSession": "New session",
     "compact": "Compact",
@@ -159,6 +161,17 @@
       "titleNoDuration_other": "Completed {{count}} steps",
       "expand": "Expand work log",
       "collapse": "Collapse work log"
+    },
+    "taskList": {
+      "title": "Tasks",
+      "progress": "{{completed}}/{{total}} complete"
+    },
+    "turnStats": {
+      "tokens": "{{tokens}} tokens · {{input}} in / {{output}} out",
+      "cache": "Cache hit {{rate}}%",
+      "durationSeconds": "{{seconds}}s",
+      "durationMinutes": "{{minutes}}m {{seconds}}s",
+      "cost": "{{cost}}"
     },
     "stopLength": "Response stopped: length limit reached.",
     "expandTools": "Expand all tools",

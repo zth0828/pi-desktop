@@ -55,6 +55,7 @@ const server = http.createServer((req, res) => {
     const hasToolResult = msgs.slice(lastUserIdx + 1).some((m) => m.role === "tool");
     const wantsTool = !hasToolResult && (
       lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") ||
+      lastUser.includes("USE_TOOL_LONG") ||
       lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_EDIT_WRITE") ||
       lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
     );
@@ -95,6 +96,17 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // Rich markdown fixture: exercises renderer-only presentation without changing pi's protocol.
+    if (lastUser.includes("RICH_MARKDOWN")) {
+      const text = "# Release plan\n\n- [x] Ship the shell\n- [ ] Add preview polish\n- [ ] Verify dark theme\n\n| Metric | Value |\n| --- | ---: |\n| Tokens | 42 |\n\n> Keep the response readable.\n\n\`\`\`ts\nconst answer = 42;\n\`\`\`\n\n[Open docs](https://example.com/docs)";
+      send({ role: "assistant", content: "" });
+      for (const ch of text) send({ content: ch });
+      send({}, "stop", { prompt_tokens: 12, completion_tokens: text.length, total_tokens: 12 + text.length });
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+    }
+
     if (wantsTool) {
       // 一轮双工具（并行 tool_calls）：edit + write，驱动聚合编辑卡 E2E
       if (lastUser.includes("USE_TOOL_EDIT_WRITE")) {
@@ -117,6 +129,9 @@ const server = http.createServer((req, res) => {
       }
       let toolName = "bash";
       let args = JSON.stringify({ command: "ls" });
+      if (lastUser.includes("USE_TOOL_LONG")) {
+        args = JSON.stringify({ command: "node -e \"process.stdout.write('x'.repeat(12000))\"" });
+      }
       if (lastUser.includes("USE_TOOL_EDIT")) {
         toolName = "edit";
         args = JSON.stringify({

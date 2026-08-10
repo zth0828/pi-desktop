@@ -105,6 +105,7 @@ export default function ChatPage() {
   const messages = useChatStore((s) => s.messages);
   const toolExecutions = useChatStore((s) => s.toolExecutions);
   const isStreaming = useChatStore((s) => s.isStreaming);
+  const turnStats = useChatStore((s) => s.turnStats);
   const sessionId = useChatStore((s) => s.sessionId);
   const workspaceVisible = useChatStore((s) => s.workspaceOpen || s.reviewOpen);
   const start = useChatStore((s) => s.start);
@@ -126,6 +127,41 @@ export default function ChatPage() {
 
   // 缓存失效检测（pi cache-stats 口径）：按下标分发给 assistant 消息尾部警告
   const cacheMisses = useMemo(() => collectCacheMisses(messages), [messages]);
+
+  // pi 可能把连续 reasoningItem 拆成多条 thinking-only 消息。渲染时合并为一条，
+  // 保留每个 thinking block 的独立 details，同时消除消息级 16px 间隔。
+  const displayMessages = useMemo(() => {
+    const result: Array<{ message: (typeof messages)[number]; sourceIndex: number }> = [];
+    for (let i = 0; i < messages.length; i += 1) {
+      const message = messages[i];
+      const thinkingOnly = message.role === 'assistant'
+        && message.content.length > 0
+        && message.content.every((block) => block.type === 'thinking');
+      if (!thinkingOnly) {
+        result.push({ message, sourceIndex: i });
+        continue;
+      }
+      const content = [...message.content];
+      let end = i;
+      while (end + 1 < messages.length) {
+        const next = messages[end + 1];
+        if (next.role !== 'assistant' || next.content.length === 0 || !next.content.every((block) => block.type === 'thinking')) break;
+        content.push(...next.content);
+        end += 1;
+      }
+      result.push({ message: { ...message, content, streaming: messages.slice(i, end + 1).some((entry) => entry.streaming) }, sourceIndex: i });
+      i = end;
+    }
+    return result;
+  }, [messages]);
+
+  const latestFinalResponseIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (message.role === 'assistant' && message.content.some((block) => block.type === 'text' && block.text?.trim())) return i;
+    }
+    return -1;
+  }, [messages]);
 
   // 按逻辑轮（user 消息边界，pi 的 agent run 是模型往返粒度、不能直接当轮边界）：
   // 完成轮里「没有文本输出」的连续工具段各自聚合成步骤摘要行（段首位置）；
@@ -256,13 +292,14 @@ export default function ChatPage() {
               <h1>{t('chat.greeting')}</h1>
             </div>
           )}
-          {messages.map((m, i) => (
+          {displayMessages.map(({ message: m, sourceIndex: i }) => (
             <Fragment key={i}>
               <MessageItem
                 message={m}
                 anchorId={m.role === 'user' ? `chat-msg-${i}` : undefined}
                 cacheMiss={cacheMisses.get(i)}
                 fold={fold}
+                turnStats={i === latestFinalResponseIndex ? turnStats : null}
               />
               {turnCards.get(i)?.map((toolCallIds, k) => (
                 <TurnChangesCard key={k} toolCallIds={toolCallIds} />

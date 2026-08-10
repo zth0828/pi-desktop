@@ -214,6 +214,53 @@ test('生成中 → 状态条 Working，结束后消失', async ({ launchElectro
   await expect(page.getByTestId('status-bar')).toHaveCount(0, { timeout: 30_000 });
 });
 
+test('工作中状态居中，完成后显示本轮统计卡', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.getByTestId('chat-input').fill('SLOW stream please');
+  await page.getByTestId('chat-send').click();
+  const indicator = page.getByTestId('status-working');
+  await expect(indicator).toBeVisible({ timeout: 30_000 });
+  const chatBox = await page.locator('.chat-column').boundingBox();
+  const indicatorBox = await indicator.boundingBox();
+  expect(chatBox).not.toBeNull();
+  expect(indicatorBox).not.toBeNull();
+  expect(Math.abs((indicatorBox!.x + indicatorBox!.width / 2) - (chatBox!.x + chatBox!.width / 2))).toBeLessThan(6);
+  await page.getByTestId('chat-stop').click();
+  await expect(page.getByTestId('status-bar')).toHaveCount(0, { timeout: 30_000 });
+
+  await page.getByTestId('chat-input').fill('Say PONG');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+  await expect(page.getByTestId('turn-stats')).toContainText(/tokens|token|本轮/);
+  await expect(page.getByTestId('turn-stats')).toContainText(/s|秒/);
+});
+
+test('富文本答复渲染任务卡、表格、代码块和外链', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+  await page.getByTestId('chat-input').fill('RICH_MARKDOWN');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('Release plan', { timeout: 30_000 });
+  await expect(page.getByTestId('task-card')).toBeVisible();
+  await expect(page.getByTestId('task-progress')).toContainText('1/3');
+  await expect(page.locator('.markdown table')).toBeVisible();
+  await expect(page.locator('[data-streamdown="code-block"]')).toBeVisible();
+  await expect(page.locator('.markdown blockquote')).toBeVisible();
+  await expect(page.locator('.markdown a[href="https://example.com/docs"]')).toBeVisible();
+  await page.screenshot({ path: 'output/playwright/rich-text-light.png', fullPage: false });
+  await page.evaluate(() => {
+    const root = (globalThis as unknown as {
+      document: { documentElement: { setAttribute(name: string, value: string): void } };
+    }).document.documentElement;
+    root.setAttribute('data-theme', 'dark');
+  });
+  await page.screenshot({ path: 'output/playwright/rich-text-dark.png', fullPage: false });
+});
+
 test('429 → 状态条重试倒计时，重试成功后拿到回复', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

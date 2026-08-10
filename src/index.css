@@ -646,6 +646,7 @@ button.danger-outline {
 
 .chat-column {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -742,6 +743,7 @@ button.danger-outline {
 
 .message-list {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
   padding: 20px 24px;
   display: flex;
@@ -812,6 +814,8 @@ button.danger-outline {
 }
 
 .message-assistant {
+  min-width: 0;
+  max-width: 100%;
   font-size: 14px;
   line-height: 1.7;
   animation: message-in 80ms ease-out;
@@ -821,6 +825,20 @@ button.danger-outline {
 .message-assistant:hover .message-actions, .message-actions:focus-within { opacity: 1; }
 .message-actions button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 6px; color: var(--text-tertiary); font-size: 11px; }
 .message-actions button:hover { background: var(--bg-hover); color: var(--text); }
+
+.turn-stats-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-hover);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 
 .cursor-blink {
   display: inline-block;
@@ -1078,11 +1096,14 @@ button.danger-outline {
 /* 折叠态输出预览：尾部 N 行 + 截断警告 */
 
 .tool-card-preview {
+  min-width: 0;
   padding: 8px 13px;
   border-top: 1px solid var(--border);
 }
 
 .tool-card-preview pre {
+  min-width: 0;
+  max-width: 100%;
   font-family: var(--font-mono);
   font-size: 12px;
   max-height: 160px;
@@ -1332,13 +1353,32 @@ button.danger-outline {
 /* 执行中状态条（对齐 pi TUI status-indicator） */
 
 .status-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   padding: 4px 24px;
   min-height: 26px;
   font-size: 12.5px;
   color: var(--text-secondary);
+  position: relative;
+}
+
+.status-bar-center {
+  display: flex;
+  min-width: 0;
+  justify-content: center;
+}
+
+.status-bar-queue {
+  position: absolute;
+  right: 24px;
+  inset-block: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: calc(50% - 36px);
 }
 
 .status-bar-indicator {
@@ -1685,6 +1725,16 @@ button.danger-outline {
   background: var(--danger);
 }
 
+.send-button[data-testid="chat-queue-send"] {
+  width: auto;
+  min-width: 58px;
+  padding: 0 10px;
+  gap: 5px;
+  border-radius: 15px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
 .usage-control {
   position: relative;
 }
@@ -1892,9 +1942,39 @@ button.danger-outline {
   margin-bottom: 6px;
 }
 
-.markdown pre {
-  overflow-x: auto;
-}
+.markdown { min-width: 0; max-width: 100%; color: var(--text); }
+.markdown > * { min-width: 0; max-width: 100%; }
+.markdown p { margin: 0 0 10px; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4 { margin: 22px 0 9px; line-height: 1.3; letter-spacing: 0; color: var(--text); }
+.markdown h1 { font-size: 22px; }
+.markdown h2 { padding-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 18px; }
+.markdown h3 { font-size: 16px; }
+.markdown ul, .markdown ol { margin: 8px 0 12px; padding-left: 24px; }
+.markdown li + li { margin-top: 4px; }
+.markdown blockquote { margin: 12px 0; padding: 7px 14px; border-left: 3px solid var(--accent); background: var(--bg-hover); color: var(--text-secondary); }
+.markdown hr { height: 1px; margin: 20px 0; border: 0; background: var(--border); }
+.markdown a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; overflow-wrap: anywhere; }
+.markdown code:not([data-block]) { padding: 2px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-sunken); font-family: var(--font-mono); font-size: .9em; overflow-wrap: anywhere; }
+.markdown pre { min-width: 0; max-width: 100%; overflow-x: auto; }
+.markdown [data-streamdown="code-block"] { min-width: 0; max-width: 100%; margin: 12px 0; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-sunken); }
+.markdown [data-streamdown="code-block-header"] { min-height: 34px; padding: 0 10px; border-bottom: 1px solid var(--border); background: var(--bg-hover); color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11px; }
+.markdown [data-streamdown="code-block-actions"] { background: var(--bg-raised); border-color: var(--border); }
+.markdown [data-streamdown="code-block-body"] { min-width: 0; overflow-x: auto; }
+.markdown .table-wrapper, .markdown [data-streamdown="table-wrapper"] { max-width: 100%; overflow-x: auto; margin: 12px 0; border: 1px solid var(--border); border-radius: 7px; }
+.markdown table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 13px; }
+.markdown th, .markdown td { padding: 8px 11px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.markdown th { background: var(--bg-hover); color: var(--text); font-weight: 600; }
+.markdown tbody tr:nth-child(even) { background: var(--bg-sunken); }
+.markdown tr:last-child td { border-bottom: 0; }
+.markdown th:last-child, .markdown td:last-child { border-right: 0; }
+.markdown-image-button { display: block; max-width: 100%; margin: 12px 0; padding: 0; cursor: zoom-in; }
+.markdown-image-button img { display: block; max-width: 100%; max-height: 520px; border-radius: 7px; object-fit: contain; }
+.task-card { width: min(100%, 620px); margin: 14px auto; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-raised); box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+.task-card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--border); background: var(--bg-hover); font-size: 12px; color: var(--text-secondary); }
+.task-card > header strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.task-card > ul { margin: 0; padding: 8px 12px; list-style: none; }
+.task-card li { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; }
+.task-card input[type="checkbox"] { flex: none; width: 15px; height: 15px; margin: 3px 0 0; accent-color: var(--accent); pointer-events: none; }
 
 /* ---------- 列表页（Models/Skills/Extensions/MCP/Sessions） ---------- */
 
