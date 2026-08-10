@@ -11,7 +11,12 @@ import type {
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { reportRunCompleted, reportUiRequest } from '../lib/notify';
-import type { ChatMessage, ContentBlock, ToolExecution } from '../lib/chat-types';
+import {
+  rebuildToolExecutionsFromMessages,
+  type ChatMessage,
+  type ContentBlock,
+  type ToolExecution,
+} from '../lib/chat-types';
 
 export type { ChatMessage, ContentBlock, ToolExecution };
 
@@ -221,6 +226,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   applyState: (state) => {
+    const messages = state.messages.map((m, i) => ({
+      ...asMessage(m),
+      entryId: state.messageEntryIds?.[i] ?? undefined,
+    }));
     set({
       cwd: state.cwd,
       sessionId: state.sessionId,
@@ -229,11 +238,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       thinkingLevel: state.thinkingLevel,
       availableThinkingLevels: state.availableThinkingLevels ?? [],
       isStreaming: state.isStreaming,
-      messages: state.messages.map((m, i) => ({
-        ...asMessage(m),
-        entryId: state.messageEntryIds?.[i] ?? undefined,
-      })),
-      toolExecutions: {},
+      messages,
+      // 恢复/切换会话：事件累积的执行表为空，从消息历史重建（结果 + 中断标记）
+      toolExecutions: rebuildToolExecutionsFromMessages(messages),
       compaction: null,
       retry: null,
       queue: { steering: [], followUp: [] },
@@ -265,9 +272,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   refreshMessages: async () => {
     const state = await hostApi.piRuntime.getState().catch(() => null);
     if (!state || state.generation !== get().generation) return; // 会话已替换，丢弃
+    const messages = state.messages.map((m) => asMessage(m));
     set({
-      messages: state.messages.map((m) => asMessage(m)),
-      toolExecutions: {},
+      messages,
+      toolExecutions: rebuildToolExecutionsFromMessages(messages),
     });
   },
 
