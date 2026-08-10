@@ -120,10 +120,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
   uiRequests: [],
 
   start: async (cwd) => {
-    if (get().starting) return;
+    const current = get();
+    if (current.starting) return;
+    // 页面来回切换会重挂 ChatPage：同 cwd 的重复 start 直接忽略，
+    // 否则会闪「正在启动会话…」并被 applyState 无谓重置。
+    if (current.started && current.cwd === cwd) return;
     set({ starting: true, startError: undefined });
     try {
-      const state = await hostApi.piRuntime.start(cwd);
+      // 兜底超时：main 侧也有自己的超时，这里防 IPC 完全无响应把页面卡死
+      const state = await Promise.race([
+        hostApi.piRuntime.start(cwd),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('start-timeout')), 75_000);
+        }),
+      ]);
       get().applyState(state);
       set({ started: true, starting: false });
     } catch (err) {

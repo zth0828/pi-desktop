@@ -38,6 +38,7 @@ import { sendHostEvent } from '../main/ipc/host-events';
 import { expandFileReferences } from '../utils/file-expand';
 import { detectPiEnvironment } from '../utils/pi-detector';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
+import { samePath } from '../utils/same-path';
 import { syncLmStudioModels } from '../utils/lmstudio-models';
 import {
   cancelAllPendingUi,
@@ -406,11 +407,20 @@ async function removeQueuedItem(
   return removed;
 }
 
+/**
+ * 会话启动上限。超时后渲染层得到错误（可重试），底层构建继续在后台完成：
+ * startInFlight 只在构建自然结束后清理，重试会复用同一个构建而不是再起一个。
+ */
+const START_TIMEOUT_MS = 45_000;
+
 export const piRuntimeApi = {
   start: async (payload: PiRuntimeStartPayload): Promise<PiRuntimeStateResult> => {
-    if (active && active.cwd === payload.cwd) return snapshotState(active);
+    // samePath：/tmp ↔ /private/tmp 等形式差异不应触发无谓的 runtime 重建
+    if (active && samePath(active.cwd, payload.cwd)) return snapshotState(active);
     if (startInFlight) await startInFlight.catch(() => {});
-    if (active && active.cwd !== payload.cwd) {
+    // 等完上一个构建后复看：可能恰好就是目标 cwd（如超时后的重试）
+    if (active && samePath(active.cwd, payload.cwd)) return snapshotState(active);
+    if (active && !samePath(active.cwd, payload.cwd)) {
       active.unsubscribe();
       cancelAllPendingUi();
       active.runtime.dispose();
@@ -420,14 +430,25 @@ export const piRuntimeApi = {
       // 运行时销毁：旧 run 的 ended 事件不再可达，兜底解除防休眠
       noteRunEnded();
     }
-    startInFlight = (async () => {
+    const flight = (async () => {
       active = await createRuntime(payload.cwd);
       return snapshotState(active);
     })();
+    startInFlight = flight;
+    // 构建自然结束（成功或失败）后清理 in-flight 标记；超时不清理（见上方注释）
+    void flight.catch(() => {}).then(() => {
+      if (startInFlight === flight) startInFlight = null;
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      return await startInFlight;
+      return await Promise.race([
+        flight,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('start-timeout')), START_TIMEOUT_MS);
+        }),
+      ]);
     } finally {
-      startInFlight = null;
+      clearTimeout(timer);
     }
   },
 

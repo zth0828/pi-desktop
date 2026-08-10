@@ -212,12 +212,23 @@ export default function ChatPage() {
 
   return (
     <div className={`chat-page${workspaceVisible ? ' workspace-visible' : ''}`}>
-      {startError && <div className="error-banner">{startError}</div>}
-      {starting && <div className="chat-empty">{t('chat.starting')}</div>}
+      {startError && (
+        <div className="error-banner">
+          <span>{startError === 'start-timeout' ? t('chat.startTimeout') : startError}</span>
+          {effectiveCwd && (
+            <button data-testid="start-retry" onClick={() => void start(effectiveCwd)}>
+              {t('chat.startRetry')}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="chat-column">
         {started && <SessionTitleBar />}
         <div className="message-list" ref={listRef} data-testid="message-list">
+          {!started && starting && (
+            <div className="chat-starting" data-testid="chat-starting">{t('chat.starting')}</div>
+          )}
           {started && messages.length === 0 && (
             <div className="chat-greeting" data-testid="chat-greeting">
               <h1>{t('chat.greeting')}</h1>

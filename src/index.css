@@ -598,6 +598,29 @@ button.danger-outline {
   background: var(--danger-soft);
   color: var(--danger);
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.error-banner button {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border: 1px solid currentColor;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+/* 会话启动中的占位：放在 message-list 内，布局与正常会话一致 */
+
+.chat-starting {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 13.5px;
 }
 
 /* ---------- Chat ---------- */

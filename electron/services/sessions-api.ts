@@ -2,7 +2,6 @@
 // 列表/切换/重命名/分叉走 pi SDK（SessionManager 静态方法 + runtime.switchSession）；
 // 删除 pi 无 SDK API（已确认），对齐 pi `/resume`：优先移入系统废纸篓。
 // 会话替换后必须 afterSessionReplaced（重订阅 + 重绑扩展 + 推 sessionReplaced）。
-import { realpathSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { shell } from 'electron';
 import type {
@@ -22,20 +21,10 @@ import {
 } from './pi-runtime-api';
 import { settingsApi } from './settings-api';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
+import { samePath } from '../utils/same-path';
 
 function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-/** macOS /tmp → /private/tmp symlink：路径比较前两边 realpath（AGENTS.md）。 */
-function samePath(a?: string, b?: string): boolean {
-  if (!a || !b) return false;
-  if (a === b) return true;
-  try {
-    return realpathSync(a) === realpathSync(b);
-  } catch {
-    return false;
-  }
 }
 
 function currentSessionFile(): string | undefined {
