@@ -265,6 +265,8 @@
       "output": "输出",
       "total": "总计",
       "cost": "费用"
+    "startTimeout": "会话启动超时，请检查后重试",
+    "startRetry": "重试",
     }
   },
   "models": {

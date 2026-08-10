@@ -265,6 +265,8 @@
       "output": "Output",
       "total": "Total",
       "cost": "Cost"
+    "startTimeout": "Session start timed out. Please try again.",
+    "startRetry": "Retry",
     }
   },
   "models": {
