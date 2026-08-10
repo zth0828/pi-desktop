@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, AtSign, Brain, ChevronDown, CircleGauge, Folder, ListPlus, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
+import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, Folder, ListPlus, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
 import type {
   PiCommandRow,
   PiModelRow,
@@ -33,7 +33,6 @@ function detectAtToken(text: string, caret: number): AtToken | null {
 type ChatInputProps = {
   cwd: string;
   onChooseWorkspace: () => Promise<void>;
-  onNewSession: () => void;
 };
 
 type FollowupBehavior = 'queue' | 'steer';
@@ -111,7 +110,7 @@ function lastAssistantText(messages: ChatMessage[]): string | null {
   return null;
 }
 
-export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputProps) {
+export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
   const [images, setImages] = useState<StagedImage[]>([]);
@@ -143,23 +142,36 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
   const [followupBehavior, setFollowupBehavior] = useState<FollowupBehavior>('queue');
   const [sendWith, setSendWith] = useState<SendWith>('enter');
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [modelMenuSection, setModelMenuSection] = useState<'models' | 'thinking' | null>(null);
   const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const modelSelectRef = useRef<HTMLSelectElement>(null);
   const composerMenuRef = useRef<HTMLDivElement>(null);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
   const usageControlRef = useRef<HTMLDivElement>(null);
   const noticeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!composerMenuOpen && !usageOpen) return;
+    if (!composerMenuOpen && !usageOpen && !modelMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (composerMenuOpen && !composerMenuRef.current?.contains(target)) setComposerMenuOpen(false);
       if (usageOpen && !usageControlRef.current?.contains(target)) setUsageOpen(false);
+      if (modelMenuOpen && !modelMenuRef.current?.contains(target)) setModelMenuOpen(false);
+    };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setComposerMenuOpen(false);
+      setUsageOpen(false);
+      setModelMenuOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [composerMenuOpen, usageOpen]);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [composerMenuOpen, usageOpen, modelMenuOpen]);
 
   /** 命令执行的轻量确认（/name /copy /export /reload 等），5s 自动消失 */
   const showNotice = (text: string) => {
@@ -272,9 +284,9 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
         return void hostApi.piRuntime.compact(arg || undefined);
       case 'model': {
         if (!arg) {
-          // pi /model 无参 = 打开模型选择器 → 壳聚焦并展开聊天页模型下拉
-          modelSelectRef.current?.focus();
-          modelSelectRef.current?.showPicker?.();
+          // pi /model 无参 = 打开模型选择器 → 壳展开聊天页模型菜单
+          setModelMenuSection('models');
+          setModelMenuOpen(true);
           return;
         }
         const needle = arg.toLowerCase();
@@ -649,68 +661,6 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
         </div>
       )}
       <div className="chat-input-card">
-        <div className="chat-context-bar">
-          <button
-            className="context-chip workspace-chip"
-            data-testid="chat-workspace"
-            title={cwd}
-            onClick={() => void onChooseWorkspace()}
-          >
-            <Folder size={15} />
-            <span>{cwd.split('/').filter(Boolean).pop() ?? cwd}</span>
-            <ChevronDown size={13} />
-          </button>
-          <span className="context-separator" aria-hidden="true" />
-          {models.length > 0 ? (
-            <select
-              ref={modelSelectRef}
-              className="context-chip model-select"
-              data-testid="model-select"
-              aria-label={t('chat.model')}
-              value={modelKey}
-              onChange={(e) => applyModelSelection(e.target.value)}
-            >
-              {[...modelGroups.entries()].map(([provider, providerModels]) => (
-                <optgroup key={provider} label={provider}>
-                  {providerModels.map((m) => (
-                    <option key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
-                      {modelDisplayName(m)}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          ) : model ? (
-            <span className="context-chip model-badge" data-testid="model-badge">
-              {model.name ?? model.id}
-            </span>
-          ) : null}
-          {reasoning && availableThinkingLevels.length > 0 && (
-            <select
-              className="context-chip thinking-select"
-              data-testid="thinking-level-select"
-              aria-label={t('chat.thinkingLevel')}
-              value={thinkingLevel}
-              onChange={(e) => {
-                void hostApi.piRuntime.setThinkingLevel(e.target.value).then((result) => {
-                  useChatStore.getState().applyModelUpdate(result);
-                });
-              }}
-              disabled={isStreaming}
-            >
-              {availableThinkingLevels.map((level) => <option key={level} value={level}>{t(`chat.thinkingLevels.${level}`, { defaultValue: level })}</option>)}
-            </select>
-          )}
-          <span className="spacer" />
-          <button
-            className="context-action"
-            data-testid="new-session"
-            onClick={onNewSession}
-            disabled={isStreaming}
-          >
-            {t('chat.newSession')}
-          </button>
-        </div>
         {stagedFiles.length > 0 && (
           <div className="staged-files" data-testid="staged-files">
             {stagedFiles.map((file, i) => (
@@ -788,7 +738,109 @@ export function ChatInput({ cwd, onChooseWorkspace, onNewSession }: ChatInputPro
               </div>
             )}
           </div>
+          <button
+            className="context-chip workspace-chip"
+            data-testid="chat-workspace"
+            title={cwd}
+            onClick={() => void onChooseWorkspace()}
+          >
+            <Folder size={15} />
+            <span>{cwd.split('/').filter(Boolean).pop() ?? cwd}</span>
+            <ChevronDown size={13} />
+          </button>
           <span className="spacer" />
+          {(models.length > 0 || model) && (
+            <div className="model-menu-wrap" ref={modelMenuRef}>
+              <button
+                className="model-menu-trigger"
+                data-testid="model-select"
+                data-value={modelKey}
+                aria-label={t('chat.model')}
+                aria-expanded={modelMenuOpen}
+                onClick={() => setModelMenuOpen((open) => !open)}
+              >
+                <span className="model-menu-trigger-name">
+                  {selectedModel ? modelDisplayName(selectedModel) : (model?.name ?? model?.id ?? t('chat.model'))}
+                </span>
+                <ChevronDown size={13} />
+              </button>
+              {modelMenuOpen && (
+                <div className="model-menu" data-testid="model-menu" role="menu">
+                  {modelMenuSection === 'models' && (
+                    <div className="model-submenu" data-testid="model-submenu">
+                      {models.length === 0 && <div className="composer-menu-hint">{t('chat.modelMenu.empty')}</div>}
+                      {[...modelGroups.entries()].map(([provider, providerModels]) => (
+                        <div key={provider}>
+                          <div className="model-group-label">{provider}</div>
+                          {providerModels.map((m) => {
+                            const value = `${m.provider}/${m.id}`;
+                            return (
+                              <button
+                                key={value}
+                                className="model-option"
+                                data-testid="model-option"
+                                data-value={value}
+                                onClick={() => { setModelMenuOpen(false); applyModelSelection(value); }}
+                              >
+                                <span>{modelDisplayName(m)}</span>
+                                {value === modelKey && <Check size={14} />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {modelMenuSection === 'thinking' && (
+                    <div className="model-submenu" data-testid="model-submenu">
+                      {availableThinkingLevels.map((level) => (
+                        <button
+                          key={level}
+                          className="model-option"
+                          data-testid="thinking-option"
+                          data-value={level}
+                          onClick={() => {
+                            setModelMenuOpen(false);
+                            void hostApi.piRuntime.setThinkingLevel(level).then((result) => {
+                              useChatStore.getState().applyModelUpdate(result);
+                            });
+                          }}
+                        >
+                          <span>{t(`chat.thinkingLevels.${level}`, { defaultValue: level })}</span>
+                          {level === thinkingLevel && <Check size={14} />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="model-menu-main">
+                    <button
+                      className={`model-menu-row${modelMenuSection === 'models' ? ' active' : ''}`}
+                      data-testid="model-menu-models"
+                      onClick={() => setModelMenuSection((s) => (s === 'models' ? null : 'models'))}
+                    >
+                      <span>{t('chat.modelMenu.model')}</span>
+                      <span className="model-menu-value">
+                        {selectedModel ? modelDisplayName(selectedModel) : (model?.name ?? model?.id ?? '')}
+                      </span>
+                      <ChevronLeft size={13} />
+                    </button>
+                    {reasoning && availableThinkingLevels.length > 0 && (
+                      <button
+                        className={`model-menu-row${modelMenuSection === 'thinking' ? ' active' : ''}`}
+                        data-testid="model-menu-thinking"
+                        disabled={isStreaming}
+                        onClick={() => setModelMenuSection((s) => (s === 'thinking' ? null : 'thinking'))}
+                      >
+                        <span>{t('chat.thinkingLevel')}</span>
+                        <span className="model-menu-value">{t(`chat.thinkingLevels.${thinkingLevel}`, { defaultValue: thinkingLevel })}</span>
+                        <ChevronLeft size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <div className="usage-control" ref={usageControlRef}>
             <button
               className="usage-button"

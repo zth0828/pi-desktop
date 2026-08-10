@@ -46,7 +46,7 @@ const log = (...args) => console.log('[verify-img]', ...args);
 try {
   const input = page.getByTestId('chat-input');
   await input.waitFor({ state: 'visible', timeout: 30_000 });
-  log('model:', await page.getByTestId('model-select').inputValue().catch(() => '?'));
+  log('model:', await page.getByTestId('model-select').getAttribute('data-value').catch(() => '?'));
   await page.locator('input[type="file"]').setInputFiles(testImage);
   await page.waitForTimeout(800);
   await input.fill('What is in this image? Answer in one short sentence.');

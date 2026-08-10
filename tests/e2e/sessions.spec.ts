@@ -112,7 +112,7 @@ test('切换会话 → 消息列表恢复目标会话内容', async ({ launchEle
   await waitSessionReady(page);
 
   await sendAndWaitReply(page, 'session one ALPHA');
-  await page.getByTestId('new-session').click();
+  await page.getByTestId('new-chat').click();
   await sendAndWaitReply(page, 'session two BRAVO');
 
   await page.getByTestId('nav-sessions').click();
@@ -132,7 +132,7 @@ test('侧栏会话入口：从其他功能页点击后切回对话并恢复目�
   await waitSessionReady(page);
 
   await sendAndWaitReply(page, 'sidebar target KOALA');
-  await page.getByTestId('new-session').click();
+  await page.getByTestId('new-chat').click();
   await sendAndWaitReply(page, 'sidebar current PANDA');
   await page.getByTestId('nav-models').click();
   await expect(page.getByTestId('nav-models')).toHaveClass(/active/);
@@ -170,7 +170,7 @@ test('删除（二次确认）→ 列表减少', async ({ launchElectronApp }) =
   await waitSessionReady(page);
 
   await sendAndWaitReply(page, 'delete me DELTA');
-  await page.getByTestId('new-session').click();
+  await page.getByTestId('new-chat').click();
   await sendAndWaitReply(page, 'keep me ECHO');
 
   await page.getByTestId('nav-sessions').click();
@@ -192,7 +192,7 @@ test('侧栏会话菜单 → 归档后移入已归档，可恢复；删除后消
   await waitSessionReady(page);
 
   await sendAndWaitReply(page, 'archive from sidebar FOX');
-  await page.getByTestId('new-session').click();
+  await page.getByTestId('new-chat').click();
   await sendAndWaitReply(page, 'delete from sidebar OWL');
 
   const workspaceName = path.basename(workspace);

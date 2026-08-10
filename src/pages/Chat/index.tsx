@@ -108,7 +108,6 @@ export default function ChatPage() {
   const sessionId = useChatStore((s) => s.sessionId);
   const workspaceVisible = useChatStore((s) => s.workspaceOpen || s.reviewOpen);
   const start = useChatStore((s) => s.start);
-  const newSession = useChatStore((s) => s.newSession);
   // 跨项目切换会话时以 runtime 的实际 cwd 为准
   const activeCwd = useChatStore((s) => (s.started ? s.cwd : undefined));
   const effectiveCwd = activeCwd ?? cwd;
@@ -268,7 +267,6 @@ export default function ChatPage() {
         <ChatInput
           cwd={effectiveCwd}
           onChooseWorkspace={chooseWorkspace}
-          onNewSession={() => void newSession()}
         />
       </div>
       <TreeDialog />

@@ -270,7 +270,7 @@ test('新会话 → 消息列表清空', async ({ launchElectronApp }) => {
     timeout: 30_000,
   });
 
-  await page.getByTestId('new-session').click();
+  await page.getByTestId('new-chat').click();
   await expect(page.getByTestId('message-assistant')).toHaveCount(0);
   // 新会话仍可继续对话
   await page.getByTestId('chat-input').fill('Say PONG again');

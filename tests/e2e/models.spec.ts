@@ -195,19 +195,35 @@ test('Models 页：已配置供应商展开显示可用模型，可设为当前�
   await page.getByTestId('nav-chat').click();
   const selector = page.getByTestId('model-select');
   await expect(selector).toBeVisible({ timeout: 30_000 });
-  await expect(selector).toHaveValue('mock/mock-wide');
-  await page.getByTestId('new-session').click();
-  await expect.poll(async () => selector.inputValue(), { timeout: 15_000 }).toBe('mock/mock-wide');
+  await expect(selector).toHaveAttribute('data-value', 'mock/mock-wide');
+  await page.getByTestId('new-chat').click();
+  await expect
+    .poll(async () => selector.getAttribute('data-value'), { timeout: 15_000 })
+    .toBe('mock/mock-wide');
 });
 
-test('聊天页模型下拉按供应商分组（optgroup）', async ({ launchElectronApp }) => {
+/** Codex 风格模型菜单：触发器 → 「模型」行 → 子菜单里按 data-value 点选 */
+async function selectChatModel(page: import('@playwright/test').Page, value: string) {
+  await page.getByTestId('model-select').click();
+  await page.getByTestId('model-menu-models').click();
+  await page.locator(`[data-testid="model-option"][data-value="${value}"]`).click();
+}
+
+test('聊天页模型菜单按供应商分组', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
 
   const selector = page.getByTestId('model-select');
   await expect(selector).toBeVisible({ timeout: 30_000 });
-  await expect(selector.locator('optgroup[label="mock"]')).toHaveCount(1);
-  await expect(selector.locator('optgroup[label="mock"] option')).toHaveCount(2);
+  await selector.click();
+  await page.getByTestId('model-menu-models').click();
+  const submenu = page.getByTestId('model-submenu');
+  await expect(submenu).toBeVisible();
+  const mockGroup = submenu.locator('> div', {
+    has: page.locator('.model-group-label', { hasText: 'mock' }),
+  });
+  await expect(mockGroup).toHaveCount(1);
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(2);
 });
 
 test('LM Studio：自动发现模型并同步视觉能力与真实上下文', async ({ launchElectronApp }) => {
@@ -216,9 +232,14 @@ test('LM Studio：自动发现模型并同步视觉能力与真实上下文', as
 
   const selector = page.getByTestId('model-select');
   await expect(selector).toBeVisible({ timeout: 30_000 });
-  const group = selector.locator('optgroup[label="LM Studio"]');
+  await selector.click();
+  await page.getByTestId('model-menu-models').click();
+  const group = page.locator('.model-submenu > div', {
+    has: page.locator('.model-group-label', { hasText: 'LM Studio' }),
+  });
   await expect(group).toHaveCount(1);
-  await expect(group.locator('option')).toHaveText(['Qwen3.5 9B']);
+  await expect(group.getByTestId('model-option')).toHaveText(['Qwen3.5 9B']);
+  await selector.click();
 
   await expect.poll(async () => {
     const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
@@ -312,7 +333,9 @@ test('Token 上限随当前模型切换，不使用固定 128K', async ({ launch
   await expect(popover).toContainText('128,000');
   await expect(popover).toContainText('4,096');
 
-  await selector.selectOption('mock/mock-wide');
+  // 菜单点选会顺带关闭 usage popover（外部点击语义），选完重新打开
+  await selectChatModel(page, 'mock/mock-wide');
+  await page.getByTestId('token-usage').click();
   await expect(popover.getByTestId('usage-context-window')).toContainText('200,000');
   await expect(popover.getByTestId('usage-max-output')).toContainText('8,192');
 });
@@ -330,7 +353,9 @@ test('模型切换只更新当前模型参数，会话累计 usage 保持不变'
   const inputTotal = page.getByTestId('usage-session-input');
   await expect.poll(async () => Number((await inputTotal.locator('strong').textContent())?.replaceAll(',', '') ?? 0)).toBeGreaterThan(0);
   const before = await inputTotal.locator('strong').textContent();
-  await selector.selectOption('mock/mock-wide');
+  await selectChatModel(page, 'mock/mock-wide');
+  // 重新打开 usage popover（菜单点选按外部点击关掉了它）
+  await page.getByTestId('token-usage').click();
   await expect(page.getByTestId('usage-context-window')).toContainText('200,000');
   await expect(inputTotal.locator('strong')).toHaveText(before ?? '');
 });

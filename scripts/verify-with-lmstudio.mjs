@@ -48,7 +48,7 @@ const log = (...args) => console.log('[verify]', ...args);
 try {
   const input = page.getByTestId('chat-input');
   await input.waitFor({ state: 'visible', timeout: 30_000 });
-  log('chat ready, model:', await page.getByTestId('model-select').inputValue().catch(() => '(no select)'));
+  log('chat ready, model:', await page.getByTestId('model-select').getAttribute('data-value').catch(() => '(no select)'));
 
   await input.fill(
     'Do these steps with tools, no questions: ' +

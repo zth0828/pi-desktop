@@ -51,9 +51,10 @@ await page.getByTestId('workspace-review-tab').click();
 await page.screenshot({ path: path.join(outDir, 'workspace-03-review.png') });
 await page.getByTestId('workspace-close').click();
 
-const modelSelect = page.getByTestId('model-select');
-if (await modelSelect.count()) {
-  await modelSelect.selectOption('lmstudio/qwen/qwen3.5-9b');
+if (await page.getByTestId('model-select').count()) {
+  await page.getByTestId('model-select').click();
+  await page.getByTestId('model-menu-models').click();
+  await page.locator('[data-testid="model-option"][data-value="lmstudio/qwen/qwen3.5-9b"]').click();
 }
 await page.getByTestId('token-usage').click();
 await page.getByTestId('token-usage-popover').waitFor();

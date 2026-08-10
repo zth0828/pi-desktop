@@ -65,6 +65,12 @@ await page.waitForLoadState('domcontentloaded');
 const shot = (name) => page.screenshot({ path: join(shotDir, `${name}.png`), fullPage: false });
 const log = (...args) => console.log('[verify]', ...args);
 
+const selectModel = async (page, value) => {
+  await page.getByTestId('model-select').click();
+  await page.getByTestId('model-menu-models').click();
+  await page.locator(`[data-testid="model-option"][data-value="${value}"]`).click();
+};
+
 async function waitRunDone(maxSeconds = 240) {
   // 先等状态条出现（防止 Enter 后轮询太快误判已完成），再等它消失
   let appeared = false;
@@ -111,11 +117,10 @@ try {
 
   // ---------- Phase 2: 图片上传（切 GLM 4.6V 视觉模型） ----------
   if (phases.includes('2')) {
-  await page.getByTestId('new-session').click();
-  const selector = page.getByTestId('model-select');
-  await selector.waitFor({ state: 'visible', timeout: 30_000 });
-  await selector.selectOption('lmstudio/zai-org/glm-4.6v-flash');
-  log('phase2 model switched:', await selector.inputValue());
+  await page.getByTestId('new-chat').click();
+  await page.getByTestId('model-select').waitFor({ state: 'visible', timeout: 30_000 });
+  await selectModel(page, 'lmstudio/zai-org/glm-4.6v-flash');
+  log('phase2 model switched:', await page.getByTestId('model-select').getAttribute('data-value'));
   await page.locator('input[type="file"]').setInputFiles(testImage);
   await page.waitForTimeout(1_000);
   await shot('20-image-attached');
@@ -128,10 +133,9 @@ try {
 
   // ---------- Phase 3: subagent 扩展（prompt 模板 /scout-and-plan 强制走 subagent 链） ----------
   if (phases.includes('3')) {
-  await page.getByTestId('new-session').click();
-  const selector3 = page.getByTestId('model-select');
-  await selector3.waitFor({ state: 'visible', timeout: 30_000 });
-  await selector3.selectOption('lmstudio/qwen/qwen3.5-9b');
+  await page.getByTestId('new-chat').click();
+  await page.getByTestId('model-select').waitFor({ state: 'visible', timeout: 30_000 });
+  await selectModel(page, 'lmstudio/qwen/qwen3.5-9b');
   await send('/scout-and-plan list the files in the current directory');
   const done3 = await waitRunDone(420);
   // 展开 subagent 卡片看聚合结果
@@ -145,7 +149,7 @@ try {
 
   // ---------- Phase 4: @ 文件引用 ----------
   if (phases.includes('4')) {
-  await page.getByTestId('new-session').click();
+  await page.getByTestId('new-chat').click();
   const input4 = page.getByTestId('chat-input');
   await input4.waitFor({ state: 'visible', timeout: 30_000 });
   await input4.pressSequentially('@fruits', { delay: 80 });

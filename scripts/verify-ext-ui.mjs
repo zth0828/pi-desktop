@@ -79,7 +79,7 @@ try {
   log('two turns done, user messages:', await userMessages());
 
   // 1) confirm：新会话被扩展拦截 → 取消
-  await page.getByTestId('new-session').click();
+  await page.getByTestId('new-chat').click();
   const dialog = page.getByTestId('extui-dialog');
   await dialog.waitFor({ state: 'visible', timeout: 15_000 });
   log('confirm dialog kind:', await dialog.getAttribute('data-kind'));
