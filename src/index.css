@@ -397,13 +397,14 @@ button.danger-outline {
 
 /* ---------- Settings ---------- */
 
+/* 页面内容列：整体居中、列内左对齐，随窗口宽度自适应（居中列 900px） */
 .settings-page {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  width: min(900px, 100%);
-  max-width: 900px;
+  width: 100%;
   padding-bottom: 36px;
+  padding-inline: max(40px, calc((100% - 900px) / 2));
 }
 
 .settings-section {
@@ -1897,12 +1898,14 @@ button.danger-outline {
 
 /* ---------- 列表页（Models/Skills/Extensions/MCP/Sessions） ---------- */
 
+/* 列表页内容列：整体居中、列内左对齐，随窗口宽度自适应（居中列 820px） */
 .models-page,
 .skills-page,
 .extensions-page,
 .mcp-page,
 .sessions-page {
   padding: 32px 40px;
+  padding-inline: max(40px, calc((100% - 820px) / 2));
   overflow-y: auto;
   display: flex;
   flex-direction: column;
