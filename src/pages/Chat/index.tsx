@@ -1,10 +1,10 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, PanelRight, Pencil, X } from 'lucide-react';
+import { ArrowDown, Check, ChevronRight, PanelRight, Pencil, X } from 'lucide-react';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
-import { groupLogicalTurns, groupTurnStages, turnFinalResponseIndex } from '../../lib/turn-changes';
+import { groupLogicalTurns, groupTurnStages, turnDurationMs, turnFinalResponseIndex } from '../../lib/turn-changes';
 import { useChatStore } from '../../stores/chat';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
@@ -123,9 +123,13 @@ export default function ChatPage() {
   // 一个 user 问题对应一个完整回合；完成后默认收起 thinking/阶段文本/工具调用。
   const [expandedTurns, setExpandedTurns] = useState<Record<number, boolean>>({});
   const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({});
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const stickToBottomRef = useRef(true);
   useEffect(() => {
     setExpandedTurns({});
     setExpandedStages({});
+    stickToBottomRef.current = true;
+    setShowScrollToBottom(false);
   }, [sessionId]);
 
   // user 消息稳定锚点（消息列表在会话内只追加，index 锚点稳定）
@@ -169,9 +173,41 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const updateScrollAffordance = useCallback(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+    const hasOverflow = list.scrollHeight > list.clientHeight + 2;
+    const atBottom = !hasOverflow || distanceFromBottom <= 24;
+    stickToBottomRef.current = atBottom;
+    setShowScrollToBottom(hasOverflow && !atBottom);
+  }, []);
+
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages]);
+    const list = listRef.current;
+    if (!list) return;
+    const onScroll = () => updateScrollAffordance();
+    updateScrollAffordance();
+    list.addEventListener('scroll', onScroll, { passive: true });
+    return () => list.removeEventListener('scroll', onScroll);
+  }, [sessionId, started, updateScrollAffordance]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    if (stickToBottomRef.current) {
+      list.scrollTo({ top: list.scrollHeight });
+    }
+    updateScrollAffordance();
+  }, [messages, updateScrollAffordance]);
+
+  const scrollToBottom = () => {
+    const list = listRef.current;
+    if (!list) return;
+    stickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+    list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' });
+  };
 
   const chooseWorkspace = async () => {
     const result = await hostApi.dialog.openDirectory(t('chat.workspace.choose'));
@@ -180,6 +216,20 @@ export default function ChatPage() {
     await hostApi.settings.set('workspaceCwd', dir);
     setCwd(dir);
     void start(dir);
+  };
+
+  const formatTurnDuration = (durationMs: number | null): string | null => {
+    if (durationMs === null || !Number.isFinite(durationMs) || durationMs < 0) return null;
+    const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const duration = hours > 0
+      ? t('chat.turnFold.durationHours', { hours, minutes, seconds })
+      : minutes > 0
+        ? t('chat.turnFold.durationMinutes', { minutes, seconds })
+        : t('chat.turnFold.durationSeconds', { seconds });
+    return t('chat.turnFold.duration', { duration });
   };
 
   const renderTurn = (turn: (typeof logicalTurns)[number], turnIndex: number) => {
@@ -222,6 +272,12 @@ export default function ChatPage() {
     const stageIndices = [...processIndices, ...(finalProcess.length > 0 ? [finalIndex] : [])];
     const stages = groupTurnStages(messages, stageIndices, String(turn.startIndex));
     const hasProcess = stages.length > 0;
+    const duration = formatTurnDuration(turnDurationMs(
+      messages,
+      turn,
+      toolExecutions,
+      finalIndex === latestFinalResponseIndex ? turnStats?.durationMs : undefined,
+    ));
 
     return (
       <Fragment key={turn.startIndex}>
@@ -237,8 +293,13 @@ export default function ChatPage() {
                 [turn.startIndex]: !expanded,
               }))}
             >
+              <span className="turn-fold-label">
+                {duration && <span className="turn-fold-duration" data-testid="turn-fold-duration">{duration}</span>}
+                <span className="turn-fold-action">
+                  {expanded ? t('chat.turnFold.collapse') : t('chat.turnFold.expand')}
+                </span>
+              </span>
               <ChevronRight size={14} aria-hidden="true" />
-              <span>{expanded ? t('chat.turnFold.collapse') : t('chat.turnFold.expand')}</span>
             </button>
             {expanded && (
               <div className="turn-fold-content" data-testid="turn-fold-content">
@@ -315,21 +376,35 @@ export default function ChatPage() {
 
       <div className="chat-column">
         {started && <SessionTitleBar />}
-        <div className="message-list" ref={listRef} data-testid="message-list">
-          {!started && starting && (
-            <div className="chat-starting" data-testid="chat-starting">{t('chat.starting')}</div>
+        <div className="chat-message-region">
+          <div className="message-list" ref={listRef} data-testid="message-list">
+            {!started && starting && (
+              <div className="chat-starting" data-testid="chat-starting">{t('chat.starting')}</div>
+            )}
+            {started && messages.length === 0 && (
+              <div className="chat-greeting" data-testid="chat-greeting">
+                <h1>{t('chat.greeting')}</h1>
+              </div>
+            )}
+            {messages.slice(0, logicalTurns[0]?.startIndex ?? messages.length).map((message, i) => (
+              <MessageItem key={i} message={message} cacheMiss={cacheMisses.get(i)} />
+            ))}
+            {logicalTurns.map(renderTurn)}
+          </div>
+          <MessageNavRail anchors={railAnchors} listRef={listRef} />
+          {showScrollToBottom && (
+            <button
+              className="scroll-to-bottom"
+              data-testid="scroll-to-bottom"
+              type="button"
+              title={t('chat.scrollToBottom')}
+              aria-label={t('chat.scrollToBottom')}
+              onClick={scrollToBottom}
+            >
+              <ArrowDown size={20} aria-hidden="true" />
+            </button>
           )}
-          {started && messages.length === 0 && (
-            <div className="chat-greeting" data-testid="chat-greeting">
-              <h1>{t('chat.greeting')}</h1>
-            </div>
-          )}
-          {messages.slice(0, logicalTurns[0]?.startIndex ?? messages.length).map((message, i) => (
-            <MessageItem key={i} message={message} cacheMiss={cacheMisses.get(i)} />
-          ))}
-          {logicalTurns.map(renderTurn)}
         </div>
-        <MessageNavRail anchors={railAnchors} listRef={listRef} />
 
         <ExtensionWidgets placement="aboveEditor" />
         <StatusBar />

@@ -98,6 +98,32 @@ export function turnTimeRange(
   return { startedAt, endedAt };
 }
 
+/**
+ * 计算一轮回合的可展示耗时。
+ *
+ * 实时回合优先使用 run 统计传入的精确耗时；历史回合则以消息时间戳和工具
+ * 执行时间戳的最小/最大值兜底。缺少两类时间信息时返回 null，避免伪造耗时。
+ */
+export function turnDurationMs(
+  messages: ChatMessage[],
+  turn: LogicalTurn,
+  toolExecutions: Record<string, ToolExecution>,
+  fallbackMs?: number,
+): number | null {
+  if (fallbackMs !== undefined && Number.isFinite(fallbackMs) && fallbackMs >= 0) return fallbackMs;
+  const range = turnTimeRange(toolExecutions, turn.toolCallIds);
+  const timestamps = messages
+    .slice(turn.startIndex, turn.endIndex + 1)
+    .map((message) => message.timestamp)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const starts = [range.startedAt, ...timestamps].filter((value): value is number => value !== undefined);
+  const ends = [range.endedAt, ...timestamps].filter((value): value is number => value !== undefined);
+  if (starts.length === 0 || ends.length === 0) return null;
+  const startedAt = Math.min(...starts);
+  const endedAt = Math.max(...ends);
+  return endedAt >= startedAt ? endedAt - startedAt : null;
+}
+
 export type TurnFileChange = {
   path: string;
   added: number;

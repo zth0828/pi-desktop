@@ -166,7 +166,11 @@
     "turnFold": {
       "expand": "展开本轮过程",
       "collapse": "收起本轮过程",
-      "stage": "阶段 {{index}} · {{count}} 条过程消息"
+      "stage": "阶段 {{index}} · {{count}} 条过程消息",
+      "duration": "耗时 {{duration}}",
+      "durationSeconds": "{{seconds}} 秒",
+      "durationMinutes": "{{minutes}} 分 {{seconds}} 秒",
+      "durationHours": "{{hours}} 小时 {{minutes}} 分 {{seconds}} 秒"
     },
     "taskList": {
       "title": "任务",
@@ -214,6 +218,7 @@
     "totalCost": "累计成本",
     "tokenUnknown": "—",
     "greeting": "我能为你做些什么？",
+    "scrollToBottom": "回到底部",
     "untitled": "未命名会话",
     "imageSessionTitle": "图片会话",
     "sessionMenu": "会话操作",

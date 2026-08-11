@@ -166,7 +166,11 @@
     "turnFold": {
       "expand": "Show turn process",
       "collapse": "Hide turn process",
-      "stage": "Stage {{index}} · {{count}} process messages"
+      "stage": "Stage {{index}} · {{count}} process messages",
+      "duration": "Took {{duration}}",
+      "durationSeconds": "{{seconds}}s",
+      "durationMinutes": "{{minutes}}m {{seconds}}s",
+      "durationHours": "{{hours}}h {{minutes}}m {{seconds}}s"
     },
     "taskList": {
       "title": "Tasks",
@@ -214,6 +218,7 @@
     "totalCost": "Session cost",
     "tokenUnknown": "—",
     "greeting": "What can I do for you?",
+    "scrollToBottom": "Scroll to bottom",
     "untitled": "Untitled session",
     "imageSessionTitle": "Image conversation",
     "sessionMenu": "Session actions",
