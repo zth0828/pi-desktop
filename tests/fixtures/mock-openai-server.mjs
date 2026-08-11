@@ -27,6 +27,11 @@ let flaked429 = false;
 let callSeq = 0;
 
 const server = http.createServer((req, res) => {
+  if (req.method === "GET" && req.url === "/models") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end("<!doctype html><html><body>dashboard</body></html>");
+    return;
+  }
   if (req.method === "GET" && req.url.includes("/api/v1/models")) {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ models: [
@@ -48,6 +53,12 @@ const server = http.createServer((req, res) => {
       { id: "mock-2" },
       { id: "mock-discovered", context_window: 256000, max_output_tokens: 16384 },
     ] }));
+    return;
+  }
+  // 协议探测回归：站点路由可能返回 200 HTML，不能据此判定 API 可用。
+  if (req.method === "POST" && ["/chat/completions", "/responses", "/messages"].includes(req.url)) {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end("<!doctype html><html><body>dashboard</body></html>");
     return;
   }
   if (req.method !== "POST" || !req.url.includes("/chat/completions")) {

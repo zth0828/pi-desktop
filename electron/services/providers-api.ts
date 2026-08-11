@@ -56,6 +56,28 @@ function configuredProviders(agentDir: string): Record<string, ConfiguredProvide
   }
 }
 
+function normalizeBaseUrlForApi(baseUrl: string, api: string): string {
+  const base = baseUrl.replace(/\/+$/, '');
+  // Anthropic's SDK appends /v1/messages itself; storing a /v1 suffix would
+  // produce /v1/v1/messages at request time.
+  return api === 'anthropic-messages' ? base.replace(/\/v1$/i, '') : base;
+}
+
+function updateConfiguredProvider(
+  agentDir: string,
+  providerId: string,
+  update: (provider: Record<string, unknown>, providers: Record<string, unknown>) => void,
+): boolean {
+  const modelsPath = path.join(agentDir, 'models.json');
+  if (!existsSync(modelsPath)) return false;
+  const doc = JSON.parse(readFileSync(modelsPath, 'utf8')) as { providers?: Record<string, unknown> };
+  const provider = doc.providers?.[providerId];
+  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) return false;
+  update(provider as Record<string, unknown>, doc.providers!);
+  writeFileSync(modelsPath, JSON.stringify(doc, null, 2));
+  return true;
+}
+
 async function syncConfiguredCatalogs(
   runtime: ModelRuntime,
   agentDir: string,
@@ -236,9 +258,36 @@ export const providersApi = {
   },
 
   removeCredential: async (payload: { providerId: string }): Promise<HostSuccess> => {
-    const { runtime } = await getModelRuntime();
+    const { sdk, runtime } = await getModelRuntime();
     try {
       await runtime.logout(payload.providerId);
+      updateConfiguredProvider(sdk.getAgentDir(), payload.providerId, (provider) => {
+        delete provider.apiKey;
+        // Config-defined models are only usable with this credential. Clear the
+        // stale directory now; saving a new key discovers them again.
+        if (Array.isArray(provider.models)) provider.models = [];
+      });
+      invalidateModelRuntime();
+      await runtime.refresh({ allowNetwork: false });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  deleteCustom: async (payload: { providerId: string }): Promise<HostSuccess> => {
+    const { sdk, runtime } = await getModelRuntime();
+    try {
+      const configured = configuredProviders(sdk.getAgentDir());
+      if (!configured[payload.providerId]) {
+        return { success: false, error: `custom provider not found: ${payload.providerId}` };
+      }
+      await runtime.logout(payload.providerId);
+      updateConfiguredProvider(sdk.getAgentDir(), payload.providerId, (_provider, providers) => {
+        delete providers[payload.providerId];
+      });
+      invalidateModelRuntime();
+      await runtime.refresh({ allowNetwork: false });
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -276,9 +325,8 @@ export const providersApi = {
       }
       doc.providers ??= {};
       doc.providers[payload.id] = {
-        baseUrl: payload.baseUrl,
+        baseUrl: normalizeBaseUrlForApi(payload.baseUrl, payload.api),
         api: payload.api,
-        ...(payload.apiKey ? { apiKey: payload.apiKey } : {}),
         models: payload.models.map((m) => ({
           id: m.id,
           name: m.name ?? m.id,
@@ -293,7 +341,14 @@ export const providersApi = {
       writeFileSync(modelsPath, JSON.stringify(doc, null, 2));
       invalidateModelRuntime();
       const active = await getActiveRuntimeReady();
-      if (active) await active.runtime.services.modelRuntime.refresh({ allowNetwork: false });
+      const runtime = active?.runtime.services.modelRuntime ?? (await getModelRuntime()).runtime;
+      if (active) await runtime.refresh({ allowNetwork: false });
+      if (payload.apiKey) {
+        await runtime.login(payload.id, 'api_key', {
+          prompt: async () => payload.apiKey!,
+          notify: () => {},
+        });
+      }
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -304,6 +359,7 @@ export const providersApi = {
    * connection diagnostic and must not create a pi session or mutate provider state. */
   probe: async (payload: PiProviderProbePayload): Promise<PiProviderProbeResult> => {
     const base = payload.baseUrl.replace(/\/+$/, '');
+    const openAiBases = /\/v1$/i.test(base) ? [base] : [base, `${base}/v1`];
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (payload.apiKey) {
       headers.authorization = `Bearer ${payload.apiKey}`;
@@ -312,6 +368,12 @@ export const providersApi = {
     const readJson = async (response: Response): Promise<Record<string, unknown>> => {
       const text = await response.text();
       try { return JSON.parse(text) as Record<string, unknown>; } catch { return {}; }
+    };
+    const isProtocolPayload = (response: Response, json: Record<string, unknown>): boolean => {
+      const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+      if (contentType.includes('text/html')) return false;
+      return contentType.includes('text/event-stream')
+        || (contentType.includes('json') && Object.keys(json).length > 0);
     };
     const hasCache = (value: unknown): boolean => {
       if (!value || typeof value !== 'object') return false;
@@ -323,17 +385,33 @@ export const providersApi = {
     };
     const models: string[] = [];
     const modelDetails: Array<{ id: string; contextWindow?: number }> = [];
-    try {
-      const response = await fetch(`${base}/models`, { headers, signal: AbortSignal.timeout(9000) });
-      if (response.ok) {
+    const advertisedEndpointTypes = new Set<string>();
+    for (const candidateBase of openAiBases) {
+      try {
+        const response = await fetch(`${candidateBase}/models`, { headers, signal: AbortSignal.timeout(9000) });
+        if (!response.ok) continue;
         const json = await readJson(response);
         const rows = Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : [];
-        for (const row of rows) {
-          const id = typeof row === 'object' && row ? String((row as Record<string, unknown>).id ?? '') : '';
-          if (id) models.push(id);
+        if (rows.length === 0) continue;
+        for (const raw of rows) {
+          if (!raw || typeof raw !== 'object') continue;
+          const row = raw as Record<string, unknown>;
+          const id = String(row.id ?? row.name ?? '');
+          if (!id) continue;
+          models.push(id);
+          const contextWindow = Number(
+            row.contextWindow ?? row.context_window ?? row.context_length
+              ?? row.max_context_length ?? row.max_model_len ?? 0,
+          );
+          if (contextWindow > 0) modelDetails.push({ id, contextWindow });
+          const endpointTypes = Array.isArray(row.supported_endpoint_types)
+            ? row.supported_endpoint_types
+            : [];
+          for (const endpointType of endpointTypes) advertisedEndpointTypes.add(String(endpointType));
         }
-      }
-    } catch { /* each protocol result reports its own failure */ }
+        break;
+      } catch { /* Try the next conventional OpenAI base URL. */ }
+    }
     // LM Studio's OpenAI-compatible /models currently omits loaded context metadata.
     // Its native endpoint exposes both the model maximum and the active instance value.
     try {
@@ -361,29 +439,75 @@ export const providersApi = {
     } catch { /* Native metadata is optional and only available on LM Studio. */ }
     const model = payload.model || models[0] || 'test-model';
     const protocols: PiProviderProbeResult['protocols'] = [];
-    const requests: Array<{ api: string; url: string; body: Record<string, unknown>; headers?: Record<string, string> }> = [
-      { api: 'openai-completions', url: `${base}/chat/completions`, body: { model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 } },
-      { api: 'openai-responses', url: `${base}/responses`, body: { model, input: 'ping', max_output_tokens: 1 } },
-      { api: 'anthropic-messages', url: `${base.replace(/\/v1$/, '')}/messages`, body: { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }, headers: { ...headers, 'anthropic-version': '2023-06-01' } },
-      { api: 'google-generative-ai', url: `${base}/models/${encodeURIComponent(model)}:generateContent`, body: { contents: [{ parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } } },
+    const resolvedBaseUrls = new Map<string, string>();
+    const anthropicUrl = /\/v1$/i.test(base) ? `${base}/messages` : `${base}/v1/messages`;
+    type ProbeCandidate = { url: string; resolvedBaseUrl: string };
+    const requests: Array<{ api: string; candidates: ProbeCandidate[]; body: Record<string, unknown>; headers?: Record<string, string> }> = [
+      {
+        api: 'openai-completions',
+        candidates: openAiBases.map((candidateBase) => ({ url: `${candidateBase}/chat/completions`, resolvedBaseUrl: candidateBase })),
+        body: { model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 },
+      },
+      {
+        api: 'openai-responses',
+        candidates: openAiBases.map((candidateBase) => ({ url: `${candidateBase}/responses`, resolvedBaseUrl: candidateBase })),
+        body: { model, input: 'ping', max_output_tokens: 1 },
+      },
+      {
+        api: 'anthropic-messages',
+        candidates: [{ url: anthropicUrl, resolvedBaseUrl: normalizeBaseUrlForApi(base, 'anthropic-messages') }],
+        body: { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] },
+        headers: { ...headers, 'anthropic-version': '2023-06-01' },
+      },
+      {
+        api: 'google-generative-ai',
+        candidates: [{ url: `${base}/models/${encodeURIComponent(model)}:generateContent`, resolvedBaseUrl: base }],
+        body: { contents: [{ parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } },
+      },
     ];
     for (const request of requests) {
-      try {
-        const first = await fetch(request.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
-        const firstJson = await readJson(first);
-        let cacheStats = hasCache(firstJson);
-        if (first.ok) {
-          const second = await fetch(request.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
+      let available = false;
+      let cacheStats = false;
+      let error: string | undefined;
+      for (const candidate of request.candidates) {
+        try {
+          const first = await fetch(candidate.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
+          const firstJson = await readJson(first);
+          available = first.ok && isProtocolPayload(first, firstJson);
+          cacheStats = hasCache(firstJson);
+          error = first.ok
+            ? `unexpected content-type: ${first.headers.get('content-type') ?? 'unknown'}`
+            : `HTTP ${first.status}`;
+          if (!available) continue;
+          const second = await fetch(candidate.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
           cacheStats ||= hasCache(await readJson(second));
+          resolvedBaseUrls.set(request.api, candidate.resolvedBaseUrl);
+          error = undefined;
+          break;
+        } catch (candidateError) {
+          error = candidateError instanceof Error ? candidateError.message : String(candidateError);
         }
-        protocols.push({ api: request.api, available: first.ok, cacheStats, error: first.ok ? undefined : `HTTP ${first.status}` });
-      } catch (error) {
-        protocols.push({ api: request.api, available: false, cacheStats: false, error: error instanceof Error ? error.message : String(error) });
       }
+      protocols.push({ api: request.api, available, cacheStats, ...(error ? { error } : {}) });
     }
-    const recommendedApi = protocols.find((p) => p.available && p.cacheStats)?.api
-      ?? protocols.find((p) => p.available)?.api;
-    return { models, modelDetails, protocols, recommendedApi };
+    const advertisedProtocols = protocols.filter((protocol) =>
+      advertisedEndpointTypes.has(protocol.api)
+      || (advertisedEndpointTypes.has('openai') && protocol.api.startsWith('openai-'))
+      || (advertisedEndpointTypes.has('anthropic') && protocol.api === 'anthropic-messages')
+      || (advertisedEndpointTypes.has('google') && protocol.api === 'google-generative-ai'),
+    );
+    const candidates = advertisedProtocols.some((protocol) => protocol.available)
+      ? advertisedProtocols
+      : protocols;
+    const recommended = candidates.find((protocol) => protocol.available && protocol.cacheStats)
+      ?? candidates.find((protocol) => protocol.available);
+    return {
+      models,
+      modelDetails,
+      protocols,
+      recommendedApi: recommended?.api,
+      recommendedBaseUrl: recommended ? resolvedBaseUrls.get(recommended.api) : undefined,
+    };
   },
 
   getCompaction: async (): Promise<PiCompactionSettings> => {

@@ -422,6 +422,8 @@ export type PiProviderProbeResult = {
   modelDetails?: Array<{ id: string; contextWindow?: number }>;
   protocols: PiProviderProbeProtocol[];
   recommendedApi?: string;
+  /** Successful API base URL, including a discovered /v1 prefix when required. */
+  recommendedBaseUrl?: string;
 };
 export type PiCompactionSettings = {
   reserveTokens: number;
@@ -705,6 +707,8 @@ export type HostApiContract = {
     refresh: () => PiProviderRefreshResult;
     setApiKey: (payload: PiProviderSetKeyPayload) => PiProviderSetKeyResult;
     removeCredential: (payload: { providerId: string }) => HostSuccess;
+    /** 删除 models.json 中的供应商定义；内置/扩展供应商不由此动作拥有。 */
+    deleteCustom: (payload: { providerId: string }) => HostSuccess;
     startOAuth: (payload: { providerId: string }) => HostSuccess;
     addCustom: (payload: PiProviderAddCustomPayload) => HostSuccess;
     /** 首选模型（pi 原生 defaultProvider/defaultModel）；null = 未设置。 */

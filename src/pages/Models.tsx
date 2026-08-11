@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RefreshCw } from 'lucide-react';
-import type { PiDefaultModel, PiModelRow, PiProviderRow } from '@shared/host-api/contract';
+import type { PiDefaultModel, PiModelRow, PiProviderProbeResult, PiProviderRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { useChatStore } from '../stores/chat';
@@ -72,8 +72,22 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
   };
 
   const remove = async () => {
-    await hostApi.providers.removeCredential(provider.id);
-    onChanged();
+    setBusy(true);
+    setMessage(undefined);
+    const result = await hostApi.providers.removeCredential(provider.id);
+    setBusy(false);
+    if (result.success) onChanged();
+    else setMessage(result.error);
+  };
+
+  const deleteCustom = async () => {
+    if (!window.confirm(t('models.deleteProviderConfirm', { name: provider.name }))) return;
+    setBusy(true);
+    setMessage(undefined);
+    const result = await hostApi.providers.deleteCustom(provider.id);
+    setBusy(false);
+    if (result.success) onChanged();
+    else setMessage(result.error);
   };
 
   const setCurrent = async (modelId: string) => {
@@ -142,8 +156,23 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
             </button>
           )}
           {provider.configured && (
-            <button className="danger-outline" onClick={() => void remove()}>
+            <button
+              className="danger-outline"
+              data-testid={`remove-credential-${provider.id}`}
+              disabled={busy}
+              onClick={() => void remove()}
+            >
               {t('models.removeKey')}
+            </button>
+          )}
+          {provider.source === 'config' && (
+            <button
+              className="danger-outline"
+              data-testid={`delete-provider-${provider.id}`}
+              disabled={busy}
+              onClick={() => void deleteCustom()}
+            >
+              {t('models.deleteProvider')}
             </button>
           )}
           {provider.configured && (
@@ -216,10 +245,12 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
   const [apiKey, setApiKey] = useState('');
   const [modelIds, setModelIds] = useState('');
   const [contextWindow, setContextWindow] = useState('');
-  const [maxTokens, setMaxTokens] = useState('8192');
+  const [maxTokens, setMaxTokens] = useState('16384');
+  const [contextDetected, setContextDetected] = useState(false);
+  const [usePiContextDefault, setUsePiContextDefault] = useState(false);
   const [message, setMessage] = useState<string>();
   const [probing, setProbing] = useState(false);
-  const [probeResult, setProbeResult] = useState<{ models: string[]; modelDetails?: Array<{ id: string; contextWindow?: number }>; protocols: Array<{ api: string; available: boolean; cacheStats: boolean; error?: string }>; recommendedApi?: string }>();
+  const [probeResult, setProbeResult] = useState<PiProviderProbeResult>();
 
   const probe = async () => {
     setProbing(true);
@@ -228,9 +259,17 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       const result = await hostApi.providers.probe({ baseUrl: baseUrl.trim(), apiKey: apiKey.trim() || undefined, model: modelIds.split(',')[0]?.trim() || undefined });
       setProbeResult(result);
       if (result.models.length > 0) setModelIds(result.models.join(', '));
-      const detectedContext = result.modelDetails?.find((model) => model.contextWindow)?.contextWindow;
-      if (detectedContext) setContextWindow(String(detectedContext));
+      const requestedModel = modelIds.split(',')[0]?.trim() || result.models[0];
+      const detectedContext = result.modelDetails?.find((model) => model.id === requestedModel)?.contextWindow;
+      if (detectedContext) {
+        setContextWindow(String(detectedContext));
+        setContextDetected(true);
+        setUsePiContextDefault(false);
+      } else {
+        setContextDetected(false);
+      }
       if (result.recommendedApi) setApi(result.recommendedApi);
+      if (result.recommendedBaseUrl) setBaseUrl(result.recommendedBaseUrl);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -245,7 +284,7 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       .filter(Boolean)
       .map((mid) => ({
         id: mid,
-        ...(Number(contextWindow) > 0 ? { contextWindow: Number(contextWindow) } : {}),
+        ...(!usePiContextDefault && Number(contextWindow) > 0 ? { contextWindow: Number(contextWindow) } : {}),
         ...(Number(maxTokens) > 0 ? { maxTokens: Number(maxTokens) } : {}),
       }));
     const result = await hostApi.providers.addCustom({
@@ -323,11 +362,34 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
         onChange={(e) => setModelIds(e.target.value)}
       />
       <div className="form-row">
-        <input data-testid="custom-context-window" inputMode="numeric" placeholder={t('models.customContextWindow')} value={contextWindow} onChange={(e) => setContextWindow(e.target.value.replace(/\D/g, ''))} />
+        <input
+          data-testid="custom-context-window"
+          disabled={usePiContextDefault}
+          inputMode="numeric"
+          placeholder={t('models.customContextWindow')}
+          value={contextWindow}
+          onChange={(e) => { setContextWindow(e.target.value.replace(/\D/g, '')); setContextDetected(false); }}
+        />
         <input data-testid="custom-max-tokens" inputMode="numeric" placeholder={t('models.customMaxTokens')} value={maxTokens} onChange={(e) => setMaxTokens(e.target.value.replace(/\D/g, ''))} />
       </div>
+      <div className={`model-context-status${contextDetected ? ' detected' : ''}`} data-testid="custom-context-status">
+        {contextDetected
+          ? t('models.contextDetected', { count: Number(contextWindow).toLocaleString() })
+          : usePiContextDefault
+            ? t('models.contextUsingDefault')
+            : t('models.contextRequired')}
+      </div>
+      <label className="model-context-default">
+        <input
+          type="checkbox"
+          data-testid="custom-use-pi-context-default"
+          checked={usePiContextDefault}
+          onChange={(event) => { setUsePiContextDefault(event.target.checked); if (event.target.checked) setContextDetected(false); }}
+        />
+        <span>{t('models.usePiContextDefault')}</span>
+      </label>
       <div className="actions">
-        <button className="primary" disabled={!id.trim() || !baseUrl.trim() || !modelIds.trim()} onClick={() => void submit()}>
+        <button className="primary" disabled={!id.trim() || !baseUrl.trim() || !modelIds.trim() || (!usePiContextDefault && !(Number(contextWindow) > 0))} onClick={() => void submit()}>
           {t('models.saveCustom')}
         </button>
         <button onClick={() => setOpen(false)}>{t('models.cancel')}</button>

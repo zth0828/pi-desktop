@@ -60,6 +60,8 @@ export const hostApi = {
       invokeHost('providers', 'setApiKey', { providerId, apiKey }),
     removeCredential: (providerId: string) =>
       invokeHost('providers', 'removeCredential', { providerId }),
+    deleteCustom: (providerId: string) =>
+      invokeHost('providers', 'deleteCustom', { providerId }),
     startOAuth: (providerId: string) => invokeHost('providers', 'startOAuth', { providerId }),
     addCustom: (payload: {
       id: string;

@@ -1954,6 +1954,10 @@ button.danger-outline {
 .probe-result-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; }
 .probe-ok { color: var(--success); }
 .probe-fail { color: var(--danger); }
+.model-context-status { margin-top: -2px; color: var(--warning); font-size: 11.5px; line-height: 1.45; }
+.model-context-status.detected { color: var(--success); }
+.model-context-default { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 12px; }
+.model-context-default input { width: 15px; height: 15px; margin: 0; padding: 0; accent-color: var(--accent); }
 
 .staged-images {
   display: flex;

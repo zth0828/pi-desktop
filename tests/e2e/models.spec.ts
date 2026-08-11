@@ -182,6 +182,101 @@ test('Models 页：录入 API key 后状态变已配置', async ({ launchElectro
   }).toContain('mock-discovered');
 });
 
+test('Models 页：删除旧版内联凭证会清空 key、模型和可用状态', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  const row = page.getByTestId('provider-mock');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.provider-row-header').click();
+  await expect(page.getByTestId('provider-model-mock-mock-1')).toBeVisible();
+  await page.getByTestId('remove-credential-mock').click();
+
+  await expect(page.getByTestId('provider-status-mock')).not.toHaveClass(/configured/, {
+    timeout: 15_000,
+  });
+  await expect(page.getByTestId('provider-models-mock')).not.toBeVisible();
+  await expect.poll(async () => {
+    const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+      providers: { mock: { apiKey?: string; models?: unknown[] } };
+    };
+    return { hasKey: Boolean(doc.providers.mock.apiKey), models: doc.providers.mock.models?.length };
+  }).toEqual({ hasKey: false, models: 0 });
+});
+
+test('Models 页：新增供应商使用 pi auth storage，并可整项删除', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('add-custom-provider').click();
+  const form = page.getByTestId('custom-provider-form');
+  await form.getByPlaceholder('Provider id (e.g. my-llm)').fill('added-provider');
+  await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}/v1`);
+  await form.getByPlaceholder('API key').fill('added-secret');
+  await form.getByPlaceholder('Model ids, comma separated').fill('added-model');
+  await expect(form.getByRole('button', { name: 'Save provider' })).toBeDisabled();
+  await form.getByTestId('custom-use-pi-context-default').check();
+  await expect(form.getByTestId('custom-context-status')).toContainText('128K');
+  await form.getByRole('button', { name: 'Save provider' }).click();
+
+  const added = page.getByTestId('provider-added-provider');
+  await expect(added).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('provider-status-added-provider')).toHaveClass(/configured/);
+  await expect.poll(async () => {
+    const models = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+      providers: { 'added-provider': { apiKey?: string; models?: Array<{ contextWindow?: number }> } };
+    };
+    const auth = JSON.parse(await readFile(path.join(agentDir, 'auth.json'), 'utf8')) as {
+      'added-provider'?: { key?: string };
+    };
+    return {
+      inlineKey: models.providers['added-provider'].apiKey,
+      storedKey: auth['added-provider']?.key,
+      contextWindow: models.providers['added-provider'].models?.[0]?.contextWindow,
+    };
+  }).toEqual({ inlineKey: undefined, storedKey: 'added-secret', contextWindow: undefined });
+
+  await added.locator('.provider-row-header').click();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByTestId('delete-provider-added-provider').click();
+  await expect(page.getByTestId('provider-added-provider')).toHaveCount(0, { timeout: 15_000 });
+  await expect.poll(async () => {
+    const models = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+      providers: Record<string, unknown>;
+    };
+    const auth = JSON.parse(await readFile(path.join(agentDir, 'auth.json'), 'utf8')) as Record<string, unknown>;
+    return {
+      hasProvider: Object.hasOwn(models.providers, 'added-provider'),
+      hasCredential: Object.hasOwn(auth, 'added-provider'),
+    };
+  }).toEqual({ hasProvider: false, hasCredential: false });
+});
+
+test('Models 页：协议探测拒绝 200 HTML，发现 /v1 并选择真实 OpenAI 接口', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('add-custom-provider').click();
+  const form = page.getByTestId('custom-provider-form');
+  await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}`);
+  await form.getByTestId('probe-custom-provider').click();
+  const results = form.getByTestId('probe-results');
+  await expect(results).toBeVisible({ timeout: 30_000 });
+  await expect(results.locator('.probe-result-row').filter({ hasText: 'openai-completions' })).toContainText('Available');
+  await expect(results.locator('.probe-result-row').filter({ hasText: 'anthropic-messages' })).toContainText('Unavailable');
+  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-completions');
+  await expect(form.getByPlaceholder('baseURL')).toHaveValue(`http://127.0.0.1:${mockPort}/v1`);
+  await expect(form.getByTestId('custom-context-window')).toHaveValue('');
+  await expect(form.getByTestId('custom-context-status')).toContainText('did not report a context length');
+  await form.getByTestId('custom-context-status').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'output/playwright/models-context-unresolved.png', fullPage: false });
+});
+
 test('Models 页：刷新会发现已配置自定义供应商的新模型', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
