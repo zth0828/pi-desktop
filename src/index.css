@@ -237,6 +237,23 @@ button.danger-outline {
   -webkit-app-region: drag;
 }
 
+.app-window-controls {
+  position: fixed;
+  top: 0;
+  left: 78px;
+  z-index: 102;
+  display: flex;
+  height: 54px;
+  align-items: center;
+  gap: 7px;
+  -webkit-app-region: no-drag;
+}
+
+.app-window-brand {
+  font-size: 14px;
+  font-weight: 650;
+}
+
 /* Electron 的拖拽层覆盖整个标题高度；交互控件必须明确声明可点击。 */
 .session-titlebar,
 .session-titlebar * {
@@ -272,12 +289,6 @@ button.danger-outline {
   padding: 0 4px;
 }
 
-.sidebar-brand {
-  padding-left: 6px;
-  font-size: 14px;
-  font-weight: 650;
-}
-
 .sidebar-toggle { flex-shrink: 0; }
 
 .app-layout.sidebar-collapsed .sidebar {
@@ -291,6 +302,14 @@ button.danger-outline {
 .app-layout.sidebar-collapsed .nav-item span { display: none; }
 .app-layout.sidebar-collapsed .sidebar-nav { margin-top: auto; padding-top: 8px; }
 .app-layout.sidebar-collapsed .nav-item { width: 36px; height: 36px; justify-content: center; padding: 0; }
+
+.app-layout.is-macos.sidebar-collapsed .session-titlebar {
+  padding-left: 104px;
+}
+
+.app-layout.is-macos.sidebar-collapsed .page {
+  padding-top: 62px;
+}
 
 .drag-region {
   -webkit-app-region: drag;
@@ -374,13 +393,6 @@ button.danger-outline {
   background: var(--bg-active);
   color: var(--text);
   font-weight: 600;
-}
-
-.sidebar-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 8px 10px 0;
 }
 
 .content {
@@ -680,7 +692,7 @@ button.danger-outline {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-width: 820px;
+  max-width: 960px;
   width: 100%;
   margin: 0 auto;
   position: relative;
@@ -1659,7 +1671,7 @@ button.danger-outline {
 .chat-input {
   position: relative;
   min-width: 0;
-  padding: 12px 28px 22px;
+  padding: 14px 24px 24px;
 }
 
 .chat-input-card {
@@ -1667,7 +1679,7 @@ button.danger-outline {
   border: 1px solid var(--border-strong);
   border-radius: 18px;
   background: var(--bg-raised);
-  padding: 8px 12px 10px;
+  padding: 12px 14px 12px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
 }
 
@@ -1813,7 +1825,7 @@ button.danger-outline {
 
 .chat-input-card textarea {
   width: 100%;
-  min-height: 34px;
+  min-height: 56px;
   max-height: min(260px, 32vh);
   resize: none;
   border: none;

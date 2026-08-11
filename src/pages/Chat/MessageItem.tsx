@@ -109,7 +109,7 @@ export function MessageItem({
   const { t } = useTranslation();
   const forkFrom = useChatStore((s) => s.forkFrom);
   const isStreaming = useChatStore((s) => s.isStreaming);
-  const [copied, setCopied] = useState<'text' | 'markdown' | null>(null);
+  const [copied, setCopied] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   if (message.role === 'user') {
     const rawText = message.content
@@ -212,24 +212,18 @@ export function MessageItem({
   const content = contentOverride ?? message.content;
   const raw = message.raw as { stopReason?: string; errorMessage?: string } | undefined;
   const showTail = !message.streaming && !suppressTail;
-  const markdownText = content
-    .filter((b) => b.type === 'text' || b.type === 'thinking')
-    .map((b) => b.type === 'thinking' ? `> ${b.thinking ?? ''}` : b.text ?? '')
-    .join('\n\n')
-    .trim();
   const plainText = content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
   if (content.length === 0) return null;
-  const copy = async (kind: 'text' | 'markdown') => {
-    const value = kind === 'text' ? plainText : markdownText;
-    if (!value) return;
+  const copy = async () => {
+    if (!plainText) return;
     try {
-      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
-      else await hostApi.app.writeClipboard(value);
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(plainText);
+      else await hostApi.app.writeClipboard(plainText);
     } catch {
-      await hostApi.app.writeClipboard(value);
+      await hostApi.app.writeClipboard(plainText);
     }
-    setCopied(kind);
-    window.setTimeout(() => setCopied((current) => current === kind ? null : current), 1200);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
   };
   return (
     <div className="message message-assistant" data-testid="message-assistant">
@@ -264,11 +258,8 @@ export function MessageItem({
       )}
       {showTail && plainText && (
         <div className="message-actions" data-testid="message-actions">
-          <button data-testid="copy-message" title={t('chat.copy')} onClick={() => void copy('text')}>
-            {copied === 'text' ? <Check size={13} /> : <Copy size={13} />} {copied === 'text' ? t('chat.copied') : t('chat.copy')}
-          </button>
-          <button data-testid="copy-markdown" title={t('chat.copyMarkdown')} onClick={() => void copy('markdown')}>
-            <FileText size={13} /> {t('chat.copyMarkdown')}
+          <button data-testid="copy-message" title={t('chat.copy')} onClick={() => void copy()}>
+            {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? t('chat.copied') : t('chat.copy')}
           </button>
         </div>
       )}

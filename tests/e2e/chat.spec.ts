@@ -105,6 +105,7 @@ test('会话标题、消息复制与 composer 加号菜单', async ({ launchElec
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.getByTestId('copy-message').last().click();
   await expect.poll(() => page.evaluate(() => (navigator as Navigator & { clipboard: { readText: () => Promise<string> } }).clipboard.readText())).toContain('PONG');
+  await expect(page.getByTestId('copy-markdown')).toHaveCount(0);
   await page.getByTestId('composer-menu').click();
   await expect(page.getByTestId('composer-file-reference')).toBeVisible();
   await page.getByTestId('chat-input').click();
@@ -121,11 +122,25 @@ test('侧边栏折叠为稳定图标栏并可恢复历史列表', async ({ launc
   await waitSessionReady(page);
 
   const sidebar = page.locator('.sidebar');
+  const windowControls = page.getByTestId('app-window-controls');
+  await expect(windowControls).toBeVisible();
+  await expect(windowControls).toContainText('Pi');
+  const controlsBox = await windowControls.boundingBox();
+  expect(controlsBox).not.toBeNull();
+  expect(controlsBox!.x).toBeGreaterThan(70);
+  expect(controlsBox!.y).toBeLessThan(12);
+
+  const composerBox = await page.locator('.chat-input-card').boundingBox();
+  expect(composerBox).not.toBeNull();
+  expect(composerBox!.width).toBeGreaterThan(820);
+  expect(composerBox!.height).toBeGreaterThanOrEqual(110);
+
   const expandedWidth = (await sidebar.boundingBox())!.width;
   await page.getByTestId('sidebar-toggle').click();
   await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByTestId('sidebar-sessions')).toHaveCount(0);
   await expect(page.getByTestId('nav-chat')).toBeVisible();
+  await expect(windowControls).toBeVisible();
   await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(expandedWidth - 100);
 
   await page.getByTestId('sidebar-toggle').click();

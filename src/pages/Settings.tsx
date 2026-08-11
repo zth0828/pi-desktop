@@ -262,7 +262,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="settings-section">
+      <section className="settings-section" data-testid="settings-about">
         <h2>{t('settings.about')}</h2>
         <div className="settings-row">
           <div className="settings-row-label">
@@ -270,11 +270,11 @@ export default function SettingsPage() {
             <div className="settings-row-desc">v{appVersion}</div>
           </div>
         </div>
-        <div className="settings-row">
+        <div className="settings-row" data-testid="settings-pi-status">
           <div className="settings-row-label">
             <div>pi</div>
             <div className="settings-row-desc">
-              v{env?.pi.version ?? '?'}
+              {t('status.ready', { version: env?.pi.version ?? '?' })}
               {latestVersion && latestVersion !== env?.pi.version
                 ? ` · ${t('status.latestAvailable', { version: latestVersion })}`
                 : ''}

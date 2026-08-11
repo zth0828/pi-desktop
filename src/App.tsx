@@ -50,8 +50,6 @@ export default function App() {
   const [platform, setPlatform] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('pi-desktop.sidebar-collapsed') === 'true');
   const state = usePiSystemStore((s) => s.state);
-  const env = usePiSystemStore((s) => s.env);
-  const latestVersion = usePiSystemStore((s) => s.latestVersion);
   const detect = usePiSystemStore((s) => s.detect);
   const chatStarted = useChatStore((s) => s.started);
   const isStreaming = useChatStore((s) => s.isStreaming);
@@ -101,9 +99,9 @@ export default function App() {
   return (
     <div className={`${isMac ? 'app-layout is-macos' : 'app-layout'}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
       {dragStrip}
-      <nav className="sidebar">
-        <div className="sidebar-topbar">
-          {!sidebarCollapsed && <span className="sidebar-brand">Pi</span>}
+      {isMac && (
+        <div className="app-window-controls" data-testid="app-window-controls">
+          <span className="app-window-brand">Pi</span>
           <button
             className="icon-button sidebar-toggle"
             data-testid="sidebar-toggle"
@@ -115,6 +113,21 @@ export default function App() {
             {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
           </button>
         </div>
+      )}
+      <nav className="sidebar">
+        {!isMac && <div className="sidebar-topbar">
+          {!sidebarCollapsed && <span className="app-window-brand">Pi</span>}
+          <button
+            className="icon-button sidebar-toggle"
+            data-testid="sidebar-toggle"
+            title={t(sidebarCollapsed ? 'sidebar.expand' : 'sidebar.collapse')}
+            aria-label={t(sidebarCollapsed ? 'sidebar.expand' : 'sidebar.collapse')}
+            aria-expanded={!sidebarCollapsed}
+            onClick={toggleSidebar}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          </button>
+        </div>}
         <button className="new-chat" data-testid="new-chat" title={sidebarCollapsed ? t('sidebar.newChat') : undefined} onClick={newChat}>
           <Plus size={15} />
           <span>{t('sidebar.newChat')}</span>
@@ -134,12 +147,6 @@ export default function App() {
             </button>
           ))}
         </div>
-        {!sidebarCollapsed && <div className="sidebar-footer">
-          <span className="hint">{t('status.ready', { version: env?.pi.version })}</span>
-          {latestVersion && latestVersion !== env?.pi.version && (
-            <span className="hint">{t('status.latestAvailable', { version: latestVersion })}</span>
-          )}
-        </div>}
       </nav>
       <main className="content">
         {page === 'chat' ? (
