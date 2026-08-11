@@ -4,7 +4,7 @@ import { readdir, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { shell } from 'electron';
+import { app, shell } from 'electron';
 import type {
   HostSuccess,
   ShellApplication,
@@ -26,6 +26,18 @@ const RELEVANT_APP_PATTERNS = [
 
 function isRelevantApplication(name: string): boolean {
   return RELEVANT_APP_PATTERNS.some((pattern) => pattern.test(name));
+}
+
+async function attachNativeIcons(applications: ShellApplication[]): Promise<ShellApplication[]> {
+  return Promise.all(applications.map(async (application) => {
+    try {
+      const icon = await app.getFileIcon(application.path, { size: 'small' });
+      if (!icon.isEmpty()) return { ...application, iconDataUrl: icon.toDataURL() };
+    } catch {
+      // Some Linux desktop entries and sandboxed app paths do not expose icons.
+    }
+    return application;
+  }));
 }
 
 async function macApplications(): Promise<ShellApplication[]> {
@@ -62,7 +74,10 @@ async function macApplications(): Promise<ShellApplication[]> {
 }
 
 async function discoveredApplications(): Promise<ShellListApplicationsResult> {
-  if (process.platform === 'darwin') return { applications: await macApplications() };
+  if (process.platform === 'darwin') {
+    const applications = (await macApplications()).slice(0, 20);
+    return { applications: await attachNativeIcons(applications) };
+  }
   const roots = process.platform === 'win32'
     ? [process.env['ProgramFiles'], process.env['ProgramFiles(x86)']].filter((entry): entry is string => Boolean(entry))
     : ['/usr/share/applications', path.join(os.homedir(), '.local/share/applications')];
@@ -77,7 +92,11 @@ async function discoveredApplications(): Promise<ShellListApplicationsResult> {
       // Ignore unavailable platform application directories.
     }
   }
-  return { applications: applications.filter((application) => isRelevantApplication(application.name)).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 20) };
+  const relevant = applications
+    .filter((application) => isRelevantApplication(application.name))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 20);
+  return { applications: await attachNativeIcons(relevant) };
 }
 
 async function openPath(payload: { path: string }): Promise<HostSuccess> {

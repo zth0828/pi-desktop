@@ -6,16 +6,23 @@ import {
   Columns2,
   AppWindow,
   File,
+  FileArchive,
   FileCode2,
+  FileImage,
+  FileJson,
+  FileSpreadsheet,
+  FileText,
   Files,
   Folder,
   FolderOpen,
   List,
+  LoaderCircle,
   MapPin,
   PanelRightClose,
   RefreshCw,
   Search,
   SquareX,
+  WrapText,
   X,
 } from 'lucide-react';
 import type {
@@ -36,6 +43,7 @@ import {
 } from '../../lib/review-diff';
 import { parseDiffLines } from '../../lib/tool-display';
 import { useChatStore } from '../../stores/chat';
+import { FilePreviewContent } from './FilePreviewContent';
 
 type PendingRevert =
   | { kind: 'file'; path: string }
@@ -82,6 +90,17 @@ function rankApplications(applications: ShellApplication[]): ShellApplication[] 
     return index < 0 ? APPLICATION_PRIORITY.length : index;
   };
   return [...applications].sort((a, b) => priority(a.name) - priority(b.name) || a.name.localeCompare(b.name));
+}
+
+function WorkspaceFileIcon({ name, size = 14 }: { name: string; size?: number }) {
+  const extension = name.toLowerCase().split('.').pop() ?? '';
+  if (['js', 'jsx', 'ts', 'tsx', 'css', 'html', 'py', 'rb', 'go', 'rs', 'java', 'swift', 'sh'].includes(extension)) return <FileCode2 size={size} />;
+  if (['json', 'jsonl', 'yaml', 'yml', 'toml', 'xml', 'plist'].includes(extension)) return <FileJson size={size} />;
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'svg'].includes(extension)) return <FileImage size={size} />;
+  if (['csv', 'tsv', 'xls', 'xlsx', 'numbers'].includes(extension)) return <FileSpreadsheet size={size} />;
+  if (['zip', 'tar', 'gz', 'tgz', 'bz2', '7z', 'rar'].includes(extension)) return <FileArchive size={size} />;
+  if (['md', 'markdown', 'txt', 'log', 'pdf', 'doc', 'docx', 'rtf'].includes(extension)) return <FileText size={size} />;
+  return <File size={size} />;
 }
 
 function FallbackView() {
@@ -158,18 +177,43 @@ function SplitDiff({ parsed, onRevert }: { parsed: ParsedFileDiff; onRevert: (in
   );
 }
 
-function FileExplorer({ selected, onSelect }: { selected: string | null; onSelect: (path: string) => void }) {
+function FileExplorer({ selected, onSelect, onRootCount }: { selected: string | null; onSelect: (path: string) => void; onRootCount: (count: number) => void }) {
   const { t } = useTranslation();
+  const cwd = useChatStore((state) => state.cwd);
   const [children, setChildren] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['']));
+  const [loading, setLoading] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
+  const loadedRef = useRef(new Set<string>());
+  const loadingRef = useRef(new Set<string>());
+  const generationRef = useRef(0);
 
   const load = useCallback(async (dir: string) => {
+    if (loadedRef.current.has(dir) || loadingRef.current.has(dir)) return;
+    const generation = generationRef.current;
+    loadingRef.current.add(dir);
+    setLoading(new Set(loadingRef.current));
     const result = await hostApi.workspace.listChildren(dir).catch(() => null);
-    if (result) setChildren((current) => ({ ...current, [dir]: result.entries }));
-  }, []);
+    if (generation !== generationRef.current) return;
+    loadingRef.current.delete(dir);
+    setLoading(new Set(loadingRef.current));
+    if (!result) return;
+    loadedRef.current.add(dir);
+    setChildren((current) => ({ ...current, [dir]: result.entries }));
+    if (dir === '') onRootCount(result.entries.length);
+  }, [onRootCount]);
 
-  useEffect(() => { void load(''); }, [load]);
+  useEffect(() => {
+    generationRef.current += 1;
+    loadedRef.current.clear();
+    loadingRef.current.clear();
+    setChildren({});
+    setExpanded(new Set(['']));
+    setLoading(new Set());
+    setFilter('');
+    onRootCount(0);
+    void load('');
+  }, [cwd, load, onRootCount]);
 
   const toggle = (entry: WorkspaceEntry) => {
     setExpanded((current) => {
@@ -178,7 +222,7 @@ function FileExplorer({ selected, onSelect }: { selected: string | null; onSelec
       else next.add(entry.path);
       return next;
     });
-    if (!children[entry.path]) void load(entry.path);
+    if (!loadedRef.current.has(entry.path)) void load(entry.path);
   };
 
   const renderEntries = (dir: string, depth: number): React.ReactNode =>
@@ -197,10 +241,13 @@ function FileExplorer({ selected, onSelect }: { selected: string | null; onSelec
           >
             {entry.kind === 'directory' ? (
               <>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{open ? <FolderOpen size={14} /> : <Folder size={14} />}</>
-            ) : <><span className="workspace-tree-indent" /><File size={14} /></>}
+            ) : <><span className="workspace-tree-indent" /><WorkspaceFileIcon name={entry.name} /></>}
             <span>{entry.name}</span>
           </button>
           {entry.kind === 'directory' && open && renderEntries(entry.path, depth + 1)}
+          {entry.kind === 'directory' && open && loading.has(entry.path) && (
+            <div className="workspace-tree-loading" style={{ paddingLeft: 29 + (depth + 1) * 14 }}><LoaderCircle size={13} />{t('workspace.loadingFolder')}</div>
+          )}
         </div>
       );
     });
@@ -211,7 +258,10 @@ function FileExplorer({ selected, onSelect }: { selected: string | null; onSelec
         <Search size={14} />
         <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t('workspace.filter')} />
       </label>
-      <div className="workspace-tree-scroll">{renderEntries('', 0)}</div>
+      <div className="workspace-tree-scroll">
+        {loading.has('') && <div className="workspace-tree-loading"><LoaderCircle size={13} />{t('workspace.loadingFolder')}</div>}
+        {renderEntries('', 0)}
+      </div>
     </aside>
   );
 }
@@ -275,7 +325,10 @@ function OpenWithMenu({ absolutePath }: { absolutePath: string }) {
           {loading && <div className="workspace-open-state">{t('workspace.findingApps')}</div>}
           {!loading && applications.map((application) => (
             <button key={application.id} data-testid="workspace-open-application" onClick={() => void openApplication(application)}>
-              <AppWindow size={15} /><span>{application.name}</span>
+              {application.iconDataUrl
+                ? <img className="workspace-application-icon" src={application.iconDataUrl} alt="" />
+                : <AppWindow size={15} />}
+              <span>{application.name}</span>
             </button>
           ))}
           {!loading && applications.length === 0 && <div className="workspace-open-state">{t('workspace.noApps')}</div>}
@@ -290,47 +343,35 @@ function FilePreview({ path }: { path: string }) {
   const { t } = useTranslation();
   const [result, setResult] = useState<WorkspaceReadResult | null>(null);
   const [error, setError] = useState(false);
+  const [wrapLines, setWrapLines] = useState(true);
   useEffect(() => {
+    let cancelled = false;
     setResult(null);
     setError(false);
-    void hostApi.workspace.readFile(path).then(setResult).catch(() => setError(true));
+    setWrapLines(true);
+    void hostApi.workspace.readFile(path)
+      .then((next) => { if (!cancelled) setResult(next); })
+      .catch(() => { if (!cancelled) setError(true); });
+    return () => { cancelled = true; };
   }, [path]);
   if (error) return <div className="workspace-empty">{t('workspace.readFailed')}</div>;
   if (!result) return <div className="workspace-empty">{t('workspace.loading')}</div>;
-  let content: React.ReactNode;
-  if (result.truncated && !result.data && !result.text) {
-    content = <div className="workspace-empty">{t('workspace.tooLarge', { size: result.size.toLocaleString() })}</div>;
-  } else if (result.kind === 'image' && result.data) {
-    content = <div className="workspace-image-preview" data-testid="workspace-image-preview"><img src={`data:${result.mimeType};base64,${result.data}`} alt={result.name} /></div>;
-  } else if (result.kind === 'text') {
-    const lines = (result.text ?? '').split('\n');
-    content = (
-      <div className="workspace-text-preview" data-testid="workspace-text-preview">
-        {result.truncated && <div className="workspace-truncated">{t('workspace.truncated')}</div>}
-        <div className="workspace-code" role="presentation">
-          {lines.map((line, index) => (
-            <div className="workspace-code-line" key={index}>
-              <span className="workspace-code-number">{index + 1}</span>
-              <code>{line || ' '}</code>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  } else {
-    content = <div className="workspace-empty">{t('workspace.binary', { size: result.size.toLocaleString() })}</div>;
-  }
   return (
     <div className="workspace-file-view">
       <header className="workspace-file-header">
         <div className="workspace-file-title">
-          <FileCode2 size={15} />
+          <WorkspaceFileIcon name={result.name} size={15} />
           <span title={result.path}>{result.name}</span>
           <small>{formatBytes(result.size)}</small>
         </div>
-        <OpenWithMenu absolutePath={result.absolutePath} />
+        <div className="workspace-file-actions">
+          {(result.kind === 'text' || result.kind === 'markdown') && (
+            <button className={`icon-button${wrapLines ? ' active' : ''}`} data-testid="workspace-toggle-wrap" aria-pressed={wrapLines} title={wrapLines ? t('workspace.disableWrap') : t('workspace.enableWrap')} onClick={() => setWrapLines((current) => !current)}><WrapText size={15} /></button>
+          )}
+          <OpenWithMenu absolutePath={result.absolutePath} />
+        </div>
       </header>
-      <div className="workspace-file-content">{content}</div>
+      <div className="workspace-file-content"><FilePreviewContent result={result} wrapLines={wrapLines} /></div>
     </div>
   );
 }
@@ -436,15 +477,24 @@ export function ReviewPanel() {
   const setReviewOpen = useChatStore((s) => s.setReviewOpen);
   const setWorkspaceOpen = useChatStore((s) => s.setWorkspaceOpen);
   const workspaceFileRequest = useChatStore((s) => s.workspaceFileRequest);
+  const cwd = useChatStore((s) => s.cwd);
   const [tab, setTab] = useState<WorkbenchTab>('files');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
+  const [fileTreeOpen, setFileTreeOpen] = useState(true);
+  const [rootItemCount, setRootItemCount] = useState(0);
   const [panelWidth, setPanelWidth] = useState<number | undefined>(() => {
     const saved = Number(window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY));
     return Number.isFinite(saved) && saved > 0 ? saved : undefined;
   });
   const [resizing, setResizing] = useState(false);
   const open = reviewOpen || workspaceOpen;
+  useEffect(() => {
+    setTab('files');
+    setSelectedFile(null);
+    setOpenFiles([]);
+    setFileTreeOpen(true);
+  }, [cwd]);
   useEffect(() => { if (reviewOpen) setTab('review'); else if (workspaceOpen && tab === 'review') setTab('files'); }, [reviewOpen, workspaceOpen, tab]);
   useEffect(() => {
     if (!workspaceFileRequest) return;
@@ -452,6 +502,7 @@ export function ReviewPanel() {
     setSelectedFile(path);
     setOpenFiles((current) => current.includes(path) ? current : [...current, path]);
     setTab(`file:${path}`);
+    setFileTreeOpen(false);
   }, [workspaceFileRequest]);
   useEffect(() => {
     if (!resizing) return;
@@ -477,10 +528,19 @@ export function ReviewPanel() {
     window.addEventListener('resize', adaptToWindow);
     return () => window.removeEventListener('resize', adaptToWindow);
   }, []);
+  useEffect(() => {
+    if (!fileTreeOpen) return;
+    const closeTree = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setFileTreeOpen(false);
+    };
+    window.addEventListener('keydown', closeTree);
+    return () => window.removeEventListener('keydown', closeTree);
+  }, [fileTreeOpen]);
   const chooseFile = (path: string) => {
     setSelectedFile(path);
     setOpenFiles((current) => current.includes(path) ? current : [...current, path]);
     setTab(`file:${path}`);
+    setFileTreeOpen(false);
   };
   const close = () => { setReviewOpen(false); setWorkspaceOpen(false); };
   const closeFile = (path: string) => {
@@ -526,7 +586,7 @@ export function ReviewPanel() {
       />
       <div className="workspace-tabs">
         <div className="workspace-tabs-scroll" role="tablist">
-          <button className={`workspace-tab${tab === 'files' ? ' active' : ''}`} role="tab" aria-selected={tab === 'files'} data-testid="workspace-files-tab" onClick={() => { setWorkspaceOpen(true); setTab('files'); }}><Files size={14} />{t('workspace.files')}</button>
+          <button className={`workspace-tab${tab === 'files' ? ' active' : ''}`} role="tab" aria-selected={tab === 'files'} data-testid="workspace-files-tab" onClick={() => { setWorkspaceOpen(true); setTab('files'); setFileTreeOpen(true); }}><Files size={14} />{t('workspace.files')}</button>
           {openFiles.map((path) => (
             <div className={`workspace-file-tab${tab === `file:${path}` ? ' active' : ''}`} data-testid="workspace-file-tab" key={path} title={path}>
               <button className="workspace-file-tab-main" role="tab" aria-selected={tab === `file:${path}`} onClick={() => { setWorkspaceOpen(true); setSelectedFile(path); setTab(`file:${path}`); }}>{titleFor(path)}</button>
@@ -536,13 +596,20 @@ export function ReviewPanel() {
           <button className={`workspace-tab${tab === 'review' ? ' active' : ''}`} role="tab" aria-selected={tab === 'review'} data-testid="workspace-review-tab" onClick={() => { setReviewOpen(true); setTab('review'); }}><FileCode2 size={14} />{t('review.title')}</button>
         </div>
         <div className="workspace-tab-actions">
+          {tab !== 'review' && (
+            <button className={`workspace-tree-trigger${fileTreeOpen ? ' active' : ''}`} data-testid="workspace-tree-toggle" aria-expanded={fileTreeOpen} title={fileTreeOpen ? t('workspace.hideFiles') : t('workspace.showFiles')} onClick={() => setFileTreeOpen((current) => !current)}>
+              <Files size={15} />
+              {rootItemCount > 0 && <span aria-label={t('workspace.itemCount', { count: rootItemCount })}>{rootItemCount}</span>}
+            </button>
+          )}
           {openFiles.length > 0 && <button className="icon-button" data-testid="workspace-close-all" title={t('workspace.closeAll')} aria-label={t('workspace.closeAll')} onClick={closeAllFiles}><SquareX size={16} /></button>}
           <button className="icon-button" data-testid="workspace-close" title={t('workspace.close')} onClick={close}><PanelRightClose size={16} /></button>
         </div>
       </div>
       {tab === 'review' ? <ReviewWorkspace /> : (
-        <div className="workspace-browser">
-          <FileExplorer selected={activeFile} onSelect={chooseFile} />
+        <div className={`workspace-browser${fileTreeOpen ? ' tree-open' : ''}`}>
+          <button className="workspace-tree-backdrop" aria-label={t('workspace.hideFiles')} tabIndex={fileTreeOpen ? 0 : -1} onClick={() => setFileTreeOpen(false)} />
+          <FileExplorer selected={activeFile} onSelect={chooseFile} onRootCount={setRootItemCount} />
           <main className="workspace-preview" data-testid="workspace-preview">
             {activeFile ? <FilePreview path={activeFile} /> : <div className="workspace-empty">{t('workspace.selectFile')}</div>}
           </main>

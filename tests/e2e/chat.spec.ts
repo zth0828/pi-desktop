@@ -292,6 +292,10 @@ test('富文本答复渲染任务卡、表格、代码块和外链', async ({ la
   await expect(page.getByTestId('task-progress')).toContainText('1/3');
   await expect(page.locator('.markdown table')).toBeVisible();
   await expect(page.locator('[data-streamdown="code-block"]')).toBeVisible();
+  const renderedCode = page.locator('[data-streamdown="code-block-body"] code');
+  await expect(renderedCode).toContainText('console.log(answer)');
+  expect(await renderedCode.evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).whiteSpace)).toBe('pre');
+  expect(await renderedCode.innerText()).toContain('const answer = 42;\nif (answer)');
   await expect(page.locator('.markdown blockquote')).toBeVisible();
   await expect(page.locator('.markdown a[href="https://example.com/docs"]')).toBeVisible();
   await page.screenshot({ path: 'output/playwright/rich-text-light.png', fullPage: false });

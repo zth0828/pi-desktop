@@ -1,4 +1,4 @@
-import { lstat, readFile, readdir, realpath } from 'node:fs/promises';
+import { lstat, open, readFile, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   WorkspaceEntry,
@@ -13,6 +13,7 @@ import { getActiveRuntime } from './pi-runtime-api';
 const EXCLUDED_DIRS = new Set(['.git', 'node_modules']);
 const MAX_TEXT_BYTES = 1024 * 1024;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
 const IMAGE_MIME: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -21,6 +22,13 @@ const IMAGE_MIME: Record<string, string> = {
   '.webp': 'image/webp',
   '.bmp': 'image/bmp',
   '.avif': 'image/avif',
+};
+const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown', '.mdown', '.mkd', '.mdx']);
+const SPREADSHEET_TEXT_EXTENSIONS = new Set(['.csv', '.tsv']);
+const BINARY_PREVIEW: Record<string, { kind: WorkspaceReadResult['kind']; mimeType: string }> = {
+  '.pdf': { kind: 'pdf', mimeType: 'application/pdf' },
+  '.docx': { kind: 'document', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+  '.xlsx': { kind: 'spreadsheet', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
 };
 
 function activeRoot(): string {
@@ -49,12 +57,10 @@ export const workspaceApi = {
       if (child.isDirectory() && EXCLUDED_DIRS.has(child.name)) continue;
       if (!child.isDirectory() && !child.isFile()) continue;
       const absolute = path.join(dir, child.name);
-      const stat = child.isFile() ? await lstat(absolute) : null;
       entries.push({
         name: child.name,
         path: relativePath(root, absolute),
         kind: child.isDirectory() ? 'directory' : 'file',
-        ...(stat ? { size: stat.size } : {}),
       });
     }
     entries.sort((a, b) =>
@@ -68,7 +74,8 @@ export const workspaceApi = {
     const file = await resolveWorkspacePath(root, payload.path);
     const stat = await lstat(file);
     if (!stat.isFile()) throw new Error('path is not a file');
-    const mimeType = IMAGE_MIME[path.extname(file).toLowerCase()];
+    const extension = path.extname(file).toLowerCase();
+    const mimeType = IMAGE_MIME[extension];
     if (mimeType) {
       if (stat.size > MAX_IMAGE_BYTES) {
         return { path: payload.path, absolutePath: file, name: path.basename(file), size: stat.size, kind: 'image', mimeType, truncated: true };
@@ -85,8 +92,42 @@ export const workspaceApi = {
         truncated: false,
       };
     }
-    const buffer = await readFile(file);
-    if (looksBinary(buffer)) {
+    const binaryPreview = BINARY_PREVIEW[extension];
+    if (binaryPreview) {
+      if (stat.size > MAX_DOCUMENT_BYTES) {
+        return {
+          path: payload.path,
+          absolutePath: file,
+          name: path.basename(file),
+          size: stat.size,
+          kind: binaryPreview.kind,
+          mimeType: binaryPreview.mimeType,
+          truncated: true,
+        };
+      }
+      const buffer = await readFile(file);
+      return {
+        path: payload.path,
+        absolutePath: file,
+        name: path.basename(file),
+        size: stat.size,
+        kind: binaryPreview.kind,
+        mimeType: binaryPreview.mimeType,
+        data: buffer.toString('base64'),
+        truncated: false,
+      };
+    }
+    const handle = await open(file, 'r');
+    const previewSize = Math.min(stat.size, MAX_TEXT_BYTES + 1);
+    const buffer = Buffer.alloc(previewSize);
+    let bytesRead = 0;
+    try {
+      ({ bytesRead } = await handle.read(buffer, 0, previewSize, 0));
+    } finally {
+      await handle.close();
+    }
+    const preview = buffer.subarray(0, bytesRead);
+    if (looksBinary(preview)) {
       return { path: payload.path, absolutePath: file, name: path.basename(file), size: stat.size, kind: 'binary', truncated: false };
     }
     return {
@@ -94,9 +135,13 @@ export const workspaceApi = {
       absolutePath: file,
       name: path.basename(file),
       size: stat.size,
-      kind: 'text',
-      text: buffer.subarray(0, MAX_TEXT_BYTES).toString('utf8'),
-      truncated: buffer.length > MAX_TEXT_BYTES,
+      kind: MARKDOWN_EXTENSIONS.has(extension)
+        ? 'markdown'
+        : SPREADSHEET_TEXT_EXTENSIONS.has(extension)
+          ? 'spreadsheet'
+          : 'text',
+      text: preview.subarray(0, MAX_TEXT_BYTES).toString('utf8'),
+      truncated: stat.size > MAX_TEXT_BYTES,
     };
   },
 };

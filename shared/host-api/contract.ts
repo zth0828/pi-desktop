@@ -12,6 +12,8 @@ export type ShellApplication = {
   id: string;
   name: string;
   path: string;
+  /** OS-provided application icon. Optional in headless and unsupported environments. */
+  iconDataUrl?: string;
 };
 
 export type ShellListApplicationsResult = {
@@ -308,7 +310,7 @@ export type WorkspaceReadResult = {
   absolutePath: string;
   name: string;
   size: number;
-  kind: 'text' | 'image' | 'binary';
+  kind: 'text' | 'markdown' | 'image' | 'pdf' | 'document' | 'spreadsheet' | 'binary';
   mimeType?: string;
   text?: string;
   data?: string;

@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
+import { createDocxFixture, createPdfFixture, createXlsxFixture } from '../helpers/document-fixtures';
 
 let mock: ChildProcess;
 let mockPort: number;
@@ -44,6 +45,11 @@ test.beforeAll(async () => {
     path.join(repoWorkspace, 'preview.png'),
     Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'),
   );
+  await writeFile(path.join(repoWorkspace, 'preview.md'), '# Preview Guide\n\nMarkdown renders as a document.\n\n| Format | State |\n| --- | --- |\n| PDF | Ready |\n\n```bash\necho first\necho second\n```\n');
+  await writeFile(path.join(repoWorkspace, 'preview.csv'), 'Name,Status\nAlpha,Ready\nBeta,Queued\n');
+  await writeFile(path.join(repoWorkspace, 'preview.pdf'), createPdfFixture());
+  await writeFile(path.join(repoWorkspace, 'preview.docx'), createDocxFixture());
+  await writeFile(path.join(repoWorkspace, 'preview.xlsx'), createXlsxFixture());
   git(repoWorkspace, ['init']);
   git(repoWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '.']);
   git(repoWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'init']);
@@ -163,6 +169,11 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   const panel = page.getByTestId('review-panel');
   await expect(panel).toBeVisible();
   await expect(panel.getByTestId('workspace-tree')).toBeVisible();
+  const treeToggle = panel.getByTestId('workspace-tree-toggle');
+  await expect(treeToggle).toBeVisible();
+  await expect(treeToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(treeToggle.locator('span')).toHaveText(/\d+/);
+  await page.screenshot({ path: 'output/playwright/workspace-tree-overlay.png', fullPage: false });
 
   // Long tool output must scroll inside the chat column and never push the panel beyond the viewport.
   await page.getByTestId('chat-input').fill('USE_TOOL_LONG now');
@@ -210,13 +221,29 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
 
   await panel.getByTestId('workspace-directory').filter({ hasText: 'src' }).click();
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.ts' }).click();
+  await expect(panel.getByTestId('workspace-tree')).toBeHidden();
+  await expect(treeToggle).toHaveAttribute('aria-expanded', 'false');
   const textPreview = panel.getByTestId('workspace-text-preview');
   await expect(textPreview).toContainText('answer = 42');
+  await expect(textPreview).toHaveAttribute('data-language', 'typescript');
   await expect(textPreview.locator('.workspace-code-number').first()).toHaveText('1');
+  await expect(textPreview.locator('.workspace-code-token')).not.toHaveCount(0);
+  await expect(panel.getByTestId('workspace-toggle-wrap')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => textPreview.locator('.workspace-code-line code').first().evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).whiteSpace)).toBe('pre-wrap');
+  await page.screenshot({ path: 'output/playwright/workspace-code-preview-wrapped.png', fullPage: false });
+  await panel.getByTestId('workspace-toggle-wrap').click();
+  await expect(panel.getByTestId('workspace-toggle-wrap')).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(async () => textPreview.locator('.workspace-code-line code').first().evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).whiteSpace)).toBe('pre');
+  await page.screenshot({ path: 'output/playwright/workspace-code-preview.png', fullPage: false });
   await expect(panel.getByTestId('workspace-open-with')).toBeVisible();
   await panel.getByTestId('workspace-open-with').click();
   await expect(panel.getByTestId('workspace-open-menu')).toBeVisible();
   await expect(panel.getByTestId('workspace-open-menu')).toContainText(/默认应用|default application/);
+  const applicationButtons = panel.getByTestId('workspace-open-application');
+  const applicationCount = await applicationButtons.count();
+  for (let index = 0; index < applicationCount; index += 1) {
+    await expect(applicationButtons.nth(index).locator('img, svg')).toHaveCount(1);
+  }
   await page.screenshot({ path: 'output/playwright/workspace-preview-open-menu.png', fullPage: false });
   await panel.getByTestId('workspace-open-with').click();
   const previewColors = await panel.evaluate((node) => {
@@ -246,6 +273,86 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
 
   await panel.getByTestId('workspace-close').click();
   await expect(panel).toBeHidden();
+});
+
+test('右侧工作台：Markdown、PDF、Word、Excel 和 CSV 使用专用预览', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByTestId('workspace-toggle').click();
+  const panel = page.getByTestId('review-panel');
+
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.md' }).click();
+  const markdown = panel.getByTestId('workspace-markdown-preview');
+  await expect(markdown).toContainText('Preview Guide');
+  await expect(markdown.locator('table')).toBeVisible();
+  const codeWhiteSpace = await markdown.locator('[data-streamdown="code-block-body"] code').evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).whiteSpace);
+  expect(codeWhiteSpace).toBe('pre');
+  await page.screenshot({ path: 'output/playwright/workspace-markdown-preview.png', fullPage: false });
+  await markdown.getByRole('button', { name: 'Source' }).click();
+  await expect(markdown.getByTestId('workspace-text-preview')).toContainText('# Preview Guide');
+
+  await panel.getByTestId('workspace-files-tab').click();
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.pdf' }).click();
+  const pdf = panel.getByTestId('workspace-pdf-preview');
+  const canvas = pdf.locator('canvas');
+  await expect(canvas).toBeVisible({ timeout: 30_000 });
+  await expect(pdf).toContainText('Page 1 of 2', { timeout: 20_000 });
+  await expect.poll(async () => canvas.evaluate((element) => element.width * element.height)).toBeGreaterThan(100_000);
+  const nonWhitePixels = await canvas.evaluate((element) => {
+    const context = element.getContext('2d');
+    if (!context) return 0;
+    const pixels = context.getImageData(0, 0, element.width, element.height).data;
+    let count = 0;
+    for (let index = 0; index < pixels.length; index += 400) {
+      if (pixels[index + 3] > 0 && (pixels[index] < 245 || pixels[index + 1] < 245 || pixels[index + 2] < 245)) count += 1;
+    }
+    return count;
+  });
+  expect(nonWhitePixels).toBeGreaterThan(10);
+  await page.screenshot({ path: 'output/playwright/workspace-pdf-preview.png', fullPage: false });
+  await pdf.getByTitle('Next page').click();
+  await expect(pdf).toContainText('Page 2 of 2');
+
+  await panel.getByTestId('workspace-files-tab').click();
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.docx' }).click();
+  const document = panel.getByTestId('workspace-document-preview');
+  await expect(document).toContainText('Project Brief', { timeout: 30_000 });
+  await expect(document).toContainText('Status');
+  await expect(document).toContainText('Ready');
+  await page.screenshot({ path: 'output/playwright/workspace-docx-preview.png', fullPage: false });
+
+  await panel.getByTestId('workspace-files-tab').click();
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.xlsx' }).click();
+  const spreadsheet = panel.getByTestId('workspace-spreadsheet-preview');
+  await expect(spreadsheet.getByRole('tab', { name: 'Overview' })).toBeVisible({ timeout: 30_000 });
+  await expect(spreadsheet).toContainText('Preview');
+  await spreadsheet.getByRole('tab', { name: 'Details' }).click();
+  await expect(spreadsheet).toContainText('DOCX');
+  await expect(spreadsheet).toContainText('Ready');
+  await page.screenshot({ path: 'output/playwright/workspace-xlsx-preview.png', fullPage: false });
+
+  await panel.getByTestId('workspace-files-tab').click();
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.csv' }).click();
+  await expect(panel.getByTestId('workspace-spreadsheet-preview')).toContainText('Alpha');
+
+  await page.setViewportSize({ width: 760, height: 820 });
+  await panel.getByTestId('workspace-files-tab').click();
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.pdf' }).click();
+  const narrowPdf = panel.getByTestId('workspace-pdf-preview');
+  await expect(narrowPdf).toContainText('Page 1 of 2', { timeout: 20_000 });
+  const [toolbarBox, pagerBox, zoomBox] = await Promise.all([
+    narrowPdf.locator('.workspace-preview-toolbar').boundingBox(),
+    narrowPdf.locator('.workspace-pdf-pager').boundingBox(),
+    narrowPdf.locator('.workspace-pdf-zoom').boundingBox(),
+  ]);
+  expect(toolbarBox).not.toBeNull();
+  expect(pagerBox).not.toBeNull();
+  expect(zoomBox).not.toBeNull();
+  expect(pagerBox!.x + pagerBox!.width).toBeLessThanOrEqual(zoomBox!.x);
+  expect(zoomBox!.x + zoomBox!.width).toBeLessThanOrEqual(toolbarBox!.x + toolbarBox!.width + 1);
+  await page.screenshot({ path: 'output/playwright/workspace-pdf-preview-narrow.png', fullPage: false });
 });
 
 test('read 图片工具卡：预览按钮直达右侧图片查看器', async ({ launchElectronApp }) => {

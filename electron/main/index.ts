@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, screen } from 'electron';
 import path from 'node:path';
 import { resolveAppPageId } from '@shared/app-page';
 import { HostApiRegistry, registerHostInvokeHandler } from './ipc/host-invoke';
@@ -22,9 +22,12 @@ hostRegistry.registerCoreServices(createHostServices());
 registerHostInvokeHandler(hostRegistry);
 
 function createMainWindow(): BrowserWindow {
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const width = Math.min(1440, Math.max(960, workArea.width - 64));
+  const height = Math.min(900, Math.max(640, workArea.height - 64));
   const win = new BrowserWindow({
-    width: 1280,
-    height: 840,
+    width,
+    height,
     // 侧栏 + 聊天列(420) + 右侧面板的最小可用宽度；窄于此面板自动转覆盖层（CSS 媒体查询）
     minWidth: 960,
     minHeight: 640,

@@ -107,7 +107,7 @@ const server = http.createServer((req, res) => {
 
     // Rich markdown fixture: exercises renderer-only presentation without changing pi's protocol.
     if (lastUser.includes("RICH_MARKDOWN")) {
-      const text = "# Release plan\n\n- [x] Ship the shell\n- [ ] Add preview polish\n- [ ] Verify dark theme\n\n| Metric | Value |\n| --- | ---: |\n| Tokens | 42 |\n\n> Keep the response readable.\n\n\`\`\`ts\nconst answer = 42;\n\`\`\`\n\n[Open docs](https://example.com/docs)";
+      const text = "# Release plan\n\n- [x] Ship the shell\n- [ ] Add preview polish\n- [ ] Verify dark theme\n\n| Metric | Value |\n| --- | ---: |\n| Tokens | 42 |\n\n> Keep the response readable.\n\n\`\`\`ts\nconst answer = 42;\nif (answer) {\n  console.log(answer);\n}\n\`\`\`\n\n[Open docs](https://example.com/docs)";
       send({ role: "assistant", content: "" });
       for (const ch of text) send({ content: ch });
       send({}, "stop", { prompt_tokens: 12, completion_tokens: text.length, total_tokens: 12 + text.length });
