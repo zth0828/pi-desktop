@@ -46,8 +46,15 @@ test.beforeAll(async () => {
           ],
         },
       },
-    }),
+      }),
   );
+  await mkdir(path.join(workspace, '.pi/prompts'), { recursive: true });
+  for (let index = 1; index <= 8; index += 1) {
+    await writeFile(
+      path.join(workspace, `.pi/prompts/overflow-${index}.md`),
+      `---\ndescription: Overflow command ${index}\n---\nOverflow command ${index}.`,
+    );
+  }
   // 扩展 registerCommand 进补全的验证扩展（<agentDir>/extensions 自动发现）
   await mkdir(path.join(agentDir, 'extensions'), { recursive: true });
   await writeFile(
@@ -137,6 +144,37 @@ test('扩展 registerCommand 的命令出现在 / 补全列表', async ({ launch
   await expect(item).toBeVisible({ timeout: 15_000 });
   await expect(item.locator('.command-source')).toHaveText(/^extension/);
   await expect(item.locator('.command-desc')).toHaveText('E2E extension command');
+});
+
+test('/ 命令补全：键盘切换时高亮命令始终滚入可视区域', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  const input = page.getByTestId('chat-input');
+  await input.fill('/');
+  const panel = page.getByTestId('command-panel');
+  await expect(panel).toBeVisible();
+  const count = await panel.locator('.command-item').count();
+  expect(count).toBeGreaterThan(16);
+
+  for (let index = 1; index < count; index += 1) await input.press('ArrowDown');
+  await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  const bottomSelection = await panel.evaluate((element) => {
+    const selected = element.querySelector<HTMLElement>('.command-item.selected');
+    if (!selected) return null;
+    const panelRect = element.getBoundingClientRect();
+    const selectedRect = selected.getBoundingClientRect();
+    return {
+      top: selectedRect.top - panelRect.top,
+      bottom: panelRect.bottom - selectedRect.bottom,
+    };
+  });
+  expect(bottomSelection?.top).toBeGreaterThanOrEqual(0);
+  expect(bottomSelection?.bottom).toBeGreaterThanOrEqual(0);
+
+  for (let index = 1; index < count; index += 1) await input.press('ArrowUp');
+  await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBe(0);
 });
 
 test('/settings → 导航到设置页', async ({ launchElectronApp }) => {

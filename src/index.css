@@ -2026,8 +2026,11 @@ button.danger-outline {
   bottom: calc(100% - 6px);
   left: 24px;
   right: 24px;
-  max-height: 320px;
+  max-height: min(320px, calc(100vh - 180px));
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scroll-padding-block: 8px;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);

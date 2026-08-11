@@ -147,6 +147,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const [modelMenuSection, setModelMenuSection] = useState<'models' | 'thinking' | null>(null);
   const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const commandPanelRef = useRef<HTMLDivElement>(null);
+  const filePanelRef = useRef<HTMLDivElement>(null);
   const composerMenuRef = useRef<HTMLDivElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const usageControlRef = useRef<HTMLDivElement>(null);
@@ -393,6 +395,17 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       })();
   const panelOpen = matches.length > 0;
 
+  useEffect(() => {
+    setSelected(0);
+  }, [query]);
+
+  useEffect(() => {
+    if (!panelOpen) return;
+    commandPanelRef.current
+      ?.querySelector<HTMLElement>('.command-item.selected')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [panelOpen, query, selected]);
+
   // @ 文件补全：panel 打开时拉一次候选列表（cwd 下相对路径），本地模糊过滤
   const atActive = atToken !== null && !atSuppressed;
   useEffect(() => {
@@ -401,6 +414,17 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   }, [atActive, cwd]);
   const fileMatches = atActive ? filterFiles(fileList, atToken.query) : [];
   const filePanelOpen = fileMatches.length > 0;
+
+  useEffect(() => {
+    setFileSelected(0);
+  }, [atToken?.query]);
+
+  useEffect(() => {
+    if (!filePanelOpen) return;
+    filePanelRef.current
+      ?.querySelector<HTMLElement>('.command-item.selected')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [atToken?.query, filePanelOpen, fileSelected]);
 
   const send = (behavior?: 'steer' | 'followUp') => {
     const text = value.trim();
@@ -634,7 +658,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         </div>
       )}
       {panelOpen && (
-        <div className="command-panel" data-testid="command-panel">
+        <div ref={commandPanelRef} className="command-panel" data-testid="command-panel">
           {matches.map((cmd, i) => (
             <button
               key={cmd.name}
@@ -653,7 +677,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         </div>
       )}
       {filePanelOpen && (
-        <div className="command-panel" data-testid="file-panel">
+        <div ref={filePanelRef} className="command-panel" data-testid="file-panel">
           {fileMatches.map((file, i) => (
             <button
               key={file}
