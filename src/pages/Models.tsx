@@ -50,6 +50,14 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
     setBusy(false);
     if (result.success) {
       setKey('');
+      if (result.discoveryError) {
+        setMessage(t('models.discoveryFailed', { message: result.discoveryError }));
+      } else if (result.discoveredModels) {
+        setMessage(t('models.discoveryComplete', {
+          count: result.discoveredModels,
+          added: result.addedModels ?? 0,
+        }));
+      }
       onChanged();
     } else {
       setMessage(result.error);
@@ -369,7 +377,16 @@ export default function ModelsPage() {
     setRefreshMessage(undefined);
     const result = await hostApi.providers.refresh();
     setRefreshingCatalog(false);
-    setRefreshMessage(result.success ? t('models.refreshComplete') : result.error);
+    setRefreshMessage(
+      result.success
+        ? result.discoveredModels
+          ? t('models.refreshCompleteWithDiscovery', {
+            count: result.discoveredModels,
+            added: result.addedModels ?? 0,
+          })
+          : t('models.refreshComplete')
+        : result.error,
+    );
     refresh();
   };
 

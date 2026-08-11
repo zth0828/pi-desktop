@@ -298,6 +298,7 @@
     "modelCount": "{{count}} 个模型",
     "refresh": "刷新 pi 模型目录",
     "refreshComplete": "模型目录已刷新。",
+    "refreshCompleteWithDiscovery": "模型目录已刷新，共发现 {{count}} 个自定义模型，其中新增 {{added}} 个。",
     "source": {
       "builtin": "内置",
       "config": "models.json",
@@ -307,6 +308,8 @@
     "pricing": "每百万 Token：输入 {{input}}，输出 {{output}}，缓存读 {{cacheRead}}，缓存写 {{cacheWrite}}",
     "keyPlaceholder": "API key",
     "saveKey": "保存 key",
+    "discoveryComplete": "密钥已保存，共发现 {{count}} 个模型，其中新增 {{added}} 个。",
+    "discoveryFailed": "密钥已保存，但模型发现失败：{{message}}",
     "removeKey": "删除凭证",
     "oauth": "浏览器授权登录",
     "oauthStarted": "授权已发起——请在浏览器中完成。",

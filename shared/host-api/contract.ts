@@ -367,6 +367,11 @@ export type PiProviderRow = {
 };
 export type PiProviderListResult = { providers: PiProviderRow[] };
 export type PiProviderSetKeyPayload = { providerId: string; apiKey: string };
+export type PiProviderSetKeyResult = HostSuccess & {
+  discoveredModels?: number;
+  addedModels?: number;
+  discoveryError?: string;
+};
 export type PiModelRow = {
   provider: string;
   providerLabel?: string;
@@ -382,6 +387,8 @@ export type PiModelRow = {
 export type PiProviderRefreshResult = HostSuccess & {
   aborted?: boolean;
   errors?: string[];
+  discoveredModels?: number;
+  addedModels?: number;
 };
 export type PiProviderAddCustomPayload = {
   id: string;
@@ -694,7 +701,7 @@ export type HostApiContract = {
     listModels: () => { models: PiModelRow[] };
     /** 经 pi ModelRuntime 刷新动态/远程 catalog；失败时保留 pi 的缓存模型。 */
     refresh: () => PiProviderRefreshResult;
-    setApiKey: (payload: PiProviderSetKeyPayload) => HostSuccess;
+    setApiKey: (payload: PiProviderSetKeyPayload) => PiProviderSetKeyResult;
     removeCredential: (payload: { providerId: string }) => HostSuccess;
     startOAuth: (payload: { providerId: string }) => HostSuccess;
     addCustom: (payload: PiProviderAddCustomPayload) => HostSuccess;

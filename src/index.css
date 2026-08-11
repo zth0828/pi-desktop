@@ -2156,6 +2156,12 @@ button.danger-outline {
   font-size: 34px;
 }
 
+.models-header .icon-button {
+  position: relative;
+  z-index: 101;
+  -webkit-app-region: no-drag;
+}
+
 .spin { animation: spin 900ms linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

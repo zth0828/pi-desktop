@@ -170,6 +170,31 @@ test('Models 页：录入 API key 后状态变已配置', async ({ launchElectro
   await expect(page.getByTestId('provider-status-customnoauth')).toHaveClass(/configured/, {
     timeout: 15_000,
   });
+  await expect(page.getByTestId('provider-model-customnoauth-mock-discovered')).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(row).toContainText('Found 2 models, including 1 new');
+  await expect.poll(async () => {
+    const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+      providers: { customnoauth: { models: Array<{ id: string }> } };
+    };
+    return doc.providers.customnoauth.models.map((model) => model.id);
+  }).toContain('mock-discovered');
+});
+
+test('Models 页：刷新会发现已配置自定义供应商的新模型', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('refresh-models').click();
+  await expect(page.getByTestId('models-refresh-message')).toContainText('Found 2 custom models', {
+    timeout: 30_000,
+  });
+  const row = page.getByTestId('provider-mock');
+  await row.locator('.provider-row-header').click();
+  await expect(page.getByTestId('provider-model-mock-mock-discovered')).toBeVisible();
 });
 
 test('Models 页：已配置供应商展开显示可用模型，可设为当前模型并持久化', async ({

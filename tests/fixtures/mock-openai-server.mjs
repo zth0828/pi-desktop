@@ -42,6 +42,14 @@ const server = http.createServer((req, res) => {
     ] }));
     return;
   }
+  if (req.method === "GET" && req.url.includes("/models")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ data: [
+      { id: "mock-2" },
+      { id: "mock-discovered", context_window: 256000, max_output_tokens: 16384 },
+    ] }));
+    return;
+  }
   if (req.method !== "POST" || !req.url.includes("/chat/completions")) {
     res.writeHead(404).end("not found");
     return;

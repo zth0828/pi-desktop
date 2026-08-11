@@ -298,6 +298,7 @@
     "modelCount": "{{count}} models",
     "refresh": "Refresh pi model catalogs",
     "refreshComplete": "Model catalogs refreshed.",
+    "refreshCompleteWithDiscovery": "Model catalogs refreshed. Found {{count}} custom models, including {{added}} new ones.",
     "source": {
       "builtin": "Built in",
       "config": "models.json",
@@ -307,6 +308,8 @@
     "pricing": "Per 1M tokens: input {{input}}, output {{output}}, cache read {{cacheRead}}, cache write {{cacheWrite}}",
     "keyPlaceholder": "API key",
     "saveKey": "Save key",
+    "discoveryComplete": "Key saved. Found {{count}} models, including {{added}} new ones.",
+    "discoveryFailed": "Key saved, but model discovery failed: {{message}}",
     "removeKey": "Remove credential",
     "oauth": "Sign in with browser",
     "oauthStarted": "Authorization started — complete it in your browser.",

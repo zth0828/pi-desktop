@@ -13,11 +13,13 @@ import type {
   PiProviderSetKeyPayload,
   PiProviderProbePayload,
   PiProviderProbeResult,
+  PiProviderSetKeyResult,
   PiCompactionSettings,
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
-import { syncLmStudioModels } from '../utils/lmstudio-models';
+import { isLmStudioProvider, syncLmStudioModels } from '../utils/lmstudio-models';
+import { syncConfiguredProviderModels } from '../utils/configured-provider-models';
 import { getActiveRuntime, getActiveRuntimeReady, piRuntimeApi } from './pi-runtime-api';
 import { settingsApi } from './settings-api';
 
@@ -36,15 +38,69 @@ async function getModelRuntime(): Promise<{ sdk: PiSdk; runtime: ModelRuntime }>
   return { sdk, runtime: await runtimePromise };
 }
 
-function configuredProviders(agentDir: string): Record<string, { baseUrl?: string }> {
+type ConfiguredProvider = {
+  name?: string;
+  baseUrl?: string;
+  api?: string;
+  models?: unknown[];
+};
+
+function configuredProviders(agentDir: string): Record<string, ConfiguredProvider> {
   try {
     const doc = JSON.parse(readFileSync(path.join(agentDir, 'models.json'), 'utf8')) as {
-      providers?: Record<string, { baseUrl?: string }>;
+      providers?: Record<string, ConfiguredProvider>;
     };
     return doc.providers ?? {};
   } catch {
     return {};
   }
+}
+
+async function syncConfiguredCatalogs(
+  runtime: ModelRuntime,
+  agentDir: string,
+  onlyProviderIds?: readonly string[],
+): Promise<{ discovered: number; added: number; changed: boolean; errors: string[] }> {
+  const configured = configuredProviders(agentDir);
+  const selected = onlyProviderIds ? new Set(onlyProviderIds) : null;
+  let discovered = 0;
+  let added = 0;
+  let changed = false;
+  const errors: string[] = [];
+  for (const [providerId, provider] of Object.entries(configured)) {
+    if (selected && !selected.has(providerId)) continue;
+    if (!provider.baseUrl || isLmStudioProvider(providerId, provider as Record<string, unknown>)) continue;
+    const model = runtime.getModels(providerId)[0];
+    const api = provider.api ?? model?.api;
+    if (!api) continue;
+    try {
+      const resolution = model
+        ? await runtime.getAuth(model)
+        : await runtime.getAuth(providerId);
+      if (!resolution) continue;
+      const headers = Object.fromEntries(
+        Object.entries(resolution.auth.headers ?? {})
+          .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+      );
+      const result = await syncConfiguredProviderModels({
+        agentDir,
+        providerId,
+        api,
+        auth: {
+          apiKey: resolution.auth.apiKey,
+          baseUrl: resolution.auth.baseUrl,
+          headers,
+        },
+      });
+      if (!result) continue;
+      discovered += result.discovered;
+      added += result.added;
+      changed ||= result.changed;
+    } catch (error) {
+      errors.push(`${providerId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return { discovered, added, changed, errors };
 }
 
 function providerLabel(id: string, name: string, baseUrl?: string): string {
@@ -130,13 +186,19 @@ export const providersApi = {
   },
 
   refresh: async () => {
-    const { runtime } = await getModelRuntime();
+    const { sdk, runtime } = await getModelRuntime();
     const signal = AbortSignal.timeout(15_000);
     try {
+      const configured = await syncConfiguredCatalogs(runtime, sdk.getAgentDir());
       const result = await runtime.refresh({ allowNetwork: true, force: true, signal });
-      const errors = [...result.errors].map(([providerId, error]) => `${providerId}: ${error.message}`);
+      const errors = [
+        ...configured.errors,
+        ...[...result.errors].map(([providerId, error]) => `${providerId}: ${error.message}`),
+      ];
       return {
         success: errors.length === 0 && !result.aborted,
+        discoveredModels: configured.discovered,
+        addedModels: configured.added,
         ...(result.aborted ? { aborted: true, error: 'model refresh timed out' } : {}),
         ...(errors.length > 0 ? { errors, error: errors.join('\n') } : {}),
       };
@@ -145,8 +207,8 @@ export const providersApi = {
     }
   },
 
-  setApiKey: async (payload: PiProviderSetKeyPayload): Promise<HostSuccess> => {
-    const { runtime } = await getModelRuntime();
+  setApiKey: async (payload: PiProviderSetKeyPayload): Promise<PiProviderSetKeyResult> => {
+    const { sdk, runtime } = await getModelRuntime();
     try {
       // login('api_key') 的 interaction.prompt 直接回传 GUI 录入的 key；
       // 持久化由 pi auth-storage 完成
@@ -154,7 +216,20 @@ export const providersApi = {
         prompt: async () => payload.apiKey,
         notify: () => {},
       });
-      return { success: true };
+      const configured = await syncConfiguredCatalogs(
+        runtime,
+        sdk.getAgentDir(),
+        [payload.providerId],
+      );
+      if (configured.changed) {
+        await runtime.refresh({ allowNetwork: false });
+      }
+      return {
+        success: true,
+        discoveredModels: configured.discovered,
+        addedModels: configured.added,
+        ...(configured.errors.length > 0 ? { discoveryError: configured.errors.join('\n') } : {}),
+      };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
     }

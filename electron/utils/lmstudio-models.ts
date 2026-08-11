@@ -71,7 +71,7 @@ export function mergeLmStudioModels(existing: unknown[], detected: LmStudioModel
   });
 }
 
-function isLmStudioProvider(id: string, provider: JsonRecord): boolean {
+export function isLmStudioProvider(id: string, provider: JsonRecord): boolean {
   if (/lm[ -]?studio/i.test(id)) return true;
   if (typeof provider.name === 'string' && /lm[ -]?studio/i.test(provider.name)) return true;
   if (typeof provider.baseUrl !== 'string') return false;
