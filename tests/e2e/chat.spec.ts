@@ -124,7 +124,8 @@ test('侧边栏折叠为稳定图标栏并可恢复历史列表', async ({ launc
   const sidebar = page.locator('.sidebar');
   const windowControls = page.getByTestId('app-window-controls');
   await expect(windowControls).toBeVisible();
-  await expect(windowControls).toContainText('Pi');
+  await expect(windowControls).not.toContainText('Pi');
+  await expect(page.getByTestId('session-search-trigger')).toBeVisible();
   const controlsBox = await windowControls.boundingBox();
   expect(controlsBox).not.toBeNull();
   expect(controlsBox!.x).toBeGreaterThan(70);
