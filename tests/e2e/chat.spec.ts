@@ -134,6 +134,7 @@ test('侧边栏折叠为稳定图标栏并可恢复历史列表', async ({ launc
   expect(composerBox).not.toBeNull();
   expect(composerBox!.width).toBeGreaterThan(820);
   expect(composerBox!.height).toBeGreaterThanOrEqual(110);
+  await page.screenshot({ path: 'output/playwright/chat-chrome-refined.png', fullPage: false });
 
   const expandedWidth = (await sidebar.boundingBox())!.width;
   await page.getByTestId('sidebar-toggle').click();
@@ -141,6 +142,7 @@ test('侧边栏折叠为稳定图标栏并可恢复历史列表', async ({ launc
   await expect(page.getByTestId('sidebar-sessions')).toHaveCount(0);
   await expect(page.getByTestId('nav-chat')).toBeVisible();
   await expect(windowControls).toBeVisible();
+  await page.screenshot({ path: 'output/playwright/sidebar-collapsed-refined.png', fullPage: false });
   await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(expandedWidth - 100);
 
   await page.getByTestId('sidebar-toggle').click();
