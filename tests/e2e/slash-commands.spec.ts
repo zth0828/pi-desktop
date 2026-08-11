@@ -161,7 +161,7 @@ test('/ 命令补全：键盘切换时高亮命令始终滚入可视区域', asy
   for (let index = 1; index < count; index += 1) await input.press('ArrowDown');
   await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   const bottomSelection = await panel.evaluate((element) => {
-    const selected = element.querySelector<HTMLElement>('.command-item.selected');
+    const selected = element.querySelector('.command-item.selected');
     if (!selected) return null;
     const panelRect = element.getBoundingClientRect();
     const selectedRect = selected.getBoundingClientRect();
