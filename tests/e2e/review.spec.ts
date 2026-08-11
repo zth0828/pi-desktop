@@ -102,6 +102,7 @@ async function runTool(page: import('@playwright/test').Page, prompt: string) {
   const summary = page.getByTestId('turn-fold-toggle').last();
   await expect(summary).toBeVisible({ timeout: 30_000 });
   await summary.click();
+  await page.getByTestId('process-stage-toggle').last().click();
   await expect(page.getByTestId('tool-card').last().locator('.tool-status')).toHaveText('done');
 }
 
@@ -165,6 +166,7 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('turn-fold-toggle')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('turn-fold-toggle').click();
+  await page.getByTestId('process-stage-toggle').click();
   const viewport = page.viewportSize();
   const panelBox = await panel.boundingBox();
   expect(panelBox).not.toBeNull();
@@ -172,6 +174,7 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
 
   const initialWidth = (await panel.boundingBox())!.width;
+  const initialChatWidth = (await page.locator('.chat-column').boundingBox())!.width;
   const handle = panel.getByTestId('workspace-resize-handle');
   const handleBox = await handle.boundingBox();
   expect(handleBox).not.toBeNull();
@@ -180,6 +183,7 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await page.mouse.move(handleBox!.x + 70, handleBox!.y + 100);
   await page.mouse.up();
   await expect.poll(async () => (await panel.boundingBox())!.width).toBeLessThan(initialWidth - 40);
+  await expect.poll(async () => (await page.locator('.chat-column').boundingBox())!.width).toBeGreaterThan(initialChatWidth + 40);
 
   // 过窄窗口自动切成覆盖层工作台，不要求用户手动拖宽（≥960px 时停靠并排）。
   await page.setViewportSize({ width: 900, height: 800 });
@@ -205,7 +209,13 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.ts' }).click();
   const textPreview = panel.getByTestId('workspace-text-preview');
   await expect(textPreview).toContainText('answer = 42');
-  await expect.poll(() => textPreview.locator('pre').evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  await expect(textPreview.locator('.workspace-code-number').first()).toHaveText('1');
+  await expect(panel.getByTestId('workspace-open-with')).toBeVisible();
+  await panel.getByTestId('workspace-open-with').click();
+  await expect(panel.getByTestId('workspace-open-menu')).toBeVisible();
+  await expect(panel.getByTestId('workspace-open-application').first()).toBeVisible({ timeout: 10_000 });
+  await page.screenshot({ path: 'output/playwright/workspace-preview-open-menu.png', fullPage: false });
+  await panel.getByTestId('workspace-open-with').click();
   const previewColors = await panel.evaluate((node) => {
     const preview = node.querySelector('.workspace-text-preview');
     const view = node.ownerDocument.defaultView!;

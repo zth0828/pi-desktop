@@ -164,7 +164,8 @@
     },
     "turnFold": {
       "expand": "Show turn process",
-      "collapse": "Hide turn process"
+      "collapse": "Hide turn process",
+      "stage": "Stage {{index}} · {{count}} process messages"
     },
     "taskList": {
       "title": "Tasks",
@@ -474,7 +475,9 @@
     }
   },
   "sidebar": {
-    "newChat": "New chat"
+    "newChat": "New chat",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar"
   },
   "extui": {
     "dismiss": "Dismiss",
@@ -593,6 +596,11 @@
     "filter": "Filter files…",
     "selectFile": "Select a file to preview",
     "loading": "Loading preview…",
+    "openWith": "Open location",
+    "showInFolder": "Show in folder",
+    "findingApps": "Finding available apps…",
+    "noApps": "No available apps found",
+    "openFailed": "Could not open file",
     "readFailed": "This file could not be read.",
     "binary": "Binary file · {{size}} bytes",
     "tooLarge": "Preview unavailable · {{size}} bytes",

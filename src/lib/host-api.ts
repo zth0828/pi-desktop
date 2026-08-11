@@ -12,6 +12,10 @@ export const hostApi = {
   },
   shell: {
     openExternal: (url: string) => invokeHost('shell', 'openExternal', { url }),
+    listApplications: () => invokeHost('shell', 'listApplications'),
+    openPathWith: (path: string, application: { id: string; name: string; path: string }) =>
+      invokeHost('shell', 'openPathWith', { path, application }),
+    showInFolder: (path: string) => invokeHost('shell', 'showInFolder', { path }),
   },
   piSystem: {
     detect: (force?: boolean) => invokeHost('piSystem', 'detect', force ? { force } : undefined),

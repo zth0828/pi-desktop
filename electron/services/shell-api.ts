@@ -1,9 +1,102 @@
-// shell 模块：打开外部链接等系统交互。
+// shell 模块：打开外部链接与工作区文件等系统交互。
+import { execFile } from 'node:child_process';
+import { readdir, stat } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
 import { shell } from 'electron';
-import type { ShellOpenExternalPayload } from '@shared/host-api/contract';
+import type {
+  HostSuccess,
+  ShellApplication,
+  ShellListApplicationsResult,
+  ShellOpenExternalPayload,
+  ShellOpenPathWithPayload,
+} from '@shared/host-api/contract';
+
+const execFileAsync = promisify(execFile);
+
+async function macApplications(): Promise<ShellApplication[]> {
+  const roots = ['/Applications', '/System/Applications', path.join(os.homedir(), 'Applications')];
+  const found = new Map<string, ShellApplication>();
+  try {
+    const results = await Promise.all(roots.map(async (root) => {
+      try {
+        const { stdout } = await execFileAsync('mdfind', ['-onlyin', root, 'kMDItemContentType == "com.apple.application-bundle"'], { timeout: 5000 });
+        return stdout.split('\n').map((entry) => entry.trim()).filter(Boolean);
+      } catch {
+        return [];
+      }
+    }));
+    for (const appPath of results.flat()) {
+      const name = path.basename(appPath, '.app');
+      if (name) found.set(appPath, { id: appPath, name, path: appPath });
+    }
+  } catch {
+    // Spotlight is optional; directory scanning below still provides a useful menu.
+  }
+  for (const root of roots) {
+    try {
+      for (const name of await readdir(root)) {
+        if (!name.endsWith('.app')) continue;
+        const appPath = path.join(root, name);
+        found.set(appPath, { id: appPath, name: name.slice(0, -4), path: appPath });
+      }
+    } catch {
+      // A missing Applications directory is expected on some test platforms.
+    }
+  }
+  return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function discoveredApplications(): Promise<ShellListApplicationsResult> {
+  if (process.platform === 'darwin') return { applications: await macApplications() };
+  const roots = process.platform === 'win32'
+    ? [process.env['ProgramFiles'], process.env['ProgramFiles(x86)']].filter((entry): entry is string => Boolean(entry))
+    : ['/usr/share/applications', path.join(os.homedir(), '.local/share/applications')];
+  const applications: ShellApplication[] = [];
+  for (const root of roots) {
+    try {
+      for (const name of await readdir(root)) {
+        if (process.platform === 'win32' ? !name.endsWith('.exe') : !name.endsWith('.desktop')) continue;
+        applications.push({ id: path.join(root, name), name: name.replace(/\.(desktop|exe)$/i, ''), path: path.join(root, name) });
+      }
+    } catch {
+      // Ignore unavailable platform application directories.
+    }
+  }
+  return { applications: applications.sort((a, b) => a.name.localeCompare(b.name)).slice(0, 80) };
+}
+
+async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSuccess> {
+  const target = path.resolve(payload.path);
+  try {
+    await stat(target);
+    if (process.platform === 'darwin' && payload.application.path.endsWith('.app')) {
+      await execFileAsync('open', ['-a', payload.application.path, target], { timeout: 15_000 });
+    } else {
+      const error = await shell.openPath(target);
+      if (error) throw new Error(error);
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 export const shellApi = {
   openExternal: async (payload: ShellOpenExternalPayload) => {
     await shell.openExternal(payload.url);
+  },
+  listApplications: discoveredApplications,
+  openPathWith,
+  showInFolder: async (payload: { path: string }): Promise<HostSuccess> => {
+    try {
+      const target = path.resolve(payload.path);
+      await stat(target);
+      shell.showItemInFolder(target);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   },
 };

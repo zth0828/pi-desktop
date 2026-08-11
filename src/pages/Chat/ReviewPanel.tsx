@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronDown,
   ChevronRight,
   Columns2,
+  AppWindow,
   File,
   FileCode2,
   Files,
   Folder,
   FolderOpen,
   List,
+  MapPin,
   PanelRightClose,
   RefreshCw,
   Search,
@@ -19,6 +21,7 @@ import {
 import type {
   ReviewFileEntry,
   ReviewSummaryResult,
+  ShellApplication,
   WorkspaceEntry,
   WorkspaceReadResult,
 } from '@shared/host-api/contract';
@@ -40,7 +43,8 @@ type PendingRevert =
 type WorkbenchTab = 'files' | 'review' | `file:${string}`;
 
 const WORKSPACE_PANEL_MIN = 620;
-const CHAT_COLUMN_MIN = 420;
+const CHAT_COLUMN_MIN = 360;
+const PANEL_WIDTH_STORAGE_KEY = 'pi-desktop.workspace-panel-width';
 
 /** 可用宽度必须是聊天页容器（已扣除侧栏），用 window.innerWidth 会把侧栏宽度算进来挤掉聊天列 */
 function availablePanelSpace(): number {
@@ -51,6 +55,33 @@ function clampPanelWidth(width: number): number {
   const maximum = Math.max(320, availablePanelSpace() - CHAT_COLUMN_MIN);
   const minimum = Math.min(WORKSPACE_PANEL_MIN, maximum);
   return Math.min(maximum, Math.max(minimum, width));
+}
+
+function formatBytes(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(size < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+const APPLICATION_PRIORITY = [
+  /^cursor$/i,
+  /^finder$/i,
+  /^terminal$/i,
+  /^ghostty$/i,
+  /^visual studio code$/i,
+  /^xcode$/i,
+  /^android studio$/i,
+  /^zed$/i,
+  /sublime text/i,
+  /^textedit$/i,
+];
+
+function rankApplications(applications: ShellApplication[]): ShellApplication[] {
+  const priority = (name: string) => {
+    const index = APPLICATION_PRIORITY.findIndex((pattern) => pattern.test(name));
+    return index < 0 ? APPLICATION_PRIORITY.length : index;
+  };
+  return [...applications].sort((a, b) => priority(a.name) - priority(b.name) || a.name.localeCompare(b.name));
 }
 
 function FallbackView() {
@@ -185,6 +216,72 @@ function FileExplorer({ selected, onSelect }: { selected: string | null; onSelec
   );
 }
 
+function OpenWithMenu({ absolutePath }: { absolutePath: string }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [applications, setApplications] = useState<ShellApplication[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [open]);
+
+  const toggle = async () => {
+    const next = !open;
+    setOpen(next);
+    if (!next || applications.length > 0 || loading) return;
+    setLoading(true);
+    setError(undefined);
+    try {
+      const result = await hostApi.shell.listApplications();
+      setApplications(rankApplications(result.applications));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : String(nextError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openApplication = async (application: ShellApplication) => {
+    setOpen(false);
+    const result = await hostApi.shell.openPathWith(absolutePath, application);
+    if (!result.success) setError(result.error ?? t('workspace.openFailed'));
+  };
+
+  return (
+    <div className="workspace-open-menu" ref={menuRef}>
+      <button className="workspace-open-trigger" data-testid="workspace-open-with" aria-expanded={open} onClick={() => void toggle()}>
+        <AppWindow size={14} />
+        <span>{t('workspace.openWith')}</span>
+        <ChevronDown size={13} />
+      </button>
+      {open && (
+        <div className="workspace-open-popover" data-testid="workspace-open-menu">
+          <button onClick={() => { setOpen(false); void hostApi.shell.showInFolder(absolutePath); }}>
+            <MapPin size={15} /><span>{t('workspace.showInFolder')}</span>
+          </button>
+          <div className="workspace-open-separator" />
+          {loading && <div className="workspace-open-state">{t('workspace.findingApps')}</div>}
+          {!loading && applications.map((application) => (
+            <button key={application.id} data-testid="workspace-open-application" onClick={() => void openApplication(application)}>
+              <AppWindow size={15} /><span>{application.name}</span>
+            </button>
+          ))}
+          {!loading && applications.length === 0 && <div className="workspace-open-state">{t('workspace.noApps')}</div>}
+        </div>
+      )}
+      {error && <div className="workspace-open-error" role="status">{error}</div>}
+    </div>
+  );
+}
+
 function FilePreview({ path }: { path: string }) {
   const { t } = useTranslation();
   const [result, setResult] = useState<WorkspaceReadResult | null>(null);
@@ -196,21 +293,42 @@ function FilePreview({ path }: { path: string }) {
   }, [path]);
   if (error) return <div className="workspace-empty">{t('workspace.readFailed')}</div>;
   if (!result) return <div className="workspace-empty">{t('workspace.loading')}</div>;
+  let content: React.ReactNode;
   if (result.truncated && !result.data && !result.text) {
-    return <div className="workspace-empty">{t('workspace.tooLarge', { size: result.size.toLocaleString() })}</div>;
-  }
-  if (result.kind === 'image' && result.data) {
-    return <div className="workspace-image-preview" data-testid="workspace-image-preview"><img src={`data:${result.mimeType};base64,${result.data}`} alt={result.name} /></div>;
-  }
-  if (result.kind === 'text') {
-    return (
+    content = <div className="workspace-empty">{t('workspace.tooLarge', { size: result.size.toLocaleString() })}</div>;
+  } else if (result.kind === 'image' && result.data) {
+    content = <div className="workspace-image-preview" data-testid="workspace-image-preview"><img src={`data:${result.mimeType};base64,${result.data}`} alt={result.name} /></div>;
+  } else if (result.kind === 'text') {
+    const lines = (result.text ?? '').split('\n');
+    content = (
       <div className="workspace-text-preview" data-testid="workspace-text-preview">
         {result.truncated && <div className="workspace-truncated">{t('workspace.truncated')}</div>}
-        <pre><code>{result.text}</code></pre>
+        <div className="workspace-code" role="presentation">
+          {lines.map((line, index) => (
+            <div className="workspace-code-line" key={index}>
+              <span className="workspace-code-number">{index + 1}</span>
+              <code>{line || ' '}</code>
+            </div>
+          ))}
+        </div>
       </div>
     );
+  } else {
+    content = <div className="workspace-empty">{t('workspace.binary', { size: result.size.toLocaleString() })}</div>;
   }
-  return <div className="workspace-empty">{t('workspace.binary', { size: result.size.toLocaleString() })}</div>;
+  return (
+    <div className="workspace-file-view">
+      <header className="workspace-file-header">
+        <div className="workspace-file-title">
+          <FileCode2 size={15} />
+          <span title={result.path}>{result.name}</span>
+          <small>{formatBytes(result.size)}</small>
+        </div>
+        <OpenWithMenu absolutePath={result.absolutePath} />
+      </header>
+      <div className="workspace-file-content">{content}</div>
+    </div>
+  );
 }
 
 function ReviewWorkspace() {
@@ -317,7 +435,10 @@ export function ReviewPanel() {
   const [tab, setTab] = useState<WorkbenchTab>('files');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
-  const [panelWidth, setPanelWidth] = useState<number>();
+  const [panelWidth, setPanelWidth] = useState<number | undefined>(() => {
+    const saved = Number(window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY));
+    return Number.isFinite(saved) && saved > 0 ? saved : undefined;
+  });
   const [resizing, setResizing] = useState(false);
   const open = reviewOpen || workspaceOpen;
   useEffect(() => { if (reviewOpen) setTab('review'); else if (workspaceOpen && tab === 'review') setTab('files'); }, [reviewOpen, workspaceOpen, tab]);
@@ -342,7 +463,13 @@ export function ReviewPanel() {
     };
   }, [resizing]);
   useEffect(() => {
-    const adaptToWindow = () => setPanelWidth((current) => current === undefined ? current : clampPanelWidth(current));
+    if (panelWidth) window.localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(Math.round(panelWidth)));
+  }, [panelWidth]);
+  useEffect(() => {
+    const adaptToWindow = () => {
+      if (window.innerWidth <= 960) return;
+      setPanelWidth((current) => current === undefined ? current : clampPanelWidth(current));
+    };
     window.addEventListener('resize', adaptToWindow);
     return () => window.removeEventListener('resize', adaptToWindow);
   }, []);
@@ -384,11 +511,11 @@ export function ReviewPanel() {
         aria-label={t('workspace.resize')}
         aria-orientation="vertical"
         tabIndex={0}
-        onPointerDown={(event) => { event.preventDefault(); setResizing(true); }}
+        onPointerDown={(event) => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); setResizing(true); }}
         onKeyDown={(event) => {
           if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
           event.preventDefault();
-          const current = panelWidth ?? Math.min(960, availablePanelSpace() * 0.64);
+          const current = panelWidth ?? Math.min(1120, availablePanelSpace() * 0.72);
           const delta = event.key === 'ArrowLeft' ? 24 : -24;
           setPanelWidth(clampPanelWidth(current + delta));
         }}

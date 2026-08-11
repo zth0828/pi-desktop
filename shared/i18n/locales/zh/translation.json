@@ -164,7 +164,8 @@
     },
     "turnFold": {
       "expand": "展开本轮过程",
-      "collapse": "收起本轮过程"
+      "collapse": "收起本轮过程",
+      "stage": "阶段 {{index}} · {{count}} 条过程消息"
     },
     "taskList": {
       "title": "任务",
@@ -474,7 +475,9 @@
     }
   },
   "sidebar": {
-    "newChat": "新会话"
+    "newChat": "新会话",
+    "collapse": "收起侧边栏",
+    "expand": "展开侧边栏"
   },
   "extui": {
     "dismiss": "关闭",
@@ -593,6 +596,11 @@
     "filter": "筛选文件…",
     "selectFile": "选择文件以预览",
     "loading": "正在加载预览…",
+    "openWith": "打开位置",
+    "showInFolder": "在文件夹中显示",
+    "findingApps": "正在发现可用应用…",
+    "noApps": "没有发现可用应用",
+    "openFailed": "无法打开文件",
     "readFailed": "无法读取这个文件。",
     "binary": "二进制文件 · {{size}} 字节",
     "tooLarge": "文件过大，无法预览 · {{size}} 字节",

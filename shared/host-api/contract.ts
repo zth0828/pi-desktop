@@ -7,6 +7,21 @@ export type JsonRecord = Record<string, unknown>;
 export type HostSuccess = { success: boolean; error?: string };
 
 export type ShellOpenExternalPayload = { url: string };
+
+export type ShellApplication = {
+  id: string;
+  name: string;
+  path: string;
+};
+
+export type ShellListApplicationsResult = {
+  applications: ShellApplication[];
+};
+
+export type ShellOpenPathWithPayload = {
+  path: string;
+  application: ShellApplication;
+};
 export type AppClipboardWritePayload = { text: string };
 
 // —— piSystem：pi/Node/npm 环境检测与安装引导（M1）——
@@ -288,6 +303,8 @@ export type WorkspaceListResult = { path: string; entries: WorkspaceEntry[] };
 export type WorkspaceReadPayload = { path: string };
 export type WorkspaceReadResult = {
   path: string;
+  /** Main 侧已在活动工作区边界内解析并校验的真实路径，仅用于系统打开/显示。 */
+  absolutePath: string;
   name: string;
   size: number;
   kind: 'text' | 'image' | 'binary';
@@ -617,6 +634,9 @@ export type HostApiContract = {
   };
   shell: {
     openExternal: (payload: ShellOpenExternalPayload) => void;
+    listApplications: () => ShellListApplicationsResult;
+    openPathWith: (payload: ShellOpenPathWithPayload) => HostSuccess;
+    showInFolder: (payload: { path: string }) => HostSuccess;
   };
   piSystem: {
     /** 完整环境检测（Node/npm/pi + 版本判定）。带短 TTL 缓存；force 绕过。 */

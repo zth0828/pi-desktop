@@ -71,11 +71,12 @@ export const workspaceApi = {
     const mimeType = IMAGE_MIME[path.extname(file).toLowerCase()];
     if (mimeType) {
       if (stat.size > MAX_IMAGE_BYTES) {
-        return { path: payload.path, name: path.basename(file), size: stat.size, kind: 'image', mimeType, truncated: true };
+        return { path: payload.path, absolutePath: file, name: path.basename(file), size: stat.size, kind: 'image', mimeType, truncated: true };
       }
       const buffer = await readFile(file);
       return {
         path: payload.path,
+        absolutePath: file,
         name: path.basename(file),
         size: stat.size,
         kind: 'image',
@@ -86,10 +87,11 @@ export const workspaceApi = {
     }
     const buffer = await readFile(file);
     if (looksBinary(buffer)) {
-      return { path: payload.path, name: path.basename(file), size: stat.size, kind: 'binary', truncated: false };
+      return { path: payload.path, absolutePath: file, name: path.basename(file), size: stat.size, kind: 'binary', truncated: false };
     }
     return {
       path: payload.path,
+      absolutePath: file,
       name: path.basename(file),
       size: stat.size,
       kind: 'text',
