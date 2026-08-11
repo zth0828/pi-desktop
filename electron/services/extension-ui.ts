@@ -1,12 +1,9 @@
 // 扩展 UI 桥：pi ExtensionUIContext 的 confirm/select/input → 渲染层对话框。
-// 支持范围（ExtensionUIContext 全接口，非对话框方法给安全 no-op，与 pi 自己的
-// print 模式 noOpUIContext 同策略）：
-//   confirm/select/input — 经 piRuntime.uiRequest 事件推到渲染层，Promise 挂起
+// 支持范围（ExtensionUIContext 可序列化子集，其余方法按 pi print 模式安全降级）：
+//   confirm/select/input/editor — 经 piRuntime.uiRequest 事件推到渲染层，Promise 挂起
 //     等 piRuntime.uiResponse 回传（按 requestId 配对）。
-//   notify — 忽略（壳无 toast 基础设施）。
-//   editor（多行编辑）— 不支持：直接 resolve undefined（取消语义）。降级为单行
-//     input 会丢多行/保存语义，比明确取消更有害。
-//   其余 TUI 专属（widget/footer/header/theme/editor 组件等）— no-op。
+//   notify/status/working/文本 widget — 映射到 toast、状态条和 composer 插槽。
+//   其余 TUI 专属（Component factory、footer/header/theme 等）— no-op。
 // 竞态与超时：
 //   - 会话替换（new/switch/fork）或 runtime 销毁时 cancelAllPendingUi() 取消全部
 //     挂起请求（confirm→false，select/input→undefined），并通知渲染层移除对话框。
@@ -20,6 +17,7 @@ import type {
 } from '@earendil-works/pi-coding-agent';
 import type {
   HostSuccess,
+  PiExtensionUiState,
   PiUiRequestKind,
   PiUiRequestPayload,
   PiUiResponsePayload,
@@ -44,7 +42,7 @@ function cancelValueFor(kind: PiUiRequestKind): string | boolean | undefined {
 function requestUi(
   ctx: UiRequestContext,
   kind: PiUiRequestKind,
-  params: { title: string; message?: string; options?: string[]; placeholder?: string },
+  params: { title: string; message?: string; options?: string[]; placeholder?: string; prefill?: string },
   opts?: ExtensionUIDialogOptions,
 ): Promise<string | boolean | undefined> {
   const cancelValue = cancelValueFor(kind);
@@ -59,6 +57,7 @@ function requestUi(
     message: params.message,
     options: params.options,
     placeholder: params.placeholder,
+    prefill: params.prefill,
     timeoutMs: opts?.timeout,
   };
   return new Promise((resolve) => {
@@ -93,12 +92,40 @@ export function cancelAllPendingUi(): void {
   for (const entry of [...pending.values()]) entry.finish(entry.cancelValue, true);
 }
 
+let currentState: PiExtensionUiState | undefined;
+
+function emptyUiState(ctx: UiRequestContext): PiExtensionUiState {
+  return { ...ctx, statuses: [], widgets: [], workingVisible: true };
+}
+
+function publishUiState(state: PiExtensionUiState): void {
+  currentState = state;
+  sendHostEvent('piRuntime', 'uiState', state);
+}
+
+export function resetExtensionUiState(ctx: UiRequestContext): void {
+  publishUiState(emptyUiState(ctx));
+}
+
+export function getExtensionUiStateSnapshot(ctx: UiRequestContext): PiExtensionUiState {
+  if (!currentState || currentState.sessionId !== ctx.sessionId || currentState.generation !== ctx.generation) {
+    currentState = emptyUiState(ctx);
+  }
+  return currentState;
+}
+
 /**
  * 构造传给 session.bindExtensions 的 uiContext。
  * 传入后 runner.hasUI() === true（uiContext !== noOpUIContext），扩展的
  * ctx.ui.confirm/select/input 才真正可用（print 模式默认无 UI）。
  */
 export function createExtensionUIContext(getCtx: () => UiRequestContext): ExtensionUIContext {
+  let state = emptyUiState(getCtx());
+  publishUiState(state);
+  const update = (patch: Partial<PiExtensionUiState>) => {
+    state = { ...state, ...getCtx(), ...patch };
+    publishUiState(state);
+  };
   return {
     select: async (title: string, options: string[], opts?: ExtensionUIDialogOptions) =>
       (await requestUi(getCtx(), 'select', { title, options }, opts)) as string | undefined,
@@ -106,18 +133,29 @@ export function createExtensionUIContext(getCtx: () => UiRequestContext): Extens
       (await requestUi(getCtx(), 'confirm', { title, message }, opts)) === true,
     input: async (title: string, placeholder?: string, opts?: ExtensionUIDialogOptions) =>
       (await requestUi(getCtx(), 'input', { title, placeholder }, opts)) as string | undefined,
-    // 忽略：壳暂无 toast 基础设施
-    notify: () => {},
-    // 不支持多行编辑器：取消语义（见文件头说明）
-    editor: async () => undefined,
+    editor: async (title: string, prefill?: string) =>
+      (await requestUi(getCtx(), 'editor', { title, prefill })) as string | undefined,
+    notify: (message: string, level: 'info' | 'warning' | 'error' = 'info') => {
+      sendHostEvent('piRuntime', 'uiNotification', { ...getCtx(), message, level });
+    },
     // —— TUI 专属能力：安全 no-op ——
     onTerminalInput: () => () => {},
-    setStatus: () => {},
-    setWorkingMessage: () => {},
-    setWorkingVisible: () => {},
+    setStatus: (key: string, text: string | undefined) => {
+      const statuses = new Map(state.statuses.map((entry) => [entry.key, entry.text]));
+      if (text === undefined) statuses.delete(key);
+      else statuses.set(key, text);
+      update({ statuses: [...statuses].map(([statusKey, statusText]) => ({ key: statusKey, text: statusText })) });
+    },
+    setWorkingMessage: (workingMessage?: string) => update({ workingMessage }),
+    setWorkingVisible: (workingVisible: boolean) => update({ workingVisible }),
     setWorkingIndicator: () => {},
-    setHiddenThinkingLabel: () => {},
-    setWidget: () => {},
+    setHiddenThinkingLabel: (hiddenThinkingLabel?: string) => update({ hiddenThinkingLabel }),
+    setWidget: (key: string, content: unknown, options?: { placement?: 'aboveEditor' | 'belowEditor' }) => {
+      const widgets = new Map(state.widgets.map((widget) => [widget.key, widget]));
+      if (!Array.isArray(content) || !content.every((line) => typeof line === 'string')) widgets.delete(key);
+      else widgets.set(key, { key, lines: content, placement: options?.placement ?? 'aboveEditor' });
+      update({ widgets: [...widgets.values()] });
+    },
     setFooter: () => {},
     setHeader: () => {},
     setTitle: () => {},

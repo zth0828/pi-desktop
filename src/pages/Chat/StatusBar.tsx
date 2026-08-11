@@ -26,6 +26,7 @@ export function StatusBar() {
   const retry = useChatStore((s) => s.retry);
   const compaction = useChatStore((s) => s.compaction);
   const queue = useChatStore((s) => s.queue);
+  const extensionUi = useChatStore((s) => s.extensionUi);
   const [, setTick] = useState(0);
 
   // retry 倒计时：按 delayMs 本地倒数（pi 不会在倒计时期间再发事件）
@@ -63,12 +64,13 @@ export function StatusBar() {
             }),
       title: retry.errorMessage,
     };
-  } else if (isStreaming) {
-    status = { testid: 'status-working', text: t('chat.status.working') };
+  } else if (isStreaming && extensionUi?.workingVisible !== false) {
+    status = { testid: 'status-working', text: extensionUi?.workingMessage ?? t('chat.status.working') };
   }
 
   const hasQueue = queue.steering.length > 0 || queue.followUp.length > 0;
-  if (!status && !hasQueue) return null;
+  const extensionStatuses = extensionUi?.statuses ?? [];
+  if (!status && !hasQueue && extensionStatuses.length === 0) return null;
 
   return (
     <div className="status-bar" data-testid="status-bar">
@@ -80,6 +82,11 @@ export function StatusBar() {
           </span>
         )}
       </div>
+      {extensionStatuses.length > 0 && (
+        <div className="status-bar-extensions" data-testid="extension-statuses">
+          {extensionStatuses.map((entry) => <span key={entry.key}>{entry.text}</span>)}
+        </div>
+      )}
       {hasQueue && (
         <div className="status-bar-queue">
           <QueueChip kind="steering" items={queue.steering} />

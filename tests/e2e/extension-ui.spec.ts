@@ -20,12 +20,17 @@ export default function (pi: any) {
   pi.registerCommand('e2e-ui', {
     description: 'E2E extension UI bridge test',
     handler: async (_args: string, ctx: any) => {
+      ctx.ui.setStatus('e2e', 'Extension ready');
+      ctx.ui.setWorkingMessage('Extension is working');
+      ctx.ui.setWidget('e2e-widget', ['Extension widget', 'Second line'], { placement: 'aboveEditor' });
+      ctx.ui.notify('Extension notification', 'info');
       const ok = await ctx.ui.confirm('E2E Confirm Title', 'Proceed with E2E?');
       const choice = await ctx.ui.select('E2E Select Title', ['Red', 'Green', 'Blue']);
       const text = await ctx.ui.input('E2E Input Title', 'type something');
+      const edited = await ctx.ui.editor('E2E Editor Title', 'first line\\nsecond line');
       writeFileSync(
         join(ctx.cwd, 'e2e-ui-result.json'),
-        JSON.stringify({ ok, choice: choice ?? null, text: text ?? null }),
+        JSON.stringify({ mode: ctx.mode, ok, choice: choice ?? null, text: text ?? null, edited: edited ?? null }),
       );
     },
   });
@@ -100,7 +105,7 @@ async function triggerCommand(page: import('@playwright/test').Page) {
 }
 
 /** 扩展 handler 走完三个对话框后落盘的结果 */
-async function readResult(): Promise<{ ok: boolean; choice: string | null; text: string | null }> {
+async function readResult(): Promise<{ mode: string; ok: boolean; choice: string | null; text: string | null; edited: string | null }> {
   return JSON.parse(await readFile(resultFile, 'utf-8'));
 }
 
@@ -111,6 +116,10 @@ test('confirm/select/input 全流程：对话框出现，用户操作回传扩�
   await rm(resultFile, { force: true });
 
   await triggerCommand(page);
+
+  await expect(page.getByTestId('extui-notification')).toContainText('Extension notification');
+  await expect(page.getByTestId('extension-statuses')).toContainText('Extension ready');
+  await expect(page.getByTestId('extension-widgets-aboveEditor')).toContainText('Extension widget');
 
   // 1) confirm：标题 + 正文 + 确认
   const dialog = page.getByTestId('extui-dialog');
@@ -132,11 +141,26 @@ test('confirm/select/input 全流程：对话框出现，用户操作回传扩�
   await page.getByTestId('extui-input').fill('hello from shell');
   await page.getByTestId('extui-submit').click();
 
+  // 4) editor：多行 prefill 可编辑并提交
+  await expect(dialog).toHaveAttribute('data-kind', 'editor');
+  await expect(dialog).toContainText('E2E Editor Title');
+  const editor = page.getByTestId('extui-editor');
+  await expect(editor).toHaveValue('first line\nsecond line');
+  await page.screenshot({ path: 'output/playwright/extension-ui-editor.png', fullPage: false });
+  await editor.fill('edited line 1\nedited line 2');
+  await page.getByTestId('extui-submit').click();
+
   // 队列清空，对话框消失；扩展拿到三个结果并落盘
   await expect(dialog).toHaveCount(0);
   await expect
     .poll(async () => readResult().catch(() => null), { timeout: 30_000 })
-    .toEqual({ ok: true, choice: 'Green', text: 'hello from shell' });
+    .toEqual({
+      mode: 'print',
+      ok: true,
+      choice: 'Green',
+      text: 'hello from shell',
+      edited: 'edited line 1\nedited line 2',
+    });
 });
 
 test('取消路径：confirm 取消 → false，select/input 取消 → undefined', async ({
@@ -159,8 +183,11 @@ test('取消路径：confirm 取消 → false，select/input 取消 → undefine
   await expect(dialog).toHaveAttribute('data-kind', 'input');
   await page.getByTestId('extui-cancel').click();
 
+  await expect(dialog).toHaveAttribute('data-kind', 'editor');
+  await page.getByTestId('extui-cancel').click();
+
   await expect(dialog).toHaveCount(0);
   await expect
     .poll(async () => readResult().catch(() => null), { timeout: 30_000 })
-    .toEqual({ ok: false, choice: null, text: null });
+    .toEqual({ mode: 'print', ok: false, choice: null, text: null, edited: null });
 });

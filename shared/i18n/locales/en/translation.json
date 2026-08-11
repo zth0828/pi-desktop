@@ -294,6 +294,15 @@
   "models": {
     "title": "Providers & Models",
     "modelCount": "{{count}} models",
+    "refresh": "Refresh pi model catalogs",
+    "refreshComplete": "Model catalogs refreshed.",
+    "source": {
+      "builtin": "Built in",
+      "config": "models.json",
+      "extension": "Extension"
+    },
+    "modelMeta": "{{api}} · context {{context}} · max output {{output}}",
+    "pricing": "Per 1M tokens: input {{input}}, output {{output}}, cache read {{cacheRead}}, cache write {{cacheWrite}}",
     "keyPlaceholder": "API key",
     "saveKey": "Save key",
     "removeKey": "Remove credential",
@@ -468,6 +477,7 @@
     "newChat": "New chat"
   },
   "extui": {
+    "dismiss": "Dismiss",
     "confirm": "Confirm",
     "cancel": "Cancel",
     "ok": "OK",

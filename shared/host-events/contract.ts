@@ -4,6 +4,8 @@
  */
 import type { PiRuntimeEventEnvelope } from '../pi-event-map';
 import type {
+  PiExtensionUiNotification,
+  PiExtensionUiState,
   PiOAuthProgressEvent,
   PiPackageProgressEvent,
   PiRuntimeStateResult,
@@ -28,6 +30,10 @@ export type HostEventContract = {
     uiRequest: (payload: PiUiRequestPayload) => void;
     /** 扩展 UI 请求被取消（超时/signal abort/会话替换），渲染层移除对应对话框 */
     uiCancel: (payload: { requestId: string }) => void;
+    /** 可序列化扩展 UI（状态、working 文案、文本 widget）的完整快照。 */
+    uiState: (payload: PiExtensionUiState) => void;
+    /** ctx.ui.notify 的壳内通知。 */
+    uiNotification: (payload: PiExtensionUiNotification) => void;
   };
   providers: {
     /** OAuth 授权进度（授权 URL 等），由 pi provider-owned 流程发出 */
@@ -63,6 +69,8 @@ export const HOST_EVENT_CHANNELS = {
     sessionReplaced: 'pi-runtime:session-replaced',
     uiRequest: 'pi-runtime:ui-request',
     uiCancel: 'pi-runtime:ui-cancel',
+    uiState: 'pi-runtime:ui-state',
+    uiNotification: 'pi-runtime:ui-notification',
   },
   providers: {
     oauthProgress: 'providers:oauth-progress',

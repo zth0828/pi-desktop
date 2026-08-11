@@ -99,6 +99,26 @@ test.beforeEach(async () => {
       },
     }),
   );
+  const providerExtensionDir = path.join(agentDir, 'extensions', 'e2e-provider');
+  await mkdir(providerExtensionDir, { recursive: true });
+  await writeFile(path.join(providerExtensionDir, 'index.ts'), `
+export default function (pi: any) {
+  pi.registerProvider('extension-models', {
+    baseUrl: 'http://127.0.0.1:${mockPort}/v1',
+    apiKey: 'extension-key',
+    api: 'openai-completions',
+    models: [{
+      id: 'extension-1',
+      name: 'Extension Model 1',
+      reasoning: false,
+      input: ['text'],
+      cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 1.25 },
+      contextWindow: 64000,
+      maxTokens: 4096,
+    }],
+  });
+}
+`);
   await writeFile(
     path.join(agentDir, 'settings.json'),
     JSON.stringify({ defaultProvider: 'mock', defaultModel: 'mock-1' }),
@@ -224,6 +244,27 @@ test('聊天页模型菜单按供应商分组', async ({ launchElectronApp }) =>
   });
   await expect(mockGroup).toHaveCount(1);
   await expect(mockGroup.getByTestId('model-option')).toHaveCount(2);
+  const extensionGroup = submenu.locator('> div', {
+    has: page.locator('.model-group-label', { hasText: 'extension-models' }),
+  });
+  await expect(extensionGroup.getByTestId('model-option')).toHaveText(['Extension Model 1']);
+});
+
+test('Models 页标识扩展供应商并展示 pi 模型协议与费率', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await page.getByTestId('nav-models').click();
+
+  const row = page.getByTestId('provider-extension-models');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(row.locator('.provider-source')).toHaveText('Extension');
+  await row.locator('.provider-row-header').click();
+  await expect(page.getByTestId('provider-model-extension-models-extension-1')).toBeVisible();
+  await expect(page.getByTestId('provider-model-meta-extension-models-extension-1')).toContainText('openai-completions');
+  await expect(page.getByTestId('provider-model-meta-extension-models-extension-1')).toContainText('cache read $0.1');
+  await expect(page.getByTestId('refresh-models')).toBeVisible();
+  await page.getByTestId('provider-model-extension-models-extension-1').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'output/playwright/models-extension-provider.png', fullPage: false });
 });
 
 test('LM Studio：自动发现模型并同步视觉能力与真实上下文', async ({ launchElectronApp }) => {

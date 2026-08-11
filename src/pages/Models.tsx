@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { RefreshCw } from 'lucide-react';
 import type { PiDefaultModel, PiModelRow, PiProviderRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
@@ -30,6 +31,10 @@ function modelDisplayName(model: PiModelRow, provider: PiProviderRow): string {
     }
   }
   return name;
+}
+
+function formatRate(rate: number): string {
+  return rate === 0 ? '$0' : `$${rate.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
 }
 
 function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChanged }: ProviderRowProps) {
@@ -97,6 +102,7 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
         />
         <span className="provider-name">{provider.name}</span>
         <span className="hint">{provider.id}</span>
+        <span className="provider-source">{t(`models.source.${provider.source}`)}</span>
         <span className="spacer" />
         <span
           className={provider.configured ? 'provider-state configured' : 'provider-state'}
@@ -144,8 +150,26 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                     key={m.id}
                     data-testid={`provider-model-${provider.id}-${m.id}`}
                   >
-                    <span className="provider-model-name">{modelDisplayName(m, provider)}</span>
-                    {m.name && m.name !== m.id && <span className="hint">{m.id}</span>}
+                    <div className="provider-model-main">
+                      <div>
+                        <span className="provider-model-name">{modelDisplayName(m, provider)}</span>
+                        {m.name && m.name !== m.id && <span className="hint">{m.id}</span>}
+                      </div>
+                      <span className="provider-model-meta" data-testid={`provider-model-meta-${provider.id}-${m.id}`}>
+                        {t('models.modelMeta', {
+                          api: m.api,
+                          context: m.contextWindow?.toLocaleString() ?? '—',
+                          output: m.maxTokens?.toLocaleString() ?? '—',
+                        })}
+                        {' · '}
+                        {t('models.pricing', {
+                          input: formatRate(m.cost.input),
+                          output: formatRate(m.cost.output),
+                          cacheRead: formatRate(m.cost.cacheRead),
+                          cacheWrite: formatRate(m.cost.cacheWrite),
+                        })}
+                      </span>
+                    </div>
                     <span className="spacer" />
                     {isDefault(m.id) ? (
                       <span
@@ -314,6 +338,8 @@ export default function ModelsPage() {
   const [error, setError] = useState<string>();
   const [query, setQuery] = useState('');
   const [oauthMessages, setOauthMessages] = useState<string[]>([]);
+  const [refreshingCatalog, setRefreshingCatalog] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string>();
 
   const refresh = () => {
     setLoading(true);
@@ -338,9 +364,30 @@ export default function ModelsPage() {
     });
   }, []);
 
+  const refreshCatalog = async () => {
+    setRefreshingCatalog(true);
+    setRefreshMessage(undefined);
+    const result = await hostApi.providers.refresh();
+    setRefreshingCatalog(false);
+    setRefreshMessage(result.success ? t('models.refreshComplete') : result.error);
+    refresh();
+  };
+
   return (
     <div className="models-page">
-      <h2>{t('models.title')}</h2>
+      <div className="models-header">
+        <h2>{t('models.title')}</h2>
+        <button
+          className="icon-button"
+          data-testid="refresh-models"
+          title={t('models.refresh')}
+          aria-label={t('models.refresh')}
+          disabled={refreshingCatalog}
+          onClick={() => void refreshCatalog()}
+        >
+          <RefreshCw size={16} className={refreshingCatalog ? 'spin' : ''} />
+        </button>
+      </div>
       <input
         className="search-input"
         data-testid="models-search"
@@ -353,6 +400,7 @@ export default function ModelsPage() {
           {t('models.oauthStarted')}
         </div>
       )}
+      {refreshMessage && <div className="hint" data-testid="models-refresh-message">{refreshMessage}</div>}
       {loading && (
         <p className="hint" data-testid="models-loading">
           {t('states.loading')}

@@ -2,6 +2,9 @@
 // App 级挂载（扩展 UI 不一定发生在聊天上下文）；队列在 chat store，这里只取队首。
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { X } from 'lucide-react';
+import type { PiExtensionUiNotification } from '@shared/host-api/contract';
+import { onHostEvent } from '../lib/host-events';
 import { useChatStore } from '../stores/chat';
 
 export function ExtensionUiDialog() {
@@ -14,7 +17,7 @@ export function ExtensionUiDialog() {
   const requestId = req?.requestId;
   const timeoutMs = req?.timeoutMs;
   // 切换请求时重置输入草稿
-  useEffect(() => setText(''), [requestId]);
+  useEffect(() => setText(req?.prefill ?? ''), [requestId, req?.prefill]);
   // 超时倒计时（展示用；到期由 main 侧 timer 兜底取消并发 uiCancel）
   useEffect(() => {
     if (!timeoutMs) {
@@ -69,6 +72,15 @@ export function ExtensionUiDialog() {
             }}
           />
         )}
+        {req.kind === 'editor' && (
+          <textarea
+            className="extui-editor"
+            data-testid="extui-editor"
+            value={text}
+            autoFocus
+            onChange={(e) => setText(e.target.value)}
+          />
+        )}
         <div className="extui-footer">
           {remaining !== null && (
             <span className="extui-countdown">{t('extui.countdown', { seconds: remaining })}</span>
@@ -85,7 +97,7 @@ export function ExtensionUiDialog() {
               {t('extui.confirm')}
             </button>
           )}
-          {req.kind === 'input' && (
+          {(req.kind === 'input' || req.kind === 'editor') && (
             <button
               className="btn primary"
               data-testid="extui-submit"
@@ -96,6 +108,26 @@ export function ExtensionUiDialog() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+export function ExtensionUiNotifications() {
+  const { t } = useTranslation();
+  const [notification, setNotification] = useState<PiExtensionUiNotification | null>(null);
+  useEffect(() => onHostEvent('piRuntime', 'uiNotification', (next) => {
+    const current = useChatStore.getState();
+    if (next.sessionId !== current.sessionId || next.generation !== current.generation) return;
+    setNotification(next);
+    window.setTimeout(() => setNotification((current) => current === next ? null : current), 5000);
+  }), []);
+  if (!notification) return null;
+  return (
+    <div className={`extui-toast ${notification.level}`} data-testid="extui-notification">
+      <span>{notification.message}</span>
+      <button title={t('extui.dismiss')} aria-label={t('extui.dismiss')} onClick={() => setNotification(null)}>
+        <X size={14} />
+      </button>
     </div>
   );
 }

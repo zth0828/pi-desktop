@@ -43,6 +43,8 @@ import { syncLmStudioModels } from '../utils/lmstudio-models';
 import {
   cancelAllPendingUi,
   createExtensionUIContext,
+  getExtensionUiStateSnapshot,
+  resetExtensionUiState,
   resolveUiResponse,
 } from './extension-ui';
 import { captureReviewBaseline, clearReviewBaseline } from './review-api';
@@ -180,6 +182,10 @@ function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
     messageEntryIds: messageEntryIds(session),
     sessionFile: session.sessionFile,
     contextUsage: contextUsage(session),
+    extensionUi: getExtensionUiStateSnapshot({
+      sessionId: runtime.sessionId,
+      generation: runtime.generation,
+    }),
   };
 }
 
@@ -204,7 +210,7 @@ function bridgeSessionEvents(runtime: ActiveRuntime): void {
 async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
   const session = runtime.runtime.session;
   // Spike B 结论：不调 bindExtensions 扩展收不到 session_start（MCP 等全部失效）。
-  // mode 用 'print'（无 TUI，与 pi 自己的 headless 模式一致）。
+  // 沿用 pi 的 print 宿主模式；桌面交互能力由显式 uiContext 提供。
   // uiContext 桥接 confirm/select/input 到渲染层对话框（electron/services/extension-ui.ts），
   // 不传则 hasUI=false，权限确认/plan mode/question 类扩展无法工作。
   await session.bindExtensions({
@@ -653,6 +659,7 @@ export const piRuntimeApi = {
     if (session.isStreaming) return { success: false, error: 'session is streaming' };
     if (session.isCompacting) return { success: false, error: 'session is compacting' };
     try {
+      resetExtensionUiState({ sessionId: active.sessionId, generation: active.generation });
       await session.reload();
       // TUI /reload 后 rebuildChatFromMessages + 重建补全源；壳推全量状态（渲染层重取命令列表）
       sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));

@@ -16,7 +16,7 @@ import { hostApi } from './lib/host-api';
 import { onNavigateToPage } from './lib/app-navigation';
 import { initTheme } from './lib/theme';
 import { SessionList } from './components/SessionList';
-import { ExtensionUiDialog } from './components/ExtensionUiDialog';
+import { ExtensionUiDialog, ExtensionUiNotifications } from './components/ExtensionUiDialog';
 import Onboarding from './pages/Onboarding';
 import ChatPage from './pages/Chat';
 import ModelsPage from './pages/Models';
@@ -134,6 +134,7 @@ export default function App() {
         ) : null}
       </main>
       <ExtensionUiDialog />
+      <ExtensionUiNotifications />
     </div>
   );
 }

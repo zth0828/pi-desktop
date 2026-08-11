@@ -26,6 +26,10 @@ type ModelRuntime = Awaited<ReturnType<PiSdk['ModelRuntime']['create']>>;
 let runtimePromise: Promise<ModelRuntime> | null = null;
 
 async function getModelRuntime(): Promise<{ sdk: PiSdk; runtime: ModelRuntime }> {
+  const active = await getActiveRuntimeReady();
+  if (active) {
+    return { sdk: active.sdk, runtime: active.runtime.services.modelRuntime };
+  }
   const sdk = await loadPiSdk();
   if (await syncLmStudioModels(sdk.getAgentDir())) runtimePromise = null;
   runtimePromise ??= sdk.ModelRuntime.create();
@@ -72,6 +76,7 @@ export const providersApi = {
   list: async (): Promise<PiProviderListResult> => {
     const { sdk, runtime } = await getModelRuntime();
     const configuredProvidersById = configuredProviders(sdk.getAgentDir());
+    const extensionProviderIds = new Set(runtime.getRegisteredProviderIds());
     const rows: PiProviderRow[] = [];
     for (const provider of runtime.getProviders()) {
       let configured = false;
@@ -84,6 +89,11 @@ export const providersApi = {
       rows.push({
         id: provider.id,
         name: providerLabel(provider.id, provider.name, configuredProvidersById[provider.id]?.baseUrl),
+        source: extensionProviderIds.has(provider.id)
+          ? 'extension'
+          : configuredProvidersById[provider.id]
+            ? 'config'
+            : 'builtin',
         authMethods: [auth.apiKey ? 'api_key' : null, auth.oauth ? 'oauth' : null].filter(
           (m): m is string => m !== null,
         ),
@@ -109,12 +119,30 @@ export const providersApi = {
         ),
         id: m.id,
         name: m.name,
+        api: m.api,
         reasoning: m.reasoning,
         input: m.input,
         contextWindow: m.contextWindow,
         maxTokens: m.maxTokens,
+        cost: { ...m.cost },
       })),
     };
+  },
+
+  refresh: async () => {
+    const { runtime } = await getModelRuntime();
+    const signal = AbortSignal.timeout(15_000);
+    try {
+      const result = await runtime.refresh({ allowNetwork: true, force: true, signal });
+      const errors = [...result.errors].map(([providerId, error]) => `${providerId}: ${error.message}`);
+      return {
+        success: errors.length === 0 && !result.aborted,
+        ...(result.aborted ? { aborted: true, error: 'model refresh timed out' } : {}),
+        ...(errors.length > 0 ? { errors, error: errors.join('\n') } : {}),
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   },
 
   setApiKey: async (payload: PiProviderSetKeyPayload): Promise<HostSuccess> => {
@@ -189,6 +217,8 @@ export const providersApi = {
       mkdirSync(agentDir, { recursive: true });
       writeFileSync(modelsPath, JSON.stringify(doc, null, 2));
       invalidateModelRuntime();
+      const active = await getActiveRuntimeReady();
+      if (active) await active.runtime.services.modelRuntime.refresh({ allowNetwork: false });
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };

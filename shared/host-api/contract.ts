@@ -137,6 +137,7 @@ export type PiRuntimeStateResult = {
   messageEntryIds: (string | null)[];
   sessionFile?: string;
   contextUsage?: PiRuntimeContextUsage;
+  extensionUi?: PiExtensionUiState;
 };
 
 // —— piRuntime 消息级 fork / 分支导航（/tree）——
@@ -189,7 +190,30 @@ export type PiRuntimeSessionInfo = {
 
 // —— piRuntime 扩展 UI 桥（ctx.ui.confirm/select/input → 渲染层对话框）——
 
-export type PiUiRequestKind = 'confirm' | 'select' | 'input';
+export type PiUiRequestKind = 'confirm' | 'select' | 'input' | 'editor';
+
+export type PiExtensionUiWidget = {
+  key: string;
+  lines: string[];
+  placement: 'aboveEditor' | 'belowEditor';
+};
+
+export type PiExtensionUiState = {
+  sessionId: string;
+  generation: number;
+  statuses: Array<{ key: string; text: string }>;
+  widgets: PiExtensionUiWidget[];
+  workingMessage?: string;
+  workingVisible: boolean;
+  hiddenThinkingLabel?: string;
+};
+
+export type PiExtensionUiNotification = {
+  sessionId: string;
+  generation: number;
+  message: string;
+  level: 'info' | 'warning' | 'error';
+};
 
 export type PiUiRequestPayload = {
   /** 请求 id：响应按它配对，迟到/过期响应幂等忽略 */
@@ -205,6 +229,8 @@ export type PiUiRequestPayload = {
   options?: string[];
   /** input 的占位符 */
   placeholder?: string;
+  /** editor 的初始多行文本 */
+  prefill?: string;
   /** 扩展传入的超时（ExtensionUIDialogOptions.timeout），到期 main 侧按取消兜底 */
   timeoutMs?: number;
 };
@@ -316,6 +342,7 @@ export type NotifyDispatchPayload = {
 export type PiProviderRow = {
   id: string;
   name: string;
+  source: 'builtin' | 'config' | 'extension';
   authMethods: string[];
   configured: boolean;
   modelCount: number;
@@ -327,10 +354,16 @@ export type PiModelRow = {
   providerLabel?: string;
   id: string;
   name?: string;
+  api: string;
   reasoning?: boolean;
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
+  cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+};
+export type PiProviderRefreshResult = HostSuccess & {
+  aborted?: boolean;
+  errors?: string[];
 };
 export type PiProviderAddCustomPayload = {
   id: string;
@@ -637,6 +670,8 @@ export type HostApiContract = {
   providers: {
     list: () => PiProviderListResult;
     listModels: () => { models: PiModelRow[] };
+    /** 经 pi ModelRuntime 刷新动态/远程 catalog；失败时保留 pi 的缓存模型。 */
+    refresh: () => PiProviderRefreshResult;
     setApiKey: (payload: PiProviderSetKeyPayload) => HostSuccess;
     removeCredential: (payload: { providerId: string }) => HostSuccess;
     startOAuth: (payload: { providerId: string }) => HostSuccess;

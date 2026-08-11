@@ -50,6 +50,7 @@ export const hostApi = {
   providers: {
     list: () => invokeHost('providers', 'list'),
     listModels: () => invokeHost('providers', 'listModels'),
+    refresh: () => invokeHost('providers', 'refresh'),
     setApiKey: (providerId: string, apiKey: string) =>
       invokeHost('providers', 'setApiKey', { providerId, apiKey }),
     removeCredential: (providerId: string) =>
