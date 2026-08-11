@@ -196,6 +196,8 @@
     },
     "attachFile": "添加图片或文本文件",
     "removeAttachment": "移除附件",
+    "imageAttachment": "附件 {{index}}，图片 {{name}}",
+    "imageNumber": "图片 {{index}}",
     "model": "选择模型",
     "tokenUsage": "Token 使用情况",
     "currentModelUsage": "当前模型",

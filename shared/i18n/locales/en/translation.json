@@ -196,6 +196,8 @@
     },
     "attachFile": "Attach image or text file",
     "removeAttachment": "Remove attachment",
+    "imageAttachment": "Attachment {{index}}, image {{name}}",
+    "imageNumber": "Image {{index}}",
     "model": "Select model",
     "tokenUsage": "Token usage",
     "currentModelUsage": "Current model",

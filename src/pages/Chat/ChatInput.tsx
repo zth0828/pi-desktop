@@ -1,13 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, Folder, ListPlus, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
+import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, FileText, Folder, ListPlus, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
 import type {
   PiCommandRow,
   PiModelRow,
   PiRuntimeSessionInfo,
   PiRuntimeUsageResult,
 } from '@shared/host-api/contract';
-import { formatFileBlock, isProbablyBinary, MAX_FILE_TEXT_BYTES } from '@shared/file-references';
+import { isProbablyBinary, MAX_FILE_TEXT_BYTES } from '@shared/file-references';
+import { formatOrderedAttachmentPrompt } from '@shared/message-attachments';
 import { hostApi } from '../../lib/host-api';
 import { filterFiles } from '../../lib/file-search';
 import { navigateToPage } from '../../lib/app-navigation';
@@ -17,8 +18,9 @@ import { useChatStore, type ChatMessage } from '../../stores/chat';
 import { ImageLightbox } from './ImageLightbox';
 import { QueueList } from './QueueList';
 
-type StagedImage = { data: string; mediaType: string; previewUrl: string };
-type StagedFile = { name: string; text: string };
+type StagedImage = { kind: 'image'; name: string; data: string; mediaType: string; previewUrl: string };
+type StagedFile = { kind: 'file'; name: string; text: string };
+type StagedAttachment = StagedImage | StagedFile;
 
 /** 光标处的 @ token（@ 前需行首/空白，对齐 pi-tui 编辑器触发规则） */
 type AtToken = { start: number; end: number; query: string };
@@ -63,6 +65,8 @@ function fileToStagedImage(file: File): Promise<StagedImage> {
     reader.onload = () => {
       const dataUrl = String(reader.result);
       resolveFile({
+        kind: 'image',
+        name: file.name,
         data: dataUrl.split(',')[1] ?? '',
         mediaType: file.type || 'image/png',
         previewUrl: dataUrl,
@@ -114,9 +118,8 @@ function lastAssistantText(messages: ChatMessage[]): string | null {
 export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
-  const [images, setImages] = useState<StagedImage[]>([]);
+  const [attachments, setAttachments] = useState<StagedAttachment[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [commands, setCommands] = useState<PiCommandRow[]>([]);
   const [selected, setSelected] = useState(0);
   const [atToken, setAtToken] = useState<AtToken | null>(null);
@@ -459,15 +462,14 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
 
   const send = (behavior?: 'steer' | 'followUp') => {
     const text = value.trim();
-    if (!text && images.length === 0 && stagedFiles.length === 0) return;
-    const outgoing = images;
-    // 附件文本文件：照 pi file-processor 的 <file name> 块前置于 prompt
-    const filePrefix = stagedFiles.map((f) => formatFileBlock(f.name, f.text)).join('');
+    if (!text && attachments.length === 0) return;
+    const outgoingAttachments = attachments;
+    const outgoing = outgoingAttachments.filter((attachment): attachment is StagedImage => attachment.kind === 'image');
+    const promptText = formatOrderedAttachmentPrompt(text, outgoingAttachments);
     setValue('');
-    setImages([]);
-    setStagedFiles([]);
+    setAttachments([]);
     // 壳内置命令直接执行，不发给 pi（其余 /xxx 由 pi 展开：prompt 模板/skill/扩展命令）
-    if (text.startsWith('/') && outgoing.length === 0 && stagedFiles.length === 0) {
+    if (text.startsWith('/') && outgoingAttachments.length === 0) {
       const spaceIndex = text.indexOf(' ');
       const name = (spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex)).toLowerCase();
       if (SHELL_BUILTIN_NAMES.has(name)) {
@@ -479,7 +481,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       ? sessionTitleFromQuestion(text, t('chat.imageSessionTitle'))
       : null;
     void prompt(
-      filePrefix + text,
+      promptText,
       // pi ImageContent 是扁平结构 {type:'image', data, mimeType}
       outgoing.map((img) => ({ type: 'image', data: img.data, mimeType: img.mediaType })),
       behavior,
@@ -496,7 +498,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       if (file.type.startsWith('image/')) {
         try {
           const staged = await fileToStagedImage(file);
-          setImages((prev) => [...prev, staged]);
+          setAttachments((prev) => [...prev, staged]);
         } catch {
           // 忽略读不了的文件
         }
@@ -507,7 +509,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       try {
         const text = await file.text();
         if (isProbablyBinary(text)) continue;
-        setStagedFiles((prev) => [...prev, { name: file.name, text }]);
+        setAttachments((prev) => [...prev, { kind: 'file', name: file.name, text }]);
       } catch {
         // 忽略读不了的文件
       }
@@ -725,37 +727,36 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         </div>
       )}
       <div className="chat-input-card">
-        {stagedFiles.length > 0 && (
-          <div className="staged-files" data-testid="staged-files">
-            {stagedFiles.map((file, i) => (
-              <span key={file.name} className="staged-file" data-testid="staged-file">
-                {file.name}
-                <button
-                  className="staged-remove"
-                  onClick={() => setStagedFiles((prev) => prev.filter((_, j) => j !== i))}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        {images.length > 0 && (
-          <div className="staged-images" data-testid="staged-images">
-            {images.map((img, i) => (
-              <span key={i} className="staged-image">
+        {attachments.length > 0 && (
+          <div className="staged-attachments" data-testid="staged-attachments">
+            {attachments.map((attachment, index) => attachment.kind === 'image' ? (
+              <span key={`${attachment.name}-${index}`} className="staged-image" data-testid="staged-image" data-attachment-index={index + 1}>
                 <button
                   className="staged-image-preview"
                   data-testid="staged-image-preview"
-                  aria-label={t('chat.imagePreview')}
-                  onClick={() => setPreviewImage(img.previewUrl)}
+                  aria-label={t('chat.imageAttachment', { index: index + 1, name: attachment.name })}
+                  onClick={() => setPreviewImage(attachment.previewUrl)}
                 >
-                  <img src={img.previewUrl} alt={t('chat.imagePreview')} />
+                  <img src={attachment.previewUrl} alt={attachment.name} />
+                  <span className="attachment-order">{index + 1}</span>
                 </button>
                 <button
                   className="staged-remove"
                   aria-label={t('chat.removeAttachment')}
-                  onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
+                  onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+              </span>
+            ) : (
+              <span key={`${attachment.name}-${index}`} className="staged-file" data-testid="staged-file" data-attachment-index={index + 1}>
+                <span className="attachment-order">{index + 1}</span>
+                <FileText size={14} />
+                <span className="staged-file-name">{attachment.name}</span>
+                <button
+                  className="staged-remove"
+                  aria-label={t('chat.removeAttachment')}
+                  onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))}
                 >
                   <span aria-hidden="true">×</span>
                 </button>
@@ -954,7 +955,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 data-testid="chat-queue-send"
                 className="send-button"
                 onClick={(e) => send(resolveStreamBehavior(followupBehavior, e.altKey))}
-                disabled={!value.trim() && images.length === 0}
+                disabled={!value.trim() && attachments.length === 0}
                 title={
                   followupBehavior === 'steer' ? t('chat.queueSendTipSteer') : t('chat.queueSendTip')
                 }
@@ -976,7 +977,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
               data-testid="chat-send"
               className="send-button"
               onClick={() => send()}
-              disabled={!value.trim() && images.length === 0}
+              disabled={!value.trim() && attachments.length === 0}
               title={sendWith === 'cmdEnter' ? t('chat.sendTipCmdEnter') : t('chat.sendTip')}
             >
               <ArrowUp size={15} />

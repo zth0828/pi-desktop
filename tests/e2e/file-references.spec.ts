@@ -93,8 +93,11 @@ test('发送时 @path 展开为文件内容（mock 收到 <file> 块）', async 
   // 面板可能因尾部 @token 处于打开态，点发送按钮而不是 Enter（Enter 是选中候选）
   await page.getByTestId('chat-send').click();
 
-  // 用户消息 = 展开后的文本（Main 侧 prompt 前处理）
-  await expect(page.getByTestId('message-user').last()).toContainText('UNIQUE_FILE_TOKEN_12345');
+  // 展开的文件独立显示为附件卡，正文不再被文件内容污染。
+  const message = page.getByTestId('message-user').last();
+  await expect(message.getByTestId('message-file')).toContainText('hello-e2e.txt');
+  await expect(message.getByTestId('message-user-text')).toHaveText('ECHO_USER');
+  await expect(message.getByTestId('message-user-text')).not.toContainText('UNIQUE_FILE_TOKEN_12345');
   // mock 回显最后一条 user 消息：证明展开后的文件内容确实发给了 provider
   await expect(page.getByTestId('message-assistant').last()).toContainText(
     'UNIQUE_FILE_TOKEN_12345',
@@ -119,7 +122,9 @@ test('附件按钮接受文本文件 → 暂存 chip → 随 prompt 以 <file> �
   await page.getByTestId('chat-input').fill('ECHO_USER with attachment');
   await page.getByTestId('chat-send').click();
 
-  await expect(page.getByTestId('message-user').last()).toContainText('UNIQUE_ATTACH_TOKEN_67890');
+  const message = page.getByTestId('message-user').last();
+  await expect(message.getByTestId('message-file')).toContainText('attach-e2e.txt');
+  await expect(message.getByTestId('message-user-text')).not.toContainText('UNIQUE_ATTACH_TOKEN_67890');
   await expect(page.getByTestId('message-assistant').last()).toContainText(
     'UNIQUE_ATTACH_TOKEN_67890',
     { timeout: 30_000 },

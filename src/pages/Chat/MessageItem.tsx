@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Copy, FileText, GitFork } from 'lucide-react';
+import { parseUserMessage } from '@shared/message-attachments';
 import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
 import { formatDuration } from '../../lib/tool-display';
@@ -111,11 +112,52 @@ export function MessageItem({
   const [copied, setCopied] = useState<'text' | 'markdown' | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   if (message.role === 'user') {
-    const text = message.content
+    const rawText = message.content
       .filter((b) => b.type === 'text')
       .map((b) => b.text ?? '')
       .join('\n');
-    const images = message.content.filter((b) => b.type === 'image');
+    const parsed = parseUserMessage(rawText);
+    const images = message.content
+      .filter((b) => b.type === 'image')
+      .map((b) => {
+        // pi 的 ImageContent 是扁平 {data, mimeType}；兼容壳早期误存的 source 嵌套格式
+        const block = b as { data?: string; mimeType?: string; source?: { mediaType?: string; data?: string } };
+        const data = block.data ?? block.source?.data;
+        const mimeType = block.mimeType ?? block.source?.mediaType;
+        return data ? `data:${mimeType ?? 'image/png'};base64,${data}` : null;
+      });
+    const usedImages = new Set<number>();
+    const usedFiles = new Set<number>();
+    const orderedAttachments: Array<
+      | { kind: 'image'; index: number; name: string; url: string }
+      | { kind: 'file'; index: number; name: string }
+    > = [];
+    for (const attachment of parsed.attachments) {
+      if (attachment.kind === 'image') {
+        const imageOffset = (attachment.imageIndex ?? 0) - 1;
+        const url = images[imageOffset];
+        if (!url) continue;
+        usedImages.add(imageOffset);
+        orderedAttachments.push({ kind: 'image', index: attachment.index, name: attachment.name, url });
+        continue;
+      }
+      const fileOffset = parsed.files.findIndex((file, index) => file.name === attachment.name && !usedFiles.has(index));
+      if (fileOffset < 0) continue;
+      usedFiles.add(fileOffset);
+      orderedAttachments.push({ kind: 'file', index: attachment.index, name: attachment.name });
+    }
+    // Older Pi Desktop sessions have no manifest. Keep all legacy attachments visible.
+    let fallbackIndex = orderedAttachments.length;
+    images.forEach((url, index) => {
+      if (!url || usedImages.has(index)) return;
+      fallbackIndex += 1;
+      orderedAttachments.push({ kind: 'image', index: fallbackIndex, name: t('chat.imageNumber', { index: index + 1 }), url });
+    });
+    parsed.files.forEach((file, index) => {
+      if (usedFiles.has(index)) return;
+      fallbackIndex += 1;
+      orderedAttachments.push({ kind: 'file', index: fallbackIndex, name: file.name });
+    });
     return (
       <div className="message message-user" data-testid="message-user" id={anchorId}>
         {message.entryId && !isStreaming && (
@@ -128,20 +170,27 @@ export function MessageItem({
             <GitFork size={14} />
           </button>
         )}
-        <div className="message-bubble">
-          {images.map((b, i) => {
-            // pi 的 ImageContent 是扁平 {data, mimeType}；兼容壳早期误存的 source 嵌套格式
-            const block = b as { data?: string; mimeType?: string; source?: { mediaType?: string; data?: string } };
-            const data = block.data ?? block.source?.data;
-            const mimeType = block.mimeType ?? block.source?.mediaType;
-            const url = data ? `data:${mimeType ?? 'image/png'};base64,${data}` : undefined;
-            return url ? (
-              <button className="message-image-button" key={i} onClick={() => setPreviewImage(url)}>
-                <img className="message-image" data-testid="message-image" src={url} alt={t('chat.imagePreview')} />
-              </button>
-            ) : null;
-          })}
-          {text}
+        <div className="message-user-content">
+          {orderedAttachments.length > 0 && (
+            <div className="message-attachments" data-testid="message-attachments">
+              {orderedAttachments.map((attachment) => attachment.kind === 'image' ? (
+                <div className="message-attachment message-image-attachment" data-testid="message-attachment" data-attachment-index={attachment.index} key={`${attachment.index}-${attachment.name}`}>
+                  <button className="message-image-button" onClick={() => setPreviewImage(attachment.url)} aria-label={t('chat.imageAttachment', { index: attachment.index, name: attachment.name })}>
+                    <img className="message-image" data-testid="message-image" src={attachment.url} alt={attachment.name} />
+                    <span className="attachment-order">{attachment.index}</span>
+                  </button>
+                  <span className="message-attachment-name" title={attachment.name}>{attachment.name}</span>
+                </div>
+              ) : (
+                <div className="message-attachment message-file-attachment" data-testid="message-attachment" data-attachment-index={attachment.index} key={`${attachment.index}-${attachment.name}`}>
+                  <span className="attachment-order">{attachment.index}</span>
+                  <FileText size={18} />
+                  <span className="message-attachment-name" data-testid="message-file" title={attachment.name}>{attachment.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {parsed.text && <div className="message-bubble" data-testid="message-user-text">{parsed.text}</div>}
         </div>
         {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
       </div>

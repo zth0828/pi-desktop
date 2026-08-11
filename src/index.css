@@ -820,8 +820,17 @@ button.danger-outline {
   justify-content: flex-end;
 }
 
-.message-user .message-bubble {
+.message-user-content {
+  display: flex;
+  min-width: 0;
   max-width: 78%;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.message-user .message-bubble {
+  max-width: 100%;
   padding: 10px 15px;
   border-radius: 16px 16px 4px 16px;
   background: var(--accent);
@@ -832,12 +841,75 @@ button.danger-outline {
 }
 
 .message-image-button {
+  position: relative;
   display: block;
-  max-width: 100%;
-  margin-bottom: 7px;
+  padding: 0;
   overflow: hidden;
+  border: 1px solid var(--border);
   border-radius: 8px;
+  background: var(--bg-sunken);
   cursor: zoom-in;
+}
+
+.message-attachments {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.message-attachment {
+  position: relative;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.message-image-attachment {
+  width: 112px;
+}
+
+.message-attachment-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-image-attachment .message-attachment-name {
+  padding: 4px 2px 0;
+}
+
+.message-file-attachment {
+  display: grid;
+  width: min(210px, 100%);
+  min-height: 52px;
+  padding: 10px 12px 10px 34px;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+
+.attachment-order {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  z-index: 1;
+  display: grid;
+  width: 19px;
+  height: 19px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-raised);
+  color: var(--text);
+  font: 600 10px/1 var(--font-mono);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
 }
 
 .image-lightbox {
@@ -1959,13 +2031,7 @@ button.danger-outline {
 .model-context-default { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 12px; }
 .model-context-default input { width: 15px; height: 15px; margin: 0; padding: 0; accent-color: var(--accent); }
 
-.staged-images {
-  display: flex;
-  gap: 8px;
-  padding: 0 4px 8px;
-}
-
-.staged-files {
+.staged-attachments {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -1976,12 +2042,21 @@ button.danger-outline {
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  max-width: 220px;
+  padding: 7px 24px 7px 31px;
+  gap: 6px;
   font-size: 12px;
   font-family: var(--font-mono);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text-secondary);
+}
+
+.staged-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .staged-image {
@@ -2085,10 +2160,9 @@ button.danger-outline {
 
 .message-image {
   display: block;
-  max-width: 240px;
-  max-height: 180px;
-  border-radius: 8px;
-  margin-bottom: 6px;
+  width: 110px;
+  height: 82px;
+  object-fit: cover;
 }
 
 .markdown { min-width: 0; max-width: 100%; color: var(--text); }

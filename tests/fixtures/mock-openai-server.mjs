@@ -10,6 +10,7 @@
 //   "SLOW ..." → 30 个 chunk × 100ms 慢速流（用于 abort 测试）
 //   "FLAKE_429" → 首次请求返回 429（触发 pi 自动重试），后续正常 PONG
 //   "ECHO_USER" → 回显最后一条 user 消息（@文件 展开断言用）
+//   "ATTACHMENT_ORDER_CHECK" → 校验附件 manifest 与原生图片 parts 的顺序关系
 //   "CACHE_MISS" → 第一轮 usage 全量 cache_write，第二轮零缓存（缓存失效警告断言用）
 //   "REASONING_TURN" → 同一 assistant 消息返回 thinking + 最终文本（整回合折叠断言用）
 //   压缩摘要请求（含 "context checkpoint summary"）→ 12 个 chunk × 150ms 慢速流，
@@ -71,7 +72,8 @@ const server = http.createServer((req, res) => {
     const parsed = JSON.parse(body);
     const msgs = parsed.messages || [];
     const lastUserIdx = msgs.map((m) => m.role).lastIndexOf("user");
-    const lastUser = lastUserIdx >= 0 ? JSON.stringify(msgs[lastUserIdx]) : "";
+    const lastUserMessage = lastUserIdx >= 0 ? msgs[lastUserIdx] : null;
+    const lastUser = lastUserMessage ? JSON.stringify(lastUserMessage) : "";
     const hasToolResult = msgs.slice(lastUserIdx + 1).some((m) => m.role === "tool");
     const wantsTool = !hasToolResult && (
       lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") ||
@@ -104,6 +106,33 @@ const server = http.createServer((req, res) => {
       if (usage) chunk.usage = usage;
       sse(res, chunk);
     };
+
+    if (lastUser.includes("ATTACHMENT_ORDER_CHECK")) {
+      const parts = Array.isArray(lastUserMessage?.content) ? lastUserMessage.content : [];
+      const textPart = parts.find((part) => part?.type === "text")?.text ?? "";
+      const imageParts = parts.filter((part) => part?.type === "image_url");
+      const expected = [
+        '<attachment index="1" kind="image" name="first.png" image-index="1"></attachment>',
+        '<attachment index="2" kind="file" name="notes.txt"></attachment>',
+        '<attachment index="3" kind="image" name="second.png" image-index="2"></attachment>',
+      ];
+      let cursor = -1;
+      const manifestOrdered = expected.every((entry) => {
+        const next = textPart.indexOf(entry, cursor + 1);
+        if (next < 0) return false;
+        cursor = next;
+        return true;
+      });
+      const text = manifestOrdered && imageParts.length === 2
+        ? "ATTACHMENT_ORDER_OK images=2"
+        : `ATTACHMENT_ORDER_ERROR manifest=${manifestOrdered} images=${imageParts.length}`;
+      send({ role: "assistant", content: "" });
+      for (const ch of text) send({ content: ch });
+      send({}, "stop", { prompt_tokens: 10, completion_tokens: text.length, total_tokens: 10 + text.length });
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+    }
 
     // ECHO_USER：回显最后一条 user 消息（断言 @文件 展开后的内容确实到了 provider）
     if (lastUser.includes("ECHO_USER")) {

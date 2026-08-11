@@ -132,7 +132,7 @@ test('图片输入：附件入列 → 随消息发送 → 用户消息渲染图�
     mimeType: 'image/png',
     buffer: TINY_PNG,
   });
-  await expect(page.getByTestId('staged-images').locator('img')).toHaveCount(1);
+  await expect(page.getByTestId('staged-attachments').locator('img')).toHaveCount(1);
   await page.getByTestId('staged-image-preview').click();
   await expect(page.getByTestId('image-lightbox')).toBeVisible();
   await page.keyboard.press('Escape');
@@ -157,5 +157,58 @@ test('图片输入：附件入列 → 随消息发送 → 用户消息渲染图�
   await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
     timeout: 30_000,
   });
+  await rm(agentDir, { recursive: true, force: true });
+});
+
+test('混合附件：按上传顺序独立渲染，并向模型声明图片序号', async ({ launchElectronApp }) => {
+  const agentDir = await makeAgentDir();
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page = await app.firstWindow();
+  await expect(
+    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  await page.getByTestId('attach-input').setInputFiles([
+    { name: 'first.png', mimeType: 'image/png', buffer: TINY_PNG },
+    { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('ORDERED_FILE_CONTENT') },
+    { name: 'second.png', mimeType: 'image/png', buffer: TINY_PNG },
+  ]);
+  const staged = page.getByTestId('staged-attachments').locator('[data-attachment-index]');
+  await expect(staged).toHaveCount(3);
+  await expect(staged.nth(0)).toHaveAttribute('data-attachment-index', '1');
+  await expect(staged.nth(1)).toContainText('notes.txt');
+  await expect(staged.nth(2)).toHaveAttribute('data-attachment-index', '3');
+
+  const longText = `ATTACHMENT_ORDER_CHECK ${'Long text stays in its own surface. '.repeat(24)}`;
+  await page.getByTestId('chat-input').fill(longText);
+  await page.getByTestId('chat-send').click();
+
+  const message = page.getByTestId('message-user').last();
+  const sent = message.getByTestId('message-attachment');
+  await expect(sent).toHaveCount(3, { timeout: 15_000 });
+  await expect(sent.nth(0)).toContainText('first.png');
+  await expect(sent.nth(0)).toHaveAttribute('data-attachment-index', '1');
+  await expect(sent.nth(1)).toContainText('notes.txt');
+  await expect(sent.nth(1)).toHaveAttribute('data-attachment-index', '2');
+  await expect(sent.nth(2)).toContainText('second.png');
+  await expect(sent.nth(2)).toHaveAttribute('data-attachment-index', '3');
+  await expect(message.getByTestId('message-user-text')).toContainText('Long text stays in its own surface.');
+  await expect(message.getByTestId('message-user-text')).not.toContainText('<file');
+  await expect(page.getByTestId('message-assistant').last()).toContainText('ATTACHMENT_ORDER_OK images=2', { timeout: 30_000 });
+  await expect(page.locator('.session-title')).not.toContainText('<attachments>');
+
+  await page.setViewportSize({ width: 1180, height: 820 });
+  await page.screenshot({ path: 'output/playwright/ordered-attachments-desktop.png', fullPage: false });
+  await page.setViewportSize({ width: 760, height: 820 });
+  const messageBox = await message.boundingBox();
+  const viewport = page.viewportSize();
+  expect(messageBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(messageBox!.x + messageBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+  await page.screenshot({ path: 'output/playwright/ordered-attachments-narrow.png', fullPage: false });
   await rm(agentDir, { recursive: true, force: true });
 });
