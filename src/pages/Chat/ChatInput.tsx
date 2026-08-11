@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, Folder, ListPlus, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
 import type {
@@ -146,6 +146,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelMenuSection, setModelMenuSection] = useState<'models' | 'thinking' | null>(null);
   const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
+  const [composerScrollable, setComposerScrollable] = useState(false);
+  const [composerScrollbarActive, setComposerScrollbarActive] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const commandPanelRef = useRef<HTMLDivElement>(null);
   const filePanelRef = useRef<HTMLDivElement>(null);
@@ -153,6 +155,27 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const usageControlRef = useRef<HTMLDivElement>(null);
   const noticeTimerRef = useRef<number | null>(null);
+  const composerScrollTimerRef = useRef<number | null>(null);
+
+  const resizeComposer = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const maximum = Math.max(112, Math.min(260, Math.round(window.innerHeight * 0.32)));
+    textarea.style.height = 'auto';
+    const nextHeight = Math.min(textarea.scrollHeight, maximum);
+    textarea.style.height = `${nextHeight}px`;
+    const scrollable = textarea.scrollHeight > maximum + 1;
+    setComposerScrollable(scrollable);
+    if (!scrollable) setComposerScrollbarActive(false);
+  };
+
+  useLayoutEffect(() => { resizeComposer(); }, [value]);
+
+  useEffect(() => {
+    const resize = () => resizeComposer();
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, []);
 
   useEffect(() => {
     if (!composerMenuOpen && !usageOpen && !modelMenuOpen) return;
@@ -186,9 +209,17 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   useEffect(
     () => () => {
       if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+      if (composerScrollTimerRef.current) window.clearTimeout(composerScrollTimerRef.current);
     },
     [],
   );
+
+  const revealComposerScrollbar = () => {
+    if (!composerScrollable) return;
+    setComposerScrollbarActive(true);
+    if (composerScrollTimerRef.current) window.clearTimeout(composerScrollTimerRef.current);
+    composerScrollTimerRef.current = window.setTimeout(() => setComposerScrollbarActive(false), 700);
+  };
 
   useEffect(() => {
     if (started) {
@@ -735,6 +766,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         <textarea
           ref={textareaRef}
           data-testid="chat-input"
+          className={`${composerScrollable ? 'is-scrollable' : ''}${composerScrollbarActive ? ' scrollbar-active' : ''}`}
           value={value}
           placeholder={sendWith === 'cmdEnter' ? t('chat.placeholderCmdEnter') : t('chat.placeholder')}
           onChange={(e) => {
@@ -751,7 +783,9 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
           }}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
-          rows={3}
+          onScroll={revealComposerScrollbar}
+          onWheel={revealComposerScrollbar}
+          rows={1}
         />
         <div className="chat-input-toolbar">
           <div className="composer-menu-wrap" ref={composerMenuRef}>

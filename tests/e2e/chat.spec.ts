@@ -366,6 +366,34 @@ test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当
   await expect(steeringChip).toContainText('steer me');
 });
 
+test('长文本输入自然增长，达到上限后使用短暂滚动条', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+  await page.setViewportSize({ width: 1200, height: 800 });
+
+  const input = page.getByTestId('chat-input');
+  const initialHeight = (await input.boundingBox())!.height;
+  await input.fill(Array.from({ length: 40 }, (_, index) => `line ${index + 1} with enough text to edit comfortably`).join('\n'));
+  await expect(input).toHaveClass(/is-scrollable/);
+  const expandedHeight = (await input.boundingBox())!.height;
+  expect(expandedHeight).toBeGreaterThan(initialHeight + 80);
+  expect(expandedHeight).toBeLessThanOrEqual(260);
+
+  await input.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    element.dispatchEvent(new Event('scroll'));
+  });
+  await expect(input).toHaveClass(/scrollbar-active/);
+  await page.screenshot({ path: 'output/playwright/long-composer.png', fullPage: false });
+  await expect.poll(async () => (await input.getAttribute('class'))?.includes('scrollbar-active')).toBe(false);
+
+  await input.fill('short prompt');
+  await expect(input).not.toHaveClass(/is-scrollable/);
+  const collapsedHeight = (await input.boundingBox())!.height;
+  expect(collapsedHeight).toBeLessThan(expandedHeight - 80);
+});
+
 test('新会话 → 消息列表清空', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

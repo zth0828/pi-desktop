@@ -1741,11 +1741,15 @@ button.danger-outline {
 
 .chat-input-card textarea {
   width: 100%;
+  min-height: 34px;
+  max-height: min(260px, 32vh);
   resize: none;
   border: none;
   background: transparent;
   padding: 5px 6px 8px;
   font-size: 14.5px;
+  line-height: 1.5;
+  overflow-y: hidden;
 }
 
 .chat-input-card textarea:focus-visible {
@@ -3980,6 +3984,13 @@ button.danger-outline {
   width: 0;
   height: 0;
 }
+
+.chat-input-card textarea.is-scrollable { overflow-y: auto; scrollbar-width: none; }
+.chat-input-card textarea.is-scrollable::-webkit-scrollbar { display: block; width: 5px; height: 0; }
+.chat-input-card textarea.is-scrollable::-webkit-scrollbar-track { background: transparent; }
+.chat-input-card textarea.is-scrollable::-webkit-scrollbar-thumb { border-radius: 5px; background: transparent; }
+.chat-input-card textarea.is-scrollable.scrollbar-active { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.chat-input-card textarea.is-scrollable.scrollbar-active::-webkit-scrollbar-thumb { background: var(--border-strong); }
 
 /* 视口过窄（扣除 224px 侧栏后放不下 聊天420 + 面板320）时面板转覆盖层，避免挤没聊天列 */
 @media (max-width: 960px) {
