@@ -7,8 +7,8 @@ import { useChatStore } from '../../stores/chat';
 
 /**
  * 聚合编辑卡（Codex「已编辑 N 个文件 +x -y」范式）：一轮对话结束后在该轮尾部展示
- * 成功的 edit/write 汇总。「撤销」仅 git 可用时出现（review baseline 回滚，
- * 语义 = 回到会话开始时的状态）；「审核」打开 Review 面板。
+ * 成功的 edit/write 汇总。「撤销」通过 review baseline 回滚该工具改动；
+ * 「审核」打开完整 Review 面板。
  */
 export function TurnChangesCard({ toolCallIds }: { toolCallIds: string[] }) {
   const { t } = useTranslation();

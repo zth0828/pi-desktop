@@ -589,14 +589,20 @@
     "revertHunk": "Revert hunk",
     "confirm": "Revert",
     "cancel": "Cancel",
-    "confirmFile": "Revert all changes to {{path}}? The file will be restored to its state when this session started.",
+    "confirmFile": "Revert all reviewed changes to {{path}}?",
     "confirmHunk": "Revert this hunk in {{path}}?",
     "revertFailed": "Revert failed: {{error}}",
     "fallbackHint": "Not a git repository — showing a read-only summary of files changed by the agent. Revert is unavailable.",
     "split": "Side-by-side diff",
     "unified": "Unified diff",
     "showFiles": "Show changed files",
-    "hideFiles": "Hide changed files"
+    "hideFiles": "Hide changed files",
+    "status": {
+      "modified": "Modified",
+      "added": "Added",
+      "deleted": "Deleted",
+      "conflicted": "Conflict"
+    }
   },
   "workspace": {
     "resize": "Resize workspace panel",

@@ -1,14 +1,8 @@
-// Review 面板后端：会话改动的 git baseline 快照 + diff + 回滚（M6 Review MVP）。
+// Review 面板后端：Git 仓库以启动时 HEAD 为基准；非 Git 目录以会话启动快照为基准。
 //
-// baseline 方案（为什么是 ghost commit 而不是 git stash create）：
-// `git stash create` 只含已跟踪文件（不支持 -u），agent 新建文件不会进入 baseline，
-// 之后 `git diff <stashRef>` 也永远看不到当前工作区的 untracked 文件。
-// 这里改用临时 index 造 ghost commit（Codex 同款思路）：
-//   GIT_INDEX_FILE=<tmp> git read-tree HEAD → git add -A → git write-tree → git commit-tree
-// tree = 会话开始时的完整工作区（含未跟踪、不含 .gitignore 忽略项），commit 挂为 dangling
-// 对象（不动工作区/index/HEAD，与 stash create 一样无副作用）。
-// 面板数据同样是「baseline tree ↔ 当前磁盘快照 tree」的 tree-to-tree diff，
-// 两侧同构，新建/删除/修改全部覆盖；磁盘快照每次请求重算，保持活视图。
+// 当前磁盘始终由隔离的临时 index 快照，因此 staged、unstaged、untracked 都能形成
+// 同一份 tree diff，又不会触碰真实 index/工作区。真实 index 只用于补充 unmerged 状态；
+// 临时 index 会把冲突文件展平成普通工作区内容，不能单独承担冲突识别。
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -108,6 +102,7 @@ async function snapshotTree(
 type Baseline = {
   cwd: string;
   ref: string;
+  kind: 'git-head' | 'session-snapshot';
   gitEnv?: NodeJS.ProcessEnv;
   /** 非 Git 项目的临时 object store；baseline 清理时一并删除。 */
   ownedDir?: string;
@@ -135,6 +130,10 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
     let parent: string | null = null;
     if (await isGitRepo(cwd)) {
       parent = await headRef(cwd);
+      if (parent) {
+        baseline = { cwd, ref: parent, kind: 'git-head' };
+        return;
+      }
     } else {
       ownedDir = mkdtempSync(join(tmpdir(), 'pi-desktop-review-repo-'));
       const gitDir = join(ownedDir, 'objects.git');
@@ -142,14 +141,19 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
       if (init.code !== 0) throw new Error(init.stderr.trim() || 'git init failed');
       gitEnv = { GIT_DIR: gitDir, GIT_WORK_TREE: cwd };
     }
-    const tree = await snapshotTree(cwd, gitEnv, parent);
+    // Unborn Git repository compares against an empty tree. Non-Git workspaces
+    // retain their complete session-start snapshot in the temporary object store.
+    const tree = parent === null && !gitEnv
+      ? (await runGit(cwd, ['hash-object', '-w', '-t', 'tree', '--stdin'], { input: '' })).stdout.trim()
+      : await snapshotTree(cwd, gitEnv, parent);
+    if (!tree) throw new Error('git empty tree failed');
     const commit = await runGit(
       cwd,
       ['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', 'pi-desktop review baseline'],
       { env: { ...GHOST_IDENTITY_ENV, ...gitEnv } },
     );
     if (commit.code !== 0) throw new Error(commit.stderr.trim() || 'git commit-tree failed');
-    baseline = { cwd, ref: commit.stdout.trim(), gitEnv, ownedDir };
+    baseline = { cwd, ref: commit.stdout.trim(), kind: gitEnv ? 'session-snapshot' : 'git-head', gitEnv, ownedDir };
   } catch (err) {
     if (ownedDir) rmSync(ownedDir, { recursive: true, force: true });
     baseline = null;
@@ -206,6 +210,21 @@ async function diffNumstat(cwd: string, base: string, cur: string, env?: NodeJS.
   return map;
 }
 
+const CONFLICT_CODES = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']);
+
+/** Read the real index because temporary snapshot indexes intentionally flatten conflicts. */
+async function conflictPaths(cwd: string, base: Baseline): Promise<Set<string>> {
+  if (base.kind !== 'git-head') return new Set();
+  const result = await runGit(cwd, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--no-renames']);
+  if (result.code !== 0) throw new Error(result.stderr.trim() || 'git status failed');
+  const paths = new Set<string>();
+  for (const entry of result.stdout.split('\0')) {
+    if (entry.length < 4 || !CONFLICT_CODES.has(entry.slice(0, 2))) continue;
+    paths.add(entry.slice(3));
+  }
+  return paths;
+}
+
 export const reviewApi = {
   getSummary: async (): Promise<ReviewSummaryResult> => {
     const active = getActiveRuntime();
@@ -214,10 +233,12 @@ export const reviewApi = {
     if (!base) return unavailable(baselineFailure ?? 'not-a-git-repo');
     try {
       const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
-      const [statuses, stats] = await Promise.all([
+      const [statuses, stats, conflicts] = await Promise.all([
         diffNameStatus(active.cwd, base.ref, cur, base.gitEnv),
         diffNumstat(active.cwd, base.ref, cur, base.gitEnv),
+        conflictPaths(active.cwd, base),
       ]);
+      for (const path of conflicts) statuses.set(path, 'conflicted');
       const files: ReviewFileEntry[] = [];
       for (const [path, status] of statuses) {
         const s = stats.get(path) ?? { added: 0, deleted: 0 };
@@ -257,6 +278,9 @@ export const reviewApi = {
     const base = currentBaseline();
     if (!active || !base) return { success: false, error: baselineFailure ?? 'not-started' };
     try {
+      if ((await conflictPaths(active.cwd, base)).has(payload.path)) {
+        return { success: false, error: 'conflicted files cannot be reverted from Review' };
+      }
       const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
       const diff = await runGit(active.cwd, ['diff', '--no-renames', base.ref, cur, '--', payload.path], { env: base.gitEnv });
       if (diff.code !== 0) throw new Error(diff.stderr.trim() || 'git diff failed');
@@ -276,6 +300,9 @@ export const reviewApi = {
     if (!active || !base) return { success: false, error: baselineFailure ?? 'not-started' };
     if (!payload.patch.trim()) return { success: false, error: 'empty patch' };
     try {
+      if ((await conflictPaths(active.cwd, base)).has(payload.path)) {
+        return { success: false, error: 'conflicted files cannot be reverted from Review' };
+      }
       const apply = await runGit(active.cwd, ['apply', '-R'], { env: base.gitEnv, input: payload.patch });
       if (apply.code !== 0) return { success: false, error: apply.stderr.trim() || 'git apply failed' };
       return { success: true };

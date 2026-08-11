@@ -131,13 +131,13 @@ function FallbackView() {
   );
 }
 
-function UnifiedDiff({ parsed, onRevert }: { parsed: ParsedFileDiff; onRevert: (index: number) => void }) {
+function UnifiedDiff({ parsed, onRevert }: { parsed: ParsedFileDiff; onRevert?: (index: number) => void }) {
   const { t } = useTranslation();
   return (
     <div className="review-diff" data-testid="review-diff">
       {parsed.hunks.map((hunk, index) => (
         <div className="review-hunk" key={index}>
-          <div className="review-hunk-header"><span className="review-hunk-range">{hunk.header}</span><button className="review-revert-btn" data-testid="revert-hunk" onClick={() => onRevert(index)}>{t('review.revertHunk')}</button></div>
+          <div className="review-hunk-header"><span className="review-hunk-range">{hunk.header}</span>{onRevert && <button className="review-revert-btn" data-testid="revert-hunk" onClick={() => onRevert(index)}>{t('review.revertHunk')}</button>}</div>
         <pre className="diff-view review-unified" data-testid="diff-unified">
           {hunk.lines.map((line, lineIndex) => {
             const kind = hunkLineKind(line);
@@ -154,13 +154,13 @@ function UnifiedDiff({ parsed, onRevert }: { parsed: ParsedFileDiff; onRevert: (
   );
 }
 
-function SplitDiff({ parsed, onRevert }: { parsed: ParsedFileDiff; onRevert: (index: number) => void }) {
+function SplitDiff({ parsed, onRevert }: { parsed: ParsedFileDiff; onRevert?: (index: number) => void }) {
   const { t } = useTranslation();
   return (
     <div className="review-diff review-split" data-testid="review-diff">
       {parsed.hunks.map((hunk, index) => (
         <div className="split-hunk" key={index} data-testid="diff-split">
-          <div className="split-hunk-header"><span>{hunk.header}</span><button className="review-revert-btn" data-testid="revert-hunk" onClick={() => onRevert(index)}>{t('review.revertHunk')}</button></div>
+          <div className="split-hunk-header"><span>{hunk.header}</span>{onRevert && <button className="review-revert-btn" data-testid="revert-hunk" onClick={() => onRevert(index)}>{t('review.revertHunk')}</button>}</div>
           {buildSplitDiffRows(hunk).map((row, rowIndex) => (
             <div className="split-row" key={rowIndex}>
               {[row.old, row.next].map((cell, side) => (
@@ -419,6 +419,8 @@ function ReviewWorkspace() {
 
   if (summary && !summary.available) return <FallbackView />;
   const files: ReviewFileEntry[] = summary?.files ?? [];
+  const selectedFile = files.find((file) => file.path === selected);
+  const canRevertSelected = selectedFile?.status !== 'conflicted';
   return (
     <div className="review-workspace">
       <div className="review-toolbar">
@@ -436,9 +438,10 @@ function ReviewWorkspace() {
               <div className={`review-file${selected === file.path ? ' selected' : ''}`} data-testid="review-file" key={file.path}>
                 <button className="review-file-main" onClick={() => setSelected(file.path)}>
                   <span className="review-file-name">{file.path}</span>
+                  {file.status === 'conflicted' && <span className="review-file-status status-conflicted" data-testid="review-file-status">{t('review.status.conflicted')}</span>}
                   <span className="review-file-stats"><span className="review-stat-add">+{file.added}</span><span className="review-stat-del">-{file.deleted}</span></span>
                 </button>
-                <button className="review-revert-btn" data-testid="revert-file" onClick={() => setPendingRevert({ kind: 'file', path: file.path })}>{t('review.revertFile')}</button>
+                {file.status !== 'conflicted' && <button className="review-revert-btn" data-testid="revert-file" onClick={() => setPendingRevert({ kind: 'file', path: file.path })}>{t('review.revertFile')}</button>}
               </div>
             ))}
           </div>
@@ -450,8 +453,8 @@ function ReviewWorkspace() {
                 <FileCode2 size={15} /><span>{selected}</span>
               </div>
               {mode === 'split'
-                ? <SplitDiff parsed={diff} onRevert={(index) => setPendingRevert({ kind: 'hunk', path: selected, patch: buildHunkPatch(diff, index) })} />
-                : <UnifiedDiff parsed={diff} onRevert={(index) => setPendingRevert({ kind: 'hunk', path: selected, patch: buildHunkPatch(diff, index) })} />}
+                ? <SplitDiff parsed={diff} onRevert={canRevertSelected ? (index) => setPendingRevert({ kind: 'hunk', path: selected, patch: buildHunkPatch(diff, index) }) : undefined} />
+                : <UnifiedDiff parsed={diff} onRevert={canRevertSelected ? (index) => setPendingRevert({ kind: 'hunk', path: selected, patch: buildHunkPatch(diff, index) }) : undefined} />}
             </>
           )}
           {selected && !diff && <div className="review-empty">{t('review.noDiff', { path: selected })}</div>}

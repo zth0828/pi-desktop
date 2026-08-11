@@ -1,6 +1,6 @@
 // Review 面板 E2E（真 pi + mock provider + 临时 git repo workspace，不烧 API quota）。
-// 覆盖：baseline 捕获（runtime 创建时）→ 改动文件列表 → diff 渲染 → 文件级回滚后磁盘复原；
-// agent 新建文件（untracked）纳入清单；非 Git 目录也使用临时 baseline 完整评审。
+// 覆盖：Git HEAD / 非 Git 会话 baseline → 改动文件列表 → diff 渲染 → 文件级回滚；
+// staged、unstaged、untracked、conflict 与 agent 新建文件都纳入清单。
 import { execFileSync } from 'node:child_process';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -17,6 +17,8 @@ let agentDir: string;
 let repoWorkspace: string;
 /** 非 Git workspace（临时 object store 路径） */
 let plainWorkspace: string;
+/** 启动 runtime 前已存在各类 Git 状态的 workspace。 */
+let dirtyWorkspace: string;
 
 const git = (cwd: string, args: string[]) =>
   execFileSync('git', ['-C', cwd, ...args], { stdio: 'pipe' }).toString();
@@ -36,6 +38,7 @@ test.beforeAll(async () => {
   agentDir = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-agent-'));
   repoWorkspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-repo-'));
   plainWorkspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-plain-'));
+  dirtyWorkspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-dirty-repo-'));
 
   // edit 工具 E2E 的目标文件（mock 会把 alpha → beta）；git 仓库含一个初始 commit
   await writeFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
@@ -56,6 +59,31 @@ test.beforeAll(async () => {
 
   await writeFile(path.join(plainWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
   await writeFile(path.join(plainWorkspace, 'delete-me.txt'), 'remove me\n');
+
+  await writeFile(path.join(dirtyWorkspace, 'staged.txt'), 'base staged\n');
+  await writeFile(path.join(dirtyWorkspace, 'unstaged.txt'), 'base unstaged\n');
+  await writeFile(path.join(dirtyWorkspace, 'conflict.txt'), 'base conflict\n');
+  git(dirtyWorkspace, ['init']);
+  git(dirtyWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '.']);
+  git(dirtyWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'base']);
+  const baseBranch = git(dirtyWorkspace, ['branch', '--show-current']).trim();
+  git(dirtyWorkspace, ['checkout', '-b', 'conflict-other']);
+  await writeFile(path.join(dirtyWorkspace, 'conflict.txt'), 'theirs\n');
+  git(dirtyWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'add', 'conflict.txt']);
+  git(dirtyWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'theirs']);
+  git(dirtyWorkspace, ['checkout', baseBranch]);
+  await writeFile(path.join(dirtyWorkspace, 'conflict.txt'), 'ours\n');
+  git(dirtyWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'add', 'conflict.txt']);
+  git(dirtyWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'ours']);
+  try {
+    git(dirtyWorkspace, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'merge', 'conflict-other']);
+  } catch {
+    // Expected: keep the UU index/worktree state for Review coverage.
+  }
+  await writeFile(path.join(dirtyWorkspace, 'staged.txt'), 'changed in index\n');
+  git(dirtyWorkspace, ['add', 'staged.txt']);
+  await writeFile(path.join(dirtyWorkspace, 'unstaged.txt'), 'changed in worktree\n');
+  await writeFile(path.join(dirtyWorkspace, 'untracked.txt'), 'not tracked\n');
 
   await writeFile(
     path.join(agentDir, 'models.json'),
@@ -87,6 +115,7 @@ test.afterAll(async () => {
   await rm(agentDir, { recursive: true, force: true });
   await rm(repoWorkspace, { recursive: true, force: true });
   await rm(plainWorkspace, { recursive: true, force: true });
+  await rm(dirtyWorkspace, { recursive: true, force: true });
 });
 
 const launchOptions = (workspace: string) => ({
@@ -157,6 +186,26 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
   await expect(panel.getByTestId('review-file')).toHaveCount(0, { timeout: 30_000 });
   const content = await readFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'utf-8');
   expect(content).toBe('alpha\ngamma\n');
+});
+
+test('git 仓库：启动前 staged/unstaged/untracked/conflict 全部进入 Review', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(dirtyWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+  await openReview(page);
+
+  const panel = page.getByTestId('review-panel');
+  for (const name of ['staged.txt', 'unstaged.txt', 'untracked.txt', 'conflict.txt']) {
+    await expect(panel.getByText(name, { exact: true })).toBeVisible({ timeout: 30_000 });
+  }
+
+  const conflict = panel.getByTestId('review-file').filter({ hasText: 'conflict.txt' });
+  await expect(conflict.getByTestId('review-file-status')).toHaveText(/Conflict|冲突/);
+  await expect(conflict.getByTestId('revert-file')).toHaveCount(0);
+  await conflict.locator('.review-file-main').click();
+  await expect(panel.getByTestId('review-diff')).toContainText('<<<<<<<');
+  await expect(panel.getByTestId('revert-hunk')).toHaveCount(0);
+  await page.screenshot({ path: 'output/playwright/review-complete-git-state.png', fullPage: false });
 });
 
 test('右侧工作台：按需展开目录并预览文本和图片', async ({ launchElectronApp }) => {

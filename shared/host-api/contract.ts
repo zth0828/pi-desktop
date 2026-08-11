@@ -260,9 +260,9 @@ export type PiUiResponsePayload = {
   cancelled?: boolean;
 };
 
-// —— review：会话改动评审（会话 baseline diff；非 Git 项目使用临时 object store）——
+// —— review：Git HEAD / 非 Git 会话 baseline diff ——
 
-export type ReviewFileStatus = 'modified' | 'added' | 'deleted';
+export type ReviewFileStatus = 'modified' | 'added' | 'deleted' | 'conflicted';
 
 export type ReviewFileEntry = {
   /** 相对 cwd 的路径 */
@@ -786,11 +786,11 @@ export type HostApiContract = {
     open: (payload: DialogOpenPayload) => DialogOpenResult;
   };
   review: {
-    /** 当前会话改动汇总（baseline ↔ 当前磁盘快照）。非 git 目录 available=false，渲染层降级为只读汇总。 */
+    /** Git HEAD 或非 Git 会话 baseline ↔ 当前磁盘快照的改动汇总。 */
     getSummary: () => ReviewSummaryResult;
     /** 单文件 unified diff（活视图，每次调用重新对比当前磁盘）。 */
     getFileDiff: (payload: ReviewFileDiffPayload) => ReviewFileDiffResult;
-    /** 文件级回滚：对该文件的 baseline→当前 diff 执行 git apply -R。 */
+    /** 文件级回滚：对该文件的 baseline→当前 diff 执行 git apply -R；冲突文件拒绝。 */
     revertFile: (payload: ReviewRevertFilePayload) => HostSuccess;
     /** hunk 级回滚：git apply -R 渲染层重建的单 hunk patch；apply 失败返回错误。 */
     revertHunk: (payload: ReviewRevertHunkPayload) => HostSuccess;

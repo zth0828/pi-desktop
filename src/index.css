@@ -3642,9 +3642,24 @@ button.danger-outline {
 }
 
 .review-file-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.review-file-status {
+  flex-shrink: 0;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.review-file-status.status-conflicted {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 
 .review-file-stats {
