@@ -95,6 +95,11 @@ async function waitSessionReady(page: import('@playwright/test').Page) {
   ).toBeVisible({ timeout: 30_000 });
 }
 
+async function openReview(page: import('@playwright/test').Page) {
+  await page.getByTestId('workspace-toggle').click();
+  await page.getByTestId('workspace-review-tab').click();
+}
+
 /** 驱动 mock agent 执行一个工具调用并等工具卡片完成 */
 async function runTool(page: import('@playwright/test').Page, prompt: string) {
   await page.getByTestId('chat-input').fill(prompt);
@@ -113,16 +118,14 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
 
   await runTool(page, 'USE_TOOL_EDIT now');
 
-  await page.getByTestId('session-menu').click();
-  await page.getByTestId('open-review').click();
+  await openReview(page);
   const panel = page.getByTestId('review-panel');
   await expect(panel).toBeVisible();
 
   // 评审态下标题栏开关同样能收起面板（回归：reviewOpen 时开关曾失效）
   await page.getByTestId('workspace-toggle').click();
   await expect(panel).toBeHidden();
-  await page.getByTestId('session-menu').click();
-  await page.getByTestId('open-review').click();
+  await openReview(page);
   await expect(panel).toBeVisible();
 
   // 文件清单：e2e-edit-target.txt，+1/-1
@@ -213,7 +216,7 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await expect(panel.getByTestId('workspace-open-with')).toBeVisible();
   await panel.getByTestId('workspace-open-with').click();
   await expect(panel.getByTestId('workspace-open-menu')).toBeVisible();
-  await expect(panel.getByTestId('workspace-open-application').first()).toBeVisible({ timeout: 10_000 });
+  await expect(panel.getByTestId('workspace-open-menu')).toContainText(/默认应用|default application/);
   await page.screenshot({ path: 'output/playwright/workspace-preview-open-menu.png', fullPage: false });
   await panel.getByTestId('workspace-open-with').click();
   const previewColors = await panel.evaluate((node) => {
@@ -266,8 +269,7 @@ test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文�
   await runTool(page, 'USE_TOOL_WRITE now');
   expect(existsSync(path.join(repoWorkspace, 'e2e-new-file.txt'))).toBe(true);
 
-  await page.getByTestId('session-menu').click();
-  await page.getByTestId('open-review').click();
+  await openReview(page);
   const panel = page.getByTestId('review-panel');
   const fileRow = panel.getByTestId('review-file').filter({ hasText: 'e2e-new-file.txt' });
   await expect(fileRow).toBeVisible({ timeout: 30_000 });
@@ -294,8 +296,7 @@ test('非 Git 目录：新增/修改/删除进入评审并可回滚', async ({ l
   await writeFile(path.join(plainWorkspace, 'plain-new.txt'), 'new file\n');
   await rm(path.join(plainWorkspace, 'delete-me.txt'), { force: true });
 
-  await page.getByTestId('session-menu').click();
-  await page.getByTestId('open-review').click();
+  await openReview(page);
   const panel = page.getByTestId('review-panel');
   await expect(panel.getByTestId('review-fallback')).toHaveCount(0);
   await expect(panel.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' })).toBeVisible({ timeout: 30_000 });

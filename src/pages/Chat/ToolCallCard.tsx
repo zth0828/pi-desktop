@@ -68,11 +68,10 @@ export function ToolCallCard({
   expandByDefault?: boolean;
 }) {
   const { t } = useTranslation();
-  const toolsExpanded = useChatStore((s) => s.toolsExpanded);
   const openWorkspaceFile = useChatStore((s) => s.openWorkspaceFile);
-  // null = 跟随全局开关；单独点击后为本地覆盖
+  // null = 跟随阶段默认值；单独点击后为本地覆盖
   const [localExpanded, setLocalExpanded] = useState<boolean | null>(null);
-  const expanded = localExpanded ?? toolsExpanded ?? expandByDefault;
+  const expanded = localExpanded ?? expandByDefault;
 
   const summary = toolSummary(execution.toolName, execution.args);
   const details = resultDetails(execution.result);

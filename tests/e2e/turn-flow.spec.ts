@@ -138,6 +138,8 @@ test('一轮 edit+write → 聚合编辑卡（清单 + 增删统计）→ 撤销
   await expect(editRow).toBeVisible();
   await expect(editRow.locator('.turn-stat-add')).toHaveText('+1');
   await expect(editRow.locator('.turn-stat-del')).toHaveText('-1');
+  await editRow.getByTestId('turn-changes-open-file').click();
+  await expect(page.getByTestId('workspace-preview')).toContainText('beta');
   const writeRow = card.getByTestId('turn-changes-file').filter({ hasText: 'e2e-new-file.txt' });
   await expect(writeRow).toBeVisible();
   await expect(writeRow.locator('.turn-stat-add')).toHaveText('+1');

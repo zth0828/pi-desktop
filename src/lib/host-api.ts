@@ -13,6 +13,7 @@ export const hostApi = {
   shell: {
     openExternal: (url: string) => invokeHost('shell', 'openExternal', { url }),
     listApplications: () => invokeHost('shell', 'listApplications'),
+    openPath: (path: string) => invokeHost('shell', 'openPath', { path }),
     openPathWith: (path: string, application: { id: string; name: string; path: string }) =>
       invokeHost('shell', 'openPathWith', { path, application }),
     showInFolder: (path: string) => invokeHost('shell', 'showInFolder', { path }),

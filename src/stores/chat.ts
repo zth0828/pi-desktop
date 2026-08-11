@@ -61,9 +61,6 @@ type ChatState = {
   turnStats: TurnStats | null;
   messages: ChatMessage[];
   toolExecutions: Record<string, ToolExecution>;
-  /** 全局展开/折叠所有工具卡片（卡片仍可单独点击覆盖） */
-  /** null 跟随所在回合；boolean 表示用户显式设置的全局覆盖。 */
-  toolsExpanded: boolean | null;
   compaction: { reason: CompactionReason } | null;
   retry: RetryState | null;
   queue: QueueState;
@@ -92,7 +89,6 @@ type ChatState = {
   queueSteerNow: (kind: 'steering' | 'followUp', index: number) => Promise<void>;
   newSession: () => Promise<void>;
   compact: () => Promise<void>;
-  toggleToolsExpanded: () => void;
   setTreeOpen: (open: boolean) => void;
   setReviewOpen: (open: boolean) => void;
   setWorkspaceOpen: (open: boolean) => void;
@@ -123,7 +119,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   turnStats: null,
   messages: [],
   toolExecutions: {},
-  toolsExpanded: null,
   compaction: null,
   retry: null,
   queue: { steering: [], followUp: [] },
@@ -190,7 +185,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await hostApi.piRuntime.compact();
   },
 
-  toggleToolsExpanded: () => set((s) => ({ toolsExpanded: s.toolsExpanded === true ? false : true })),
 
   setTreeOpen: (open) => set({ treeOpen: open }),
 

@@ -78,6 +78,12 @@ async function sendAndWaitReply(page: import('@playwright/test').Page, text: str
   });
 }
 
+async function openTree(page: import('@playwright/test').Page) {
+  await page.getByTestId('chat-input').fill('/tree');
+  await page.getByTestId('chat-input').press('Enter');
+  await expect(page.getByTestId('tree-dialog')).toBeVisible();
+}
+
 test('消息级 fork：从第二条 user 消息分叉，新会话只保留其之前的历史', async ({
   launchElectronApp,
 }) => {
@@ -118,9 +124,7 @@ test('/tree 分支导航：跳到历史节点开新分支，再跳回原分支',
   await expect(page.getByTestId('message-user')).toHaveCount(2);
 
   // 打开分支树：两轮对话 = 4 个消息节点
-  await page.getByTestId('session-menu').click();
-  await page.getByTestId('open-tree').click();
-  await expect(page.getByTestId('tree-dialog')).toBeVisible();
+  await openTree(page);
   await expect(page.getByTestId('tree-node')).toHaveCount(4);
 
   // 点「first question」user 节点：leaf 移到其父（root），文本退回编辑器
@@ -134,9 +138,7 @@ test('/tree 分支导航：跳到历史节点开新分支，再跳回原分支',
   await expect(page.getByTestId('message-user')).toHaveCount(1);
 
   // 树里同时看到两条分支的 user 节点
-  await page.getByTestId('session-menu').click();
-  await page.getByTestId('open-tree').click();
-  await expect(page.getByTestId('tree-dialog')).toBeVisible();
+  await openTree(page);
   await expect(
     page.getByTestId('tree-node').filter({ hasText: 'second question' }),
   ).toHaveCount(1);

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, MoreHorizontal, PanelRight, Pencil, X } from 'lucide-react';
+import { Check, ChevronRight, PanelRight, Pencil, X } from 'lucide-react';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
@@ -16,9 +16,6 @@ import { TurnChangesCard } from './TurnChangesCard';
 
 function SessionTitleBar() {
   const { t } = useTranslation();
-  const toolsExpanded = useChatStore((s) => s.toolsExpanded);
-  const toggleToolsExpanded = useChatStore((s) => s.toggleToolsExpanded);
-  const setTreeOpen = useChatStore((s) => s.setTreeOpen);
   const setReviewOpen = useChatStore((s) => s.setReviewOpen);
   const workspaceOpen = useChatStore((s) => s.workspaceOpen);
   const reviewOpen = useChatStore((s) => s.reviewOpen);
@@ -33,8 +30,6 @@ function SessionTitleBar() {
   const [name, setName] = useState('');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!started) return;
     const refresh = () => {
@@ -55,14 +50,6 @@ function SessionTitleBar() {
     if (result.success) setName(result.name ?? next);
     setEditing(false);
   };
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [menuOpen]);
   return (
     <div className="session-titlebar" data-testid="session-titlebar">
       <div className="session-title">
@@ -78,7 +65,7 @@ function SessionTitleBar() {
           </button>
         )}
       </div>
-      <div className="session-menu" ref={menuRef}>
+      <div className="session-title-actions">
         <button
           className={`icon-button${workspaceOpen || reviewOpen ? ' active' : ''}`}
           data-testid="workspace-toggle"
@@ -96,14 +83,6 @@ function SessionTitleBar() {
         >
           <PanelRight size={17} />
         </button>
-        <button className="icon-button" data-testid="session-menu" title={t('chat.sessionMenu')} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><MoreHorizontal size={18} /></button>
-        {menuOpen && (
-        <div className="session-menu-popover">
-          <button data-testid="open-review" onClick={() => { setMenuOpen(false); setReviewOpen(true); }}>{t('review.title')}</button>
-          <button data-testid="open-tree" onClick={() => { setMenuOpen(false); setTreeOpen(true); }}>{t('chat.branches')}</button>
-          <button data-testid="toggle-tools" onClick={() => { setMenuOpen(false); toggleToolsExpanded(); }}>{toolsExpanded ? t('chat.collapseTools') : t('chat.expandTools')}</button>
-        </div>
-        )}
       </div>
     </div>
   );

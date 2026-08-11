@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { FolderOpen } from 'lucide-react';
 import { hostApi } from '../../lib/host-api';
 import { collectTurnChanges } from '../../lib/turn-changes';
 import { useChatStore } from '../../stores/chat';
@@ -13,6 +14,7 @@ export function TurnChangesCard({ toolCallIds }: { toolCallIds: string[] }) {
   const { t } = useTranslation();
   const toolExecutions = useChatStore((s) => s.toolExecutions);
   const setReviewOpen = useChatStore((s) => s.setReviewOpen);
+  const openWorkspaceFile = useChatStore((s) => s.openWorkspaceFile);
   const [gitAvailable, setGitAvailable] = useState(false);
   const [revertState, setRevertState] = useState<'idle' | 'reverting' | 'done' | 'error'>('idle');
   const [revertError, setRevertError] = useState('');
@@ -91,6 +93,15 @@ export function TurnChangesCard({ toolCallIds }: { toolCallIds: string[] }) {
         {changes.files.map((file) => (
           <div className="turn-changes-file" data-testid="turn-changes-file" key={file.path}>
             <span className="turn-changes-path">{file.path}</span>
+            <button
+              className="turn-changes-open"
+              data-testid="turn-changes-open-file"
+              title={t('chat.turnChanges.openFile')}
+              aria-label={t('chat.turnChanges.openFile')}
+              onClick={() => openWorkspaceFile(file.path)}
+            >
+              <FolderOpen size={14} />
+            </button>
             <span className="turn-stat-add">+{file.added}</span>
             <span className="turn-stat-del">-{file.deleted}</span>
           </div>

@@ -241,7 +241,8 @@ function OpenWithMenu({ absolutePath }: { absolutePath: string }) {
     setError(undefined);
     try {
       const result = await hostApi.shell.listApplications();
-      setApplications(rankApplications(result.applications));
+      // 菜单只展示最相关的少量应用；列表本身仍由 Main 动态发现。
+      setApplications(rankApplications(result.applications).slice(0, 8));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
     } finally {
@@ -266,6 +267,9 @@ function OpenWithMenu({ absolutePath }: { absolutePath: string }) {
         <div className="workspace-open-popover" data-testid="workspace-open-menu">
           <button onClick={() => { setOpen(false); void hostApi.shell.showInFolder(absolutePath); }}>
             <MapPin size={15} /><span>{t('workspace.showInFolder')}</span>
+          </button>
+          <button onClick={() => { setOpen(false); void hostApi.shell.openPath(absolutePath); }}>
+            <AppWindow size={15} /><span>{t('workspace.defaultApplication')}</span>
           </button>
           <div className="workspace-open-separator" />
           {loading && <div className="workspace-open-state">{t('workspace.findingApps')}</div>}

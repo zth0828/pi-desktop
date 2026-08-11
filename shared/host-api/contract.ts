@@ -22,6 +22,7 @@ export type ShellOpenPathWithPayload = {
   path: string;
   application: ShellApplication;
 };
+export type ShellOpenPathPayload = { path: string };
 export type AppClipboardWritePayload = { text: string };
 
 // —— piSystem：pi/Node/npm 环境检测与安装引导（M1）——
@@ -635,6 +636,7 @@ export type HostApiContract = {
   shell: {
     openExternal: (payload: ShellOpenExternalPayload) => void;
     listApplications: () => ShellListApplicationsResult;
+    openPath: (payload: ShellOpenPathPayload) => HostSuccess;
     openPathWith: (payload: ShellOpenPathWithPayload) => HostSuccess;
     showInFolder: (payload: { path: string }) => HostSuccess;
   };

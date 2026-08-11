@@ -92,7 +92,7 @@ test('发消息 → 流式渲染回复', async ({ launchElectronApp }) => {
   });
 });
 
-test('会话标题菜单、消息复制与 composer 加号菜单', async ({ launchElectronApp }) => {
+test('会话标题、消息复制与 composer 加号菜单', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
@@ -100,10 +100,7 @@ test('会话标题菜单、消息复制与 composer 加号菜单', async ({ laun
   await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
 
-  await page.getByTestId('session-menu').click();
-  await expect(page.getByTestId('open-review')).toBeVisible();
   await page.locator('.chat-input-card').click({ position: { x: 280, y: 18 } });
-  await expect(page.getByTestId('open-review')).toBeHidden();
   await page.getByTestId('message-assistant').last().hover();
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.getByTestId('copy-message').last().click();
@@ -190,7 +187,7 @@ test('edit 工具 → 行级 diff 展示', async ({ launchElectronApp }) => {
   await expect(diff.locator('.diff-add')).toContainText('beta');
 });
 
-test('全局展开/折叠工具卡片', async ({ launchElectronApp }) => {
+test('阶段内工具卡可单独展开和折叠', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
@@ -205,14 +202,8 @@ test('全局展开/折叠工具卡片', async ({ launchElectronApp }) => {
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
   await expect(card.locator('.tool-card-body')).toBeVisible();
 
-  // 第一次设置显式“全部展开”，第二次显式“全部折叠”。
-  await page.getByTestId('session-menu').click();
-  await page.getByTestId('toggle-tools').click();
-  await expect(card.locator('.tool-card-body')).toBeVisible();
-
-  // 全局折叠后卡片仍可单独点开
-  if (!(await page.getByTestId('toggle-tools').isVisible())) await page.getByTestId('session-menu').click();
-  await page.getByTestId('toggle-tools').click();
+  // 阶段打开后，工具卡仍可单独收起再打开。
+  await card.locator('.tool-card-header').click();
   await expect(card.locator('.tool-card-body')).toHaveCount(0);
   await card.locator('.tool-card-header').click();
   await expect(card.locator('.tool-card-body')).toBeVisible();

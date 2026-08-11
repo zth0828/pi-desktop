@@ -719,13 +719,8 @@ button.danger-outline {
 .session-title input { width: min(420px, 56vw); padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg-raised); color: var(--text); }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border-radius: 7px; color: var(--text-secondary); }
 .icon-button:hover { background: var(--bg-hover); color: var(--text); }
-.session-menu { position: relative; display: flex; align-items: center; gap: 2px; }
+.session-title-actions { display: flex; align-items: center; gap: 2px; }
 .icon-button.active { background: var(--bg-active); color: var(--text); }
-.session-menu > summary { list-style: none; cursor: pointer; }
-.session-menu > summary::-webkit-details-marker { display: none; }
-.session-menu-popover { position: absolute; right: 0; top: 36px; width: 180px; padding: 5px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-raised); box-shadow: var(--shadow-panel); }
-.session-menu-popover button { display: block; width: 100%; padding: 8px 10px; border-radius: 6px; text-align: left; color: var(--text-secondary); font-size: 12.5px; }
-.session-menu-popover button:hover { background: var(--bg-hover); color: var(--text); }
 
 /* 用户消息导航 rail（悬浮在消息列表右侧） */
 .msg-rail {
@@ -1166,6 +1161,9 @@ button.danger-outline {
   white-space: nowrap;
   color: var(--text-secondary);
 }
+
+.turn-changes-open { flex: none; display: inline-grid; place-items: center; width: 25px; height: 25px; border-radius: 6px; color: var(--text-tertiary); }
+.turn-changes-open:hover { color: var(--text); background: var(--bg-hover); }
 
 /* 折叠态输出预览：尾部 N 行 + 截断警告 */
 

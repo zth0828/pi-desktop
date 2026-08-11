@@ -15,6 +15,19 @@ import type {
 
 const execFileAsync = promisify(execFile);
 
+// 只把适合作为代码/文件工作流入口的应用放进“打开方式”；实际是否安装仍由系统动态发现。
+const RELEVANT_APP_PATTERNS = [
+  /cursor/i, /finder/i, /terminal/i, /ghostty/i, /iterm/i, /warp/i,
+  /visual studio code/i, /^code$/i, /xcode/i, /android studio/i, /intellij/i,
+  /webstorm/i, /pycharm/i, /goland/i, /clion/i, /rider/i, /fleet/i,
+  /sublime/i, /^zed$/i, /textedit/i, /bbedit/i, /nova/i, /coteditor/i,
+  /codeedit/i, /windsurf/i, /trae/i, /emacs/i, /^vim/i,
+];
+
+function isRelevantApplication(name: string): boolean {
+  return RELEVANT_APP_PATTERNS.some((pattern) => pattern.test(name));
+}
+
 async function macApplications(): Promise<ShellApplication[]> {
   const roots = ['/Applications', '/System/Applications', path.join(os.homedir(), 'Applications')];
   const found = new Map<string, ShellApplication>();
@@ -45,7 +58,7 @@ async function macApplications(): Promise<ShellApplication[]> {
       // A missing Applications directory is expected on some test platforms.
     }
   }
-  return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...found.values()].filter((application) => isRelevantApplication(application.name)).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 async function discoveredApplications(): Promise<ShellListApplicationsResult> {
@@ -64,7 +77,18 @@ async function discoveredApplications(): Promise<ShellListApplicationsResult> {
       // Ignore unavailable platform application directories.
     }
   }
-  return { applications: applications.sort((a, b) => a.name.localeCompare(b.name)).slice(0, 80) };
+  return { applications: applications.filter((application) => isRelevantApplication(application.name)).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 20) };
+}
+
+async function openPath(payload: { path: string }): Promise<HostSuccess> {
+  try {
+    const target = path.resolve(payload.path);
+    await stat(target);
+    const error = await shell.openPath(target);
+    return error ? { success: false, error } : { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSuccess> {
@@ -74,8 +98,8 @@ async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSucc
     if (process.platform === 'darwin' && payload.application.path.endsWith('.app')) {
       await execFileAsync('open', ['-a', payload.application.path, target], { timeout: 15_000 });
     } else {
-      const error = await shell.openPath(target);
-      if (error) throw new Error(error);
+      const result = await openPath({ path: target });
+      if (!result.success) throw new Error(result.error);
     }
     return { success: true };
   } catch (error) {
@@ -88,6 +112,7 @@ export const shellApi = {
     await shell.openExternal(payload.url);
   },
   listApplications: discoveredApplications,
+  openPath,
   openPathWith,
   showInFolder: async (payload: { path: string }): Promise<HostSuccess> => {
     try {

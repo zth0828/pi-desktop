@@ -152,7 +152,8 @@
       "reverting": "Reverting…",
       "reverted": "Reverted",
       "revertFailed": "Revert failed: {{error}}",
-      "review": "Review"
+      "review": "Review",
+      "openFile": "Open file"
     },
     "workLog": {
       "title_one": "Completed {{count}} step · {{duration}}",
@@ -598,6 +599,7 @@
     "loading": "Loading preview…",
     "openWith": "Open location",
     "showInFolder": "Show in folder",
+    "defaultApplication": "Open with default application",
     "findingApps": "Finding available apps…",
     "noApps": "No available apps found",
     "openFailed": "Could not open file",

@@ -152,7 +152,8 @@
       "reverting": "撤销中…",
       "reverted": "已撤销",
       "revertFailed": "撤销失败：{{error}}",
-      "review": "审核"
+      "review": "审核",
+      "openFile": "打开文件"
     },
     "workLog": {
       "title_one": "已完成 {{count}} 个步骤 · {{duration}}",
@@ -598,6 +599,7 @@
     "loading": "正在加载预览…",
     "openWith": "打开位置",
     "showInFolder": "在文件夹中显示",
+    "defaultApplication": "使用默认应用打开",
     "findingApps": "正在发现可用应用…",
     "noApps": "没有发现可用应用",
     "openFailed": "无法打开文件",
