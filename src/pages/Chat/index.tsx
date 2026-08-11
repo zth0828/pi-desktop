@@ -109,6 +109,21 @@ function SessionTitleBar() {
   );
 }
 
+function ExtensionWidgets({ placement }: { placement: 'aboveEditor' | 'belowEditor' }) {
+  const extensionUi = useChatStore((s) => s.extensionUi);
+  const visible = extensionUi?.widgets.filter((widget) => widget.placement === placement) ?? [];
+  if (visible.length === 0) return null;
+  return (
+    <div className={`extension-widgets ${placement}`} data-testid={`extension-widgets-${placement}`}>
+      {visible.map((widget) => (
+        <div className="extension-widget" data-testid="extension-widget" key={widget.key}>
+          {widget.lines.map((line, index) => <div key={index}>{line}</div>)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const { t } = useTranslation();
   const [cwd, setCwd] = useState<string | undefined>();
@@ -248,6 +263,7 @@ export default function ChatPage() {
                     message={messages[i]}
                     cacheMiss={cacheMisses.get(i)}
                     expandThinking
+                    expandTools
                   />
                 ))}
                 {finalProcess.length > 0 && (
@@ -255,6 +271,7 @@ export default function ChatPage() {
                     message={finalMessage}
                     contentOverride={finalProcess}
                     expandThinking
+                    expandTools
                     suppressTail
                   />
                 )}
@@ -315,11 +332,13 @@ export default function ChatPage() {
         </div>
         <MessageNavRail anchors={railAnchors} listRef={listRef} />
 
+        <ExtensionWidgets placement="aboveEditor" />
         <StatusBar />
         <ChatInput
           cwd={effectiveCwd}
           onChooseWorkspace={chooseWorkspace}
         />
+        <ExtensionWidgets placement="belowEditor" />
       </div>
       <TreeDialog />
       <ReviewPanel />

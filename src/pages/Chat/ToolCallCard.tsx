@@ -59,13 +59,20 @@ function ToolWarnings({ warnings }: { warnings: ToolWarning[] }) {
   );
 }
 
-export function ToolCallCard({ execution }: { execution: ToolExecution }) {
+export function ToolCallCard({
+  execution,
+  expandByDefault = false,
+}: {
+  execution: ToolExecution;
+  /** 外层回合已展开时同步展示完整结果；用户仍可点击本卡片单独覆盖。 */
+  expandByDefault?: boolean;
+}) {
   const { t } = useTranslation();
   const toolsExpanded = useChatStore((s) => s.toolsExpanded);
   const openWorkspaceFile = useChatStore((s) => s.openWorkspaceFile);
   // null = 跟随全局开关；单独点击后为本地覆盖
   const [localExpanded, setLocalExpanded] = useState<boolean | null>(null);
-  const expanded = localExpanded ?? toolsExpanded;
+  const expanded = localExpanded ?? toolsExpanded ?? expandByDefault;
 
   const summary = toolSummary(execution.toolName, execution.args);
   const details = resultDetails(execution.result);
@@ -159,7 +166,7 @@ export function ToolCallCard({ execution }: { execution: ToolExecution }) {
       )}
 
       {expanded && (
-        <div className="tool-card-body">
+        <div className="tool-card-body" data-testid="tool-card-body">
           {/* 对齐 Codex：参数 JSON 不展示（header 摘要已含命令/路径等关键信息），
               展开只看结果（输出/diff/写入内容） */}
           {(realDiff || writeContent !== null || outputText) && (

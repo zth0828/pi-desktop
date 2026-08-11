@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import type { CompactionReason, PiRuntimeEventEnvelope } from '@shared/pi-event-map';
 import type {
+  PiExtensionUiState,
   PiRuntimeUsageTurn,
   PiRuntimeModelInfo,
   PiRuntimeModelUpdateResult,
@@ -61,7 +62,8 @@ type ChatState = {
   messages: ChatMessage[];
   toolExecutions: Record<string, ToolExecution>;
   /** 全局展开/折叠所有工具卡片（卡片仍可单独点击覆盖） */
-  toolsExpanded: boolean;
+  /** null 跟随所在回合；boolean 表示用户显式设置的全局覆盖。 */
+  toolsExpanded: boolean | null;
   compaction: { reason: CompactionReason } | null;
   retry: RetryState | null;
   queue: QueueState;
@@ -77,6 +79,8 @@ type ChatState = {
   inputDraft: { text: string; nonce: number } | null;
   /** 扩展 UI 请求队列（ctx.ui.confirm/select/input）；同一时间通常只有一个，设计上按队列 */
   uiRequests: PiUiRequestPayload[];
+  /** pi 扩展可序列化 UI 快照（状态、working 文案、文本 widget）。 */
+  extensionUi?: PiExtensionUiState;
 
   start: (cwd: string) => Promise<void>;
   /** behavior：流式中提交的排队方式（默认 followUp 排队；'steer' 当前轮插入） */
@@ -119,7 +123,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   turnStats: null,
   messages: [],
   toolExecutions: {},
-  toolsExpanded: false,
+  toolsExpanded: null,
   compaction: null,
   retry: null,
   queue: { steering: [], followUp: [] },
@@ -129,6 +133,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   workspaceFileRequest: null,
   inputDraft: null,
   uiRequests: [],
+  extensionUi: undefined,
 
   start: async (cwd) => {
     const current = get();
@@ -185,7 +190,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await hostApi.piRuntime.compact();
   },
 
-  toggleToolsExpanded: () => set((s) => ({ toolsExpanded: !s.toolsExpanded })),
+  toggleToolsExpanded: () => set((s) => ({ toolsExpanded: s.toolsExpanded === true ? false : true })),
 
   setTreeOpen: (open) => set({ treeOpen: open }),
 
@@ -253,6 +258,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       retry: null,
       queue: { steering: [], followUp: [] },
       uiRequests: [],
+      extensionUi: state.extensionUi,
     });
   },
 
@@ -449,5 +455,10 @@ export function bindChatEvents(): void {
     useChatStore.setState((s) => ({
       uiRequests: s.uiRequests.filter((r) => r.requestId !== requestId),
     }));
+  });
+  onHostEvent('piRuntime', 'uiState', (extensionUi) => {
+    const current = useChatStore.getState();
+    if (extensionUi.generation !== current.generation || extensionUi.sessionId !== current.sessionId) return;
+    useChatStore.setState({ extensionUi });
   });
 }

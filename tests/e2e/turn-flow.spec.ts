@@ -121,6 +121,12 @@ test('一轮 edit+write → 聚合编辑卡（清单 + 增删统计）→ 撤销
   await sendPrompt(page, 'USE_TOOL_EDIT_WRITE now');
   await waitToolsDone(page, 2);
 
+  const foldSize = await page.getByTestId('turn-fold').evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(foldSize.scrollHeight).toBe(foldSize.clientHeight);
+
   const card = page.getByTestId('turn-changes');
   await expect(card).toBeVisible({ timeout: 30_000 });
   await expect(card.getByTestId('turn-changes-title')).toHaveText('Edited 2 files');
@@ -245,4 +251,29 @@ test('thinking 与最终文本在同一消息时，折叠只保留最终答复',
   await expect(restoredToggle).toBeVisible();
   await restoredToggle.click();
   await expect(restoredPage.locator('.thinking-block pre')).toContainText('THOUGHT: inspect the request');
+});
+
+test('展开本轮过程会显示完整工具输出，工具卡仍可单独收起', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions(foldWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendPrompt(page, 'USE_TOOL_LINES');
+  const toggle = page.getByTestId('turn-fold-toggle').last();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false', { timeout: 30_000 });
+  await toggle.click();
+
+  const body = page.getByTestId('turn-fold-content').getByTestId('tool-card-body');
+  await expect(body).toBeVisible();
+  await expect(body).toContainText('line-01');
+  await expect(body).toContainText('line-12');
+  await page.screenshot({ path: 'output/playwright/turn-fold-long-output.png', fullPage: false });
+
+  await page.getByTestId('turn-fold-content').locator('.tool-card-header').click();
+  await expect(body).toHaveCount(0);
+  const preview = page.getByTestId('turn-fold-content').locator('.tool-card-preview pre');
+  await expect(preview).toContainText('line-12');
+  await expect(preview).not.toContainText('line-01');
 });

@@ -16,6 +16,7 @@ import { ToolCallCard } from './ToolCallCard';
  */
 function ThinkingBlock({ thinking, active, expanded }: { thinking: string; active: boolean; expanded?: boolean }) {
   const { t } = useTranslation();
+  const hiddenThinkingLabel = useChatStore((s) => s.extensionUi?.hiddenThinkingLabel);
   const startedRef = useRef<number | null>(null);
   const endedRef = useRef<number | null>(null);
   if (active && startedRef.current === null) startedRef.current = Date.now();
@@ -27,7 +28,13 @@ function ThinkingBlock({ thinking, active, expanded }: { thinking: string; activ
   return (
     <details className={`thinking-block${active ? ' streaming' : ''}`} open={expanded || active}>
       <summary>
-        {active ? t('chat.thinkingStreaming') : duration ? t('chat.thinkingTimed', { duration }) : t('chat.thinkingDone')}
+        {active
+          ? t('chat.thinkingStreaming')
+          : !expanded && hiddenThinkingLabel
+            ? hiddenThinkingLabel
+            : duration
+              ? t('chat.thinkingTimed', { duration })
+              : t('chat.thinkingDone')}
       </summary>
       <pre>{thinking}</pre>
     </details>
@@ -39,11 +46,13 @@ function AssistantBlock({
   streaming,
   active,
   expandThinking,
+  expandTools,
 }: {
   block: ContentBlock;
   streaming?: boolean;
   active?: boolean;
   expandThinking?: boolean;
+  expandTools?: boolean;
 }) {
   const toolExecutions = useChatStore((s) => s.toolExecutions);
 
@@ -60,7 +69,7 @@ function AssistantBlock({
       args: block.arguments,
       status: 'running' as const,
     };
-    return <ToolCallCard execution={execution} />;
+    return <ToolCallCard execution={execution} expandByDefault={expandTools} />;
   }
   return null;
 }
@@ -72,6 +81,7 @@ export function MessageItem({
   turnStats,
   contentOverride,
   expandThinking,
+  expandTools,
   suppressTail,
 }: {
   message: ChatMessage;
@@ -84,6 +94,8 @@ export function MessageItem({
   contentOverride?: ContentBlock[];
   /** 回合展开后 thinking 内容也同步展开。 */
   expandThinking?: boolean;
+  /** 回合展开后工具结果也同步展开，避免嵌套折叠只显示尾部预览。 */
+  expandTools?: boolean;
   /** 最终 assistant 消息被拆成「过程 block」与「答复文本」时，尾部元数据只渲染一次。 */
   suppressTail?: boolean;
 }) {
@@ -173,6 +185,7 @@ export function MessageItem({
           streaming={message.streaming}
           active={Boolean(message.streaming) && i === content.length - 1}
           expandThinking={expandThinking}
+          expandTools={expandTools}
         />
       ))}
       {message.streaming && <span className="cursor-blink">▍</span>}

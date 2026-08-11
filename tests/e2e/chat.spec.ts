@@ -135,7 +135,10 @@ test('工具调用 → 完成后收入回合过程，展开可查看工具结果
   await expect(card.getByTestId('tool-line')).toContainText('Ran $ ls in', { timeout: 30_000 });
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
 
-  // 展开看结果
+  // 回合展开会同步展开工具结果；工具卡仍可单独收起再展开。
+  await expect(card.locator('.tool-card-body pre').last()).toBeVisible();
+  await card.locator('.tool-card-header').click();
+  await expect(card.locator('.tool-card-body')).toHaveCount(0);
   await card.locator('.tool-card-header').click();
   await expect(card.locator('.tool-card-body pre').last()).toBeVisible();
 
@@ -178,8 +181,9 @@ test('全局展开/折叠工具卡片', async ({ launchElectronApp }) => {
   await page.getByTestId('turn-fold-toggle').last().click();
   const card = page.getByTestId('tool-card').last();
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
-  await expect(card.locator('.tool-card-body')).toHaveCount(0);
+  await expect(card.locator('.tool-card-body')).toBeVisible();
 
+  // 第一次设置显式“全部展开”，第二次显式“全部折叠”。
   await page.getByTestId('session-menu').click();
   await page.getByTestId('toggle-tools').click();
   await expect(card.locator('.tool-card-body')).toBeVisible();

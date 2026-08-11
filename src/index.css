@@ -785,6 +785,12 @@ button.danger-outline {
   gap: 16px;
 }
 
+/* 滚动列表的消息项按内容高度排布；允许 flex 收缩会与 overflow:hidden 的
+   回合/改动卡组合成不可滚动的裁切区域。 */
+.message-list > * {
+  flex-shrink: 0;
+}
+
 .message-user {
   display: flex;
   justify-content: flex-end;
@@ -2096,6 +2102,22 @@ button.danger-outline {
   font-size: 34px;
 }
 
+.models-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.models-header h2 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 34px;
+}
+
+.spin { animation: spin 900ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .provider-list,
 .skill-list,
 .package-list,
@@ -2134,6 +2156,14 @@ button.danger-outline {
 
 .provider-name {
   font-weight: 600;
+}
+
+.provider-source {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
 }
 
 .status-dot {
@@ -2198,6 +2228,21 @@ button.danger-outline {
 
 .provider-model-name {
   font-weight: 500;
+}
+
+.provider-model-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.provider-model-main .hint { margin-left: 7px; }
+
+.provider-model-meta {
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  line-height: 1.35;
 }
 
 .provider-model-current {
@@ -3266,6 +3311,76 @@ button.danger-outline {
 .extui-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+.extui-editor {
+  min-height: 220px;
+  margin: 14px 16px 0;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.extui-editor:focus { outline: none; border-color: var(--accent); }
+
+.extui-toast {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 350;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 9px 10px 9px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-panel);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.extui-toast.warning { border-left-color: var(--warning); }
+.extui-toast.error { border-left-color: var(--danger); }
+.extui-toast span { min-width: 0; overflow-wrap: anywhere; }
+.extui-toast button { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 6px; }
+.extui-toast button:hover { background: var(--bg-hover); color: var(--text); }
+
+.extension-widgets {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0 28px;
+}
+
+.extension-widgets.belowEditor { padding-bottom: 10px; }
+
+.extension-widget {
+  min-width: 0;
+  padding: 6px 9px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.status-bar-extensions {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
 }
 
 .extui-footer {

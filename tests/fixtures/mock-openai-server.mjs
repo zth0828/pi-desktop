@@ -56,7 +56,7 @@ const server = http.createServer((req, res) => {
     const hasToolResult = msgs.slice(lastUserIdx + 1).some((m) => m.role === "tool");
     const wantsTool = !hasToolResult && (
       lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") ||
-      lastUser.includes("USE_TOOL_LONG") ||
+      lastUser.includes("USE_TOOL_LONG") || lastUser.includes("USE_TOOL_LINES") ||
       lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_EDIT_WRITE") ||
       lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
     );
@@ -142,6 +142,8 @@ const server = http.createServer((req, res) => {
       let args = JSON.stringify({ command: "ls" });
       if (lastUser.includes("USE_TOOL_LONG")) {
         args = JSON.stringify({ command: "node -e \"process.stdout.write('x'.repeat(12000))\"" });
+      } else if (lastUser.includes("USE_TOOL_LINES")) {
+        args = JSON.stringify({ command: "printf 'line-01\\nline-02\\nline-03\\nline-04\\nline-05\\nline-06\\nline-07\\nline-08\\nline-09\\nline-10\\nline-11\\nline-12\\n'" });
       }
       if (lastUser.includes("USE_TOOL_EDIT")) {
         toolName = "edit";
