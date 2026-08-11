@@ -105,6 +105,8 @@ async function waitToolsDone(page: import('@playwright/test').Page, count: numbe
   await expect(summary).toBeVisible({ timeout: 30_000 });
   await expect(summary).toHaveAttribute('aria-expanded', 'false');
   await summary.click();
+  const stages = page.getByTestId('process-stage-toggle');
+  for (const stage of await stages.all()) await stage.click();
   await expect(page.getByTestId('tool-card')).toHaveCount(count, { timeout: 30_000 });
   for (const card of await page.getByTestId('tool-card').all()) {
     await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
@@ -204,8 +206,10 @@ test('完成回合整体折叠过程内容，展开恢复阶段文本与工具�
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(0);
   await page.screenshot({ path: 'output/playwright/turn-fold-collapsed.png', fullPage: false });
 
-  // 点击展开：该轮阶段文本和工具卡同时还原，其他轮仍收起。
+  // 点击回合只展示阶段；展开阶段后才还原思考与工具，其他轮仍收起。
   await rows.first().click();
+  await expect(page.getByTestId('tool-card')).toHaveCount(0);
+  await page.getByTestId('process-stage-toggle').first().click();
   await expect(page.getByTestId('tool-card')).toHaveCount(1);
   await expect(page.getByTestId('turn-fold-toggle')).toHaveCount(2);
   const expandedRow = page.locator('[data-testid="turn-fold-toggle"][aria-expanded="true"]');
@@ -235,8 +239,10 @@ test('thinking 与最终文本在同一消息时，折叠只保留最终答复',
   await expect(page.locator('.thinking-block')).toHaveCount(0);
 
   await toggle.click();
+  await expect(page.locator('.thinking-block')).toHaveCount(0);
+  await page.getByTestId('process-stage-toggle').click();
   await expect(page.locator('.thinking-block pre')).toContainText('THOUGHT: inspect the request');
-  await expect(page.locator('.thinking-block')).toHaveAttribute('open', '');
+  await expect(page.locator('.thinking-block')).toHaveClass(/grouped/);
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'FINAL: reasoning complete' })).toBeVisible();
 
   // 完全退出并重启后，pi session 历史里的 thinking 仍应进入同一回合折叠，
@@ -250,6 +256,7 @@ test('thinking 与最终文本在同一消息时，折叠只保留最终答复',
   const restoredToggle = restoredPage.getByTestId('turn-fold-toggle').last();
   await expect(restoredToggle).toBeVisible();
   await restoredToggle.click();
+  await restoredPage.getByTestId('process-stage-toggle').last().click();
   await expect(restoredPage.locator('.thinking-block pre')).toContainText('THOUGHT: inspect the request');
 });
 
@@ -264,6 +271,7 @@ test('展开本轮过程会显示完整工具输出，工具卡仍可单独收�
   const toggle = page.getByTestId('turn-fold-toggle').last();
   await expect(toggle).toHaveAttribute('aria-expanded', 'false', { timeout: 30_000 });
   await toggle.click();
+  await page.getByTestId('process-stage-toggle').last().click();
 
   const body = page.getByTestId('turn-fold-content').getByTestId('tool-card-body');
   await expect(body).toBeVisible();

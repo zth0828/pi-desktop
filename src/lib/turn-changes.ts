@@ -18,6 +18,32 @@ export type LogicalTurn = {
   endIndex: number;
 };
 
+export type TurnStage = {
+  key: string;
+  indices: number[];
+};
+
+/**
+ * 将一轮里的过程消息按“重要阶段”聚合：带 toolCall 的 assistant 消息开启新阶段，
+ * 后续 toolResult 与连续思考归入该阶段。这样模型多次增量思考不会制造大量折叠行。
+ */
+export function groupTurnStages(messages: ChatMessage[], indices: number[], keyPrefix: string): TurnStage[] {
+  const stages: TurnStage[] = [];
+  let current: TurnStage | undefined;
+  for (const index of indices) {
+    const message = messages[index];
+    const startsToolStage = message.role === 'assistant'
+      && message.content.some((block) => block.type === 'toolCall');
+    if (!current || (startsToolStage && current.indices.some((entry) => messages[entry].role === 'assistant'
+      && messages[entry].content.some((block) => block.type === 'toolCall')))) {
+      current = { key: `${keyPrefix}:${stages.length}`, indices: [] };
+      stages.push(current);
+    }
+    current.indices.push(index);
+  }
+  return stages;
+}
+
 /** 按 user 消息边界把消息列表切成逻辑轮；首条 user 之前的消息不属于任何轮 */
 export function groupLogicalTurns(messages: ChatMessage[]): LogicalTurn[] {
   const turns: LogicalTurn[] = [];

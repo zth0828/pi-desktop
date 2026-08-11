@@ -4,6 +4,8 @@ import {
   History,
   MessageSquare,
   Monitor,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plug,
   Plus,
   Puzzle,
@@ -46,6 +48,7 @@ export default function App() {
   const { t } = useTranslation();
   const [page, setPage] = useState<AppPageId>(() => initialAppPage(window.location.search));
   const [platform, setPlatform] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('pi-desktop.sidebar-collapsed') === 'true');
   const state = usePiSystemStore((s) => s.state);
   const env = usePiSystemStore((s) => s.env);
   const latestVersion = usePiSystemStore((s) => s.latestVersion);
@@ -87,34 +90,56 @@ export default function App() {
     if (chatStarted && !isStreaming) void hostApi.piRuntime.newSession();
   };
 
+  const toggleSidebar = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem('pi-desktop.sidebar-collapsed', String(next));
+      return next;
+    });
+  };
+
   return (
-    <div className={isMac ? 'app-layout is-macos' : 'app-layout'}>
+    <div className={`${isMac ? 'app-layout is-macos' : 'app-layout'}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
       {dragStrip}
       <nav className="sidebar">
-        <button className="new-chat" data-testid="new-chat" onClick={newChat}>
+        <div className="sidebar-topbar">
+          {!sidebarCollapsed && <span className="sidebar-brand">Pi</span>}
+          <button
+            className="icon-button sidebar-toggle"
+            data-testid="sidebar-toggle"
+            title={t(sidebarCollapsed ? 'sidebar.expand' : 'sidebar.collapse')}
+            aria-label={t(sidebarCollapsed ? 'sidebar.expand' : 'sidebar.collapse')}
+            aria-expanded={!sidebarCollapsed}
+            onClick={toggleSidebar}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          </button>
+        </div>
+        <button className="new-chat" data-testid="new-chat" title={sidebarCollapsed ? t('sidebar.newChat') : undefined} onClick={newChat}>
           <Plus size={15} />
-          {t('sidebar.newChat')}
+          <span>{t('sidebar.newChat')}</span>
         </button>
-        <SessionList onOpenChat={() => setPage('chat')} />
+        {!sidebarCollapsed && <SessionList onOpenChat={() => setPage('chat')} />}
         <div className="sidebar-nav">
           {PAGES.map(({ id, icon: Icon }) => (
             <button
               key={id}
               data-testid={`nav-${id}`}
               className={page === id ? 'nav-item active' : 'nav-item'}
+              title={sidebarCollapsed ? t(`nav.${id}`) : undefined}
               onClick={() => setPage(id)}
             >
               <Icon size={15} />
-              {t(`nav.${id}`)}
+              <span>{t(`nav.${id}`)}</span>
             </button>
           ))}
         </div>
-        <div className="sidebar-footer">
+        {!sidebarCollapsed && <div className="sidebar-footer">
           <span className="hint">{t('status.ready', { version: env?.pi.version })}</span>
           {latestVersion && latestVersion !== env?.pi.version && (
             <span className="hint">{t('status.latestAvailable', { version: latestVersion })}</span>
           )}
-        </div>
+        </div>}
       </nav>
       <main className="content">
         {page === 'chat' ? (

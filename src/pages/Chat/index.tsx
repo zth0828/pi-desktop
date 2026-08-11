@@ -4,7 +4,7 @@ import { Check, ChevronRight, MoreHorizontal, PanelRight, Pencil, X } from 'luci
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
-import { groupLogicalTurns, turnFinalResponseIndex } from '../../lib/turn-changes';
+import { groupLogicalTurns, groupTurnStages, turnFinalResponseIndex } from '../../lib/turn-changes';
 import { useChatStore } from '../../stores/chat';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
@@ -143,7 +143,11 @@ export default function ChatPage() {
   const listRef = useRef<HTMLDivElement>(null);
   // 一个 user 问题对应一个完整回合；完成后默认收起 thinking/阶段文本/工具调用。
   const [expandedTurns, setExpandedTurns] = useState<Record<number, boolean>>({});
-  useEffect(() => setExpandedTurns({}), [sessionId]);
+  const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setExpandedTurns({});
+    setExpandedStages({});
+  }, [sessionId]);
 
   // user 消息稳定锚点（消息列表在会话内只追加，index 锚点稳定）
   const railAnchors = useMemo<RailAnchor[]>(() => {
@@ -236,7 +240,9 @@ export default function ChatPage() {
       { length: turn.endIndex - turn.startIndex },
       (_, offset) => turn.startIndex + 1 + offset,
     ).filter((i) => i !== finalIndex);
-    const hasProcess = processIndices.some((i) => messages[i].role !== 'toolResult') || finalProcess.length > 0;
+    const stageIndices = [...processIndices, ...(finalProcess.length > 0 ? [finalIndex] : [])];
+    const stages = groupTurnStages(messages, stageIndices, String(turn.startIndex));
+    const hasProcess = stages.length > 0;
 
     return (
       <Fragment key={turn.startIndex}>
@@ -257,24 +263,38 @@ export default function ChatPage() {
             </button>
             {expanded && (
               <div className="turn-fold-content" data-testid="turn-fold-content">
-                {processIndices.map((i) => (
-                  <MessageItem
-                    key={i}
-                    message={messages[i]}
-                    cacheMiss={cacheMisses.get(i)}
-                    expandThinking
-                    expandTools
-                  />
-                ))}
-                {finalProcess.length > 0 && (
-                  <MessageItem
-                    message={finalMessage}
-                    contentOverride={finalProcess}
-                    expandThinking
-                    expandTools
-                    suppressTail
-                  />
-                )}
+                {stages.map((stage, stageIndex) => {
+                  const stageExpanded = expandedStages[stage.key] ?? false;
+                  return (
+                    <section className={`process-stage${stageExpanded ? ' expanded' : ''}`} data-testid="process-stage" key={stage.key}>
+                      <button
+                        className="process-stage-toggle"
+                        data-testid="process-stage-toggle"
+                        aria-expanded={stageExpanded}
+                        onClick={() => setExpandedStages((current) => ({ ...current, [stage.key]: !stageExpanded }))}
+                      >
+                        <ChevronRight size={13} aria-hidden="true" />
+                        <span>{t('chat.turnFold.stage', { index: stageIndex + 1, count: stage.indices.length })}</span>
+                      </button>
+                      {stageExpanded && (
+                        <div className="process-stage-content">
+                          {stage.indices.map((i) => (
+                            <MessageItem
+                              key={i}
+                              message={messages[i]}
+                              contentOverride={i === finalIndex ? finalProcess : undefined}
+                              cacheMiss={cacheMisses.get(i)}
+                              expandThinking
+                              expandTools
+                              groupedThinking
+                              suppressTail={i === finalIndex}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
               </div>
             )}
           </section>

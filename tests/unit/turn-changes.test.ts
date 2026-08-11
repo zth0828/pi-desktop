@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectTurnChanges, groupLogicalTurns, turnFinalResponseIndex, turnTimeRange } from '../../src/lib/turn-changes';
+import { collectTurnChanges, groupLogicalTurns, groupTurnStages, turnFinalResponseIndex, turnTimeRange } from '../../src/lib/turn-changes';
 import { formatWorkDuration } from '../../src/lib/tool-display';
 import type { ChatMessage, ToolExecution } from '../../src/lib/chat-types';
 
@@ -132,6 +132,23 @@ describe('groupLogicalTurns', () => {
 
   it('user 消息自成一轮（尚无回复时 endIndex 指向自己）', () => {
     expect(groupLogicalTurns([msg('user')])).toEqual([{ startIndex: 0, toolCallIds: [], endIndex: 0 }]);
+  });
+});
+
+describe('groupTurnStages', () => {
+  it('连续思考与后续工具结果归为阶段，不按每个 thinking block 拆分', () => {
+    const messages: ChatMessage[] = [
+      msg('user'),
+      { ...msg('assistant'), content: [{ type: 'thinking', thinking: 'inspect' }] },
+      { ...msg('assistant', ['call1']), content: [{ type: 'thinking', thinking: 'read files' }, { type: 'toolCall', id: 'call1', name: 'read' }] },
+      msg('toolResult'),
+      { ...msg('assistant', ['call2']), content: [{ type: 'thinking', thinking: 'apply fix' }, { type: 'toolCall', id: 'call2', name: 'edit' }] },
+      msg('toolResult'),
+    ];
+    expect(groupTurnStages(messages, [1, 2, 3, 4, 5], '0')).toEqual([
+      { key: '0:0', indices: [1, 2, 3] },
+      { key: '0:1', indices: [4, 5] },
+    ]);
   });
 });
 

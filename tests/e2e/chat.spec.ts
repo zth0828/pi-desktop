@@ -118,6 +118,24 @@ test('会话标题菜单、消息复制与 composer 加号菜单', async ({ laun
   await expect(page.getByTestId('token-usage-popover')).toBeHidden();
 });
 
+test('侧边栏折叠为稳定图标栏并可恢复历史列表', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  const sidebar = page.locator('.sidebar');
+  const expandedWidth = (await sidebar.boundingBox())!.width;
+  await page.getByTestId('sidebar-toggle').click();
+  await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('sidebar-sessions')).toHaveCount(0);
+  await expect(page.getByTestId('nav-chat')).toBeVisible();
+  await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(expandedWidth - 100);
+
+  await page.getByTestId('sidebar-toggle').click();
+  await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByTestId('sidebar-sessions')).toBeVisible();
+});
+
 test('工具调用 → 完成后收入回合过程，展开可查看工具结果', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
@@ -130,12 +148,14 @@ test('工具调用 → 完成后收入回合过程，展开可查看工具结果
   await expect(summary).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('tool-card')).toHaveCount(0);
   await summary.click();
+  await expect(page.getByTestId('tool-card')).toHaveCount(0);
+  await page.getByTestId('process-stage-toggle').last().click();
   const card = page.getByTestId('tool-card').last();
   // 动词化一行文案（Codex 范式）：完成态 "Ran $ ls in X.Xs"
   await expect(card.getByTestId('tool-line')).toContainText('Ran $ ls in', { timeout: 30_000 });
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
 
-  // 回合展开会同步展开工具结果；工具卡仍可单独收起再展开。
+  // 阶段展开会同步展开工具结果；工具卡仍可单独收起再展开。
   await expect(card.locator('.tool-card-body pre').last()).toBeVisible();
   await card.locator('.tool-card-header').click();
   await expect(card.locator('.tool-card-body')).toHaveCount(0);
@@ -158,6 +178,7 @@ test('edit 工具 → 行级 diff 展示', async ({ launchElectronApp }) => {
 
   await expect(page.getByTestId('turn-fold-toggle').last()).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('turn-fold-toggle').last().click();
+  await page.getByTestId('process-stage-toggle').last().click();
   const card = page.getByTestId('tool-card').last();
   await expect(card.getByTestId('tool-line')).toContainText('Edited e2e-edit-target.txt', { timeout: 30_000 });
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
@@ -179,6 +200,7 @@ test('全局展开/折叠工具卡片', async ({ launchElectronApp }) => {
 
   await expect(page.getByTestId('turn-fold-toggle').last()).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('turn-fold-toggle').last().click();
+  await page.getByTestId('process-stage-toggle').last().click();
   const card = page.getByTestId('tool-card').last();
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
   await expect(card.locator('.tool-card-body')).toBeVisible();
