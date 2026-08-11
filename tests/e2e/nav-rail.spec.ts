@@ -110,4 +110,11 @@ test('rail 圆点 = user 消息数；悬浮显示原问题，点击跳转并高�
     'msg-rail-dot-chat-msg-2',
     'msg-rail-dot-chat-msg-4',
   ]).toContain(activeId);
+
+  // 上滑后显示回到底部入口；点击后恢复自动跟随底部。
+  await expect(page.getByTestId('scroll-to-bottom')).toBeVisible();
+  await page.screenshot({ path: 'output/playwright/scroll-to-bottom.png', fullPage: false });
+  await page.getByTestId('scroll-to-bottom').click();
+  await expect(page.getByTestId('scroll-to-bottom')).toBeHidden();
+  await expect.poll(() => list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(24);
 });

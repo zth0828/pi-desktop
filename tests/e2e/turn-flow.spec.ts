@@ -195,6 +195,7 @@ test('完成回合整体折叠过程内容，展开恢复阶段文本与工具�
   const rows = page.getByTestId('turn-fold-toggle');
   await expect(rows).toHaveCount(2);
   await expect(rows.last()).toContainText(/Show turn process|展开本轮过程/);
+  await expect(rows.last().getByTestId('turn-fold-duration')).toContainText(/Took|耗时/);
   await expect(page.getByTestId('tool-card')).toHaveCount(0);
 
   // user 消息原位（rail 锚点与 messages 下标对齐），最终文本仍完整显示；

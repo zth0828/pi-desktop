@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectTurnChanges, groupLogicalTurns, groupTurnStages, turnFinalResponseIndex, turnTimeRange } from '../../src/lib/turn-changes';
+import { collectTurnChanges, groupLogicalTurns, groupTurnStages, turnDurationMs, turnFinalResponseIndex, turnTimeRange } from '../../src/lib/turn-changes';
 import { formatWorkDuration } from '../../src/lib/tool-display';
 import type { ChatMessage, ToolExecution } from '../../src/lib/chat-types';
 
@@ -100,10 +100,11 @@ describe('formatWorkDuration', () => {
   });
 });
 
-function msg(role: string, toolCallIds: string[] = []): ChatMessage {
+function msg(role: string, toolCallIds: string[] = [], timestamp?: number): ChatMessage {
   return {
     role,
     content: toolCallIds.map((id) => ({ type: 'toolCall', id, name: 'edit' })),
+    timestamp,
     raw: null,
   };
 }
@@ -186,5 +187,25 @@ describe('turnTimeRange', () => {
 
   it('无时间戳时返回空', () => {
     expect(turnTimeRange({}, ['missing'])).toEqual({ startedAt: undefined, endedAt: undefined });
+  });
+});
+
+describe('turnDurationMs', () => {
+  it('历史回合用消息时间戳计算耗时', () => {
+    const messages = [msg('user', [], 1_000), msg('assistant', ['call1'], 2_500), msg('toolResult', [], 4_000), msg('assistant', [], 8_500)];
+    const [turn] = groupLogicalTurns(messages);
+    expect(turnDurationMs(messages, turn, {})).toBe(7_500);
+  });
+
+  it('实时回合优先使用精确的 run 耗时', () => {
+    const messages = [msg('user', [], 1_000), msg('assistant', [], 8_500)];
+    const [turn] = groupLogicalTurns(messages);
+    expect(turnDurationMs(messages, turn, {}, 1_234)).toBe(1_234);
+  });
+
+  it('缺少时间信息时不伪造耗时', () => {
+    const messages = [msg('user'), msg('assistant')];
+    const [turn] = groupLogicalTurns(messages);
+    expect(turnDurationMs(messages, turn, {})).toBeNull();
   });
 });
