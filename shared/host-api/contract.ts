@@ -463,6 +463,13 @@ export type PiSessionRow = {
   archived: boolean;
 };
 export type PiSessionListResult = { sessions: PiSessionRow[] };
+export type PiSessionSearchMatch = 'name' | 'firstMessage' | 'message';
+export type PiSessionSearchRow = PiSessionRow & {
+  match: PiSessionSearchMatch;
+  snippet: string;
+};
+export type PiSessionSearchPayload = { query: string; limit?: number };
+export type PiSessionSearchResult = { sessions: PiSessionSearchRow[] };
 export type PiSessionPathPayload = { path: string; cwd?: string };
 export type PiSessionArchivePayload = PiSessionPathPayload & { archived: boolean };
 export type PiSessionProjectArchivePayload = { cwd: string; archived: boolean };
@@ -730,6 +737,8 @@ export type HostApiContract = {
     list: (payload?: { scope?: 'cwd' }) => PiSessionListResult;
     /** 全部项目的会话（侧栏按 cwd 分组用）。 */
     listAll: () => PiSessionListResult;
+    /** 搜索全部项目（含归档）的名称、首条消息和 pi SDK 提供的完整消息文本。 */
+    search: (payload: PiSessionSearchPayload) => PiSessionSearchResult;
     /** 切换活动会话；成功后经 piRuntime.sessionReplaced 推全量状态。 */
     switch: (payload: PiSessionPathPayload) => HostSuccess;
     rename: (payload: PiSessionRenamePayload) => HostSuccess;

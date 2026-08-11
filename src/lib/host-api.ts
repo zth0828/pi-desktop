@@ -82,6 +82,7 @@ export const hostApi = {
   piSessions: {
     list: () => invokeHost('piSessions', 'list'),
     listAll: () => invokeHost('piSessions', 'listAll'),
+    search: (query: string, limit?: number) => invokeHost('piSessions', 'search', { query, limit }),
     switch: (path: string, cwd?: string) => invokeHost('piSessions', 'switch', { path, cwd }),
     rename: (path: string, name: string) => invokeHost('piSessions', 'rename', { path, name }),
     fork: (path: string) => invokeHost('piSessions', 'fork', { path }),

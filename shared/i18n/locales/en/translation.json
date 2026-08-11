@@ -501,6 +501,20 @@
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar"
   },
+  "sessionSearch": {
+    "title": "Search chats",
+    "placeholder": "Search chats",
+    "prompt": "Type to search",
+    "loading": "Searching",
+    "empty": "No matching chats",
+    "close": "Close search",
+    "switchFailed": "Could not open this chat",
+    "match": {
+      "name": "Title",
+      "firstMessage": "First message",
+      "message": "Message"
+    }
+  },
   "extui": {
     "dismiss": "Dismiss",
     "confirm": "Confirm",

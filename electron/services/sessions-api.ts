@@ -14,6 +14,8 @@ import type {
   PiSessionProjectArchivePayload,
   PiSessionRenamePayload,
   PiSessionRow,
+  PiSessionSearchPayload,
+  PiSessionSearchResult,
 } from '@shared/host-api/contract';
 import {
   afterSessionReplaced,
@@ -23,6 +25,7 @@ import { settingsApi } from './settings-api';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 import { samePath } from '../utils/same-path';
 import { ensureSessionExportDirectory, sessionExportPath } from '../utils/session-export';
+import { searchSessions } from './session-search';
 
 function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -111,9 +114,29 @@ export const sessionsApi = {
     return { sessions };
   },
 
+  search: async (payload: PiSessionSearchPayload): Promise<PiSessionSearchResult> => {
+    const query = payload.query.trim();
+    if (!query) return { sessions: [] };
+    const sdk = await loadPiSdk();
+    const infos = await sdk.SessionManager.listAll();
+    const current = currentSessionFile();
+    const sessions = searchSessions(infos, query, payload.limit).map(({ session, match, snippet }) => ({
+      ...toRow(session, current, sdk),
+      match,
+      snippet,
+    }));
+    return { sessions };
+  },
+
   switch: async (payload: PiSessionPathPayload): Promise<HostSuccess> => {
     // 跨项目切换：目标会话的 cwd 与当前 runtime 不同时先重建 runtime
-    const before = getActiveRuntime();
+    let before = getActiveRuntime();
+    if (!before && payload.cwd) {
+      const { piRuntimeApi } = await import('./pi-runtime-api');
+      await piRuntimeApi.start({ cwd: payload.cwd });
+      await settingsApi.set({ key: 'workspaceCwd', value: payload.cwd });
+      before = getActiveRuntime();
+    }
     if (payload.cwd && before && !samePath(payload.cwd, before.cwd)) {
       const { piRuntimeApi } = await import('./pi-runtime-api');
       await piRuntimeApi.start({ cwd: payload.cwd });

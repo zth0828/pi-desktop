@@ -501,6 +501,20 @@
     "collapse": "收起侧边栏",
     "expand": "展开侧边栏"
   },
+  "sessionSearch": {
+    "title": "搜索会话",
+    "placeholder": "搜索会话",
+    "prompt": "输入内容开始搜索",
+    "loading": "正在搜索",
+    "empty": "没有匹配的会话",
+    "close": "关闭搜索",
+    "switchFailed": "无法打开这个会话",
+    "match": {
+      "name": "标题",
+      "firstMessage": "首条消息",
+      "message": "消息内容"
+    }
+  },
   "extui": {
     "dismiss": "关闭",
     "confirm": "确认",

@@ -245,13 +245,8 @@ button.danger-outline {
   display: flex;
   height: 54px;
   align-items: center;
-  gap: 7px;
+  gap: 2px;
   -webkit-app-region: no-drag;
-}
-
-.app-window-brand {
-  font-size: 14px;
-  font-weight: 650;
 }
 
 /* Electron 的拖拽层覆盖整个标题高度；交互控件必须明确声明可点击。 */
@@ -285,7 +280,8 @@ button.danger-outline {
   min-height: 32px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
+  gap: 2px;
   padding: 0 4px;
 }
 
@@ -733,6 +729,168 @@ button.danger-outline {
 .icon-button:hover { background: var(--bg-hover); color: var(--text); }
 .session-title-actions { display: flex; align-items: center; gap: 2px; }
 .icon-button.active { background: var(--bg-active); color: var(--text); }
+
+/* 全局会话搜索：固定标题栏入口 + Codex 风格命令面板。 */
+.session-search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: max(72px, 10vh) 20px 24px;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(3px);
+  -webkit-app-region: no-drag;
+}
+
+.session-search-dialog {
+  width: min(680px, calc(100vw - 40px));
+  max-height: min(680px, calc(100vh - 112px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-panel);
+}
+
+.session-search-field {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px 9px 16px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.session-search-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 15px;
+}
+
+.session-search-field input:focus-visible {
+  border-color: transparent;
+  outline: 0;
+}
+
+.session-search-field input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.session-search-results {
+  min-height: 124px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.session-search-state {
+  padding: 38px 18px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.session-search-result {
+  width: 100%;
+  min-height: 86px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 11px 12px;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.session-search-result:hover,
+.session-search-result:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.session-search-result-heading,
+.session-search-meta {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.session-search-result-heading {
+  gap: 8px;
+}
+
+.session-search-result-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-search-archived {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  background: var(--bg-sunken);
+  font-size: 11px;
+}
+
+.session-search-snippet {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-search-result-heading mark,
+.session-search-snippet mark {
+  padding: 0 1px;
+  color: inherit;
+  background: var(--warning-soft);
+}
+
+.session-search-meta {
+  gap: 7px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+.session-search-meta > * + *::before {
+  content: '·';
+  margin-right: 7px;
+}
+
+.session-search-spinner {
+  flex-shrink: 0;
+  animation: session-search-spin 0.8s linear infinite;
+}
+
+@keyframes session-search-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 560px) {
+  .session-search-overlay { padding: 62px 10px 10px; }
+  .session-search-dialog { width: 100%; max-height: calc(100vh - 72px); }
+  .session-search-meta { flex-wrap: wrap; }
+}
 
 /* 用户消息导航 rail（悬浮在消息列表右侧） */
 .msg-rail {

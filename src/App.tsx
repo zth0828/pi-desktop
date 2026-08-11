@@ -9,6 +9,7 @@ import {
   Plug,
   Plus,
   Puzzle,
+  Search,
   Settings as SettingsIcon,
   Sparkles,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ import { hostApi } from './lib/host-api';
 import { onNavigateToPage } from './lib/app-navigation';
 import { initTheme } from './lib/theme';
 import { SessionList } from './components/SessionList';
+import { SessionSearchDialog } from './components/SessionSearchDialog';
 import { ExtensionUiDialog, ExtensionUiNotifications } from './components/ExtensionUiDialog';
 import Onboarding from './pages/Onboarding';
 import ChatPage from './pages/Chat';
@@ -49,6 +51,7 @@ export default function App() {
   const [page, setPage] = useState<AppPageId>(() => initialAppPage(window.location.search));
   const [platform, setPlatform] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('pi-desktop.sidebar-collapsed') === 'true');
+  const [sessionSearchOpen, setSessionSearchOpen] = useState(false);
   const state = usePiSystemStore((s) => s.state);
   const detect = usePiSystemStore((s) => s.detect);
   const chatStarted = useChatStore((s) => s.started);
@@ -70,6 +73,17 @@ export default function App() {
       unbindNavigate();
     };
   }, [detect]);
+
+  useEffect(() => {
+    const openSearch = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k') {
+        event.preventDefault();
+        setSessionSearchOpen(true);
+      }
+    };
+    document.addEventListener('keydown', openSearch);
+    return () => document.removeEventListener('keydown', openSearch);
+  }, []);
 
   const isMac = platform === 'darwin';
   const dragStrip = isMac ? <div className="window-drag-strip" data-testid="window-drag-strip" /> : null;
@@ -101,7 +115,6 @@ export default function App() {
       {dragStrip}
       {isMac && (
         <div className="app-window-controls" data-testid="app-window-controls">
-          <span className="app-window-brand">Pi</span>
           <button
             className="icon-button sidebar-toggle"
             data-testid="sidebar-toggle"
@@ -112,11 +125,20 @@ export default function App() {
           >
             {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
           </button>
+          <button
+            className="icon-button session-search-trigger"
+            data-testid="session-search-trigger"
+            title={t('sessionSearch.title')}
+            aria-label={t('sessionSearch.title')}
+            aria-haspopup="dialog"
+            onClick={() => setSessionSearchOpen(true)}
+          >
+            <Search size={17} />
+          </button>
         </div>
       )}
       <nav className="sidebar">
         {!isMac && <div className="sidebar-topbar">
-          {!sidebarCollapsed && <span className="app-window-brand">Pi</span>}
           <button
             className="icon-button sidebar-toggle"
             data-testid="sidebar-toggle"
@@ -126,6 +148,16 @@ export default function App() {
             onClick={toggleSidebar}
           >
             {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          </button>
+          <button
+            className="icon-button session-search-trigger"
+            data-testid="session-search-trigger"
+            title={t('sessionSearch.title')}
+            aria-label={t('sessionSearch.title')}
+            aria-haspopup="dialog"
+            onClick={() => setSessionSearchOpen(true)}
+          >
+            <Search size={17} />
           </button>
         </div>}
         <button className="new-chat" data-testid="new-chat" title={sidebarCollapsed ? t('sidebar.newChat') : undefined} onClick={newChat}>
@@ -167,6 +199,11 @@ export default function App() {
       </main>
       <ExtensionUiDialog />
       <ExtensionUiNotifications />
+      <SessionSearchDialog
+        open={sessionSearchOpen}
+        onClose={() => setSessionSearchOpen(false)}
+        onOpenChat={() => setPage('chat')}
+      />
     </div>
   );
 }
