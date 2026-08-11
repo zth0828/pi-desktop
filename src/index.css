@@ -2278,6 +2278,38 @@ button.danger-outline {
   max-width: 820px;
 }
 
+.session-export-status {
+  display: flex;
+  width: 100%;
+  max-width: 820px;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.session-export-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.session-export-copy .hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-export-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
 .provider-row,
 .skill-row,
 .package-row,

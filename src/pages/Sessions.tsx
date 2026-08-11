@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PiSessionRow } from '@shared/host-api/contract';
+import { ExternalLink, FolderOpen } from 'lucide-react';
+import type { PiSessionExportInfo, PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { formatRelativeTime, sessionDisplayTitle } from '../lib/session-format';
 
@@ -153,7 +154,7 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
   const [sessions, setSessions] = useState<PiSessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
-  const [exported, setExported] = useState<string>();
+  const [exportInfo, setExportInfo] = useState<PiSessionExportInfo>();
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -168,6 +169,26 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
   }, []);
 
   useEffect(refresh, [refresh]);
+
+  useEffect(() => {
+    void hostApi.piSessions.getExportInfo().then(setExportInfo).catch((err) => {
+      setError(err instanceof Error ? err.message : String(err));
+    });
+  }, []);
+
+  const runShellAction = async (action: () => Promise<{ success: boolean; error?: string }>) => {
+    const result = await action();
+    if (!result.success) setError(result.error ?? 'unknown');
+  };
+
+  const onExported = (lastPath: string) => {
+    setExportInfo((current) => ({
+      directory: current?.directory ?? lastPath.replace(/[\\/][^\\/]+$/, ''),
+      lastPath,
+    }));
+  };
+
+  const lastExportName = exportInfo?.lastPath?.split(/[\\/]/).pop();
 
   return (
     <div className="sessions-page">
@@ -185,10 +206,37 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
           </button>
         </div>
       )}
-      {exported && (
-        <p className="hint" data-testid="sessions-exported">
-          {t('sessions.exported', { path: exported })}
-        </p>
+      {exportInfo && (
+        <div className="session-export-status" data-testid="sessions-export-info">
+          <div className="session-export-copy">
+            <strong>{lastExportName ? t('sessions.lastExport') : t('sessions.exportLocation')}</strong>
+            <span className="hint" title={exportInfo.lastPath ?? exportInfo.directory}>
+              {lastExportName ?? exportInfo.directory}
+            </span>
+          </div>
+          <div className="session-export-actions">
+            {exportInfo.lastPath && (
+              <button
+                className="pill"
+                data-testid="sessions-open-export"
+                onClick={() => void runShellAction(() => hostApi.shell.openPath(exportInfo.lastPath!))}
+              >
+                <ExternalLink size={14} />
+                {t('sessions.openExport')}
+              </button>
+            )}
+            <button
+              className="pill"
+              data-testid="sessions-show-export"
+              onClick={() => void runShellAction(() => exportInfo.lastPath
+                ? hostApi.shell.showInFolder(exportInfo.lastPath)
+                : hostApi.shell.openPath(exportInfo.directory))}
+            >
+              <FolderOpen size={14} />
+              {exportInfo.lastPath ? t('sessions.showInFolder') : t('sessions.openExportFolder')}
+            </button>
+          </div>
+        </div>
       )}
       {!loading && !error && sessions.length === 0 ? (
         <p className="hint" data-testid="sessions-empty">{t('sessions.empty')}</p>
@@ -200,7 +248,7 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
               session={s}
               onChanged={refresh}
               onError={setError}
-              onExported={setExported}
+              onExported={onExported}
               onOpenChat={onOpenChat}
             />
           ))}

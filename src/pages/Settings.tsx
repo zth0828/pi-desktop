@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Monitor, Moon, Sun } from 'lucide-react';
+import { FolderOpen, Monitor, Moon, Sun } from 'lucide-react';
+import type { PiSessionExportInfo } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { setTheme, type Theme } from '../lib/theme';
 import { usePiSystemStore } from '../stores/pi-system';
@@ -33,6 +34,7 @@ export default function SettingsPage() {
   const [notifyUiRequest, setNotifyUiRequest] = useState(true);
   const [compaction, setCompaction] = useState({ reserveTokens: 16384, keepRecentTokens: 20000, enabled: true });
   const [modelWindow, setModelWindow] = useState<number>();
+  const [exportInfo, setExportInfo] = useState<PiSessionExportInfo>();
   const env = usePiSystemStore((s) => s.env);
   const latestVersion = usePiSystemStore((s) => s.latestVersion);
   const detect = usePiSystemStore((s) => s.detect);
@@ -49,6 +51,7 @@ export default function SettingsPage() {
     void hostApi.settings.get('preventSleep').then((v) => setPreventSleep(v === true));
     void hostApi.settings.get('notifyUiRequest').then((v) => setNotifyUiRequest(v !== false));
     void hostApi.providers.getCompaction().then(setCompaction).catch(() => {});
+    void hostApi.piSessions.getExportInfo().then(setExportInfo).catch(() => {});
     void Promise.all([hostApi.providers.listModels(), hostApi.providers.getDefaultModel()]).then(([available, current]) => {
       const model = current.model ? available.models.find((candidate) => candidate.provider === current.model?.provider && candidate.id === current.model?.id) : undefined;
       if (model?.contextWindow) setModelWindow(model.contextWindow);
@@ -169,6 +172,27 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="settings-section" data-testid="settings-session-exports">
+        <h2>{t('settings.sessionExports')}</h2>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('settings.exportLocation')}</div>
+            <div className="settings-row-desc" data-testid="settings-export-directory">
+              {exportInfo?.directory ?? t('states.loading')}
+            </div>
+          </div>
+          <button
+            className="pill"
+            data-testid="settings-open-export-directory"
+            disabled={!exportInfo}
+            onClick={() => exportInfo && void hostApi.shell.openPath(exportInfo.directory)}
+          >
+            <FolderOpen size={14} />
+            {t('sessions.openExportFolder')}
+          </button>
         </div>
       </section>
 

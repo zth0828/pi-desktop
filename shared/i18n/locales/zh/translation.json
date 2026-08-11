@@ -366,7 +366,12 @@
     "sessionMenu": "会话操作",
     "delete": "删除",
     "confirmDelete": "确认删除",
-    "exported": "已导出到 {{path}}"
+    "exported": "已导出到 {{path}}",
+    "exportLocation": "导出位置",
+    "lastExport": "最近导出",
+    "openExport": "打开",
+    "showInFolder": "在文件夹中显示",
+    "openExportFolder": "打开文件夹"
   },
   "extensions": {
     "title": "Packages",
@@ -521,6 +526,8 @@
     "general": "通用",
     "theme": "主题",
     "about": "关于",
+    "sessionExports": "会话导出",
+    "exportLocation": "保存位置",
     "themeOptions": {
       "light": "浅色",
       "dark": "深色",

@@ -333,6 +333,8 @@ export type SettingsSnapshot = {
   preventSleep?: boolean;
   /** 发送快捷键：enter=Enter 发送（默认），cmdEnter=Cmd/Ctrl+Enter 发送、Enter 换行 */
   sendWith?: 'enter' | 'cmdEnter';
+  /** 最近一次成功导出的会话 HTML；用于跨页面/重启恢复打开入口。 */
+  lastSessionExportPath?: string;
 };
 
 export type SettingsGetPayload = { key: keyof SettingsSnapshot };
@@ -467,6 +469,7 @@ export type PiSessionProjectArchivePayload = { cwd: string; archived: boolean };
 export type PiSessionRenamePayload = { path: string; name: string };
 export type PiSessionForkResult = HostSuccess & { path?: string };
 export type PiSessionExportResult = HostSuccess & { path?: string };
+export type PiSessionExportInfo = { directory: string; lastPath?: string };
 
 // —— piFiles：@ 文件引用（补全候选；展开在 piRuntime.prompt 前处理，格式照 pi file-processor）——
 
@@ -693,7 +696,7 @@ export type HostApiContract = {
     getSessionInfo: () => PiRuntimeSessionInfo | null;
     /** /reload：重载扩展/skills/prompts/上下文文件（session.reload；streaming/compacting 中拒绝）。 */
     reload: () => HostSuccess;
-    /** /export [path]：导出当前会话 HTML（缺省导到会话同目录）。 */
+    /** /export [path]：导出当前会话 HTML（缺省导到 Pi Desktop 的系统文档目录）。 */
     exportHtml: (payload?: PiRuntimeExportPayload) => PiSessionExportResult;
     /** / 补全：内置命令 + prompt 模板 + 扩展命令 + skills */
     getCommands: () => PiCommandListResult;
@@ -736,8 +739,10 @@ export type HostApiContract = {
     archiveProject: (payload: PiSessionProjectArchivePayload) => HostSuccess;
     /** pi 无删除 SDK API：删当前会话前先 newSession，随后移入系统废纸篓。 */
     remove: (payload: PiSessionPathPayload) => HostSuccess;
-    /** v1 简化：只导当前会话（exportToHtml 在 AgentSession 上），非当前先 switch。导出到会话同目录。 */
+    /** v1 简化：只导当前会话（exportToHtml 在 AgentSession 上），非当前先 switch。 */
     exportHtml: (payload: PiSessionPathPayload) => PiSessionExportResult;
+    /** 系统统一导出目录 + 最近成功导出路径。 */
+    getExportInfo: () => PiSessionExportInfo;
   };
   settings: {
     getAll: () => SettingsSnapshot;

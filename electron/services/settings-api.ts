@@ -32,6 +32,7 @@ export const settingsApi = {
       notifyUiRequest: store.get('notifyUiRequest') as SettingsSnapshot['notifyUiRequest'],
       preventSleep: store.get('preventSleep') as SettingsSnapshot['preventSleep'],
       sendWith: store.get('sendWith') as SettingsSnapshot['sendWith'],
+      lastSessionExportPath: store.get('lastSessionExportPath') as SettingsSnapshot['lastSessionExportPath'],
     };
   },
   get: async <K extends keyof SettingsSnapshot>(

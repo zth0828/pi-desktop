@@ -91,6 +91,7 @@ export const hostApi = {
       invokeHost('piSessions', 'archiveProject', { cwd, archived }),
     remove: (path: string) => invokeHost('piSessions', 'remove', { path }),
     exportHtml: (path: string) => invokeHost('piSessions', 'exportHtml', { path }),
+    getExportInfo: () => invokeHost('piSessions', 'getExportInfo'),
   },
   piSkills: {
     list: () => invokeHost('piSkills', 'list'),

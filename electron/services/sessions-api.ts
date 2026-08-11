@@ -22,6 +22,7 @@ import {
 import { settingsApi } from './settings-api';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 import { samePath } from '../utils/same-path';
+import { ensureSessionExportDirectory, sessionExportPath } from '../utils/session-export';
 
 function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -215,17 +216,23 @@ export const sessionsApi = {
     const active = getActiveRuntime();
     if (!active) return { success: false, error: 'session not started' };
     try {
-      // v1 简化：exportToHtml 挂在 AgentSession 上，只能导「当前会话」；
-      // 目标不是当前会话时先切过去。默认导出到会话同目录。
+      // exportToHtml 挂在 AgentSession 上，只能导「当前会话」；目标不是当前会话时先切过去。
       if (!samePath(payload.path, active.runtime.session.sessionFile)) {
         const result = await active.runtime.switchSession(payload.path);
         if (result.cancelled) return { success: false, error: 'cancelled' };
         await afterSessionReplaced(active);
       }
-      const exported = await active.runtime.session.exportToHtml();
+      const target = await sessionExportPath(payload.path);
+      const exported = await active.runtime.session.exportToHtml(target);
+      await settingsApi.set({ key: 'lastSessionExportPath', value: exported });
       return { success: true, path: exported };
     } catch (err) {
       return { success: false, error: toError(err) };
     }
   },
+
+  getExportInfo: async () => ({
+    directory: await ensureSessionExportDirectory(),
+    lastPath: await settingsApi.get({ key: 'lastSessionExportPath' }),
+  }),
 };

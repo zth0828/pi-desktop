@@ -40,6 +40,7 @@ import { detectPiEnvironment } from '../utils/pi-detector';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 import { samePath } from '../utils/same-path';
 import { syncLmStudioModels } from '../utils/lmstudio-models';
+import { sessionExportPath } from '../utils/session-export';
 import {
   cancelAllPendingUi,
   createExtensionUIContext,
@@ -49,6 +50,7 @@ import {
 } from './extension-ui';
 import { captureReviewBaseline, clearReviewBaseline } from './review-api';
 import { noteRunEnded, noteRunStarted } from './power-save';
+import { settingsApi } from './settings-api';
 
 export type ActiveRuntime = {
   sdk: PiSdk;
@@ -669,11 +671,16 @@ export const piRuntimeApi = {
     }
   },
 
-  /** /export [path]：导出当前会话 HTML（pi handleExportCommand；缺省导到会话同目录）。 */
+  /** /export [path]：导出当前会话 HTML；缺省统一落到 Pi Desktop 的系统文档目录。 */
   exportHtml: async (payload?: PiRuntimeExportPayload): Promise<PiSessionExportResult> => {
     if (!active) return { success: false, error: 'session not started' };
     try {
-      const exported = await active.runtime.session.exportToHtml(payload?.outputPath);
+      const outputPath = payload?.outputPath
+        ?? (active.runtime.session.sessionFile
+          ? await sessionExportPath(active.runtime.session.sessionFile)
+          : undefined);
+      const exported = await active.runtime.session.exportToHtml(outputPath);
+      await settingsApi.set({ key: 'lastSessionExportPath', value: exported });
       return { success: true, path: exported };
     } catch (err) {
       return { success: false, error: toError(err) };

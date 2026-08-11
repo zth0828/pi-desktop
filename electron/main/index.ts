@@ -11,7 +11,11 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
 // 测试钩子：E2E 用隔离 userData（settings 等壳状态落在这里）
 if (process.env.PI_DESKTOP_USER_DATA_DIR) {
-  app.setPath('userData', process.env.PI_DESKTOP_USER_DATA_DIR);
+  const isolatedUserData = process.env.PI_DESKTOP_USER_DATA_DIR;
+  app.setPath('userData', isolatedUserData);
+  // Keep system-directory features (session exports, downloads) inside the
+  // fixture profile; Electron's documents path does not honor HOME overrides.
+  app.setPath('documents', path.join(isolatedUserData, 'Documents'));
 }
 
 // Package catalog/detail cache lives with the isolated Electron profile.

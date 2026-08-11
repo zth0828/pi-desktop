@@ -366,7 +366,12 @@
     "sessionMenu": "Session actions",
     "delete": "Delete",
     "confirmDelete": "Confirm delete",
-    "exported": "Exported to {{path}}"
+    "exported": "Exported to {{path}}",
+    "exportLocation": "Export location",
+    "lastExport": "Last export",
+    "openExport": "Open",
+    "showInFolder": "Show in folder",
+    "openExportFolder": "Open folder"
   },
   "extensions": {
     "title": "Packages",
@@ -521,6 +526,8 @@
     "general": "General",
     "theme": "Theme",
     "about": "About",
+    "sessionExports": "Session exports",
+    "exportLocation": "Location",
     "themeOptions": {
       "light": "Light",
       "dark": "Dark",

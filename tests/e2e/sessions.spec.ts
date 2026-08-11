@@ -1,7 +1,7 @@
 // M4 验收：会话管理（列表/切换/重命名/删除，真 pi + mock provider，不烧 API quota）。
 // 每个测试独立 agentDir（会话文件互相隔离），模式同 models.spec.ts。
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
@@ -104,6 +104,38 @@ test('发消息 → Sessions 页出现该会话（firstMessage 匹配，标记�
   const row = sessionRows(page).filter({ hasText: 'Say PONG alpha' });
   await expect(row).toHaveCount(1, { timeout: 15_000 });
   await expect(row.getByTestId('session-current')).toBeVisible();
+});
+
+test('导出 HTML → 统一系统目录并在重新进入页面后保留打开入口', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'export location OSPREY');
+  await page.getByTestId('nav-sessions').click();
+  const row = sessionRows(page).filter({ hasText: 'export location OSPREY' });
+  await row.getByTestId('session-export').click();
+
+  const exportInfo = page.getByTestId('sessions-export-info');
+  await expect(exportInfo).toContainText('Last export', { timeout: 15_000 });
+  await expect(page.getByTestId('sessions-open-export')).toBeVisible();
+  await expect(page.getByTestId('sessions-show-export')).toBeVisible();
+  await page.screenshot({ path: 'output/playwright/session-export-actions.png', fullPage: false });
+
+  await page.getByTestId('nav-settings').click();
+  const directory = (await page.getByTestId('settings-export-directory').textContent())?.trim();
+  expect(directory).toBeTruthy();
+  expect(directory!.split(path.sep).slice(-2)).toEqual(['Pi Desktop', 'Exports']);
+  const exportedFiles = (await readdir(directory!)).filter((name) => name.endsWith('.html'));
+  expect(exportedFiles).toHaveLength(1);
+  const exportedHtml = await readFile(path.join(directory!, exportedFiles[0]), 'utf8');
+  expect(exportedHtml).toContain('<script id="session-data" type="application/json">');
+
+  await page.getByTestId('nav-sessions').click();
+  await expect(page.getByTestId('sessions-export-info')).toContainText(exportedFiles[0]);
+  await expect(page.getByTestId('sessions-open-export')).toBeVisible();
 });
 
 test('切换会话 → 消息列表恢复目标会话内容', async ({ launchElectronApp }) => {
