@@ -327,6 +327,20 @@ button.danger-outline {
   background: var(--bg-hover);
 }
 
+.message.search-target {
+  position: relative;
+  z-index: 1;
+  border-radius: 6px;
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 6px;
+  animation: search-target-pulse 700ms ease-out;
+}
+
+@keyframes search-target-pulse {
+  from { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  to { background: transparent; }
+}
+
 .sidebar-sessions {
   flex: 1;
   overflow-y: auto;

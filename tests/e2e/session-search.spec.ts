@@ -44,23 +44,31 @@ test.beforeAll(async () => {
 
   const active = sdk.SessionManager.create(workspace);
   active.appendMessage({ role: 'user', content: 'Visible introduction', timestamp: Date.now() });
-  active.appendMessage({
-    role: 'assistant',
-    content: [{ type: 'text', text: 'The hidden nebula phrase is in a later reply.' }],
-    api: 'openai-completions',
-    provider: 'mock',
-    model: 'mock-1',
-    usage: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 0,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    },
-    stopReason: 'stop',
-    timestamp: Date.now() + 1,
-  });
+  for (let index = 1; index <= 8; index += 1) {
+    active.appendMessage({ role: 'user', content: `Question ${index} with enough spacing for history`, timestamp: Date.now() + index * 2 });
+    active.appendMessage({
+      role: 'assistant',
+      content: [{
+        type: 'text',
+        text: index === 8
+          ? 'The hidden nebula phrase is in this final reply.'
+          : `Ordinary reply ${index}. `.repeat(16),
+      }],
+      api: 'openai-completions',
+      provider: 'mock',
+      model: 'mock-1',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: 'stop',
+      timestamp: Date.now() + index * 2 + 1,
+    });
+  }
   active.appendSessionInfo('Quarterly roadmap');
   activeSessionId = active.getSessionId();
 
@@ -131,8 +139,14 @@ test('top controls stay stable and global search opens active or archived chats'
   await expect(contentResult).toContainText('Message');
   await page.screenshot({ path: 'output/playwright/session-search-open.png', fullPage: false });
 
-  await page.keyboard.press('Escape');
+  await contentResult.click();
   await expect(page.getByTestId('session-search-dialog')).toHaveCount(0);
+  const matchedAssistant = page.locator('#chat-msg-16');
+  await expect(matchedAssistant).toBeInViewport({ timeout: 15_000 });
+  await expect(matchedAssistant).toHaveClass(/search-target/);
+  await expect.poll(() => page.getByTestId('message-list').evaluate((element) => element.scrollTop)).toBeGreaterThan(100);
+  await page.screenshot({ path: 'output/playwright/session-search-target.png', fullPage: false });
+
   await page.getByTestId('session-search-trigger').click();
   await page.getByTestId('session-search-input').fill('telescope phrase');
   const archivedResult = page.getByTestId(`session-search-result-${archivedSessionId}`);
