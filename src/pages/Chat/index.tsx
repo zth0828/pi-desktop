@@ -185,22 +185,29 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
     }
     stickToBottomRef.current = false;
     setSearchHighlightIndex(targetIndex);
-    const frame = requestAnimationFrame(() => requestAnimationFrame(() => {
-      const list = listRef.current;
-      const target = document.getElementById(`chat-msg-${targetIndex}`);
-      if (list && target) {
-        const listRect = list.getBoundingClientRect();
-        const targetRect = target.getBoundingClientRect();
-        list.scrollTo({
-          top: Math.max(0, list.scrollTop + targetRect.top - listRect.top - Math.min(80, list.clientHeight * 0.18)),
-          behavior: 'smooth',
-        });
+  }, [logicalTurns, messages, searchTarget, sessionId]);
+
+  useEffect(() => {
+    if (searchHighlightIndex === undefined) return;
+    let settleTimer = 0;
+    const frame = requestAnimationFrame(() => {
+      settleTimer = window.setTimeout(() => {
+        const list = listRef.current;
+        const target = document.getElementById(`chat-msg-${searchHighlightIndex}`);
+        if (!list || !target) return;
+        list.scrollTop = Math.max(
+          0,
+          target.offsetTop - (list.clientHeight - target.offsetHeight) / 2,
+        );
         target.focus({ preventScroll: true });
-      }
-      onSearchTargetHandled?.();
-    }));
-    return () => cancelAnimationFrame(frame);
-  }, [logicalTurns, messages, onSearchTargetHandled, searchTarget, sessionId]);
+        onSearchTargetHandled?.();
+      }, 100);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
+    };
+  }, [onSearchTargetHandled, searchHighlightIndex]);
 
   useEffect(() => {
     if (searchHighlightIndex === undefined) return;

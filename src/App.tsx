@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   History,
@@ -89,6 +89,7 @@ export default function App() {
 
   const isMac = platform === 'darwin';
   const dragStrip = isMac ? <div className="window-drag-strip" data-testid="window-drag-strip" /> : null;
+  const clearChatSearchTarget = useCallback(() => setChatSearchTarget(undefined), []);
 
   if (state !== 'ready') {
     return (
@@ -186,7 +187,7 @@ export default function App() {
         {page === 'chat' ? (
           <ChatPage
             searchTarget={chatSearchTarget}
-            onSearchTargetHandled={() => setChatSearchTarget(undefined)}
+            onSearchTargetHandled={clearChatSearchTarget}
           />
         ) : page === 'models' ? (
           <ModelsPage />
