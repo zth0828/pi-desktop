@@ -2,10 +2,29 @@
   "name": "pi-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Pi Desktop - A desktop GUI shell for the pi coding agent",
+  "description": "A local-first desktop workbench for the pi coding agent",
   "main": "dist-electron/main/index.js",
-  "author": "Pi Desktop Team",
+  "author": "zth0828",
   "license": "SEE LICENSE IN LICENSE",
+  "homepage": "https://github.com/zth0828/pi-desktop#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zth0828/pi-desktop.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zth0828/pi-desktop/issues"
+  },
+  "keywords": [
+    "pi",
+    "coding-agent",
+    "ai-coding",
+    "desktop",
+    "electron",
+    "react",
+    "developer-tools",
+    "local-first",
+    "mcp"
+  ],
   "packageManager": "pnpm@10.32.1",
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -17,6 +36,11 @@
     "dev": "vite",
     "dev:local-pi": "node scripts/dev-with-local-pi.mjs",
     "build:vite": "vite build",
+    "build": "pnpm run build:vite && electron-builder --dir",
+    "dist": "pnpm run build:vite && electron-builder",
+    "dist:mac": "pnpm run build:vite && electron-builder --mac",
+    "dist:win": "pnpm run build:vite && electron-builder --win",
+    "dist:linux": "pnpm run build:vite && electron-builder --linux",
     "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -58,6 +82,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.4",
     "electron": "40.10.6",
+    "electron-builder": "^26.15.3",
     "fflate": "^0.8.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",

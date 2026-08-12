@@ -7,6 +7,11 @@
     <a href="README.md">English</a> ·
     <a href="README.zh-CN.md">简体中文</a>
   </p>
+  <p>
+    <a href="https://github.com/zth0828/pi-desktop/actions/workflows/ci.yml"><img src="https://github.com/zth0828/pi-desktop/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <a href="https://github.com/zth0828/pi-desktop/releases"><img src="https://img.shields.io/github/v/release/zth0828/pi-desktop?include_prereleases&label=preview" alt="最新预览版"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-personal%20%26%20non--commercial-blue" alt="个人及非商业许可证"></a>
+  </p>
 </div>
 
 Pi Desktop 将 [pi](https://github.com/badlogic/pi-mono) 变成具有原生软件体验的桌面
@@ -15,7 +20,7 @@ Pi Desktop 将 [pi](https://github.com/badlogic/pi-mono) 变成具有原生软�
 
 > [!IMPORTANT]
 > Pi Desktop 不内置也不 fork pi。它加载用户全局安装的 pi SDK，并继续使用 pi
-> 原生配置和会话文件。项目仍在积极开发，目前尚未提供预构建发行包。
+> 原生配置和会话文件。项目仍在积极开发，当前下载版本为未签名预览包。
 
 ![Pi Desktop 流式对话与富 Markdown 输出](./resources/screenshots/chat.png)
 
@@ -111,7 +116,8 @@ Electron 主进程
 
 ## 环境要求
 
-- 当前开发目标为 macOS。Windows 和 Linux 已列入计划，但尚未完成发行验证。
+- 支持 macOS、Windows 和 Linux。GitHub Actions 会构建跨平台安装包；项目仍处于
+  预览阶段，需要更多真实设备验证。
 - Node.js 22.19.0 或更高版本
 - npm
 - pnpm 10.32.1（推荐使用 Corepack）
@@ -123,6 +129,22 @@ Electron 主进程
 npm i -g @earendil-works/pi-coding-agent
 pi --version
 ```
+
+## 下载预览版
+
+从 [GitHub Releases](https://github.com/zth0828/pi-desktop/releases) 下载对应平台的
+安装包。打开前请对照随 Release 发布的 `SHA256SUMS-<platform>.txt` 校验文件。
+
+当前预览包**尚未进行代码签名或 Apple 公证**：
+
+- **macOS：** Gatekeeper 首次启动时可能阻止打开。右键点击 Pi Desktop 并选择
+  **打开**，或在**系统设置 → 隐私与安全性**中允许打开。
+- **Windows：** 可能出现 Microsoft Defender SmartScreen。确认校验和与仓库来源
+  后，选择**更多信息 → 仍要运行**。
+- **Linux：** AppImage 必要时先执行 `chmod +x Pi-Desktop-*.AppImage`。
+
+正式代码签名与 macOS 公证需要平台证书，后续会单独接入。系统警告不代表文件已经
+损坏，但对于无法确认来源或校验和的文件，请勿绕过安全提示。
 
 ## 从源码运行
 
@@ -155,9 +177,9 @@ pnpm screenshots:readme
 
 ## 项目状态
 
-桌面端核心工作流已经实现，并由 Electron E2E 覆盖。打包与分发仍在进行中。下一个
-发行里程碑是未签名的 macOS DMG；签名与公证、Windows/Linux 安装包、自动更新和
-更多统计视图将在后续完成。
+桌面端核心工作流已经实现，并由 Electron E2E 覆盖。CI 会在 macOS、Windows 和
+Linux 上验证源码构建，版本标签会为三个平台生成未签名预览包。签名与公证、自动
+更新以及更广泛的真实设备发行验证仍是后续工作。
 
 ## 参与贡献
 

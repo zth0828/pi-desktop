@@ -7,6 +7,11 @@
     <a href="README.md">English</a> ·
     <a href="README.zh-CN.md">简体中文</a>
   </p>
+  <p>
+    <a href="https://github.com/zth0828/pi-desktop/actions/workflows/ci.yml"><img src="https://github.com/zth0828/pi-desktop/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <a href="https://github.com/zth0828/pi-desktop/releases"><img src="https://img.shields.io/github/v/release/zth0828/pi-desktop?include_prereleases&label=preview" alt="Latest preview release"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-personal%20%26%20non--commercial-blue" alt="Personal and non-commercial license"></a>
+  </p>
 </div>
 
 Pi Desktop turns [pi](https://github.com/badlogic/pi-mono) into a native-feeling
@@ -17,7 +22,7 @@ app makes those capabilities easier to see, control, and use every day.
 > [!IMPORTANT]
 > Pi Desktop does not bundle or fork pi. It loads the user's globally installed
 > pi SDK and uses pi's native configuration and session files. The project is
-> under active development and does not provide prebuilt releases yet.
+> under active development; current downloads are unsigned preview builds.
 
 ![Pi Desktop streaming chat with rich Markdown output](./resources/screenshots/chat.png)
 
@@ -124,8 +129,8 @@ models · sessions · tools · skills · packages · extensions
 
 ## Requirements
 
-- macOS for the current development target. Windows and Linux are planned but
-  are not release-tested yet.
+- macOS, Windows, or Linux. Cross-platform packages are built by GitHub Actions;
+  the project is still in preview and needs broader real-device validation.
 - Node.js 22.19.0 or newer
 - npm
 - pnpm 10.32.1 (Corepack recommended)
@@ -137,6 +142,25 @@ Install pi:
 npm i -g @earendil-works/pi-coding-agent
 pi --version
 ```
+
+## Download Preview Builds
+
+Download the package for your platform from
+[GitHub Releases](https://github.com/zth0828/pi-desktop/releases). Compare the
+file against the published `SHA256SUMS-<platform>.txt` before opening it.
+
+Current preview packages are **not code-signed or notarized**:
+
+- **macOS:** Gatekeeper may block the first launch. Right-click Pi Desktop and
+  choose **Open**, or allow it under **System Settings → Privacy & Security**.
+- **Windows:** Microsoft Defender SmartScreen may appear. Choose **More info →
+  Run anyway** only after verifying the checksum and repository source.
+- **Linux:** Make the AppImage executable when needed with
+  `chmod +x Pi-Desktop-*.AppImage`.
+
+Official signing and macOS notarization require platform certificates and will
+be added separately. A system warning does not mean the download is corrupt,
+but never bypass one for a file whose checksum or source you cannot verify.
 
 ## Run from Source
 
@@ -171,9 +195,9 @@ pnpm screenshots:readme
 ## Project Status
 
 The core desktop workflow is implemented and covered by Electron E2E tests.
-Packaging and distribution remain in progress. The next release milestone is
-an unsigned macOS DMG; signing/notarization, Windows/Linux packages, auto-update,
-and additional analytics views are later work.
+CI validates source builds on macOS, Windows, and Linux, and version tags create
+unsigned preview packages for all three platforms. Signing/notarization,
+auto-update, and broader real-device release validation remain future work.
 
 ## Contributing
 
