@@ -195,8 +195,9 @@ test('git 仓库：启动前 staged/unstaged/untracked/conflict 全部进入 Rev
   await openReview(page);
 
   const panel = page.getByTestId('review-panel');
+  const fileList = panel.getByTestId('review-file-list');
   for (const name of ['staged.txt', 'unstaged.txt', 'untracked.txt', 'conflict.txt']) {
-    await expect(panel.getByText(name, { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(fileList.getByText(name, { exact: true })).toBeVisible({ timeout: 30_000 });
   }
 
   const conflict = panel.getByTestId('review-file').filter({ hasText: 'conflict.txt' });
