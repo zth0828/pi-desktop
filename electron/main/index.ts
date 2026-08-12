@@ -4,6 +4,7 @@ import { resolveAppPageId } from '@shared/app-page';
 import { HostApiRegistry, registerHostInvokeHandler } from './ipc/host-invoke';
 import { createHostServices } from '../services';
 import { disposeAllRuntimes } from '../services/pi-runtime-api';
+import { resolveAppIconPath } from '../utils/app-icon';
 
 // M1 skeleton: minimal single window. Tray/menu/single-instance/session
 // recovery are ported from ClawX in later batches (see docs/TECHNICAL-PLAN.md §5.1).
@@ -30,6 +31,11 @@ function createMainWindow(): BrowserWindow {
   const workArea = screen.getPrimaryDisplay().workAreaSize;
   const width = Math.min(1440, Math.max(960, workArea.width - 64));
   const height = Math.min(900, Math.max(640, workArea.height - 64));
+  const icon = resolveAppIconPath('png', {
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    mainDir: __dirname,
+  });
   const win = new BrowserWindow({
     width,
     height,
@@ -37,6 +43,7 @@ function createMainWindow(): BrowserWindow {
     minWidth: 960,
     minHeight: 640,
     title: 'Pi Desktop',
+    icon,
     // 让 macOS 原生红黄绿按钮叠在应用内容上，避免额外占一整行标题栏。
     ...(process.platform === 'darwin'
       ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 14 } }
@@ -69,6 +76,13 @@ function createMainWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'darwin') {
+    app.dock?.setIcon(resolveAppIconPath('png', {
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      mainDir: __dirname,
+    }));
+  }
   createMainWindow();
 
   app.on('activate', () => {
