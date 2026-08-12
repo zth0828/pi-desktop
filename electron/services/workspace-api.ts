@@ -37,6 +37,22 @@ function activeRoot(): string {
   return runtime.cwd;
 }
 
+/**
+ * 相对路径始终限制在当前工作区。绝对路径只有在 pi 本次 runtime 的 read/edit/write
+ * 工具调用里真实出现过时才允许预览，避免 Renderer 通过 IPC 任意读取本机文件。
+ */
+async function resolvePreviewFile(pathValue: string): Promise<string> {
+  const runtime = getActiveRuntime();
+  if (!runtime) throw new Error('session not started');
+  const root = await realpath(runtime.cwd);
+  if (!path.isAbsolute(pathValue)) return resolveWorkspacePath(root, pathValue);
+  const candidate = path.resolve(pathValue);
+  if (!runtime.previewableExternalFiles.has(candidate)) {
+    throw new Error('file is outside the active workspace and was not produced by this session');
+  }
+  return realpath(candidate);
+}
+
 function relativePath(root: string, absolute: string): string {
   return path.relative(root, absolute).split(path.sep).join('/');
 }
@@ -70,8 +86,7 @@ export const workspaceApi = {
   },
 
   readFile: async (payload: WorkspaceReadPayload): Promise<WorkspaceReadResult> => {
-    const root = await realpath(activeRoot());
-    const file = await resolveWorkspacePath(root, payload.path);
+    const file = await resolvePreviewFile(payload.path);
     const stat = await lstat(file);
     if (!stat.isFile()) throw new Error('path is not a file');
     const extension = path.extname(file).toLowerCase();

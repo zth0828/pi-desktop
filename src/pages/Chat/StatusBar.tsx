@@ -27,6 +27,17 @@ export function StatusBar() {
   const compaction = useChatStore((s) => s.compaction);
   const queue = useChatStore((s) => s.queue);
   const extensionUi = useChatStore((s) => s.extensionUi);
+  const runningServerCommand = useChatStore((s) => Object.values(s.toolExecutions).find((execution) => {
+    if (execution.status !== 'running' || execution.toolName !== 'bash') return false;
+    const command = (execution.args as { command?: unknown } | undefined)?.command;
+    if (typeof command !== 'string') return false;
+    return [
+      /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:dev|start|serve)\b/i,
+      /\b(?:vite|next\s+(?:dev|start)|webpack(?:-dev-server)?|nodemon)\b/i,
+      /\bnode\b[^\n]*\bserver(?:\.js)?\b/i,
+      /\bpython(?:3)?\s+-m\s+http\.server\b/i,
+    ].some((pattern) => pattern.test(command));
+  }));
   const [, setTick] = useState(0);
 
   // retry 倒计时：按 delayMs 本地倒数（pi 不会在倒计时期间再发事件）
@@ -63,6 +74,12 @@ export function StatusBar() {
               maxAttempts: retry.maxAttempts,
             }),
       title: retry.errorMessage,
+    };
+  } else if (isStreaming && runningServerCommand) {
+    status = {
+      testid: 'status-server-running',
+      text: t('chat.status.serverRunning'),
+      title: (runningServerCommand.args as { command?: string } | undefined)?.command,
     };
   } else if (isStreaming && extensionUi?.workingVisible !== false) {
     status = { testid: 'status-working', text: extensionUi?.workingMessage ?? t('chat.status.working') };

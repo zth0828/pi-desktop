@@ -31,9 +31,11 @@ import type {
   AgentSession,
   AgentSessionRuntime,
   EventBus,
+  ExtensionAPI,
   SessionEntry,
   SessionTreeNode,
 } from '@earendil-works/pi-coding-agent';
+import path from 'node:path';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { expandFileReferences } from '../utils/file-expand';
 import { detectPiEnvironment } from '../utils/pi-detector';
@@ -60,6 +62,11 @@ export type ActiveRuntime = {
   generation: number;
   /** 传给 resourceLoader 的事件总线（pi-mcp-adapter 等扩展的状态通道挂在上面） */
   eventBus: EventBus;
+  /**
+   * 仅记录本次 pi 工具调用实际声明过的工作区外文件。
+   * Renderer 永远不能任意读取绝对路径；此白名单只让工具卡能预览自己刚操作的文件。
+   */
+  previewableExternalFiles: Set<string>;
   unsubscribe: () => void;
 };
 
@@ -191,11 +198,57 @@ function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
   };
 }
 
+function rememberPreviewableFile(runtime: ActiveRuntime, toolName: string, args: unknown): void {
+  if (!['read', 'edit', 'write'].includes(toolName) || !args || typeof args !== 'object') return;
+  const candidate = (args as { path?: unknown; file_path?: unknown }).path
+    ?? (args as { file_path?: unknown }).file_path;
+  if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) return;
+  // path.resolve 只做词法规范化；文件可能正在 write 调用中尚未创建，不能 realpath。
+  runtime.previewableExternalFiles.add(path.resolve(candidate));
+}
+
+function desktopWorkspaceInstructions(cwd: string): string {
+  return [
+    '## Pi Desktop workspace rules',
+    `The active workspace root is: ${cwd}`,
+    'Create, edit, and read project files inside this workspace. Prefer paths relative to this root.',
+    'Do not create or modify files outside this workspace unless the user explicitly asks to use another location.',
+    'When starting a development server, do not leave it running in the foreground. Start it in the background with stdout and stderr redirected to a log file inside the workspace, then run a bounded health check. This lets the task continue and prevents the session from appearing stuck.',
+  ].join('\n');
+}
+
+function isInsideWorkspace(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+/**
+ * pi 的官方扩展拦截点：只限制直接文件写工具，模型若需另一个项目必须让用户先在 GUI
+ * 切换工作区。这样仍完全复用 pi 的工具执行与权限模型，不在壳里重做 agent/tool。
+ */
+function workspaceBoundaryExtension(pi: ExtensionAPI): void {
+  pi.on('tool_call', (event, context) => {
+    if (event.toolName !== 'write' && event.toolName !== 'edit') return;
+    const input = event.input as { path?: unknown; file_path?: unknown };
+    const requested = input.path ?? input.file_path;
+    if (typeof requested !== 'string' || !requested.trim()) return;
+    const target = path.resolve(context.cwd, requested);
+    if (isInsideWorkspace(path.resolve(context.cwd), target)) return;
+    return {
+      block: true,
+      reason: `Pi Desktop only writes inside the selected workspace (${context.cwd}). Select ${path.dirname(target)} as the workspace before editing ${target}.`,
+    };
+  });
+}
+
 function bridgeSessionEvents(runtime: ActiveRuntime): void {
   const session = runtime.runtime.session;
   runtime.unsubscribe = session.subscribe((piEvent) => {
     const mapped = mapPiSessionEvent(piEvent);
     if (!mapped) return;
+    if (mapped.type === 'tool.execution.started') {
+      rememberPreviewableFile(runtime, mapped.toolName, mapped.args);
+    }
     // 防休眠挂钩（main 侧自治）：run 期间顶住休眠，重试等待保持，结束/替换解除
     if (mapped.type === 'run.started') noteRunStarted();
     else if (mapped.type === 'run.ended') noteRunEnded(mapped.willRetry);
@@ -278,7 +331,17 @@ async function createRuntime(cwd: string): Promise<ActiveRuntime> {
     const services = await sdk.createAgentSessionServices({
       cwd: effectiveCwd,
       agentDir,
-      resourceLoaderOptions: { eventBus },
+      resourceLoaderOptions: {
+        eventBus,
+        // 使用 pi 官方 ResourceLoader 的追加提示能力；默认系统提示和项目 AGENTS.md
+        // 仍由 pi 完整保留，壳只补充当前已选择的工作区边界与服务启动约定。
+        appendSystemPromptOverride: (base) => [...base, desktopWorkspaceInstructions(effectiveCwd)],
+        extensionFactories: [{
+          name: 'pi-desktop-workspace-boundary',
+          hidden: true,
+          factory: workspaceBoundaryExtension,
+        }],
+      },
     });
     return {
       ...(await sdk.createAgentSessionFromServices({
@@ -302,6 +365,7 @@ async function createRuntime(cwd: string): Promise<ActiveRuntime> {
     sessionId: runtime.session.sessionId,
     generation: 1,
     eventBus,
+    previewableExternalFiles: new Set(),
     unsubscribe: () => {},
   };
   // pi-mcp-adapter 状态快照：缓存 + 转发渲染层（增强项；未装 adapter 时永远不发）

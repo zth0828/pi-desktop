@@ -68,6 +68,7 @@
     "compact": "Compact",
     "status": {
       "working": "Working…",
+      "serverRunning": "A development server is running in the foreground. Stop it, or ask pi to start it in the background.",
       "retrying": "Retrying ({{attempt}}/{{maxAttempts}}) in {{seconds}}s…",
       "retryingNow": "Retrying ({{attempt}}/{{maxAttempts}})…",
       "retryingGeneric": "Retrying…",

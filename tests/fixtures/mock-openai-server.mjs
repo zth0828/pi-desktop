@@ -79,6 +79,7 @@ const server = http.createServer((req, res) => {
       lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") ||
       lastUser.includes("USE_TOOL_LONG") || lastUser.includes("USE_TOOL_LINES") ||
       lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_EDIT_WRITE") ||
+      lastUser.includes("USE_TOOL_FOREGROUND_SERVER") ||
       lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
     );
 
@@ -188,12 +189,17 @@ const server = http.createServer((req, res) => {
       }
       let toolName = "bash";
       let args = JSON.stringify({ command: "ls" });
-      if (lastUser.includes("USE_TOOL_LONG")) {
+      if (lastUser.includes("USE_TOOL_FOREGROUND_SERVER")) {
+        args = JSON.stringify({ command: "node server.js" });
+      } else if (lastUser.includes("USE_TOOL_LONG")) {
         args = JSON.stringify({ command: "node -e \"process.stdout.write('x'.repeat(12000))\"" });
       } else if (lastUser.includes("USE_TOOL_LINES")) {
         args = JSON.stringify({ command: "printf 'line-01\\nline-02\\nline-03\\nline-04\\nline-05\\nline-06\\nline-07\\nline-08\\nline-09\\nline-10\\nline-11\\nline-12\\n'" });
       }
-      if (lastUser.includes("USE_TOOL_EDIT")) {
+      if (lastUser.includes("USE_TOOL_WRITE_OUTSIDE")) {
+        toolName = "write";
+        args = JSON.stringify({ path: "/tmp/pi-desktop-outside-e2e.txt", content: "must not be written\n" });
+      } else if (lastUser.includes("USE_TOOL_EDIT")) {
         toolName = "edit";
         args = JSON.stringify({
           path: "e2e-edit-target.txt",

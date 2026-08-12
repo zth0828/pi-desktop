@@ -68,6 +68,7 @@
     "compact": "压缩上下文",
     "status": {
       "working": "工作中…",
+      "serverRunning": "开发服务正在前台运行；可停止当前任务，或让 pi 在后台启动服务。",
       "retrying": "重试中（{{attempt}}/{{maxAttempts}}），{{seconds}} 秒后重试…",
       "retryingNow": "重试中（{{attempt}}/{{maxAttempts}}）…",
       "retryingGeneric": "重试中…",
