@@ -1,0 +1,71 @@
+Pi Desktop Personal and Non-Commercial License 1.0
+
+Copyright (c) 2026 Pi Desktop contributors
+
+1. Permission
+
+Subject to the terms of this license, you may use, copy, modify, and
+redistribute this software and its source code free of charge solely for:
+
+- personal use;
+- education and academic research; and
+- other non-commercial purposes.
+
+2. Commercial use requires authorization
+
+You may not use this software for any commercial purpose without prior written
+authorization from the copyright holder. Commercial purpose includes, without
+limitation:
+
+- use in or for a for-profit business, organization, or commercial operation;
+- use to provide paid services, hosted services, consulting, or support;
+- sale, licensing, sublicensing, rental, or monetized distribution;
+- inclusion in a commercial product or service; and
+- use that directly or indirectly produces commercial advantage or monetary
+  compensation.
+
+To request a commercial license, contact the repository maintainer through the
+project's issue tracker or another contact method published with the project.
+
+3. Conditions
+
+Any permitted copy or redistribution must include this license, the copyright
+notice above, and the project's NOTICE file. You may not use the project name,
+logo, or contributor names to endorse or promote a derived product without
+prior written permission.
+
+4. Contributions
+
+Unless a separate written agreement states otherwise, contributions submitted
+to this project are licensed to the project and its users under these same
+terms. By submitting a contribution, you represent that you have the right to
+do so.
+
+5. Third-party software
+
+This license applies only to Pi Desktop's original code and assets. Third-party
+components remain subject to their own licenses. See NOTICE and dependency
+license information for details.
+
+6. No trademark license
+
+No trademark rights are granted under this license.
+
+7. Termination
+
+Your rights under this license terminate automatically if you violate its
+terms. Rights may be reinstated only with written permission from the copyright
+holder.
+
+8. Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+This is a source-available license and is not an OSI-approved open-source
+license.

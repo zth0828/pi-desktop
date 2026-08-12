@@ -7,12 +7,13 @@ This product includes code derived from the following open-source projects:
 
 ClawX
 -----
-Portions of this software (Electron shell architecture, host-api IPC
-boundary, preload patterns, chat UI mechanics, packaging pipeline) are
-derived from ClawX, Copyright (c) ValueCell Team, licensed under the
-MIT License. Source files ported from ClawX retain their original
-copyright headers where applicable, and individual commit messages
-identify the ported file paths ("Ported from ClawX: <path>").
+Limited Electron infrastructure in this software (the typed host-api IPC
+boundary and registry, preload allowlist patterns, Vite Electron bootstrap,
+and Streamdown Markdown configuration) is adapted from ClawX,
+Copyright (c) ValueCell Team, licensed under the MIT License. Other desktop
+layout and testing patterns were used as design references. Source comments
+and individual commit messages identify ported or inspired file paths where
+applicable.
 
 pi (pi-mono)
 ------------
