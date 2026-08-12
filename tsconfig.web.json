@@ -12,11 +12,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "useDefineForClassFields": true,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@electron/*": ["electron/*"],
-      "@shared/*": ["shared/*"]
+      "@/*": ["./src/*"],
+      "@electron/*": ["./electron/*"],
+      "@shared/*": ["./shared/*"]
     }
   },
   "include": ["src", "shared"]
