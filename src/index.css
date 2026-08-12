@@ -240,7 +240,7 @@ button.danger-outline {
 .app-window-controls {
   position: fixed;
   top: 0;
-  left: 78px;
+  left: 146px;
   z-index: 102;
   display: flex;
   height: 54px;
@@ -288,16 +288,28 @@ button.danger-outline {
 .sidebar-toggle { flex-shrink: 0; }
 
 .app-layout.sidebar-collapsed .sidebar {
-  width: 56px;
-  padding-inline: 7px;
+  width: 80px;
+  padding-inline: 20px;
 }
 
 .app-layout.sidebar-collapsed .sidebar-topbar { justify-content: center; padding-inline: 0; }
-.app-layout.sidebar-collapsed .new-chat { width: 36px; height: 36px; justify-content: center; margin-inline: 3px; padding: 0; }
+.app-layout.sidebar-collapsed .new-chat { width: 36px; height: 36px; justify-content: center; margin-inline: auto; padding: 0; }
 .app-layout.sidebar-collapsed .new-chat span,
 .app-layout.sidebar-collapsed .nav-item span { display: none; }
 .app-layout.sidebar-collapsed .sidebar-nav { margin-top: auto; padding-top: 8px; }
-.app-layout.sidebar-collapsed .nav-item { width: 36px; height: 36px; justify-content: center; padding: 0; }
+.app-layout.sidebar-collapsed .nav-item { width: 36px; height: 36px; justify-content: center; margin-inline: auto; padding: 0; }
+
+.app-layout.is-macos.sidebar-collapsed .sidebar {
+  padding-top: 102px;
+}
+
+.app-layout.is-macos.sidebar-collapsed .app-window-controls {
+  top: 52px;
+  left: 7px;
+  width: 66px;
+  height: 36px;
+  justify-content: center;
+}
 
 .app-layout.is-macos.sidebar-collapsed .session-titlebar {
   padding-left: 104px;
@@ -411,7 +423,7 @@ button.danger-outline {
   display: flex;
   flex-direction: column;
   background: var(--bg-raised);
-  border-radius: 14px 0 0 0;
+  border-radius: 0;
   border-left: 1px solid var(--border);
   overflow: hidden;
 }

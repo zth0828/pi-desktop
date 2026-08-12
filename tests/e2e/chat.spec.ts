@@ -127,9 +127,13 @@ test('侧边栏折叠为稳定图标栏并可恢复历史列表', async ({ launc
   await expect(windowControls).not.toContainText('Pi');
   await expect(page.getByTestId('session-search-trigger')).toBeVisible();
   const controlsBox = await windowControls.boundingBox();
+  const expandedSidebarBox = await sidebar.boundingBox();
   expect(controlsBox).not.toBeNull();
-  expect(controlsBox!.x).toBeGreaterThan(70);
+  expect(expandedSidebarBox).not.toBeNull();
+  expect(controlsBox!.x + controlsBox!.width).toBeLessThanOrEqual(expandedSidebarBox!.x + expandedSidebarBox!.width - 8);
+  expect(controlsBox!.x).toBeGreaterThan(expandedSidebarBox!.x + expandedSidebarBox!.width / 2);
   expect(controlsBox!.y).toBeLessThan(12);
+  await expect(page.locator('.content')).toHaveCSS('border-top-left-radius', '0px');
 
   const composerBox = await page.locator('.chat-input-card').boundingBox();
   expect(composerBox).not.toBeNull();
@@ -143,6 +147,23 @@ test('侧边栏折叠为稳定图标栏并可恢复历史列表', async ({ launc
   await expect(page.getByTestId('sidebar-sessions')).toHaveCount(0);
   await expect(page.getByTestId('nav-chat')).toBeVisible();
   await expect(windowControls).toBeVisible();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(80);
+  const collapsedControlsBox = await windowControls.boundingBox();
+  const collapsedSidebarBox = await sidebar.boundingBox();
+  const collapsedNewChatBox = await page.getByTestId('new-chat').boundingBox();
+  const collapsedNavBox = await page.getByTestId('nav-chat').boundingBox();
+  expect(collapsedControlsBox).not.toBeNull();
+  expect(collapsedSidebarBox).not.toBeNull();
+  expect(collapsedNewChatBox).not.toBeNull();
+  expect(collapsedNavBox).not.toBeNull();
+  expect(collapsedSidebarBox!.width).toBe(80);
+  expect(collapsedControlsBox!.x).toBeGreaterThanOrEqual(collapsedSidebarBox!.x);
+  expect(collapsedControlsBox!.x + collapsedControlsBox!.width).toBeLessThanOrEqual(collapsedSidebarBox!.x + collapsedSidebarBox!.width);
+  expect(collapsedControlsBox!.y).toBeGreaterThan(48);
+  const sidebarCenter = collapsedSidebarBox!.x + collapsedSidebarBox!.width / 2;
+  for (const box of [collapsedControlsBox!, collapsedNewChatBox!, collapsedNavBox!]) {
+    expect(Math.abs(box.x + box.width / 2 - sidebarCenter)).toBeLessThanOrEqual(0.5);
+  }
   await page.screenshot({ path: 'output/playwright/sidebar-collapsed-refined.png', fullPage: false });
   await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(expandedWidth - 100);
 
