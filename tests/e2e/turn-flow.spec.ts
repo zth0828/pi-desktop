@@ -175,6 +175,37 @@ test('非 Git 目录：聚合编辑卡可回滚，Review 按钮打开完整评�
   await expect(page.getByTestId('review-file')).toHaveCount(2);
 });
 
+test('六个改动初始显示五个，展开后显示完整清单，查看更改直达评审', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions(plainWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendPrompt(page, 'USE_TOOL_WRITE_SIX now');
+  await waitToolsDone(page, 6);
+  await page.getByTestId('turn-fold-toggle').last().click();
+
+  const card = page.getByTestId('turn-changes');
+  await expect(card.getByTestId('turn-changes-title')).toHaveText('Edited 6 files');
+  await expect(card.getByTestId('turn-changes-file')).toHaveCount(5);
+  const more = card.getByTestId('turn-changes-more');
+  await expect(more).toContainText(/Show 1 more file|再显示 1 个文件/);
+  await page.screenshot({ path: 'output/playwright/turn-changes-five-file-limit.png', fullPage: false });
+
+  await more.click();
+  await expect(card.getByTestId('turn-changes-file')).toHaveCount(6);
+  await expect(more).toHaveCount(0);
+
+  await card.getByTestId('turn-changes-view').click();
+  const panel = page.getByTestId('review-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByTestId('workspace-review-tab')).toHaveAttribute('aria-selected', 'true');
+  for (let index = 1; index <= 6; index += 1) {
+    await expect(panel.getByTestId('review-file').filter({ hasText: `generated-${index}.txt` })).toBeVisible();
+  }
+});
+
 test('完成回合整体折叠过程内容，展开恢复阶段文本与工具，最终答复始终可见', async ({
   launchElectronApp,
 }) => {

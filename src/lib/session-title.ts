@@ -5,5 +5,5 @@
 export function sessionTitleFromQuestion(question: string, fallback: string): string {
   const normalized = question.replace(/\s+/g, ' ').trim() || fallback;
   const chars = Array.from(normalized);
-  return chars.length > 42 ? `${chars.slice(0, 42).join('')}…` : normalized;
+  return chars.length > 120 ? `${chars.slice(0, 120).join('')}…` : normalized;
 }

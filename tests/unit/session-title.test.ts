@@ -7,8 +7,8 @@ describe('sessionTitleFromQuestion', () => {
   });
 
   it('按 Unicode 字符截断长标题', () => {
-    const title = sessionTitleFromQuestion('你'.repeat(50), '图片会话');
-    expect(Array.from(title)).toHaveLength(43);
+    const title = sessionTitleFromQuestion('你'.repeat(140), '图片会话');
+    expect(Array.from(title)).toHaveLength(121);
     expect(title.endsWith('…')).toBe(true);
   });
 

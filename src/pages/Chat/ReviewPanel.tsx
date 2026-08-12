@@ -38,6 +38,7 @@ import {
   buildSplitDiffRows,
   collectFallbackFiles,
   hunkLineKind,
+  mergeReviewFiles,
   parseUnifiedDiff,
   type ParsedFileDiff,
 } from '../../lib/review-diff';
@@ -101,34 +102,6 @@ function WorkspaceFileIcon({ name, size = 14 }: { name: string; size?: number })
   if (['zip', 'tar', 'gz', 'tgz', 'bz2', '7z', 'rar'].includes(extension)) return <FileArchive size={size} />;
   if (['md', 'markdown', 'txt', 'log', 'pdf', 'doc', 'docx', 'rtf'].includes(extension)) return <FileText size={size} />;
   return <File size={size} />;
-}
-
-function FallbackView() {
-  const { t } = useTranslation();
-  const toolExecutions = useChatStore((s) => s.toolExecutions);
-  const files = collectFallbackFiles(toolExecutions);
-  return (
-    <div className="review-fallback" data-testid="review-fallback">
-      <div className="review-hint">{t('review.fallbackHint')}</div>
-      {files.length === 0 && <div className="review-empty">{t('review.empty')}</div>}
-      {files.map((file) => (
-        <div className="review-fallback-file" key={file.path}>
-          <div className="review-file-name">{file.path}</div>
-          {file.diff && (
-            <pre className="diff-view" data-testid="diff-view">
-              {parseDiffLines(file.diff).map((line, index) => (
-                <div key={index} className={`diff-line diff-${line.kind}`}>
-                  <span className="diff-linenum">{line.lineNum}</span>
-                  <span className="diff-sign">{line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' '}</span>
-                  <span className="diff-content">{line.content}</span>
-                </div>
-              ))}
-            </pre>
-          )}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function UnifiedDiff({ parsed, onRevert }: { parsed: ParsedFileDiff; onRevert?: (index: number) => void }) {
@@ -378,27 +351,65 @@ function FilePreview({ path }: { path: string }) {
 
 function ReviewWorkspace() {
   const { t } = useTranslation();
+  const toolExecutions = useChatStore((s) => s.toolExecutions);
+  const cwd = useChatStore((s) => s.cwd);
   const [summary, setSummary] = useState<ReviewSummaryResult | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [diff, setDiff] = useState<ParsedFileDiff | null>(null);
+  const [toolDiff, setToolDiff] = useState<string | null>(null);
   const [mode, setMode] = useState<'split' | 'unified'>('split');
   const [showFiles, setShowFiles] = useState(true);
   const [pendingRevert, setPendingRevert] = useState<PendingRevert | null>(null);
   const [revertError, setRevertError] = useState<string | null>(null);
 
+  const toolFiles = useMemo(() => collectFallbackFiles(toolExecutions), [toolExecutions]);
+  const reviewFiles = useMemo(() => mergeReviewFiles(
+    cwd,
+    Boolean(summary?.available),
+    summary?.available ? summary.files : [],
+    toolFiles,
+  ), [cwd, summary, toolFiles]);
+
+  const toolFileFor = useCallback((filePath: string) => {
+    const root = cwd?.replace(/\\/g, '/').replace(/\/$/, '');
+    return toolFiles.find((file) => {
+      const normalized = file.path.replace(/\\/g, '/');
+      const displayPath = root && normalized.startsWith(`${root}/`)
+        ? normalized.slice(root.length + 1)
+        : normalized;
+      return displayPath === filePath;
+    });
+  }, [cwd, toolFiles]);
+
+  const isBaselineFile = useCallback(
+    (filePath: string) => Boolean(summary?.available && summary.files.some((file) => file.path === filePath)),
+    [summary],
+  );
+
   const refreshSummary = useCallback(async () => {
     const next = await hostApi.review.getSummary().catch(() => null);
     setSummary(next);
-    if (next?.available && next.files.length > 0) {
-      setSelected((current) => current && next.files.some((file) => file.path === current) ? current : next.files[0].path);
-    }
     return next;
   }, []);
   const loadDiff = useCallback(async (path: string) => {
+    const fallback = toolFileFor(path);
+    if (!isBaselineFile(path)) {
+      setDiff(null);
+      setToolDiff(fallback?.diff ?? null);
+      return;
+    }
     const result = await hostApi.review.getFileDiff(path).catch(() => null);
     setDiff(result?.available && result.diff ? parseUnifiedDiff(result.diff) : null);
-  }, []);
+    setToolDiff(null);
+  }, [isBaselineFile, toolFileFor]);
   useEffect(() => { void refreshSummary(); }, [refreshSummary]);
+  useEffect(() => {
+    if (reviewFiles.length === 0) {
+      setSelected(null);
+      return;
+    }
+    setSelected((current) => current && reviewFiles.some((file) => file.path === current) ? current : reviewFiles[0].path);
+  }, [reviewFiles]);
   useEffect(() => { if (selected) void loadDiff(selected); }, [selected, loadDiff]);
 
   const confirmRevert = async () => {
@@ -417,10 +428,9 @@ function ReviewWorkspace() {
     if (selected) await loadDiff(selected);
   };
 
-  if (summary && !summary.available) return <FallbackView />;
-  const files: ReviewFileEntry[] = summary?.files ?? [];
-  const selectedFile = files.find((file) => file.path === selected);
-  const canRevertSelected = selectedFile?.status !== 'conflicted';
+  const selectedFile = reviewFiles.find((file) => file.path === selected);
+  const selectedIsBaseline = selected ? isBaselineFile(selected) : false;
+  const canRevertSelected = selectedIsBaseline && selectedFile?.status !== 'conflicted';
   return (
     <div className="review-workspace">
       <div className="review-toolbar">
@@ -433,17 +443,20 @@ function ReviewWorkspace() {
       <div className="review-body">
         {showFiles && (
           <div className="review-file-list" data-testid="review-file-list">
-            {files.length === 0 && <div className="review-empty">{t('review.empty')}</div>}
-            {files.map((file) => (
+            {reviewFiles.length === 0 && <div className="review-empty">{t('review.empty')}</div>}
+            {reviewFiles.map((file) => {
+              const baselineFile = isBaselineFile(file.path);
+              return (
               <div className={`review-file${selected === file.path ? ' selected' : ''}`} data-testid="review-file" key={file.path}>
                 <button className="review-file-main" onClick={() => setSelected(file.path)}>
-                  <span className="review-file-name">{file.path}</span>
+                  <span className="review-file-name" title={file.path}>{file.path}</span>
+                  {!baselineFile && <span className="review-file-status" data-testid="review-file-status">{t('review.readOnly')}</span>}
                   {file.status === 'conflicted' && <span className="review-file-status status-conflicted" data-testid="review-file-status">{t('review.status.conflicted')}</span>}
                   <span className="review-file-stats"><span className="review-stat-add">+{file.added}</span><span className="review-stat-del">-{file.deleted}</span></span>
                 </button>
-                {file.status !== 'conflicted' && <button className="review-revert-btn" data-testid="revert-file" onClick={() => setPendingRevert({ kind: 'file', path: file.path })}>{t('review.revertFile')}</button>}
+                {baselineFile && file.status !== 'conflicted' && <button className="review-revert-btn" data-testid="revert-file" onClick={() => setPendingRevert({ kind: 'file', path: file.path })}>{t('review.revertFile')}</button>}
               </div>
-            ))}
+            )})}
           </div>
         )}
         <div className="review-diff-pane">
@@ -457,7 +470,21 @@ function ReviewWorkspace() {
                 : <UnifiedDiff parsed={diff} onRevert={canRevertSelected ? (index) => setPendingRevert({ kind: 'hunk', path: selected, patch: buildHunkPatch(diff, index) }) : undefined} />}
             </>
           )}
-          {selected && !diff && <div className="review-empty">{t('review.noDiff', { path: selected })}</div>}
+          {selected && toolDiff && (
+            <>
+              <div className="review-file-heading"><FileCode2 size={15} /><span>{selected}</span></div>
+              <pre className="diff-view review-tool-diff" data-testid="review-tool-diff">
+                {parseDiffLines(toolDiff).map((line, index) => (
+                  <div key={index} className={`diff-line diff-${line.kind}`}>
+                    <span className="diff-linenum">{line.lineNum}</span>
+                    <span className="diff-sign">{line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' '}</span>
+                    <span className="diff-content">{line.content}</span>
+                  </div>
+                ))}
+              </pre>
+            </>
+          )}
+          {selected && !diff && !toolDiff && <div className="review-empty">{t('review.noDiff', { path: selected })}</div>}
           {!selected && <div className="review-empty">{t('review.empty')}</div>}
         </div>
       </div>

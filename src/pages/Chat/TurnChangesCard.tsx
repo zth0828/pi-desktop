@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { hostApi } from '../../lib/host-api';
 import { collectTurnChanges } from '../../lib/turn-changes';
 import { useChatStore } from '../../stores/chat';
@@ -15,11 +15,29 @@ export function TurnChangesCard({ toolCallIds }: { toolCallIds: string[] }) {
   const toolExecutions = useChatStore((s) => s.toolExecutions);
   const setReviewOpen = useChatStore((s) => s.setReviewOpen);
   const openWorkspaceFile = useChatStore((s) => s.openWorkspaceFile);
+  const cwd = useChatStore((s) => s.cwd);
   const [gitAvailable, setGitAvailable] = useState(false);
   const [revertState, setRevertState] = useState<'idle' | 'reverting' | 'done' | 'error'>('idle');
   const [revertError, setRevertError] = useState('');
+  const [showAllFiles, setShowAllFiles] = useState(false);
 
   const changes = collectTurnChanges(toolExecutions, toolCallIds);
+  const visibleFiles = showAllFiles ? changes.files : changes.files.slice(0, 5);
+  const hiddenCount = changes.files.length - visibleFiles.length;
+  const normalizedCwd = cwd?.replace(/\\/g, '/').replace(/\/$/, '');
+  const allFilesInWorkspace = changes.files.every((file) => {
+    const normalized = file.path.replace(/\\/g, '/');
+    return !normalized.startsWith('/') || Boolean(normalizedCwd && (
+      normalized === normalizedCwd || normalized.startsWith(`${normalizedCwd}/`)
+    ));
+  });
+
+  const displayPath = (filePath: string) => {
+    const normalized = filePath.replace(/\\/g, '/');
+    return normalizedCwd && normalized.startsWith(`${normalizedCwd}/`)
+      ? normalized.slice(normalizedCwd.length + 1)
+      : normalized;
+  };
 
   useEffect(() => {
     let alive = true;
@@ -52,15 +70,17 @@ export function TurnChangesCard({ toolCallIds }: { toolCallIds: string[] }) {
   return (
     <div className="turn-changes" data-testid="turn-changes">
       <div className="turn-changes-header">
-        <span className="turn-changes-title" data-testid="turn-changes-title">
-          {t('chat.turnChanges.title', { count: changes.files.length })}
-        </span>
-        <span className="turn-changes-stats">
-          <span className="turn-stat-add">+{changes.added}</span>
-          <span className="turn-stat-del">-{changes.deleted}</span>
-        </span>
+        <div className="turn-changes-summary">
+          <span className="turn-changes-title" data-testid="turn-changes-title">
+            {t('chat.turnChanges.title', { count: changes.files.length })}
+          </span>
+          <button className="turn-changes-view" data-testid="turn-changes-view" onClick={() => setReviewOpen(true)}>
+            {t('chat.turnChanges.viewChanges')}
+          </button>
+        </div>
+        <span className="turn-changes-stats"><span className="turn-stat-add">+{changes.added}</span><span className="turn-stat-del">-{changes.deleted}</span></span>
         <span className="turn-changes-actions">
-          {gitAvailable && revertState !== 'done' && (
+          {gitAvailable && allFilesInWorkspace && revertState !== 'done' && (
             <button
               className="turn-changes-btn"
               data-testid="turn-changes-revert"
@@ -90,22 +110,26 @@ export function TurnChangesCard({ toolCallIds }: { toolCallIds: string[] }) {
         </div>
       )}
       <div className="turn-changes-files">
-        {changes.files.map((file) => (
+        {visibleFiles.map((file) => (
           <div className="turn-changes-file" data-testid="turn-changes-file" key={file.path}>
-            <span className="turn-changes-path">{file.path}</span>
             <button
-              className="turn-changes-open"
+              className="turn-changes-path"
               data-testid="turn-changes-open-file"
               title={t('chat.turnChanges.openFile')}
               aria-label={t('chat.turnChanges.openFile')}
               onClick={() => openWorkspaceFile(file.path)}
             >
-              <FolderOpen size={14} />
+              {displayPath(file.path)}
             </button>
             <span className="turn-stat-add">+{file.added}</span>
             <span className="turn-stat-del">-{file.deleted}</span>
           </div>
         ))}
+        {hiddenCount > 0 && (
+          <button className="turn-changes-more" data-testid="turn-changes-more" onClick={() => setShowAllFiles(true)}>
+            {t('chat.turnChanges.showMore', { count: hiddenCount })}<ChevronDown size={14} />
+          </button>
+        )}
       </div>
     </div>
   );

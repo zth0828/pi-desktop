@@ -154,6 +154,8 @@
       "reverted": "已撤销",
       "revertFailed": "撤销失败：{{error}}",
       "review": "审核",
+      "viewChanges": "查看更改",
+      "showMore": "再显示 {{count}} 个文件",
       "openFile": "打开文件"
     },
     "workLog": {
@@ -613,6 +615,7 @@
     "refresh": "刷新",
     "empty": "还没有改动",
     "noDiff": "{{path}} 暂无差异",
+    "readOnly": "只读",
     "revertFile": "回滚此文件",
     "revertHunk": "回滚此 hunk",
     "confirm": "回滚",

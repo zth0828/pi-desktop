@@ -118,7 +118,48 @@ export type ReviewFallbackFile = {
   path: string;
   /** pi edit 工具 details.diff（私有格式，渲染用 tool-display.parseDiffLines） */
   diff?: string;
+  added: number;
+  deleted: number;
 };
+
+type ReviewListEntry = {
+  path: string;
+  status: 'modified' | 'added' | 'deleted' | 'conflicted';
+  added: number;
+  deleted: number;
+};
+
+/**
+ * baseline 负责工作区内的实时状态；工具记录只在 baseline 不可用时兜底，或补入
+ * 工作区外的绝对路径。这样回滚后文件会从列表消失，同时跨目录改动不会丢失。
+ */
+export function mergeReviewFiles(
+  cwd: string | undefined,
+  baselineAvailable: boolean,
+  baselineFiles: ReviewListEntry[],
+  toolFiles: ReviewFallbackFile[],
+): ReviewListEntry[] {
+  const root = cwd?.replace(/\\/g, '/').replace(/\/$/, '');
+  const byPath = new Map<string, ReviewListEntry>();
+  for (const file of baselineFiles) byPath.set(file.path, file);
+  for (const file of toolFiles) {
+    const normalized = file.path.replace(/\\/g, '/');
+    const insideWorkspace = Boolean(root && (
+      normalized === root || normalized.startsWith(`${root}/`) || !normalized.startsWith('/')
+    ));
+    if (baselineAvailable && insideWorkspace) continue;
+    const displayPath = root && normalized.startsWith(`${root}/`) ? normalized.slice(root.length + 1) : normalized;
+    if (!byPath.has(displayPath)) {
+      byPath.set(displayPath, {
+        path: displayPath,
+        status: 'modified',
+        added: file.added,
+        deleted: file.deleted,
+      });
+    }
+  }
+  return [...byPath.values()];
+}
 
 /**
  * 非 git 目录降级汇总：从工具执行记录滤 edit/write 成功项，按路径去重（保留最后一次的 diff）。
@@ -150,7 +191,18 @@ export function collectFallbackFiles(
       details && typeof details === 'object' && typeof (details as { diff?: unknown }).diff === 'string'
         ? ((details as { diff: string }).diff)
         : undefined;
-    byPath.set(path, { path, diff });
+    let added = 0;
+    let deleted = 0;
+    if (diff) {
+      for (const line of diff.split('\n')) {
+        if (/^\+\s*\d*/.test(line)) added += 1;
+        else if (/^-\s*\d*/.test(line)) deleted += 1;
+      }
+    } else if (ex.toolName === 'write' && typeof args?.content === 'string') {
+      const lines = args.content.split('\n');
+      added = args.content ? lines.length - (args.content.endsWith('\n') ? 1 : 0) : 0;
+    }
+    byPath.set(path, { path, diff, added, deleted });
   }
   return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
 }

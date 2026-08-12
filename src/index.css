@@ -749,21 +749,23 @@ button.danger-outline {
 }
 
 .session-title-button {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 7px;
-  max-width: 520px;
+  width: 100%;
+  max-width: none;
   padding: 6px 8px;
   color: var(--text);
   font-size: 14px;
   font-weight: 600;
+  white-space: nowrap;
 }
+.session-title-button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-title-button:hover { background: var(--bg-hover); border-radius: 8px; }
-.session-title { min-width: 0; }
+.session-title { flex: 1; min-width: 0; overflow: hidden; }
 .session-title input { width: min(420px, 56vw); padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg-raised); color: var(--text); }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border-radius: 7px; color: var(--text-secondary); }
 .icon-button:hover { background: var(--bg-hover); color: var(--text); }
-.session-title-actions { display: flex; align-items: center; gap: 2px; }
+.session-title-actions { display: flex; flex: none; align-items: center; gap: 2px; }
 .icon-button.active { background: var(--bg-active); color: var(--text); }
 
 /* 全局会话搜索：固定标题栏入口 + Codex 风格命令面板。 */
@@ -1374,12 +1376,34 @@ button.danger-outline {
   font-size: 13px;
 }
 
-.turn-changes-title {
+.turn-changes-summary {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.turn-changes-title {
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.turn-changes-view {
+  padding: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.turn-changes-view:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .turn-changes-stats {
@@ -1442,14 +1466,28 @@ button.danger-outline {
 .turn-changes-path {
   flex: 1;
   min-width: 0;
+  padding: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-secondary);
+  text-align: left;
 }
 
-.turn-changes-open { flex: none; display: inline-grid; place-items: center; width: 25px; height: 25px; border-radius: 6px; color: var(--text-tertiary); }
-.turn-changes-open:hover { color: var(--text); background: var(--bg-hover); }
+.turn-changes-path:hover { color: var(--text); }
+
+.turn-changes-more {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 7px 13px 9px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.turn-changes-more:hover { color: var(--text); background: var(--bg-hover); }
 
 /* 折叠态输出预览：尾部 N 行 + 截断警告 */
 
@@ -4007,6 +4045,11 @@ button.danger-outline {
   min-width: 0;
   overflow: auto;
   padding: 10px 12px;
+}
+
+.review-tool-diff {
+  min-width: 100%;
+  padding: 8px 0;
 }
 
 .review-hunk {

@@ -301,6 +301,13 @@ test('首问自动命名，本轮统计与 pi usage 口径一致', async ({ laun
   await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
   await expect(page.getByTestId('session-title-button')).toContainText('Say PONG', { timeout: 5_000 });
+  await expect(page.getByTestId('session-title-button').locator('svg')).toHaveCount(0);
+  await expect.poll(async () => page.getByTestId('session-title-button').evaluate((element) =>
+    element.ownerDocument.defaultView!.getComputedStyle(element).whiteSpace,
+  )).toBe('nowrap');
+  await expect.poll(async () => page.getByTestId('session-titlebar').evaluate((element) =>
+    element.scrollHeight === element.clientHeight,
+  )).toBe(true);
   await expect(page.getByTestId('turn-stats')).toContainText(/Turn total|本轮合计/);
   await expect(page.getByTestId('turn-stats')).toContainText(/s|秒/);
 

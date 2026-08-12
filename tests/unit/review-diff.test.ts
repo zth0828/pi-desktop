@@ -9,6 +9,7 @@ import {
   buildHunkPatch,
   buildSplitDiffRows,
   collectFallbackFiles,
+  mergeReviewFiles,
   hunkLineKind,
   parseUnifiedDiff,
 } from '@/lib/review-diff';
@@ -196,7 +197,9 @@ describe('collectFallbackFiles', () => {
     });
     expect(files.map((f) => f.path)).toEqual(['x.txt', 'z.txt']);
     expect(files[0].diff).toBe('-new\n+newer');
+    expect(files[0]).toMatchObject({ added: 1, deleted: 1 });
     expect(files[1].diff).toBeUndefined();
+    expect(files[1]).toMatchObject({ added: 1, deleted: 0 });
   });
 
   it('兼容 file_path 参数形态', () => {
@@ -204,5 +207,31 @@ describe('collectFallbackFiles', () => {
       a: { toolName: 'edit', status: 'success', args: { file_path: 'fp.txt' } },
     });
     expect(files.map((f) => f.path)).toEqual(['fp.txt']);
+  });
+});
+
+describe('mergeReviewFiles', () => {
+  it('baseline 可用时只补工作区外的绝对路径', () => {
+    const files = mergeReviewFiles('/workspace', true, [
+      { path: 'inside.ts', status: 'modified', added: 2, deleted: 1 },
+    ], [
+      { path: 'inside.ts', added: 1, deleted: 1 },
+      { path: '/workspace/absolute-inside.ts', added: 3, deleted: 0 },
+      { path: '/another-project/external.ts', added: 4, deleted: 2 },
+    ]);
+    expect(files).toEqual([
+      { path: 'inside.ts', status: 'modified', added: 2, deleted: 1 },
+      { path: '/another-project/external.ts', status: 'modified', added: 4, deleted: 2 },
+    ]);
+  });
+
+  it('baseline 不可用时保留全部工具文件并缩短工作区内绝对路径', () => {
+    expect(mergeReviewFiles('/workspace', false, [], [
+      { path: '/workspace/src/a.ts', added: 1, deleted: 0 },
+      { path: '/other/b.ts', added: 2, deleted: 1 },
+    ])).toEqual([
+      { path: 'src/a.ts', status: 'modified', added: 1, deleted: 0 },
+      { path: '/other/b.ts', status: 'modified', added: 2, deleted: 1 },
+    ]);
   });
 });

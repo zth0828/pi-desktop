@@ -6,6 +6,7 @@
 //   "USE_TOOL_WRITE" → 第一轮返回 tool_call(write: 新建 e2e-new-file.txt)
 //   "USE_TOOL_READ_IMAGE" → 第一轮返回 tool_call(read: preview.png)
 //   "USE_TOOL_EDIT_WRITE" → 第一轮返回两个并行 tool_call（edit + write 各一）
+//   "USE_TOOL_WRITE_SIX" → 第一轮返回六个并行 write tool_call（改动卡折叠）
 //   "MCP_SEARCH"/"MCP_CALL" → 驱动 mcp 代理工具
 //   "SLOW ..." → 30 个 chunk × 100ms 慢速流（用于 abort 测试）
 //   "HANG ..." → 持续流式输出直到客户端 abort（用于多会话并发测试）
@@ -79,7 +80,7 @@ const server = http.createServer((req, res) => {
     const wantsTool = !hasToolResult && (
       lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") ||
       lastUser.includes("USE_TOOL_LONG") || lastUser.includes("USE_TOOL_LINES") ||
-      lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_EDIT_WRITE") ||
+      lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_EDIT_WRITE") || lastUser.includes("USE_TOOL_WRITE_SIX") ||
       lastUser.includes("USE_TOOL_FOREGROUND_SERVER") ||
       lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
     );
@@ -169,6 +170,24 @@ const server = http.createServer((req, res) => {
     }
 
     if (wantsTool) {
+      if (lastUser.includes("USE_TOOL_WRITE_SIX")) {
+        const calls = Array.from({ length: 6 }, (_, index) => ({
+          index,
+          id: `call_mock_${++callSeq}`,
+          type: "function",
+          function: { name: "write", arguments: "" },
+        }));
+        send({ role: "assistant", content: "PROCESS: preparing files", tool_calls: calls });
+        send({
+          tool_calls: calls.map((call, index) => ({
+            index,
+            function: { arguments: JSON.stringify({ path: `generated-${index + 1}.txt`, content: `file ${index + 1}\n` }) },
+          })),
+        }, "tool_calls", { prompt_tokens: 10, completion_tokens: 8, total_tokens: 18 });
+        res.write("data: [DONE]\n\n");
+        res.end();
+        return;
+      }
       // 一轮双工具（并行 tool_calls）：edit + write，驱动聚合编辑卡 E2E
       if (lastUser.includes("USE_TOOL_EDIT_WRITE")) {
         const editArgs = JSON.stringify({

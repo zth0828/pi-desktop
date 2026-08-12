@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDown, Check, ChevronRight, PanelRight, Pencil, X } from 'lucide-react';
+import { ArrowDown, Check, ChevronRight, PanelRight, X } from 'lucide-react';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
@@ -61,7 +61,7 @@ function SessionTitleBar() {
           </>
         ) : (
           <button className="session-title-button" data-testid="session-title-button" onClick={beginRename} title={t('chat.renameSession')}>
-            <span>{displayName}</span><Pencil size={13} />
+            <span>{displayName}</span>
           </button>
         )}
       </div>
