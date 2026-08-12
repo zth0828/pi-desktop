@@ -2,7 +2,7 @@
 // 从 spike 脚本搬入（/tmp/pi-desktop-spikes/mock-openai.mjs），新增 SLOW 模式验证 abort。
 // 脚本协议（按最后一条 user 消息分派）：
 //   "USE_TOOL_LS" → 第一轮返回 tool_call(bash: ls)，之后回显工具结果
-//   "USE_TOOL_EDIT" → 第一轮返回 tool_call(edit: e2e-edit-target.txt alpha→beta)
+//   "USE_TOOL_EDIT" / "update the release status" → 第一轮返回 tool_call(edit: alpha→beta)
 //   "USE_TOOL_WRITE" → 第一轮返回 tool_call(write: 新建 e2e-new-file.txt)
 //   "USE_TOOL_READ_IMAGE" → 第一轮返回 tool_call(read: preview.png)
 //   "USE_TOOL_EDIT_WRITE" → 第一轮返回两个并行 tool_call（edit + write 各一）
@@ -78,7 +78,7 @@ const server = http.createServer((req, res) => {
     const lastUser = lastUserMessage ? JSON.stringify(lastUserMessage) : "";
     const hasToolResult = msgs.slice(lastUserIdx + 1).some((m) => m.role === "tool");
     const wantsTool = !hasToolResult && (
-      lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") ||
+      lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") || lastUser.includes("update the release status") ||
       lastUser.includes("USE_TOOL_LONG") || lastUser.includes("USE_TOOL_LINES") ||
       lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_READ_EXTERNAL_HISTORY") || lastUser.includes("USE_TOOL_EDIT_WRITE") || lastUser.includes("USE_TOOL_WRITE_SIX") ||
       lastUser.includes("USE_TOOL_FOREGROUND_SERVER") ||
@@ -149,7 +149,7 @@ const server = http.createServer((req, res) => {
     }
 
     // Rich markdown fixture: exercises renderer-only presentation without changing pi's protocol.
-    if (lastUser.includes("RICH_MARKDOWN")) {
+    if (lastUser.includes("RICH_MARKDOWN") || lastUser.includes("Create a concise release plan for Pi Desktop")) {
       const text = "# Release plan\n\n- [x] Ship the shell\n- [ ] Add preview polish\n- [ ] Verify dark theme\n\n| Metric | Value |\n| --- | ---: |\n| Tokens | 42 |\n\n> Keep the response readable.\n\n\`\`\`ts\nconst answer = 42;\nif (answer) {\n  console.log(answer);\n}\n\`\`\`\n\n[Open docs](https://example.com/docs)";
       send({ role: "assistant", content: "" });
       for (const ch of text) send({ content: ch });
@@ -219,11 +219,11 @@ const server = http.createServer((req, res) => {
       if (lastUser.includes("USE_TOOL_WRITE_OUTSIDE")) {
         toolName = "write";
         args = JSON.stringify({ path: "/tmp/pi-desktop-outside-e2e.txt", content: "must not be written\n" });
-      } else if (lastUser.includes("USE_TOOL_EDIT")) {
+      } else if (lastUser.includes("USE_TOOL_EDIT") || lastUser.includes("update the release status")) {
         toolName = "edit";
         args = JSON.stringify({
-          path: "e2e-edit-target.txt",
-          edits: [{ oldText: "alpha", newText: "beta" }],
+          path: lastUser.includes("update the release status") ? "release-status.txt" : "e2e-edit-target.txt",
+          edits: [{ oldText: lastUser.includes("update the release status") ? "status: alpha" : "alpha", newText: lastUser.includes("update the release status") ? "status: beta" : "beta" }],
         });
       } else if (lastUser.includes("USE_TOOL_WRITE")) {
         toolName = "write";

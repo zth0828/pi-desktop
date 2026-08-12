@@ -21,7 +21,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "pnpm run build:vite && playwright test",
-    "test:contract": "vitest run --config vitest.contract.config.ts"
+    "test:contract": "vitest run --config vitest.contract.config.ts",
+    "screenshots:readme": "pnpm run build:vite && node scripts/capture-readme-screenshots.mjs"
   },
   "piCompat": {
     "min": "0.83.0",

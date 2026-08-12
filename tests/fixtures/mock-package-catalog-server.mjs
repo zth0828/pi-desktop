@@ -2,10 +2,9 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 
 const tarballPath = process.argv[2];
-if (!tarballPath) throw new Error('tarball path is required');
-const tarball = readFileSync(tarballPath);
+const tarball = tarballPath ? readFileSync(tarballPath) : null;
 
-const allPackages = [
+const testPackages = [
   {
     name: 'pi-desktop-catalog-fixture',
     description: 'Installable package used by the Pi Desktop catalog test.',
@@ -31,6 +30,37 @@ const allPackages = [
     types: ['theme'],
   },
 ];
+
+const readmeDemoPackages = [
+  {
+    name: 'pi-mcp-adapter',
+    description: 'Connect pi to Model Context Protocol servers and tools.',
+    author: 'pi ecosystem',
+    downloads: 12800,
+    date: 1786000000000,
+    types: ['extension'],
+  },
+  {
+    name: 'pi-web-access',
+    description: 'Add web search and page-reading tools to pi sessions.',
+    author: 'pi ecosystem',
+    downloads: 9400,
+    date: 1785000000000,
+    types: ['extension'],
+  },
+  {
+    name: 'context-mode',
+    description: 'A context-management extension for long-running coding sessions.',
+    author: 'pi ecosystem',
+    downloads: 6100,
+    date: 1784000000000,
+    types: ['extension'],
+  },
+];
+
+const allPackages = process.env.PI_CATALOG_README_DEMO === '1'
+  ? readmeDemoPackages
+  : testPackages;
 
 function escapeHtml(value) {
   return String(value)
@@ -132,6 +162,11 @@ const server = createServer((req, res) => {
     return;
   }
   if (url.pathname === '/pi-desktop-catalog-fixture/-/pi-desktop-catalog-fixture-1.0.0.tgz') {
+    if (!tarball) {
+      res.writeHead(404);
+      res.end('tarball unavailable');
+      return;
+    }
     res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': tarball.length });
     res.end(tarball);
     return;
