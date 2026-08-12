@@ -8,6 +8,7 @@ import type {
   WorkspaceReadResult,
 } from '@shared/host-api/contract';
 import { resolveWorkspacePath } from '../utils/workspace-path';
+import { normalizePreviewablePath } from '../utils/previewable-files';
 import { getActiveRuntime } from './pi-runtime-api';
 
 const EXCLUDED_DIRS = new Set(['.git', 'node_modules']);
@@ -46,7 +47,7 @@ async function resolvePreviewFile(pathValue: string): Promise<string> {
   if (!runtime) throw new Error('session not started');
   const root = await realpath(runtime.cwd);
   if (!path.isAbsolute(pathValue)) return resolveWorkspacePath(root, pathValue);
-  const candidate = path.resolve(pathValue);
+  const candidate = normalizePreviewablePath(pathValue);
   if (!runtime.previewableExternalFiles.has(candidate)) {
     throw new Error('file is outside the active workspace and was not produced by this session');
   }

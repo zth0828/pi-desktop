@@ -80,7 +80,7 @@ const server = http.createServer((req, res) => {
     const wantsTool = !hasToolResult && (
       lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") ||
       lastUser.includes("USE_TOOL_LONG") || lastUser.includes("USE_TOOL_LINES") ||
-      lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_EDIT_WRITE") || lastUser.includes("USE_TOOL_WRITE_SIX") ||
+      lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_READ_EXTERNAL_HISTORY") || lastUser.includes("USE_TOOL_EDIT_WRITE") || lastUser.includes("USE_TOOL_WRITE_SIX") ||
       lastUser.includes("USE_TOOL_FOREGROUND_SERVER") ||
       lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
     );
@@ -231,6 +231,9 @@ const server = http.createServer((req, res) => {
           path: "e2e-new-file.txt",
           content: "hello from agent\n",
         });
+      } else if (lastUser.includes("USE_TOOL_READ_EXTERNAL_HISTORY")) {
+        toolName = "read";
+        args = JSON.stringify({ path: "/tmp/pi-desktop-external-history.txt" });
       } else if (lastUser.includes("USE_TOOL_READ_IMAGE")) {
         toolName = "read";
         args = JSON.stringify({ path: "preview.png" });

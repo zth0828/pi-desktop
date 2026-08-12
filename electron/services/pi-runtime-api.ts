@@ -41,6 +41,10 @@ import { expandFileReferences } from '../utils/file-expand';
 import { detectPiEnvironment } from '../utils/pi-detector';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 import { samePath } from '../utils/same-path';
+import {
+  normalizePreviewablePath,
+  previewableExternalFilesFromMessages,
+} from '../utils/previewable-files';
 import { syncLmStudioModels } from '../utils/lmstudio-models';
 import { sessionExportPath } from '../utils/session-export';
 import {
@@ -287,8 +291,14 @@ function rememberPreviewableFile(runtime: ActiveRuntime, toolName: string, args:
   const candidate = (args as { path?: unknown; file_path?: unknown }).path
     ?? (args as { file_path?: unknown }).file_path;
   if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) return;
-  // path.resolve 只做词法规范化；文件可能正在 write 调用中尚未创建，不能 realpath。
-  runtime.previewableExternalFiles.add(path.resolve(candidate));
+  runtime.previewableExternalFiles.add(normalizePreviewablePath(candidate));
+}
+
+function restorePreviewableExternalFiles(runtime: ActiveRuntime): void {
+  runtime.previewableExternalFiles = previewableExternalFilesFromMessages(
+    runtime.runtime.session.messages as unknown[],
+    runtime.cwd,
+  );
 }
 
 function desktopWorkspaceInstructions(cwd: string): string {
@@ -479,6 +489,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
     }
   });
   await bindCurrentSession(active_);
+  restorePreviewableExternalFiles(active_);
   bridgeSessionEvents(active_);
   // Review baseline 必须在首次 run 前固定：Git 仓库固定 HEAD，非 Git 目录固定
   // 会话启动快照。失败不阻塞会话启动（面板按不可用降级）。
@@ -505,6 +516,7 @@ export async function afterSessionReplaced(runtime: ActiveRuntime): Promise<PiRu
   runtime.generation = ++generationSequence;
   runtime.sessionId = runtime.runtime.session.sessionId;
   await bindCurrentSession(runtime);
+  restorePreviewableExternalFiles(runtime);
   bridgeSessionEvents(runtime);
   const state = snapshotState(runtime);
   sendHostEvent('piRuntime', 'sessionReplaced', state);
@@ -843,6 +855,7 @@ export const piRuntimeApi = {
     try {
       resetExtensionUiState({ sessionId: active.sessionId, generation: active.generation });
       await session.reload();
+      restorePreviewableExternalFiles(active);
       // TUI /reload 后 rebuildChatFromMessages + 重建补全源；壳推全量状态（渲染层重取命令列表）
       sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));
       return { success: true };

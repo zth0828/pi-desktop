@@ -22,6 +22,7 @@ let dirtyWorkspace: string;
 
 const git = (cwd: string, args: string[]) =>
   execFileSync('git', ['-C', cwd, ...args], { stdio: 'pipe' }).toString();
+const externalHistoryFile = '/tmp/pi-desktop-external-history.txt';
 
 test.beforeAll(async () => {
   mock = spawn(process.execPath, [
@@ -39,6 +40,7 @@ test.beforeAll(async () => {
   repoWorkspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-repo-'));
   plainWorkspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-plain-'));
   dirtyWorkspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-dirty-repo-'));
+  await writeFile(externalHistoryFile, 'external history preview\n');
 
   // edit 工具 E2E 的目标文件（mock 会把 alpha → beta）；git 仓库含一个初始 commit
   await writeFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
@@ -116,6 +118,7 @@ test.afterAll(async () => {
   await rm(repoWorkspace, { recursive: true, force: true });
   await rm(plainWorkspace, { recursive: true, force: true });
   await rm(dirtyWorkspace, { recursive: true, force: true });
+  await rm(externalHistoryFile, { force: true });
 });
 
 const launchOptions = (workspace: string) => ({
@@ -416,6 +419,32 @@ test('read 图片工具卡：预览按钮直达右侧图片查看器', async ({ 
   const panel = page.getByTestId('review-panel');
   await expect(panel).toBeVisible();
   await expect(panel.getByTestId('workspace-image-preview').locator('img')).toBeVisible();
+});
+
+test('历史会话恢复后仍可预览工作区外的工具文件', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await runTool(page, 'USE_TOOL_READ_EXTERNAL_HISTORY');
+  const liveCard = page.getByTestId('tool-card').last();
+  await liveCard.getByTestId('tool-preview-file').click();
+  await expect(page.getByTestId('workspace-preview')).toContainText('external history preview');
+  await app.close();
+
+  const restoredApp = await launchElectronApp(launchOptions(repoWorkspace));
+  const restoredPage = await restoredApp.firstWindow();
+  await waitSessionReady(restoredPage);
+  await restoredPage.locator('.sidebar-session').filter({ hasText: 'USE_TOOL_READ_EXTERNAL_HISTORY' }).click();
+  const turn = restoredPage.getByTestId('turn-fold-toggle').last();
+  await expect(turn).toBeVisible({ timeout: 30_000 });
+  await turn.click();
+  await restoredPage.getByTestId('process-stage-toggle').last().click();
+  const restoredCard = restoredPage.getByTestId('tool-card').last();
+  await restoredCard.getByTestId('tool-preview-file').click();
+  await expect(restoredPage.getByTestId('workspace-preview')).toContainText('external history preview');
+  await restoredPage.screenshot({ path: 'output/playwright/external-history-preview.png', fullPage: false });
+  await restoredApp.close();
 });
 
 test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文件删除', async ({ launchElectronApp }) => {
