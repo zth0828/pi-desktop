@@ -19,7 +19,12 @@ import type {
 } from '@shared/host-api/contract';
 import {
   afterSessionReplaced,
+  activateSessionRuntime,
+  createSessionRuntime,
   getActiveRuntime,
+  getLiveSessionRows,
+  getRuntimeForSession,
+  isSessionRunning,
 } from './pi-runtime-api';
 import { settingsApi } from './settings-api';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
@@ -102,8 +107,19 @@ function toRow(s: {
     created: s.created.toISOString(),
     modified: s.modified.toISOString(),
     isCurrent: samePath(s.path, current),
+    isRunning: isSessionRunning(s.path),
     archived: isArchived(s.path, sdk),
   };
+}
+
+type SessionInfo = Parameters<typeof toRow>[0];
+
+function mergeLiveSessions(sessions: SessionInfo[]): SessionInfo[] {
+  const merged = new Map(sessions.map((session) => [session.path, session]));
+  for (const session of getLiveSessionRows()) {
+    if (!merged.has(session.path)) merged.set(session.path, session);
+  }
+  return [...merged.values()];
 }
 
 export const sessionsApi = {
@@ -113,7 +129,7 @@ export const sessionsApi = {
     const sdk = await loadPiSdk();
     const infos = await sdk.SessionManager.list(cwd);
     const current = currentSessionFile();
-    const sessions = infos
+    const sessions = mergeLiveSessions(infos)
       .map((s) => toRow(s, current, sdk))
       .sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
@@ -123,7 +139,7 @@ export const sessionsApi = {
     const sdk = await loadPiSdk();
     const infos = await sdk.SessionManager.listAll();
     const current = currentSessionFile();
-    const sessions = infos
+    const sessions = mergeLiveSessions(infos)
       .map((s) => toRow(s, current, sdk))
       .sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
@@ -158,6 +174,12 @@ export const sessionsApi = {
   },
 
   switch: async (payload: PiSessionPathPayload): Promise<HostSuccess> => {
+    const live = getRuntimeForSession(payload.path);
+    if (live) {
+      activateSessionRuntime(live);
+      if (payload.cwd) await settingsApi.set({ key: 'workspaceCwd', value: payload.cwd });
+      return { success: true };
+    }
     // 跨项目切换：目标会话的 cwd 与当前 runtime 不同时先重建 runtime
     let before = getActiveRuntime();
     if (!before && payload.cwd) {
@@ -175,6 +197,10 @@ export const sessionsApi = {
     if (!active) return { success: false, error: 'session not started' };
     if (samePath(payload.path, currentSessionFile())) return { success: true };
     try {
+      if (active.runtime.session.isStreaming) {
+        await createSessionRuntime(payload.cwd ?? active.cwd, payload.path);
+        return { success: true };
+      }
       const result = await active.runtime.switchSession(payload.path);
       if (result.cancelled) return { success: false, error: 'cancelled' };
       await afterSessionReplaced(active);
@@ -185,6 +211,7 @@ export const sessionsApi = {
   },
 
   rename: async (payload: PiSessionRenamePayload): Promise<HostSuccess> => {
+    if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     const name = payload.name.trim();
     if (!name) return { success: false, error: 'empty name' };
     try {
@@ -203,6 +230,7 @@ export const sessionsApi = {
   },
 
   fork: async (payload: PiSessionPathPayload): Promise<PiSessionForkResult> => {
+    if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     const active = getActiveRuntime();
     if (!active) return { success: false, error: 'session not started' };
     try {
@@ -219,6 +247,7 @@ export const sessionsApi = {
   },
 
   archive: async (payload: PiSessionArchivePayload): Promise<HostSuccess> => {
+    if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     try {
       const sdk = await loadPiSdk();
       setArchived(payload.path, payload.archived, sdk);
@@ -232,6 +261,9 @@ export const sessionsApi = {
     try {
       const sdk = await loadPiSdk();
       const projectSessions = await sdk.SessionManager.list(payload.cwd);
+      if (projectSessions.some((session) => isSessionRunning(session.path))) {
+        return { success: false, error: 'project has a running session' };
+      }
       for (const session of projectSessions) setArchived(session.path, payload.archived, sdk);
       return { success: true };
     } catch (err) {
@@ -240,6 +272,7 @@ export const sessionsApi = {
   },
 
   remove: async (payload: PiSessionPathPayload): Promise<HostSuccess> => {
+    if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     try {
       const active = getActiveRuntime();
       if (active && samePath(payload.path, active.runtime.session.sessionFile)) {

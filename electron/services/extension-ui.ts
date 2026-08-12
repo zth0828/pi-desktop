@@ -28,6 +28,8 @@ import { sendHostEvent } from '../main/ipc/host-events';
 export type UiRequestContext = { sessionId: string; generation: number };
 
 type PendingEntry = {
+  context: UiRequestContext;
+  payload: PiUiRequestPayload;
   /** 取消语义下的 resolve 值（confirm=false，select/input=undefined） */
   cancelValue: string | boolean | undefined;
   finish: (value: string | boolean | undefined, notifyRenderer: boolean) => void;
@@ -70,7 +72,7 @@ function requestUi(
       resolve(value);
     };
     const onAbort = () => finish(cancelValue, true);
-    pending.set(requestId, { cancelValue, finish });
+    pending.set(requestId, { context: ctx, payload, cancelValue, finish });
     if (opts?.timeout && opts.timeout > 0) {
       timer = setTimeout(() => finish(cancelValue, true), opts.timeout);
     }
@@ -92,14 +94,32 @@ export function cancelAllPendingUi(): void {
   for (const entry of [...pending.values()]) entry.finish(entry.cancelValue, true);
 }
 
-let currentState: PiExtensionUiState | undefined;
+export function cancelPendingUiForContext(context: UiRequestContext): void {
+  for (const entry of [...pending.values()]) {
+    if (entry.context.sessionId === context.sessionId && entry.context.generation === context.generation) {
+      entry.finish(entry.cancelValue, true);
+    }
+  }
+}
+
+export function getPendingUiRequests(context: UiRequestContext): PiUiRequestPayload[] {
+  return [...pending.values()]
+    .filter((entry) => entry.context.sessionId === context.sessionId && entry.context.generation === context.generation)
+    .map((entry) => entry.payload);
+}
+
+const states = new Map<string, PiExtensionUiState>();
+
+function stateKey(ctx: UiRequestContext): string {
+  return `${ctx.sessionId}:${ctx.generation}`;
+}
 
 function emptyUiState(ctx: UiRequestContext): PiExtensionUiState {
   return { ...ctx, statuses: [], widgets: [], workingVisible: true };
 }
 
 function publishUiState(state: PiExtensionUiState): void {
-  currentState = state;
+  states.set(stateKey(state), state);
   sendHostEvent('piRuntime', 'uiState', state);
 }
 
@@ -108,10 +128,12 @@ export function resetExtensionUiState(ctx: UiRequestContext): void {
 }
 
 export function getExtensionUiStateSnapshot(ctx: UiRequestContext): PiExtensionUiState {
-  if (!currentState || currentState.sessionId !== ctx.sessionId || currentState.generation !== ctx.generation) {
-    currentState = emptyUiState(ctx);
-  }
-  return currentState;
+  const key = stateKey(ctx);
+  const current = states.get(key);
+  if (current) return current;
+  const empty = emptyUiState(ctx);
+  states.set(key, empty);
+  return empty;
 }
 
 /**

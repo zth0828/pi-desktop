@@ -251,7 +251,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       compaction: null,
       retry: null,
       queue: { steering: [], followUp: [] },
-      uiRequests: [],
+      uiRequests: state.pendingUiRequests ?? [],
       extensionUi: state.extensionUi,
     });
   },

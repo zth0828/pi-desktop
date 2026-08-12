@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -66,28 +67,41 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   const [menuPosition, setMenuPosition] = useState<MenuPosition>();
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
+  const refreshSequence = useRef(0);
   const started = useChatStore((s) => s.started);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const activeCwd = useChatStore((s) => s.cwd);
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
+    const sequence = ++refreshSequence.current;
     void hostApi.piSessions
       .listAll()
-      .then((r) => setSessions(r.sessions))
+      .then((r) => {
+        if (sequence === refreshSequence.current) setSessions(r.sessions);
+      })
       .catch(() => {});
-  };
+  }, []);
+
+  const refreshAfterSessionChange = useCallback(() => {
+    refresh();
+    window.setTimeout(refresh, 150);
+    window.setTimeout(refresh, 500);
+  }, [refresh]);
 
   useEffect(() => {
-    if (started) refresh();
-    const unbind = onHostEvent('piRuntime', 'sessionReplaced', refresh);
-    return unbind;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [started]);
+    if (started) refreshAfterSessionChange();
+    const unbindSession = onHostEvent('piRuntime', 'sessionReplaced', refreshAfterSessionChange);
+    const unbindRuntime = onHostEvent('piRuntime', 'runtimeStateChanged', refreshAfterSessionChange);
+    return () => {
+      unbindSession();
+      unbindRuntime();
+    };
+  }, [refreshAfterSessionChange, started]);
 
   useEffect(() => {
-    if (!isStreaming && started) refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStreaming]);
+    if (!isStreaming && started) refreshAfterSessionChange();
+    // pi 的 run.ended 与会话文件最终落盘存在极短时序差，活动会话结束后补读一次。
+  }, [isStreaming, refreshAfterSessionChange, started]);
 
   useEffect(() => {
     const closeMenu = (event: PointerEvent) => {
@@ -166,6 +180,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     const groupKey = `${archivedOnly ? 'archived' : 'active'}:${group.cwd}`;
     const isCollapsed = collapsed[groupKey] ?? (archivedOnly || group.cwd !== activeCwd);
     const menuOpen = openMenu === groupKey;
+    const projectRunning = visibleSessions.some((session) => session.isRunning);
     const currentIndex = visibleSessions.findIndex((session) => session.isCurrent);
     const visibleCount = Math.max(
       visibleCounts[groupKey] ?? SESSION_PAGE_SIZE,
@@ -215,7 +230,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
             >
               <button
                 onClick={() => void run(() => hostApi.piSessions.archiveProject(group.cwd, !archivedOnly))}
-                disabled={busy || isStreaming}
+                disabled={busy || projectRunning}
               >
                 {archivedOnly ? <ArchiveRestore size={14} /> : <Archive size={14} />}
                 {archivedOnly ? t('sessions.unarchive') : t('sessions.archive')}
@@ -249,6 +264,14 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                   if (!session.isCurrent) void hostApi.piSessions.switch(session.path, session.cwd);
                 }}
               >
+                {session.isRunning && (
+                  <span
+                    className="sidebar-session-running"
+                    data-testid={`sidebar-session-running-${session.id}`}
+                    title={t('sessions.running')}
+                    aria-label={t('sessions.running')}
+                  />
+                )}
                 <span className="sidebar-session-title">
                   {session.name || session.firstMessage || t('sessions.untitled')}
                 </span>
@@ -305,7 +328,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                           setRenameValue(session.name || session.firstMessage || '');
                           setRenamePath(session.path);
                         }}
-                        disabled={busy || isStreaming}
+                        disabled={busy || session.isRunning}
                       >
                         <Pencil size={14} />
                         {t('sessions.rename')}
@@ -323,7 +346,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                       <button
                         data-testid={`sidebar-session-fork-${session.id}`}
                         onClick={() => void run(() => hostApi.piSessions.fork(session.path), true)}
-                        disabled={busy || isStreaming}
+                        disabled={busy || session.isRunning}
                       >
                         <GitFork size={14} />
                         {t('sessions.continueNewChat')}
@@ -331,7 +354,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                       <div className="session-context-separator" />
                       <button
                         onClick={() => void run(() => hostApi.piSessions.archive(session.path, !session.archived))}
-                        disabled={busy || isStreaming}
+                        disabled={busy || session.isRunning}
                       >
                         {session.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
                         {session.archived ? t('sessions.unarchive') : t('sessions.archive')}
@@ -340,7 +363,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                         <button
                           className="session-context-danger"
                           onClick={() => void run(() => hostApi.piSessions.remove(session.path))}
-                          disabled={busy || isStreaming}
+                          disabled={busy || session.isRunning}
                         >
                           <Trash2 size={14} />
                           {t('sessions.confirmDelete')}
@@ -349,7 +372,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                         <button
                           className="session-context-danger"
                           onClick={() => setConfirmDelete(session.path)}
-                          disabled={busy || isStreaming}
+                          disabled={busy || session.isRunning}
                         >
                           <Trash2 size={14} />
                           {t('sessions.delete')}

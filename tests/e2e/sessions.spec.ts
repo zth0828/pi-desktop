@@ -158,6 +158,43 @@ test('切换会话 → 消息列表恢复目标会话内容', async ({ launchEle
   await expect(page.getByTestId('message-user')).toHaveCount(1);
 });
 
+test('任务 A 运行时可创建任务 B，切回 A 后继续控制并停止', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('chat-input').fill('HANG task A');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('message-assistant').last()).toContainText('waiting');
+
+  await page.getByTestId('new-chat').click();
+  await expect(page.getByTestId('chat-input')).toBeEditable({ timeout: 30_000 });
+  await expect(page.getByTestId('message-user')).toHaveCount(0);
+  await sendAndWaitReply(page, 'Say PONG task B');
+
+  const taskARow = page.locator('.sidebar-session-row').filter({ hasText: 'HANG task A' });
+  await expect(taskARow).toBeVisible({ timeout: 15_000 });
+  await expect(taskARow.locator('[data-testid^="sidebar-session-running-"]')).toBeVisible();
+
+  await taskARow.locator('[data-testid^="sidebar-session-"]').first().click();
+  await expect(page.getByTestId('message-user').last()).toContainText('HANG task A');
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 15_000 });
+
+  await taskARow.locator('.sidebar-session-menu-trigger').click();
+  await expect(page.getByRole('button', { name: 'Rename', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Continue in new chat' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Archive chats' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await page.keyboard.press('Escape');
+
+  await page.getByTestId('chat-stop').click();
+  await expect(page.getByTestId('chat-stop')).toHaveCount(0, { timeout: 15_000 });
+  await expect(taskARow.locator('[data-testid^="sidebar-session-running-"]')).toHaveCount(0, {
+    timeout: 15_000,
+  });
+});
+
 test('侧栏会话入口：从其他功能页点击后切回对话并恢复目标消息', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

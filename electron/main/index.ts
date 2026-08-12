@@ -3,6 +3,7 @@ import path from 'node:path';
 import { resolveAppPageId } from '@shared/app-page';
 import { HostApiRegistry, registerHostInvokeHandler } from './ipc/host-invoke';
 import { createHostServices } from '../services';
+import { disposeAllRuntimes } from '../services/pi-runtime-api';
 
 // M1 skeleton: minimal single window. Tray/menu/single-instance/session
 // recovery are ported from ClawX in later batches (see docs/TECHNICAL-PLAN.md §5.1).
@@ -77,4 +78,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  disposeAllRuntimes();
 });

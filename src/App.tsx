@@ -58,7 +58,6 @@ export default function App() {
   const state = usePiSystemStore((s) => s.state);
   const detect = usePiSystemStore((s) => s.detect);
   const chatStarted = useChatStore((s) => s.started);
-  const isStreaming = useChatStore((s) => s.isStreaming);
 
   useEffect(() => {
     const unbind = bindPiSystemEvents();
@@ -102,7 +101,7 @@ export default function App() {
 
   const newChat = () => {
     setPage('chat');
-    if (chatStarted && !isStreaming) void hostApi.piRuntime.newSession();
+    if (chatStarted) void hostApi.piRuntime.newSession();
   };
 
   const toggleSidebar = () => {

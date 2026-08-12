@@ -6,8 +6,9 @@ import { powerSaveBlocker } from 'electron';
 import { settingsApi } from './settings-api';
 
 let blockerId: number | null = null;
-/** 期望保持阻塞状态（run 进行中）；设置读取是异步的，用它挡住 start/stop 竞态 */
-let wantBlock = false;
+/** 多个后台 runtime 可同时运行；按 runtime key 计数，避免一个任务结束误解除另一个任务。 */
+const runningRuntimes = new Set<string>();
+let settingsReadInFlight = false;
 
 /** E2E 观测钩子（同 notify 的 PI_DESKTOP_E2E_NOTIFY_LOG 模式）：按行落 JSON。 */
 function log(action: 'start' | 'stop'): void {
@@ -21,33 +22,35 @@ function log(action: 'start' | 'stop'): void {
 }
 
 /** run 开始：开关开启且无活动 blocker 时启动阻止休眠。 */
-export function noteRunStarted(): void {
-  if (wantBlock) return;
-  wantBlock = true;
+export function noteRunStarted(runtimeKey = 'active'): void {
+  runningRuntimes.add(runtimeKey);
+  if (settingsReadInFlight || blockerId != null) return;
+  settingsReadInFlight = true;
   void (async () => {
     const enabled =
       ((await settingsApi.get({ key: 'preventSleep' }).catch(() => undefined)) as
         | boolean
         | undefined) === true;
     if (!enabled) {
-      wantBlock = false;
+      settingsReadInFlight = false;
       return;
     }
-    if (!wantBlock || blockerId != null) return; // 设置读取期间 run 已结束
+    settingsReadInFlight = false;
+    if (runningRuntimes.size === 0 || blockerId != null) return;
     try {
       blockerId = powerSaveBlocker.start('prevent-display-sleep');
       log('start');
     } catch {
-      wantBlock = false;
+      // blocker 启动失败不影响 agent 运行。
     }
   })();
 }
 
 /** run 结束：willRetry（自动重试等待）时保持阻塞，否则解除。会话替换/运行时销毁也走这里兜底。 */
-export function noteRunEnded(willRetry?: boolean): void {
+export function noteRunEnded(runtimeKey = 'active', willRetry?: boolean): void {
   if (willRetry) return;
-  wantBlock = false;
-  if (blockerId == null) return;
+  runningRuntimes.delete(runtimeKey);
+  if (runningRuntimes.size > 0 || blockerId == null) return;
   try {
     powerSaveBlocker.stop(blockerId);
   } catch {

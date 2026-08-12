@@ -107,13 +107,15 @@ type Baseline = {
   /** 非 Git 项目的临时 object store；baseline 清理时一并删除。 */
   ownedDir?: string;
 };
-let baseline: Baseline | null = null;
+const baselines = new Map<string, Baseline>();
 /** capture 失败原因（git-error:…），供 getSummary 降级展示 */
 let baselineFailure: string | null = null;
 
 function disposeBaseline(): void {
-  if (baseline?.ownedDir) rmSync(baseline.ownedDir, { recursive: true, force: true });
-  baseline = null;
+  for (const entry of baselines.values()) {
+    if (entry.ownedDir) rmSync(entry.ownedDir, { recursive: true, force: true });
+  }
+  baselines.clear();
 }
 
 /**
@@ -121,8 +123,7 @@ function disposeBaseline(): void {
  * 非 Git 目录使用临时 bare object store，项目目录本身不会出现 .git。
  */
 export async function captureReviewBaseline(cwd: string): Promise<void> {
-  if (baseline?.cwd === cwd) return;
-  disposeBaseline();
+  if (baselines.has(cwd)) return;
   baselineFailure = null;
   let ownedDir: string | undefined;
   try {
@@ -131,7 +132,7 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
     if (await isGitRepo(cwd)) {
       parent = await headRef(cwd);
       if (parent) {
-        baseline = { cwd, ref: parent, kind: 'git-head' };
+        baselines.set(cwd, { cwd, ref: parent, kind: 'git-head' });
         return;
       }
     } else {
@@ -153,10 +154,9 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
       { env: { ...GHOST_IDENTITY_ENV, ...gitEnv } },
     );
     if (commit.code !== 0) throw new Error(commit.stderr.trim() || 'git commit-tree failed');
-    baseline = { cwd, ref: commit.stdout.trim(), kind: gitEnv ? 'session-snapshot' : 'git-head', gitEnv, ownedDir };
+    baselines.set(cwd, { cwd, ref: commit.stdout.trim(), kind: gitEnv ? 'session-snapshot' : 'git-head', gitEnv, ownedDir });
   } catch (err) {
     if (ownedDir) rmSync(ownedDir, { recursive: true, force: true });
-    baseline = null;
     baselineFailure = `git-error:${err instanceof Error ? err.message : String(err)}`;
   }
 }
@@ -171,7 +171,7 @@ export function clearReviewBaseline(): void {
 function currentBaseline(): Baseline | null {
   const active = getActiveRuntime();
   if (!active) return null;
-  return baseline && baseline.cwd === active.cwd ? baseline : null;
+  return baselines.get(active.cwd) ?? null;
 }
 
 function unavailable(reason: string): ReviewSummaryResult {

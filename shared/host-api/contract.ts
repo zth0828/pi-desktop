@@ -156,6 +156,8 @@ export type PiRuntimeStateResult = {
   sessionFile?: string;
   contextUsage?: PiRuntimeContextUsage;
   extensionUi?: PiExtensionUiState;
+  /** 后台 runtime 等待中的扩展确认；切回会话时恢复对话框。 */
+  pendingUiRequests?: PiUiRequestPayload[];
 };
 
 // —— piRuntime 消息级 fork / 分支导航（/tree）——
@@ -460,6 +462,8 @@ export type PiSessionRow = {
   created: string;
   modified: string;
   isCurrent: boolean;
+  /** 该会话仍有保活的 pi runtime 正在执行。 */
+  isRunning: boolean;
   archived: boolean;
 };
 export type PiSessionListResult = { sessions: PiSessionRow[] };

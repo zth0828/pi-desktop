@@ -355,6 +355,7 @@
     "empty": "No sessions in this workspace yet. Start chatting first.",
     "untitled": "Untitled session",
     "current": "Current",
+    "running": "Running",
     "messageCount": "{{count}} messages",
     "rename": "Rename",
     "renamePlaceholder": "Session name",

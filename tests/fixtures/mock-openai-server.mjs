@@ -8,6 +8,7 @@
 //   "USE_TOOL_EDIT_WRITE" → 第一轮返回两个并行 tool_call（edit + write 各一）
 //   "MCP_SEARCH"/"MCP_CALL" → 驱动 mcp 代理工具
 //   "SLOW ..." → 30 个 chunk × 100ms 慢速流（用于 abort 测试）
+//   "HANG ..." → 持续流式输出直到客户端 abort（用于多会话并发测试）
 //   "FLAKE_429" → 首次请求返回 429（触发 pi 自动重试），后续正常 PONG
 //   "ECHO_USER" → 回显最后一条 user 消息（@文件 展开断言用）
 //   "ATTACHMENT_ORDER_CHECK" → 校验附件 manifest 与原生图片 parts 的顺序关系
@@ -248,6 +249,16 @@ const server = http.createServer((req, res) => {
       }, 150);
       // 注意：不能挂 req.on("close") 清定时器——POST body 收完即触发 close，
       // 会把慢速流提前掐断（同上方 SLOW 分支注释）。
+      return;
+    }
+
+    if (lastUser.includes("HANG")) {
+      let i = 0;
+      send({ role: "assistant", content: "" });
+      const timer = setInterval(() => {
+        if (!res.writableEnded && !res.destroyed) send({ content: `waiting${i++} ` });
+      }, 100);
+      res.on("close", () => clearInterval(timer));
       return;
     }
 

@@ -355,6 +355,7 @@
     "empty": "当前工作目录还没有会话，先去聊几句吧。",
     "untitled": "未命名会话",
     "current": "当前",
+    "running": "运行中",
     "messageCount": "{{count}} 条消息",
     "rename": "重命名",
     "renamePlaceholder": "会话名称",

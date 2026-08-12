@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ExternalLink, FolderOpen } from 'lucide-react';
 import type { PiSessionExportInfo, PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
+import { onHostEvent } from '../lib/host-events';
 import { formatRelativeTime, sessionDisplayTitle } from '../lib/session-format';
 
 type RowProps = {
@@ -78,6 +79,11 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat }: Row
               {t('sessions.current')}
             </span>
           )}
+          {session.isRunning && (
+            <span className="session-running-badge" title={t('sessions.running')}>
+              {t('sessions.running')}
+            </span>
+          )}
           {t('sessions.messageCount', { count: session.messageCount })}
           {' · '}
           {formatRelativeTime(session.modified, Date.now(), i18n.language)}
@@ -100,7 +106,7 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat }: Row
         <div className="session-actions">
           <button
             data-testid="session-rename"
-            disabled={busy}
+            disabled={busy || session.isRunning}
             onClick={() => {
               setName(session.name ?? session.firstMessage);
               setRenaming(true);
@@ -108,13 +114,13 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat }: Row
           >
             {t('sessions.rename')}
           </button>
-          <button data-testid="session-fork" disabled={busy} onClick={() => void fork()}>
+          <button data-testid="session-fork" disabled={busy || session.isRunning} onClick={() => void fork()}>
             {t('sessions.fork')}
           </button>
           <button data-testid="session-export" disabled={busy} onClick={() => void exportHtml()}>
             {t('sessions.export')}
           </button>
-          <button data-testid="session-archive" disabled={busy} onClick={() => void archive()}>
+          <button data-testid="session-archive" disabled={busy || session.isRunning} onClick={() => void archive()}>
             {session.archived ? t('sessions.unarchive') : t('sessions.archive')}
           </button>
           {confirmingDelete ? (
@@ -122,7 +128,7 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat }: Row
               <button
                 className="danger-outline"
                 data-testid="session-delete-confirm"
-                disabled={busy}
+                disabled={busy || session.isRunning}
                 onClick={() => void remove()}
               >
                 {t('sessions.confirmDelete')}
@@ -133,7 +139,7 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat }: Row
             <button
               className="danger-outline"
               data-testid="session-delete"
-              disabled={busy}
+              disabled={busy || session.isRunning}
               onClick={() => setConfirmingDelete(true)}
             >
               {t('sessions.delete')}
@@ -169,6 +175,8 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
   }, []);
 
   useEffect(refresh, [refresh]);
+
+  useEffect(() => onHostEvent('piRuntime', 'runtimeStateChanged', refresh), [refresh]);
 
   useEffect(() => {
     void hostApi.piSessions.getExportInfo().then(setExportInfo).catch((err) => {
