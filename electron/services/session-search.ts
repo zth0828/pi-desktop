@@ -4,6 +4,8 @@ export type SearchableSession = {
   name?: string;
   firstMessage: string;
   allMessagesText: string;
+  /** 与 runtime state.messages 同序，用于把内容命中定位到具体消息。 */
+  messageTexts?: string[];
   modified: Date;
 };
 
@@ -12,6 +14,7 @@ export type SessionSearchHit<T extends SearchableSession> = {
   match: PiSessionSearchMatch;
   snippet: string;
   matchIndex: number;
+  messageIndex?: number;
 };
 
 const MATCH_PRIORITY: Record<PiSessionSearchMatch, number> = {
@@ -57,21 +60,30 @@ export function searchSessions<T extends SearchableSession>(
 
     const firstMessageIndex = normalizedIndex(session.firstMessage, query);
     if (firstMessageIndex >= 0) {
+      const firstMessageTarget = session.messageTexts?.findIndex((text) => normalizedIndex(text, query) >= 0) ?? -1;
       return [{
         session,
         match: 'firstMessage',
         snippet: excerpt(session.firstMessage, firstMessageIndex, query.length),
         matchIndex: firstMessageIndex,
+        messageIndex: firstMessageTarget >= 0 ? firstMessageTarget : undefined,
       }];
     }
 
-    const messageIndex = normalizedIndex(session.allMessagesText, query);
+    const matchedMessageIndex = session.messageTexts?.findIndex((text) => normalizedIndex(text, query) >= 0) ?? -1;
+    const messageIndex = matchedMessageIndex >= 0
+      ? normalizedIndex(session.messageTexts?.[matchedMessageIndex], query)
+      : normalizedIndex(session.allMessagesText, query);
     if (messageIndex >= 0) {
+      const matchedText = matchedMessageIndex >= 0
+        ? session.messageTexts?.[matchedMessageIndex] ?? session.allMessagesText
+        : session.allMessagesText;
       return [{
         session,
         match: 'message',
-        snippet: excerpt(session.allMessagesText, messageIndex, query.length),
+        snippet: excerpt(matchedText, messageIndex, query.length),
         matchIndex: messageIndex,
+        messageIndex: matchedMessageIndex >= 0 ? matchedMessageIndex : undefined,
       }];
     }
     return [];

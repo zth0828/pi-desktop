@@ -7,7 +7,7 @@ import { hostApi } from '../lib/host-api';
 type Props = {
   open: boolean;
   onClose: () => void;
-  onOpenChat: () => void;
+  onOpenChat: (target?: { sessionId: string; messageIndex: number }) => void;
 };
 
 function projectName(cwd: string): string {
@@ -95,7 +95,9 @@ export function SessionSearchDialog({ open, onClose, onOpenChat }: Props) {
         return;
       }
       onClose();
-      onOpenChat();
+      onOpenChat(session.messageIndex === undefined
+        ? undefined
+        : { sessionId: session.id, messageIndex: session.messageIndex });
     } catch (switchError) {
       setError(switchError instanceof Error ? switchError.message : String(switchError));
     } finally {

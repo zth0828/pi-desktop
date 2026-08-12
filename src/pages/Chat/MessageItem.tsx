@@ -81,6 +81,7 @@ function AssistantBlock({
 export function MessageItem({
   message,
   anchorId,
+  highlighted,
   cacheMiss,
   turnStats,
   contentOverride,
@@ -91,6 +92,8 @@ export function MessageItem({
 }: {
   message: ChatMessage;
   anchorId?: string;
+  /** 搜索跳转后的短暂定位反馈。 */
+  highlighted?: boolean;
   /** 本轮 assistant 消息的缓存失效检测结果（collectCacheMisses 按下标分发） */
   cacheMiss?: CacheMiss;
   /** 仅当前实时完成回合的收尾统计；恢复会话时为空。 */
@@ -159,7 +162,12 @@ export function MessageItem({
       orderedAttachments.push({ kind: 'file', index: fallbackIndex, name: file.name });
     });
     return (
-      <div className="message message-user" data-testid="message-user" id={anchorId}>
+      <div
+        className={`message message-user${highlighted ? ' search-target' : ''}`}
+        data-testid="message-user"
+        id={anchorId}
+        tabIndex={highlighted ? -1 : undefined}
+      >
         {message.entryId && !isStreaming && (
           <button
             className="message-fork-btn"
@@ -226,7 +234,12 @@ export function MessageItem({
     window.setTimeout(() => setCopied(false), 1200);
   };
   return (
-    <div className="message message-assistant" data-testid="message-assistant">
+    <div
+      className={`message message-assistant${highlighted ? ' search-target' : ''}`}
+      data-testid="message-assistant"
+      id={anchorId}
+      tabIndex={highlighted ? -1 : undefined}
+    >
       {content.map((block, i) => (
         <AssistantBlock
           key={i}

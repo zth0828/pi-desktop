@@ -46,12 +46,15 @@ const PAGES: Array<{ id: AppPageId; icon: typeof MessageSquare }> = APP_PAGE_IDS
   icon: PAGE_ICONS[id],
 }));
 
+type ChatSearchTarget = { sessionId: string; messageIndex: number; nonce: number };
+
 export default function App() {
   const { t } = useTranslation();
   const [page, setPage] = useState<AppPageId>(() => initialAppPage(window.location.search));
   const [platform, setPlatform] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('pi-desktop.sidebar-collapsed') === 'true');
   const [sessionSearchOpen, setSessionSearchOpen] = useState(false);
+  const [chatSearchTarget, setChatSearchTarget] = useState<ChatSearchTarget>();
   const state = usePiSystemStore((s) => s.state);
   const detect = usePiSystemStore((s) => s.detect);
   const chatStarted = useChatStore((s) => s.started);
@@ -182,7 +185,10 @@ export default function App() {
       </nav>
       <main className="content">
         {page === 'chat' ? (
-          <ChatPage />
+          <ChatPage
+            searchTarget={chatSearchTarget}
+            onSearchTargetHandled={() => setChatSearchTarget(undefined)}
+          />
         ) : page === 'models' ? (
           <ModelsPage />
         ) : page === 'sessions' ? (
@@ -202,7 +208,10 @@ export default function App() {
       <SessionSearchDialog
         open={sessionSearchOpen}
         onClose={() => setSessionSearchOpen(false)}
-        onOpenChat={() => setPage('chat')}
+        onOpenChat={(target) => {
+          setPage('chat');
+          setChatSearchTarget(target ? { ...target, nonce: Date.now() } : undefined);
+        }}
       />
     </div>
   );

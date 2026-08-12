@@ -103,7 +103,12 @@ function ExtensionWidgets({ placement }: { placement: 'aboveEditor' | 'belowEdit
   );
 }
 
-export default function ChatPage() {
+type Props = {
+  searchTarget?: { sessionId: string; messageIndex: number; nonce: number };
+  onSearchTargetHandled?: () => void;
+};
+
+export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props) {
   const { t } = useTranslation();
   const [cwd, setCwd] = useState<string | undefined>();
   const started = useChatStore((s) => s.started);
@@ -124,6 +129,7 @@ export default function ChatPage() {
   const [expandedTurns, setExpandedTurns] = useState<Record<number, boolean>>({});
   const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({});
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [searchHighlightIndex, setSearchHighlightIndex] = useState<number>();
   const stickToBottomRef = useRef(true);
   useEffect(() => {
     setExpandedTurns({});
@@ -161,6 +167,46 @@ export default function ChatPage() {
   }, [messages]);
 
   const logicalTurns = useMemo(() => groupLogicalTurns(messages), [messages]);
+
+  useEffect(() => {
+    if (!searchTarget || searchTarget.sessionId !== sessionId || !messages[searchTarget.messageIndex]) return;
+    const targetIndex = searchTarget.messageIndex;
+    const targetTurn = logicalTurns.find((turn) => targetIndex >= turn.startIndex && targetIndex <= turn.endIndex);
+    if (targetTurn) {
+      setExpandedTurns((current) => ({ ...current, [targetTurn.startIndex]: true }));
+      const finalIndex = turnFinalResponseIndex(messages, targetTurn);
+      const stageIndices = Array.from(
+        { length: targetTurn.endIndex - targetTurn.startIndex },
+        (_, offset) => targetTurn.startIndex + 1 + offset,
+      ).filter((index) => index !== finalIndex);
+      const stages = groupTurnStages(messages, stageIndices, String(targetTurn.startIndex));
+      const targetStage = stages.find((stage) => stage.indices.includes(targetIndex));
+      if (targetStage) setExpandedStages((current) => ({ ...current, [targetStage.key]: true }));
+    }
+    stickToBottomRef.current = false;
+    setSearchHighlightIndex(targetIndex);
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => {
+      const list = listRef.current;
+      const target = document.getElementById(`chat-msg-${targetIndex}`);
+      if (list && target) {
+        const listRect = list.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        list.scrollTo({
+          top: Math.max(0, list.scrollTop + targetRect.top - listRect.top - Math.min(80, list.clientHeight * 0.18)),
+          behavior: 'smooth',
+        });
+        target.focus({ preventScroll: true });
+      }
+      onSearchTargetHandled?.();
+    }));
+    return () => cancelAnimationFrame(frame);
+  }, [logicalTurns, messages, onSearchTargetHandled, searchTarget, sessionId]);
+
+  useEffect(() => {
+    if (searchHighlightIndex === undefined) return;
+    const timer = window.setTimeout(() => setSearchHighlightIndex(undefined), 2400);
+    return () => window.clearTimeout(timer);
+  }, [searchHighlightIndex]);
 
   // 恢复上次的工作目录并启动会话
   useEffect(() => {
@@ -251,7 +297,8 @@ export default function ChatPage() {
             <MessageItem
               key={i}
               message={messages[i]}
-              anchorId={i === turn.startIndex ? `chat-msg-${i}` : undefined}
+              anchorId={`chat-msg-${i}`}
+              highlighted={searchHighlightIndex === i}
               cacheMiss={cacheMisses.get(i)}
               turnStats={i === latestFinalResponseIndex ? turnStats : null}
               expandThinking
@@ -281,7 +328,11 @@ export default function ChatPage() {
 
     return (
       <Fragment key={turn.startIndex}>
-        <MessageItem message={messages[turn.startIndex]} anchorId={`chat-msg-${turn.startIndex}`} />
+        <MessageItem
+          message={messages[turn.startIndex]}
+          anchorId={`chat-msg-${turn.startIndex}`}
+          highlighted={searchHighlightIndex === turn.startIndex}
+        />
         {hasProcess && (
           <section className={`turn-fold${expanded ? ' expanded' : ''}`} data-testid="turn-fold">
             <button
@@ -322,6 +373,8 @@ export default function ChatPage() {
                             <MessageItem
                               key={i}
                               message={messages[i]}
+                              anchorId={i === finalIndex ? undefined : `chat-msg-${i}`}
+                              highlighted={searchHighlightIndex === i}
                               contentOverride={i === finalIndex ? finalProcess : undefined}
                               cacheMiss={cacheMisses.get(i)}
                               expandThinking
@@ -341,6 +394,8 @@ export default function ChatPage() {
         )}
         <MessageItem
           message={finalMessage}
+          anchorId={`chat-msg-${finalIndex}`}
+          highlighted={searchHighlightIndex === finalIndex}
           contentOverride={finalText}
           cacheMiss={cacheMisses.get(finalIndex)}
           turnStats={finalIndex === latestFinalResponseIndex ? turnStats : null}
@@ -387,7 +442,13 @@ export default function ChatPage() {
               </div>
             )}
             {messages.slice(0, logicalTurns[0]?.startIndex ?? messages.length).map((message, i) => (
-              <MessageItem key={i} message={message} cacheMiss={cacheMisses.get(i)} />
+              <MessageItem
+                key={i}
+                message={message}
+                anchorId={`chat-msg-${i}`}
+                highlighted={searchHighlightIndex === i}
+                cacheMiss={cacheMisses.get(i)}
+              />
             ))}
             {logicalTurns.map(renderTurn)}
           </div>

@@ -467,6 +467,8 @@ export type PiSessionSearchMatch = 'name' | 'firstMessage' | 'message';
 export type PiSessionSearchRow = PiSessionRow & {
   match: PiSessionSearchMatch;
   snippet: string;
+  /** 命中当前会话上下文中的消息下标；标题命中时没有目标消息。 */
+  messageIndex?: number;
 };
 export type PiSessionSearchPayload = { query: string; limit?: number };
 export type PiSessionSearchResult = { sessions: PiSessionSearchRow[] };

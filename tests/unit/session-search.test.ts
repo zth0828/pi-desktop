@@ -32,4 +32,30 @@ describe('searchSessions', () => {
     expect(searchSessions(sessions, '   ')).toEqual([]);
     expect(searchSessions(sessions, 'needle', 2)).toHaveLength(2);
   });
+
+  it('returns the exact runtime message index for a content hit', () => {
+    const [result] = searchSessions([
+      session({
+        firstMessage: 'welcome',
+        allMessagesText: 'welcome hidden nebula',
+        messageTexts: ['welcome', 'ordinary reply', 'the hidden nebula is here'],
+      }),
+    ], 'hidden nebula');
+
+    expect(result.messageIndex).toBe(2);
+    expect(result.snippet).toContain('hidden nebula');
+  });
+
+  it('locates a first-message hit in the runtime message list', () => {
+    const [result] = searchSessions([
+      session({
+        firstMessage: 'opening telescope phrase',
+        allMessagesText: 'opening telescope phrase reply',
+        messageTexts: ['', 'opening telescope phrase', 'reply'],
+      }),
+    ], 'telescope');
+
+    expect(result.match).toBe('firstMessage');
+    expect(result.messageIndex).toBe(1);
+  });
 });

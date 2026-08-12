@@ -60,6 +60,21 @@ function setArchived(path: string, archived: boolean, sdk: PiSdk): void {
   sessionManagerFor(path, sdk).appendCustomEntry(ARCHIVE_CUSTOM_TYPE, { archived });
 }
 
+function searchableMessageText(message: unknown): string {
+  const candidate = message as { content?: unknown; summary?: unknown };
+  if (typeof candidate.content === 'string') return candidate.content;
+  if (Array.isArray(candidate.content)) {
+    return candidate.content
+      .flatMap((block) => {
+        if (!block || typeof block !== 'object') return [];
+        const value = block as { type?: unknown; text?: unknown };
+        return value.type === 'text' && typeof value.text === 'string' ? [value.text] : [];
+      })
+      .join('\n');
+  }
+  return typeof candidate.summary === 'string' ? candidate.summary : '';
+}
+
 /** runtime 未启动（用户还没开过 Chat 页）时回退 settings.workspaceCwd。 */
 async function resolveCwd(): Promise<string | null> {
   const active = getActiveRuntime();
@@ -120,11 +135,25 @@ export const sessionsApi = {
     const sdk = await loadPiSdk();
     const infos = await sdk.SessionManager.listAll();
     const current = currentSessionFile();
-    const sessions = searchSessions(infos, query, payload.limit).map(({ session, match, snippet }) => ({
-      ...toRow(session, current, sdk),
-      match,
-      snippet,
-    }));
+    const limit = Math.max(1, Math.min(payload.limit ?? 50, 100));
+    const candidates = searchSessions(infos, query, limit);
+    const preciseCandidates = candidates.map((candidate) => {
+      if (candidate.match === 'name') return candidate;
+      const messageTexts = sdk.SessionManager
+        .open(candidate.session.path)
+        .buildSessionContext()
+        .messages
+        .map(searchableMessageText);
+      return searchSessions([{ ...candidate.session, messageTexts }], query, 1)[0] ?? candidate;
+    });
+    const sessions = preciseCandidates
+      .slice(0, limit)
+      .map(({ session, match, snippet, messageIndex }) => ({
+        ...toRow(session, current, sdk),
+        match,
+        snippet,
+        messageIndex,
+      }));
     return { sessions };
   },
 
