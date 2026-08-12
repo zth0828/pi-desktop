@@ -288,8 +288,10 @@ button.danger-outline {
 .sidebar-toggle { flex-shrink: 0; }
 
 .app-layout.sidebar-collapsed .sidebar {
-  width: 80px;
-  padding-inline: 20px;
+  width: 0;
+  gap: 0;
+  padding-inline: 0;
+  overflow: hidden;
 }
 
 .app-layout.sidebar-collapsed .sidebar-topbar { justify-content: center; padding-inline: 0; }
@@ -299,16 +301,10 @@ button.danger-outline {
 .app-layout.sidebar-collapsed .sidebar-nav { margin-top: auto; padding-top: 8px; }
 .app-layout.sidebar-collapsed .nav-item { width: 36px; height: 36px; justify-content: center; margin-inline: auto; padding: 0; }
 
-.app-layout.is-macos.sidebar-collapsed .sidebar {
-  padding-top: 102px;
-}
-
-.app-layout.is-macos.sidebar-collapsed .app-window-controls {
-  top: 52px;
-  left: 7px;
-  width: 66px;
-  height: 36px;
-  justify-content: center;
+.app-layout.sidebar-collapsed .new-chat,
+.app-layout.sidebar-collapsed .sidebar-sessions,
+.app-layout.sidebar-collapsed .sidebar-nav {
+  display: none;
 }
 
 .app-layout.is-macos.sidebar-collapsed .session-titlebar {

@@ -166,7 +166,7 @@ export default function App() {
           <Plus size={15} />
           <span>{t('sidebar.newChat')}</span>
         </button>
-        {!sidebarCollapsed && <SessionList onOpenChat={() => setPage('chat')} />}
+        <SessionList onOpenChat={() => setPage('chat')} />
         <div className="sidebar-nav">
           {PAGES.map(({ id, icon: Icon }) => (
             <button

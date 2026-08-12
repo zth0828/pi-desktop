@@ -116,7 +116,7 @@ test('会话标题、消息复制与 composer 加号菜单', async ({ launchElec
   await expect(page.getByTestId('token-usage-popover')).toBeHidden();
 });
 
-test('侧边栏折叠为稳定图标栏并可恢复历史列表', async ({ launchElectronApp }) => {
+test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
@@ -144,32 +144,30 @@ test('侧边栏折叠为稳定图标栏并可恢复历史列表', async ({ launc
   const expandedWidth = (await sidebar.boundingBox())!.width;
   await page.getByTestId('sidebar-toggle').click();
   await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByTestId('sidebar-sessions')).toHaveCount(0);
-  await expect(page.getByTestId('nav-chat')).toBeVisible();
+  await expect(page.getByTestId('sidebar-sessions')).toBeHidden();
+  await expect(page.getByTestId('new-chat')).toBeHidden();
+  await expect(page.getByTestId('nav-chat')).toBeHidden();
   await expect(windowControls).toBeVisible();
-  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(80);
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(0);
   const collapsedControlsBox = await windowControls.boundingBox();
   const collapsedSidebarBox = await sidebar.boundingBox();
-  const collapsedNewChatBox = await page.getByTestId('new-chat').boundingBox();
-  const collapsedNavBox = await page.getByTestId('nav-chat').boundingBox();
+  const collapsedContentBox = await page.locator('.content').boundingBox();
   expect(collapsedControlsBox).not.toBeNull();
   expect(collapsedSidebarBox).not.toBeNull();
-  expect(collapsedNewChatBox).not.toBeNull();
-  expect(collapsedNavBox).not.toBeNull();
-  expect(collapsedSidebarBox!.width).toBe(80);
-  expect(collapsedControlsBox!.x).toBeGreaterThanOrEqual(collapsedSidebarBox!.x);
-  expect(collapsedControlsBox!.x + collapsedControlsBox!.width).toBeLessThanOrEqual(collapsedSidebarBox!.x + collapsedSidebarBox!.width);
-  expect(collapsedControlsBox!.y).toBeGreaterThan(48);
-  const sidebarCenter = collapsedSidebarBox!.x + collapsedSidebarBox!.width / 2;
-  for (const box of [collapsedControlsBox!, collapsedNewChatBox!, collapsedNavBox!]) {
-    expect(Math.abs(box.x + box.width / 2 - sidebarCenter)).toBeLessThanOrEqual(0.5);
-  }
+  expect(collapsedContentBox).not.toBeNull();
+  expect(collapsedSidebarBox!.width).toBe(0);
+  expect(collapsedContentBox!.x).toBe(0);
+  expect(collapsedControlsBox!.x).toBe(controlsBox!.x);
+  expect(collapsedControlsBox!.y).toBeLessThan(12);
   await page.screenshot({ path: 'output/playwright/sidebar-collapsed-refined.png', fullPage: false });
   await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(expandedWidth - 100);
 
+  const expandStartedAt = Date.now();
   await page.getByTestId('sidebar-toggle').click();
   await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByTestId('sidebar-sessions')).toBeVisible();
+  await expect(page.getByTestId('sidebar-sessions')).toBeVisible({ timeout: 750 });
+  await expect(page.locator('.sidebar-session-row').first()).toBeVisible({ timeout: 750 });
+  expect(Date.now() - expandStartedAt).toBeLessThan(750);
 });
 
 test('工具调用 → 完成后收入回合过程，展开可查看工具结果', async ({ launchElectronApp }) => {
