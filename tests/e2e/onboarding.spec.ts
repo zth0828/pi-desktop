@@ -76,7 +76,8 @@ test('场景5：npm 安装且版本达标 → 进入主界面', async ({ launchE
       npmRoot: fake.npmRoot,
     });
     const page = await app.firstWindow();
-    await expect(page.getByText('pi v0.83.0 detected')).toBeVisible();
+    await expect(page.getByTestId('nav-chat')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Choose folder' })).toBeVisible();
   } finally {
     await fake.cleanup();
   }
