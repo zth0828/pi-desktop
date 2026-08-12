@@ -388,6 +388,20 @@ button.danger-outline {
   white-space: nowrap;
 }
 
+.sidebar-session-running {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  animation: session-running-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes session-running-pulse {
+  50% { opacity: 0.45; }
+}
+
 .sidebar-nav {
   display: flex;
   flex-direction: column;
@@ -2740,6 +2754,14 @@ button.danger-outline {
   color: var(--accent);
 }
 
+.session-running-badge {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
 .skill-desc {
   margin-top: 4px;
   color: var(--text-secondary);
@@ -3518,6 +3540,9 @@ button.danger-outline {
 .sidebar-session-row .sidebar-session {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .sidebar-session-menu-trigger {
