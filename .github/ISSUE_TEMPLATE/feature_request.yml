@@ -1,0 +1,31 @@
+name: Feature request
+description: Propose an improvement to the Pi Desktop experience
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: What user problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed experience
+      description: Describe the behavior from the user's point of view.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Architecture check
+      options:
+        - label: This belongs in the desktop experience layer, or can be implemented through pi's extension mechanism.
+          required: true
