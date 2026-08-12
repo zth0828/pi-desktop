@@ -189,23 +189,32 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
 
   useEffect(() => {
     if (searchHighlightIndex === undefined) return;
-    let settleTimer = 0;
-    const frame = requestAnimationFrame(() => {
-      settleTimer = window.setTimeout(() => {
-        const list = listRef.current;
-        const target = document.getElementById(`chat-msg-${searchHighlightIndex}`);
-        if (!list || !target) return;
-        list.scrollTop = Math.max(
-          0,
-          target.offsetTop - (list.clientHeight - target.offsetHeight) / 2,
-        );
-        target.focus({ preventScroll: true });
-        onSearchTargetHandled?.();
-      }, 100);
-    });
+    const alignTarget = () => {
+      const list = listRef.current;
+      const target = document.getElementById(`chat-msg-${searchHighlightIndex}`);
+      if (!list || !target) return;
+      list.scrollTop = Math.max(
+        0,
+        target.offsetTop - (list.clientHeight - target.offsetHeight) / 2,
+      );
+      target.focus({ preventScroll: true });
+    };
+    alignTarget();
+    // Session replacement can apply a late layout/state refresh after the
+    // target first renders. Keep the selected hit aligned during its short
+    // highlight window, then release normal scrolling.
+    const alignTimer = window.setInterval(() => {
+      const list = listRef.current;
+      const target = document.getElementById(`chat-msg-${searchHighlightIndex}`);
+      if (!list || !target) return;
+      const listRect = list.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      if (targetRect.bottom <= listRect.top || targetRect.top >= listRect.bottom) alignTarget();
+    }, 100);
+    const handledTimer = window.setTimeout(() => onSearchTargetHandled?.(), 2_000);
     return () => {
-      cancelAnimationFrame(frame);
-      window.clearTimeout(settleTimer);
+      window.clearInterval(alignTimer);
+      window.clearTimeout(handledTimer);
     };
   }, [onSearchTargetHandled, searchHighlightIndex]);
 
