@@ -75,3 +75,4 @@ package-lock.json
 # 内部材料：技术方案、spike 记录等不进 git 历史（见 docs/TECHNICAL-PLAN.md §6.1）
 docs/
 spikes/
+output/
