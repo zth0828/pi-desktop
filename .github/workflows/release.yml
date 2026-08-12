@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v-prefixed tag to publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS
+            os: macos-14
+            command: pnpm dist:mac -- --publish never
+          - platform: Windows
+            os: windows-2025
+            command: pnpm dist:win -- --publish never
+          - platform: Linux
+            os: ubuntu-24.04
+            command: pnpm dist:linux -- --publish never
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Build unsigned packages
+        run: ${{ matrix.command }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Create checksums
+        shell: bash
+        run: |
+          cd release
+          find . -maxdepth 1 -type f ! -name '*.blockmap' ! -name 'builder-*' -print0 \
+            | sort -z \
+            | xargs -0 shasum -a 256 > SHA256SUMS-${{ matrix.platform }}.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pi-desktop-${{ matrix.platform }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+            release/SHA256SUMS-*.txt
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish unsigned preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          gh release create "$RELEASE_TAG" artifacts/* \
+            --verify-tag \
+            --generate-notes \
+            --prerelease \
+            --title "Pi Desktop ${RELEASE_TAG} (Unsigned Preview)" \
+            --notes "$(cat .github/release-notes.md)"
