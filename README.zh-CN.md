@@ -192,6 +192,40 @@ Linux 上验证源码构建，版本标签会为三个平台生成未签名预�
 4. 提交前运行上面的相关检查。
 5. 报告问题时请勿附带密钥、API Key 或私有 pi 会话。
 
+## 社区交流
+
+欢迎加入 Pi Desktop 社区，交流使用经验、分享工作流、反馈问题，也欢迎提出改进建议。
+
+<table>
+  <thead>
+    <tr>
+      <th>GitHub 社区</th>
+      <th>飞书交流群</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td valign="top">
+        <p>公共、可搜索的讨论优先放在项目仓库中：</p>
+        <ul>
+          <li><a href="https://github.com/zth0828/pi-desktop/issues">Issues</a>：提交可复现的 Bug 和明确的功能建议。</li>
+          <li><a href="https://github.com/zth0828/pi-desktop/discussions">Discussions</a>：进行问答、工作流分享和产品讨论。</li>
+          <li><a href="https://github.com/zth0828/pi-desktop/pulls">Pull requests</a>：提交范围清晰的贡献。</li>
+        </ul>
+      </td>
+      <td align="center" valign="top">
+        <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=e26gbe0e-6133-462d-9192-33c554ed5f47&amp;qr_code=true">
+          <img src="./resources/community/feishu-group.png" width="240" alt="Pi Desktop 飞书交流群二维码">
+        </a>
+        <br>
+        <sub>扫码或点击二维码加入中文交流群。</sub>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+项目发展后会继续增加其他社区入口。群聊是否开放以及邀请链接是否有效由飞书控制，后续可能发生变化。
+
 ## 许可证
 
 Pi Desktop **允许个人、教育、研究及其他非商业用途免费使用**。商业使用必须事先

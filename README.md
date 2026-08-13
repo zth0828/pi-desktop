@@ -212,6 +212,43 @@ feedback, and focused pull requests are welcome.
 4. Run the relevant checks above before submitting.
 5. Do not include secrets, API keys, or private pi sessions in reports.
 
+## Community
+
+Join the Pi Desktop community to ask questions, share workflows, and exchange
+feedback with other users.
+
+<table>
+  <thead>
+    <tr>
+      <th>GitHub Community</th>
+      <th>Feishu Group</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td valign="top">
+        <p>Use the project repository for public, searchable conversations:</p>
+        <ul>
+          <li><a href="https://github.com/zth0828/pi-desktop/issues">Issues</a> for reproducible bugs and focused feature requests.</li>
+          <li><a href="https://github.com/zth0828/pi-desktop/discussions">Discussions</a> for questions, workflow ideas, and product feedback.</li>
+          <li><a href="https://github.com/zth0828/pi-desktop/pulls">Pull requests</a> for focused contributions.</li>
+        </ul>
+      </td>
+      <td align="center" valign="top">
+        <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=e26gbe0e-6133-462d-9192-33c554ed5f47&amp;qr_code=true">
+          <img src="./resources/community/feishu-group.png" width="240" alt="Pi Desktop Feishu community group QR code">
+        </a>
+        <br>
+        <sub>Scan or click to join the Chinese-language group.</sub>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+More community channels may be added as the project grows. Feishu group
+availability and invite validity are controlled by Feishu and may change over
+time.
+
 ## License
 
 Pi Desktop is **free for personal, educational, research, and other
