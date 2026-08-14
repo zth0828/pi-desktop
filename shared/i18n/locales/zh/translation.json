@@ -15,6 +15,7 @@
       "body": "Pi Desktop 需要 Node.js ≥ {{min}} 和 npm。pi 只能通过 npm 安装，所以 Node 是硬前提。",
       "detected": "检测到 Node.js v{{version}}，低于要求的 v{{min}}。",
       "notFound": "PATH 中未找到 Node.js。",
+      "npmNotFound": "检测到 Node.js v{{version}}，但 PATH 中未找到或无法运行 npm。",
       "download": "下载 Node.js LTS"
     },
     "noPi": {

@@ -15,6 +15,7 @@
       "body": "Pi Desktop needs Node.js ≥ {{min}} with npm. pi is installed via npm, so Node is a hard prerequisite.",
       "detected": "Detected Node.js v{{version}}, which is below the required v{{min}}.",
       "notFound": "Node.js was not found on your PATH.",
+      "npmNotFound": "Detected Node.js v{{version}}, but npm was not found on your PATH or could not be run.",
       "download": "Download Node.js LTS"
     },
     "noPi": {

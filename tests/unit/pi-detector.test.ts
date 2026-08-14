@@ -2,7 +2,13 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, realpathSyn
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { detectPiPackageRoot, isUnderDir, locatePackageRoot } from '@electron/utils/pi-detector';
+import {
+  detectNpm,
+  detectPiPackageRoot,
+  isUnderDir,
+  locatePackageRoot,
+  needsWindowsCommandShell,
+} from '@electron/utils/pi-detector';
 
 // 模拟 npm 全局安装布局：<prefix>/bin/pi → symlink → <prefix>/lib/node_modules/@scope/pkg/dist/cli.js
 const root = mkdtempSync(path.join(tmpdir(), 'pi-detector-test-'));
@@ -23,6 +29,17 @@ symlinkSync(path.join(pkgDir, 'dist/cli.js'), path.join(root, 'bin/pi'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 describe('pi-detector 路径逻辑', () => {
+  it('Windows 的 cmd/bat shim 通过 shell 执行', () => {
+    expect(needsWindowsCommandShell('C:\\Program Files\\nodejs\\npm.cmd', 'win32')).toBe(true);
+    expect(needsWindowsCommandShell('C:\\tools\\pi.BAT', 'win32')).toBe(true);
+    expect(needsWindowsCommandShell('C:\\Program Files\\nodejs\\node.exe', 'win32')).toBe(false);
+    expect(needsWindowsCommandShell('/usr/local/bin/npm', 'darwin')).toBe(false);
+  });
+
+  it.skipIf(process.platform !== 'win32')('Windows 可实际执行 PATH 中的 npm.cmd', () => {
+    expect(detectNpm()).toMatchObject({ found: true });
+  });
+
   it('locatePackageRoot 从 bin 真实路径向上找到包根与版本', () => {
     const located = locatePackageRoot(path.join(pkgDir, 'dist/cli.js'));
     expect(located?.packageRoot).toBe(pkgDir);

@@ -60,9 +60,11 @@ export default function Onboarding() {
           <h2>{t('onboarding.noNode.title')}</h2>
           <p>{t('onboarding.noNode.body', { min: env.minNodeVersion })}</p>
           <p className="detect-detail">
-            {env.node.found
-              ? t('onboarding.noNode.detected', { version: env.node.version, min: env.minNodeVersion })
-              : t('onboarding.noNode.notFound')}
+            {!env.node.found
+              ? t('onboarding.noNode.notFound')
+              : !env.node.meetsMin
+                ? t('onboarding.noNode.detected', { version: env.node.version, min: env.minNodeVersion })
+                : t('onboarding.noNode.npmNotFound', { version: env.node.version })}
           </p>
           <div className="actions">
             <button

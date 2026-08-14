@@ -17,17 +17,29 @@ import { envWithUserPath, resolveUserPath } from './shell-env';
 
 export type { NodeDetectResult, NpmDetectResult, PiDetectResult, PiEnvironment, PiInstallKind };
 
-function run(cmd: string, args: string[]): string | null {
+function run(binPath: string, args: string[]): string | null {
+  const useShell = needsWindowsCommandShell(binPath);
   try {
-    return execFileSync(cmd, args, {
+    return execFileSync(useShell ? path.basename(binPath) : binPath, args, {
       encoding: 'utf8',
       timeout: 8000,
       stdio: ['ignore', 'pipe', 'ignore'],
       env: envWithUserPath(),
+      // Windows command shims require cmd.exe. Running from their own directory also
+      // avoids shell parsing failures for standard paths such as C:\Program Files.
+      shell: useShell,
+      cwd: useShell ? path.dirname(binPath) : undefined,
     }).trim();
   } catch {
     return null;
   }
+}
+
+export function needsWindowsCommandShell(
+  binPath: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform === 'win32' && /\.(?:cmd|bat)$/i.test(binPath);
 }
 
 function findOnPath(bin: string): string | null {
@@ -54,7 +66,7 @@ function findOnPath(bin: string): string | null {
 
 export function detectNode(): NodeDetectResult {
   const binPath = findOnPath('node');
-  const out = binPath ? run('node', ['--version']) : null;
+  const out = binPath ? run(binPath, ['--version']) : null;
   if (!binPath || !out) return { found: false, meetsMin: false };
   const version = out.replace(/^v/, '');
   let meetsMin = false;
@@ -67,10 +79,11 @@ export function detectNode(): NodeDetectResult {
 }
 
 export function detectNpm(): NpmDetectResult {
-  const version = findOnPath('npm') ? run('npm', ['--version']) : null;
-  if (!version) return { found: false };
+  const binPath = findOnPath('npm');
+  const version = binPath ? run(binPath, ['--version']) : null;
+  if (!binPath || !version) return { found: false };
   // 测试钩子：E2E 用临时 npm prefix 模拟各安装场景
-  const rootOut = process.env.PI_DESKTOP_NPM_ROOT ?? run('npm', ['root', '-g']);
+  const rootOut = process.env.PI_DESKTOP_NPM_ROOT ?? run(binPath, ['root', '-g']);
   let globalRoot: string | undefined;
   if (rootOut && existsSync(rootOut)) {
     // macOS: /tmp → /private/tmp 等 symlink，比较前必须 realpath（Spike A 教训）

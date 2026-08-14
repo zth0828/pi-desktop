@@ -1,12 +1,20 @@
 // M1 验收：onboarding 五场景（docs/TECHNICAL-PLAN.md §3、§9 M1 DoD）。
 // 通过 PI_DESKTOP_USER_PATH / PI_DESKTOP_NPM_ROOT 测试钩子隔离模拟各环境。
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
 
 const SYSTEM_BINS = '/usr/bin:/bin';
 const nodeBinDir = path.dirname(process.execPath);
+
+async function makeFakeNodeBin(version: string): Promise<{ binDir: string; cleanup: () => Promise<void> }> {
+  const binDir = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-node-'));
+  const nodePath = path.join(binDir, 'node');
+  await writeFile(nodePath, `#!/bin/sh\nprintf 'v${version}\\n'\n`);
+  await chmod(nodePath, 0o755);
+  return { binDir, cleanup: () => rm(binDir, { recursive: true, force: true }) };
+}
 
 /** 造一个假的 npm 全局 prefix：<root>/bin/pi → lib/node_modules/.../dist/cli.js */
 async function makeFakeNpmPrefix(version: string): Promise<{ prefix: string; npmRoot: string; cleanup: () => Promise<void> }> {
@@ -29,6 +37,18 @@ test('场景1：无 Node → Node 引导页', async ({ launchElectronApp }) => {
   const page = await app.firstWindow();
   await expect(page.getByTestId('window-drag-strip')).toHaveCSS('-webkit-app-region', 'drag');
   await expect(page.getByRole('heading', { name: 'Node.js is required' })).toBeVisible();
+});
+
+test('场景1b：Node 版本达标但无 npm → 显示 npm 检测错误', async ({ launchElectronApp }) => {
+  const fake = await makeFakeNodeBin('24.19.0');
+  try {
+    const app = await launchElectronApp({ userPath: `${fake.binDir}:${SYSTEM_BINS}` });
+    const page = await app.firstWindow();
+    await expect(page.getByText(/Detected Node\.js v24\.19\.0, but npm/)).toBeVisible();
+    await expect(page.getByText(/below the required/)).toHaveCount(0);
+  } finally {
+    await fake.cleanup();
+  }
 });
 
 test('场景2：有 Node 无 pi → 安装引导页', async ({ launchElectronApp }) => {
