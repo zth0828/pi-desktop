@@ -55,14 +55,15 @@ async function closeElectronApp(app: ElectronApplication, timeoutMs = 5_000): Pr
   await app.evaluate(({ app: electronApp }) => electronApp.quit()).catch(() => undefined);
   const closed = await closeEvent;
   if (closed) return;
+  const forceClosed = await Promise.race([
+    app.close().then(() => true).catch(() => false),
+    new Promise<false>((resolveFalse) => setTimeout(() => resolveFalse(false), timeoutMs)),
+  ]);
+  if (forceClosed) return;
   try {
-    await app.close();
+    app.process().kill('SIGKILL');
   } catch {
-    try {
-      app.process().kill('SIGKILL');
-    } catch {
-      // ignore
-    }
+    // ignore
   }
 }
 
