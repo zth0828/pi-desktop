@@ -32,11 +32,11 @@ jobs:
             os: ubuntu-24.04
             command: pnpm dist:linux -- --publish never
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.19.0
           cache: pnpm
@@ -54,7 +54,7 @@ jobs:
           find . -maxdepth 1 -type f ! -name '*.blockmap' ! -name 'builder-*' -print0 \
             | sort -z \
             | xargs -0 shasum -a 256 > SHA256SUMS-${{ matrix.platform }}.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pi-desktop-${{ matrix.platform }}
           path: |
@@ -71,10 +71,10 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
