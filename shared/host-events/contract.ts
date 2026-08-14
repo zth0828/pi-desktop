@@ -28,6 +28,8 @@ export type HostEventContract = {
     sessionReplaced: (payload: PiRuntimeStateResult) => void;
     /** 任一保活 runtime 的运行状态变化；会话列表据此刷新后台任务指示。 */
     runtimeStateChanged: (payload: { sessionPath?: string; running: boolean }) => void;
+    /** 会话元数据变更（删除/归档/重命名/分叉）；侧栏与会话页据此即时刷新。 */
+    sessionsChanged: (payload: { reason: 'remove' | 'archive' | 'rename' | 'fork' }) => void;
     /** 扩展 UI 请求（ctx.ui.confirm/select/input）：渲染层弹对话框，经 piRuntime.uiResponse 回传 */
     uiRequest: (payload: PiUiRequestPayload) => void;
     /** 扩展 UI 请求被取消（超时/signal abort/会话替换），渲染层移除对应对话框 */
@@ -70,6 +72,7 @@ export const HOST_EVENT_CHANNELS = {
     event: 'pi-runtime:event',
     sessionReplaced: 'pi-runtime:session-replaced',
     runtimeStateChanged: 'pi-runtime:runtime-state-changed',
+    sessionsChanged: 'pi-runtime:sessions-changed',
     uiRequest: 'pi-runtime:ui-request',
     uiCancel: 'pi-runtime:ui-cancel',
     uiState: 'pi-runtime:ui-state',

@@ -1,7 +1,7 @@
 // M4 验收：会话管理（列表/切换/重命名/删除，真 pi + mock provider，不烧 API quota）。
 // 每个测试独立 agentDir（会话文件互相隔离），模式同 models.spec.ts。
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
@@ -160,6 +160,99 @@ test('Sessions 页全局展示：跨工作区分组并显示位置信息（listA
   } finally {
     await rm(secondWorkspace, { recursive: true, force: true });
   }
+});
+
+test('进入历史会话 → 消息列表定位在最新消息（底部）', async ({ launchElectronApp }) => {
+  // 预置一个多轮长会话（内容高度远超视口）
+  const secondWorkspace = await realpath(await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-scroll-')));
+  const seedId = '019fe296-0000-7000-8000-000000000002';
+  const seedTs = '2026-08-07T08:00:00.000Z';
+  const encoded = `--${secondWorkspace.replace(/^\//, '').replace(/[\/\\:]/g, '-')}--`;
+  const seedDir = path.join(agentDir, 'sessions', encoded);
+  await mkdir(seedDir, { recursive: true });
+  const lines = [JSON.stringify({ type: 'session', version: 3, id: seedId, timestamp: seedTs, cwd: secondWorkspace })];
+  let parent: string | null = null;
+  for (let i = 0; i < 40; i += 1) {
+    const ts = new Date(Date.parse(seedTs) + i * 60_000).toISOString();
+    const uid = `u${String(i).padStart(7, '0')}`;
+    const aid = `a${String(i).padStart(7, '0')}`;
+    lines.push(JSON.stringify({
+      type: 'message', id: uid, parentId: parent, timestamp: ts,
+      message: { role: 'user', content: [{ type: 'text', text: `scroll-seed question ${i}` }], timestamp: Date.parse(ts) },
+    }));
+    lines.push(JSON.stringify({
+      type: 'message', id: aid, parentId: uid, timestamp: ts,
+      message: { role: 'assistant', content: [{ type: 'text', text: `scroll-seed answer ${i}` }], timestamp: Date.parse(ts) },
+    }));
+    parent = aid;
+  }
+  await writeFile(path.join(seedDir, `${seedTs.replace(/[:.]/g, '-')}_${seedId}.jsonl`), lines.join('\n') + '\n');
+
+  try {
+    const app = await launchElectronApp(launchOptions());
+    const page = await app.firstWindow();
+    await waitSessionReady(page);
+
+    await page.getByTestId('nav-sessions').click();
+    const row = page.getByTestId(`session-row-${seedId}`);
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.locator('.session-row-main').click();
+
+    // 回到 chat：最后一条消息可见，且列表贴底（而不是停在第一条输入处）
+    await expect(
+      page.getByTestId('message-assistant').filter({ hasText: 'scroll-seed answer 39' }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(
+        () => page.getByTestId('message-list').evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight),
+        { timeout: 5_000 },
+      )
+      .toBeLessThanOrEqual(30);
+  } finally {
+    await rm(secondWorkspace, { recursive: true, force: true });
+  }
+});
+
+test('Sessions 页删除非当前会话 → 文件真实移除且侧栏即时同步', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 会话 A（待删，删前已非当前）+ 会话 B（当前）
+  await sendAndWaitReply(page, 'trash-sync GOLDFISH');
+  await page.getByTestId('new-chat').click();
+  await sendAndWaitReply(page, 'trash-sync keep HERON');
+
+  // 定位会话 A 的文件
+  const findSessionFile = async (needle: string) => {
+    const dirs = await readdir(path.join(agentDir, 'sessions'));
+    for (const dirName of dirs) {
+      const files = await readdir(path.join(agentDir, 'sessions', dirName));
+      for (const f of files) {
+        const full = path.join(agentDir, 'sessions', dirName, f);
+        const content = await readFile(full, 'utf8').catch(() => '');
+        if (content.includes(needle)) return full;
+      }
+    }
+    return undefined;
+  };
+  const sessionFile = await findSessionFile('trash-sync GOLDFISH');
+  expect(sessionFile).toBeTruthy();
+
+  await page.getByTestId('nav-sessions').click();
+  const row = sessionRows(page).filter({ hasText: 'trash-sync GOLDFISH' });
+  await expect(row).toHaveCount(1, { timeout: 15_000 });
+  await row.getByTestId('session-delete').click();
+  await row.getByTestId('session-delete-confirm').click();
+
+  // Sessions 页移除
+  await expect(sessionRows(page).filter({ hasText: 'trash-sync GOLDFISH' })).toHaveCount(0, { timeout: 15_000 });
+  // 侧栏即时同步（删非当前会话不会触发 sessionReplaced/runtimeStateChanged，靠 sessionsChanged）
+  await expect(
+    page.locator('.sidebar-session-row').filter({ hasText: 'trash-sync GOLDFISH' }),
+  ).toHaveCount(0, { timeout: 3_000 });
+  // 文件真的被移除（移入系统废纸篓）
+  await expect(stat(sessionFile!)).rejects.toThrow();
 });
 
 test('导出 HTML → 统一系统目录并在重新进入页面后保留打开入口', async ({

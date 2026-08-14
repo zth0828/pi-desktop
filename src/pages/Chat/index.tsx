@@ -131,11 +131,39 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [searchHighlightIndex, setSearchHighlightIndex] = useState<number>();
   const stickToBottomRef = useRef(true);
+  // 会话切换后的滚动复位窗口：期间忽略顶部瞬态滚动，防止 stickToBottom 被误置为 false
+  const scrollResetRef = useRef(false);
   useEffect(() => {
     setExpandedTurns({});
     setExpandedStages({});
-    stickToBottomRef.current = true;
     setShowScrollToBottom(false);
+    stickToBottomRef.current = true;
+    // 搜索定位跳转由 searchTarget 对齐逻辑接管，不强制回底部
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (searchTarget?.sessionId === sessionId) return;
+    // 进入/切换会话：直接定位到最新消息（底部）。列表内容替换后 scrollTop 会留在
+    // 顶部，若不主动复位会停在第一条输入处；复位窗口内的 affordance 计算不改变 stick。
+    const list = listRef.current;
+    if (list) {
+      scrollResetRef.current = true;
+      list.scrollTop = list.scrollHeight;
+      // 图片/代码块等延迟布局后再钉一次底
+      const raf = requestAnimationFrame(() => {
+        const el = listRef.current;
+        if (el && scrollResetRef.current) el.scrollTop = el.scrollHeight;
+      });
+      const release = window.setTimeout(() => {
+        scrollResetRef.current = false;
+        updateScrollAffordance();
+      }, 300);
+      return () => {
+        cancelAnimationFrame(raf);
+        window.clearTimeout(release);
+        scrollResetRef.current = false;
+      };
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   // user 消息稳定锚点（消息列表在会话内只追加，index 锚点稳定）
@@ -241,7 +269,8 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
     const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
     const hasOverflow = list.scrollHeight > list.clientHeight + 2;
     const atBottom = !hasOverflow || distanceFromBottom <= 24;
-    stickToBottomRef.current = atBottom;
+    // 会话切换复位窗口内不更新 stick，避免顶部瞬态滚动把自动钉底关掉
+    if (!scrollResetRef.current) stickToBottomRef.current = atBottom;
     setShowScrollToBottom(hasOverflow && !atBottom);
   }, []);
 

@@ -70,9 +70,12 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     if (started) refreshAfterSessionChange();
     const unbindSession = onHostEvent('piRuntime', 'sessionReplaced', refreshAfterSessionChange);
     const unbindRuntime = onHostEvent('piRuntime', 'runtimeStateChanged', refreshAfterSessionChange);
+    // 会话页的删除/归档/重命名/分叉不会触发上面两个事件，靠此事件即时同步
+    const unbindChanged = onHostEvent('piRuntime', 'sessionsChanged', refreshAfterSessionChange);
     return () => {
       unbindSession();
       unbindRuntime();
+      unbindChanged();
     };
   }, [refreshAfterSessionChange, started]);
 

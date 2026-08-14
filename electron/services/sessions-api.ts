@@ -4,6 +4,7 @@
 // 会话替换后必须 afterSessionReplaced（重订阅 + 重绑扩展 + 推 sessionReplaced）。
 import { rm } from 'node:fs/promises';
 import { shell } from 'electron';
+import { sendHostEvent } from '../main/ipc/host-events';
 import type {
   HostSuccess,
   PiSessionExportResult,
@@ -223,6 +224,7 @@ export const sessionsApi = {
         const sdk = await loadPiSdk();
         sdk.SessionManager.open(payload.path).appendSessionInfo(name);
       }
+      sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'rename' });
       return { success: true };
     } catch (err) {
       return { success: false, error: toError(err) };
@@ -240,6 +242,7 @@ export const sessionsApi = {
       const result = await active.runtime.switchSession(newPath);
       if (result.cancelled) return { success: false, error: 'cancelled' };
       await afterSessionReplaced(active);
+      sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'fork' });
       return { success: true, path: newPath };
     } catch (err) {
       return { success: false, error: toError(err) };
@@ -251,6 +254,7 @@ export const sessionsApi = {
     try {
       const sdk = await loadPiSdk();
       setArchived(payload.path, payload.archived, sdk);
+      sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'archive' });
       return { success: true };
     } catch (err) {
       return { success: false, error: toError(err) };
@@ -265,6 +269,7 @@ export const sessionsApi = {
         return { success: false, error: 'project has a running session' };
       }
       for (const session of projectSessions) setArchived(session.path, payload.archived, sdk);
+      sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'archive' });
       return { success: true };
     } catch (err) {
       return { success: false, error: toError(err) };
@@ -291,6 +296,7 @@ export const sessionsApi = {
           await rm(payload.path, { force: true });
         }
       }
+      sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'remove' });
       return { success: true };
     } catch (err) {
       return { success: false, error: toError(err) };

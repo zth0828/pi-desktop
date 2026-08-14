@@ -180,9 +180,11 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
   useEffect(() => {
     const unbindReplaced = onHostEvent('piRuntime', 'sessionReplaced', refresh);
     const unbindState = onHostEvent('piRuntime', 'runtimeStateChanged', refresh);
+    const unbindChanged = onHostEvent('piRuntime', 'sessionsChanged', refresh);
     return () => {
       unbindReplaced();
       unbindState();
+      unbindChanged();
     };
   }, [refresh]);
 
