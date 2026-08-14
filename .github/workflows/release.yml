@@ -50,11 +50,39 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - name: Create checksums
         shell: bash
+        env:
+          CHECKSUM_PLATFORM: ${{ matrix.platform }}
         run: |
-          cd release
-          find . -maxdepth 1 -type f ! -name '*.blockmap' ! -name 'builder-*' -print0 \
-            | sort -z \
-            | xargs -0 shasum -a 256 > SHA256SUMS-${{ matrix.platform }}.txt
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { createReadStream } from 'node:fs';
+          import { readdir, writeFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+
+          const outputDir = 'release';
+          const entries = (await readdir(outputDir, { withFileTypes: true }))
+            .filter((entry) =>
+              entry.isFile()
+              && !entry.name.endsWith('.blockmap')
+              && !entry.name.startsWith('builder-')
+              && !entry.name.startsWith('SHA256SUMS-')
+            )
+            .sort((left, right) => left.name.localeCompare(right.name));
+
+          const lines = [];
+          for (const entry of entries) {
+            const hash = createHash('sha256');
+            for await (const chunk of createReadStream(join(outputDir, entry.name))) {
+              hash.update(chunk);
+            }
+            lines.push(`${hash.digest('hex')}  ${entry.name}`);
+          }
+
+          await writeFile(
+            join(outputDir, `SHA256SUMS-${process.env.CHECKSUM_PLATFORM}.txt`),
+            `${lines.join('\n')}\n`,
+          );
+          NODE
       - uses: actions/upload-artifact@v7
         with:
           name: pi-desktop-${{ matrix.platform }}
