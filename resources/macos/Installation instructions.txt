@@ -1,0 +1,22 @@
+Pi Desktop macOS installation
+==============================
+
+Some Pi Desktop previews are distributed without an Apple Developer ID
+certificate. Those builds have an ad-hoc integrity signature, but macOS still
+blocks a normal first launch.
+
+If direct installation and launch work, no additional action is needed. When
+Gatekeeper blocks the app, install without changing Privacy & Security settings:
+
+1. Compare the downloaded DMG with SHA256SUMS-macOS.txt from the GitHub Release.
+2. Open Terminal.
+3. Type "bash " (including the trailing space).
+4. Drag "Install Pi Desktop.sh" from this DMG window into Terminal.
+5. Press Return.
+
+The installer verifies the application bundle, copies it to /Applications,
+removes quarantine from Pi Desktop only, and opens it. It does not disable
+Gatekeeper and does not change security policy for any other application.
+
+A direct double-click cannot pass Gatekeeper without Apple Developer ID signing
+and notarization. This Terminal confirmation is required for unsigned builds.

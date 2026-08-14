@@ -44,7 +44,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build:vite
-      - name: Require macOS release credentials
+      - name: Select macOS signing mode
         if: matrix.platform == 'macOS'
         shell: bash
         env:
@@ -54,24 +54,24 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          missing=()
-          for name in \
-            MACOS_CSC_LINK \
-            MACOS_CSC_KEY_PASSWORD \
-            APPLE_ID \
-            APPLE_APP_SPECIFIC_PASSWORD \
+          required=(
+            MACOS_CSC_LINK
+            MACOS_CSC_KEY_PASSWORD
+            APPLE_ID
+            APPLE_APP_SPECIFIC_PASSWORD
             APPLE_TEAM_ID
-          do
+          )
+          for name in "${required[@]}"; do
             if [[ -z "${!name:-}" ]]; then
-              missing+=("$name")
+              echo "MACOS_RELEASE_SIGNED=false" >> "$GITHUB_ENV"
+              echo "Building an ad-hoc signed macOS preview; Apple release credentials are incomplete."
+              exit 0
             fi
           done
-          if (( ${#missing[@]} > 0 )); then
-            printf 'Missing required macOS release secrets: %s\n' "${missing[*]}" >&2
-            exit 1
-          fi
+          echo "MACOS_RELEASE_SIGNED=true" >> "$GITHUB_ENV"
+          echo "Building a Developer ID signed and notarized macOS release."
       - name: Build signed and notarized macOS packages
-        if: matrix.platform == 'macOS'
+        if: matrix.platform == 'macOS' && env.MACOS_RELEASE_SIGNED == 'true'
         run: ${{ matrix.command }}
         env:
           CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
@@ -79,9 +79,12 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      - name: Verify macOS release trust
+      - name: Build ad-hoc signed macOS preview packages
+        if: matrix.platform == 'macOS' && env.MACOS_RELEASE_SIGNED != 'true'
+        run: ${{ matrix.command }} -c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false
+      - name: Verify macOS release
         if: matrix.platform == 'macOS'
-        run: scripts/verify-macos-release.sh release
+        run: scripts/verify-macos-release.sh release "${MACOS_RELEASE_SIGNED:-false}"
       - name: Build unsigned Windows/Linux packages
         if: matrix.platform != 'macOS'
         run: ${{ matrix.command }}

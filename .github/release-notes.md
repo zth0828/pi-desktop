@@ -1,7 +1,9 @@
 > [!WARNING]
-> This preview is not code-signed or notarized. Verify the SHA-256 checksum
-> before opening it. macOS Gatekeeper and Windows SmartScreen may show a
-> warning; see the README installation notes for details.
+> Verify the published SHA-256 checksum before opening a preview package.
+> macOS builds without Apple release credentials use an ad-hoc integrity
+> signature rather than Developer ID notarization. If Gatekeeper blocks direct
+> launch, open `Installation instructions.txt` in the DMG and run the bundled
+> installer through Terminal. Windows SmartScreen may also show a warning.
 
 Pi Desktop requires a compatible global pi installation:
 

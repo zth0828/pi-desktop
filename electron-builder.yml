@@ -40,6 +40,21 @@ mac:
 
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
+  contents:
+    - x: 130
+      y: 145
+    - x: 410
+      y: 145
+      type: link
+      path: /Applications
+    - x: 160
+      y: 290
+      type: file
+      path: resources/macos/Install Pi Desktop.sh
+    - x: 380
+      y: 290
+      type: file
+      path: resources/macos/Installation instructions.txt
 
 win:
   icon: resources/icon.ico

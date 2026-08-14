@@ -149,14 +149,16 @@ Download the package for your platform from
 [GitHub Releases](https://github.com/zth0828/pi-desktop/releases). Compare the
 file against the published `SHA256SUMS-<platform>.txt` before opening it.
 
-macOS packages produced by the current release workflow require Developer ID
-signing and Apple notarization, so Gatekeeper can open them without a manual
-Privacy & Security exception. Windows and Linux preview packages are currently
-unsigned and should be checked against the published checksum before opening.
+The macOS release workflow has two modes. When Apple credentials are available,
+it produces Developer ID signed and notarized packages that open normally.
+Without those credentials, it produces a fully ad-hoc signed preview and adds
+`Install Pi Desktop.sh` plus installation instructions to the DMG. Run that
+installer through Terminal to install without changing Privacy & Security
+settings; direct Finder launch remains unavailable for unsigned applications.
+Windows and Linux preview packages are also unsigned.
 
-The `v0.1.0` macOS packages predate that release guard and are unsigned. After
-checking `SHA256SUMS-macOS.txt`, install the app and remove quarantine from this
-app only:
+The `v0.1.0` macOS packages predate the bundled installer. After checking
+`SHA256SUMS-macOS.txt`, install the app and remove quarantine from this app only:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Pi Desktop.app"
@@ -179,9 +181,10 @@ GitHub Actions repository secrets:
 - `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for that account
 - `APPLE_TEAM_ID`: the 10-character Apple Developer team ID
 
-The release job fails before packaging if any credential is missing. It then
-checks the app's sealed signature, Gatekeeper assessment, stapled notarization
-ticket, and the signed DMG before artifacts can reach a GitHub Release.
+When all five secrets are present, the release job signs, notarizes, and checks
+the app's sealed signature, Gatekeeper assessment, stapled notarization ticket,
+and signed DMG. When they are absent, it deliberately uses ad-hoc signing and
+verifies bundle integrity before publishing the terminal-based installer.
 
 ## Run from Source
 
@@ -216,10 +219,11 @@ pnpm screenshots:readme
 ## Project Status
 
 The core desktop workflow is implemented and covered by Electron E2E tests.
-CI validates source builds on macOS, Windows, and Linux. Version tags require
-Developer ID signing and notarization for macOS artifacts, while Windows and
-Linux preview artifacts remain unsigned. Auto-update and broader real-device
-release validation remain future work.
+CI validates source builds on macOS, Windows, and Linux. Version tags create
+Developer ID signed and notarized macOS artifacts when Apple credentials are
+configured, or ad-hoc signed previews with a terminal installer otherwise.
+Windows and Linux preview artifacts remain unsigned. Auto-update and broader
+real-device release validation remain future work.
 
 ## Contributing
 
