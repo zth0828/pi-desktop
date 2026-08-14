@@ -24,13 +24,13 @@ jobs:
         include:
           - platform: macOS
             os: macos-14
-            command: pnpm dist:mac -- --publish never
+            command: pnpm exec electron-builder --mac --publish never
           - platform: Windows
             os: windows-2025
-            command: pnpm dist:win -- --publish never
+            command: pnpm exec electron-builder --win --publish never
           - platform: Linux
             os: ubuntu-24.04
-            command: pnpm dist:linux -- --publish never
+            command: pnpm exec electron-builder --linux --publish never
     steps:
       - uses: actions/checkout@v7
         with:
@@ -43,6 +43,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm build:vite
       - name: Build unsigned packages
         run: ${{ matrix.command }}
         env:
