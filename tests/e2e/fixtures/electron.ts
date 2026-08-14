@@ -48,14 +48,12 @@ const electronEntry = join(repoRoot, 'dist-electron/main/index.js');
 const nodeBinDir = path.dirname(process.execPath);
 
 async function closeElectronApp(app: ElectronApplication, timeoutMs = 5_000): Promise<void> {
-  const closed = await Promise.race([
-    app
-      .waitForEvent('close', { timeout: timeoutMs })
-      .then(() => true)
-      .catch(() => false),
-    app.evaluate(({ app: electronApp }) => electronApp.quit()).then(() => true).catch(() => false),
-    new Promise<false>((resolveFalse) => setTimeout(() => resolveFalse(false), timeoutMs)),
-  ]);
+  const closeEvent = app
+    .waitForEvent('close', { timeout: timeoutMs })
+    .then(() => true)
+    .catch(() => false);
+  await app.evaluate(({ app: electronApp }) => electronApp.quit()).catch(() => undefined);
+  const closed = await closeEvent;
   if (closed) return;
   try {
     await app.close();
