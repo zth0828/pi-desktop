@@ -160,8 +160,15 @@ jobs:
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         shell: bash
         run: |
-          gh release create "$RELEASE_TAG" artifacts/* \
-            --verify-tag \
-            --generate-notes \
-            --title "Pi Desktop ${RELEASE_TAG}" \
-            --notes "$(cat .github/release-notes.md)"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --title "Pi Desktop ${RELEASE_TAG}" \
+              --notes "$(cat .github/release-notes.md)"
+            gh release upload "$RELEASE_TAG" artifacts/* --clobber
+          else
+            gh release create "$RELEASE_TAG" artifacts/* \
+              --verify-tag \
+              --generate-notes \
+              --title "Pi Desktop ${RELEASE_TAG}" \
+              --notes "$(cat .github/release-notes.md)"
+          fi
