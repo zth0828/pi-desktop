@@ -48,6 +48,12 @@ const electronEntry = join(repoRoot, 'dist-electron/main/index.js');
 const nodeBinDir = path.dirname(process.execPath);
 
 async function closeElectronApp(app: ElectronApplication, timeoutMs = 5_000): Promise<void> {
+  try {
+    const child = app.process();
+    if (child.exitCode !== null || child.signalCode !== null) return;
+  } catch {
+    return;
+  }
   const closeEvent = app
     .waitForEvent('close', { timeout: timeoutMs })
     .then(() => true)
@@ -78,59 +84,62 @@ export const test = base.extend<ElectronFixtures>({
   },
 
   launchElectronApp: async ({ homeDir }, provideLauncher) => {
-    await provideLauncher(async (options: LaunchOptions = {}) => {
-      if (options.seedSettings) {
-        // electron-store 默认文件：<userData>/config.json（userData 经测试钩子固定）
-        const userDataDir = join(homeDir, 'user-data');
-        await mkdir(userDataDir, { recursive: true });
-        await writeFile(join(userDataDir, 'config.json'), JSON.stringify(options.seedSettings));
-      }
-      const piEnv = options.withPi ? piTestEnv() : null;
-      return await electron.launch({
-        executablePath: electronBinaryPath,
-        args: ['--lang=en-US', electronEntry],
-        env: {
-          ...process.env,
-          HOME: homeDir,
-          LANG: 'en_US.UTF-8',
-          LC_ALL: 'en_US.UTF-8',
-          ...(options.userPath !== undefined || piEnv
-            ? {
-              PI_DESKTOP_USER_PATH: options.userPath
-                ?? `${piEnv!.piBinDir}:${nodeBinDir}:/usr/bin:/bin`,
-            }
-            : {}),
-          ...(options.npmRoot ?? piEnv
-            ? { PI_DESKTOP_NPM_ROOT: options.npmRoot ?? piEnv!.npmRoot }
-            : {}),
-          ...(options.agentDir ? { PI_CODING_AGENT_DIR: options.agentDir } : {}),
-          ...(options.packageCatalogUrl ? { PI_PACKAGE_CATALOG_URL: options.packageCatalogUrl } : {}),
-          ...(options.npmRegistryUrl ? { npm_config_registry: options.npmRegistryUrl } : {}),
-          ...(options.initialPage
-            ? { PI_DESKTOP_E2E: '1', PI_DESKTOP_DEV_INITIAL_PAGE: options.initialPage }
-            : {}),
-          ...(options.devPiPackageRoot
-            ? {
-              PI_DESKTOP_E2E: '1',
-              PI_DESKTOP_DEV_ALLOW_NON_NPM: '1',
-              PI_DESKTOP_DEV_PI_PACKAGE_ROOT: options.devPiPackageRoot,
-            }
-            : {}),
-          ...(options.devAllowOutdated ? { PI_DESKTOP_DEV_ALLOW_OUTDATED: '1' } : {}),
-          PI_DESKTOP_USER_DATA_DIR: join(homeDir, 'user-data'),
-        },
-        timeout: 60_000,
+    const launchedApps: ElectronApplication[] = [];
+    try {
+      await provideLauncher(async (options: LaunchOptions = {}) => {
+        if (options.seedSettings) {
+          // electron-store 默认文件：<userData>/config.json（userData 经测试钩子固定）
+          const userDataDir = join(homeDir, 'user-data');
+          await mkdir(userDataDir, { recursive: true });
+          await writeFile(join(userDataDir, 'config.json'), JSON.stringify(options.seedSettings));
+        }
+        const piEnv = options.withPi ? piTestEnv() : null;
+        const app = await electron.launch({
+          executablePath: electronBinaryPath,
+          args: ['--lang=en-US', electronEntry],
+          env: {
+            ...process.env,
+            HOME: homeDir,
+            LANG: 'en_US.UTF-8',
+            LC_ALL: 'en_US.UTF-8',
+            ...(options.userPath !== undefined || piEnv
+              ? {
+                PI_DESKTOP_USER_PATH: options.userPath
+                  ?? `${piEnv!.piBinDir}:${nodeBinDir}:/usr/bin:/bin`,
+              }
+              : {}),
+            ...(options.npmRoot ?? piEnv
+              ? { PI_DESKTOP_NPM_ROOT: options.npmRoot ?? piEnv!.npmRoot }
+              : {}),
+            ...(options.agentDir ? { PI_CODING_AGENT_DIR: options.agentDir } : {}),
+            ...(options.packageCatalogUrl ? { PI_PACKAGE_CATALOG_URL: options.packageCatalogUrl } : {}),
+            ...(options.npmRegistryUrl ? { npm_config_registry: options.npmRegistryUrl } : {}),
+            ...(options.initialPage
+              ? { PI_DESKTOP_E2E: '1', PI_DESKTOP_DEV_INITIAL_PAGE: options.initialPage }
+              : {}),
+            ...(options.devPiPackageRoot
+              ? {
+                PI_DESKTOP_E2E: '1',
+                PI_DESKTOP_DEV_ALLOW_NON_NPM: '1',
+                PI_DESKTOP_DEV_PI_PACKAGE_ROOT: options.devPiPackageRoot,
+              }
+              : {}),
+            ...(options.devAllowOutdated ? { PI_DESKTOP_DEV_ALLOW_OUTDATED: '1' } : {}),
+            PI_DESKTOP_USER_DATA_DIR: join(homeDir, 'user-data'),
+          },
+          timeout: 60_000,
+        });
+        launchedApps.push(app);
+        return app;
       });
-    });
+    } finally {
+      for (const app of launchedApps.reverse()) await closeElectronApp(app);
+    }
   },
 
   electronApp: async ({ launchElectronApp }, provideElectronApp) => {
     const app = await launchElectronApp();
-    try {
-      await provideElectronApp(app);
-    } finally {
-      await closeElectronApp(app);
-    }
+    await provideElectronApp(app);
   },
 
   page: async ({ electronApp }, providePage) => {
