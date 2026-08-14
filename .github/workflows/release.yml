@@ -44,7 +44,46 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build:vite
-      - name: Build unsigned packages
+      - name: Require macOS release credentials
+        if: matrix.platform == 'macOS'
+        shell: bash
+        env:
+          MACOS_CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          MACOS_CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=()
+          for name in \
+            MACOS_CSC_LINK \
+            MACOS_CSC_KEY_PASSWORD \
+            APPLE_ID \
+            APPLE_APP_SPECIFIC_PASSWORD \
+            APPLE_TEAM_ID
+          do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required macOS release secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+      - name: Build signed and notarized macOS packages
+        if: matrix.platform == 'macOS'
+        run: ${{ matrix.command }}
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Verify macOS release trust
+        if: matrix.platform == 'macOS'
+        run: scripts/verify-macos-release.sh release
+      - name: Build unsigned Windows/Linux packages
+        if: matrix.platform != 'macOS'
         run: ${{ matrix.command }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -107,7 +146,7 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - name: Publish unsigned preview
+      - name: Publish preview
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -117,5 +156,5 @@ jobs:
             --verify-tag \
             --generate-notes \
             --prerelease \
-            --title "Pi Desktop ${RELEASE_TAG} (Unsigned Preview)" \
+            --title "Pi Desktop ${RELEASE_TAG} (Preview)" \
             --notes "$(cat .github/release-notes.md)"

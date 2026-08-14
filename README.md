@@ -149,18 +149,39 @@ Download the package for your platform from
 [GitHub Releases](https://github.com/zth0828/pi-desktop/releases). Compare the
 file against the published `SHA256SUMS-<platform>.txt` before opening it.
 
-Current preview packages are **not code-signed or notarized**:
+macOS packages produced by the current release workflow require Developer ID
+signing and Apple notarization, so Gatekeeper can open them without a manual
+Privacy & Security exception. Windows and Linux preview packages are currently
+unsigned and should be checked against the published checksum before opening.
 
-- **macOS:** Gatekeeper may block the first launch. Right-click Pi Desktop and
-  choose **Open**, or allow it under **System Settings → Privacy & Security**.
-- **Windows:** Microsoft Defender SmartScreen may appear. Choose **More info →
-  Run anyway** only after verifying the checksum and repository source.
-- **Linux:** Make the AppImage executable when needed with
-  `chmod +x Pi-Desktop-*.AppImage`.
+The `v0.1.0` macOS packages predate that release guard and are unsigned. After
+checking `SHA256SUMS-macOS.txt`, install the app and remove quarantine from this
+app only:
 
-Official signing and macOS notarization require platform certificates and will
-be added separately. A system warning does not mean the download is corrupt,
-but never bypass one for a file whose checksum or source you cannot verify.
+```bash
+xattr -dr com.apple.quarantine "/Applications/Pi Desktop.app"
+```
+
+Do not use `sudo spctl --master-disable`: it disables Gatekeeper globally for
+every downloaded application. A system warning does not mean the download is
+corrupt, but never bypass one for a file whose checksum or source you cannot
+verify.
+
+### macOS release signing
+
+Tag releases require an active Apple Developer Program membership and these
+GitHub Actions repository secrets:
+
+- `MACOS_CSC_LINK`: base64-encoded `.p12` containing the Developer ID
+  Application certificate and private key
+- `MACOS_CSC_KEY_PASSWORD`: password used when exporting that `.p12`
+- `APPLE_ID`: Apple account used for notarization
+- `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for that account
+- `APPLE_TEAM_ID`: the 10-character Apple Developer team ID
+
+The release job fails before packaging if any credential is missing. It then
+checks the app's sealed signature, Gatekeeper assessment, stapled notarization
+ticket, and the signed DMG before artifacts can reach a GitHub Release.
 
 ## Run from Source
 
@@ -195,9 +216,10 @@ pnpm screenshots:readme
 ## Project Status
 
 The core desktop workflow is implemented and covered by Electron E2E tests.
-CI validates source builds on macOS, Windows, and Linux, and version tags create
-unsigned preview packages for all three platforms. Signing/notarization,
-auto-update, and broader real-device release validation remain future work.
+CI validates source builds on macOS, Windows, and Linux. Version tags require
+Developer ID signing and notarization for macOS artifacts, while Windows and
+Linux preview artifacts remain unsigned. Auto-update and broader real-device
+release validation remain future work.
 
 ## Contributing
 

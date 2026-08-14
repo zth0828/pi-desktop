@@ -26,6 +26,8 @@ npmRebuild: false
 mac:
   icon: resources/icon.icns
   category: public.app-category.developer-tools
+  hardenedRuntime: true
+  notarize: true
   target:
     - target: dmg
       arch:
