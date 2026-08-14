@@ -61,7 +61,7 @@
     "dompurify": "^3.4.13",
     "electron-store": "^11.0.2",
     "i18next": "^26.3.6",
-    "katex": "^0.18.1",
+    "katex": "^0.18.4",
     "lucide-react": "^1.29.0",
     "mammoth": "^1.12.1",
     "papaparse": "^5.5.4",
