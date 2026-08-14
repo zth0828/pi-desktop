@@ -52,10 +52,18 @@ test('场景1b：Node 版本达标但无 npm → 显示 npm 检测错误', async
 });
 
 test('场景2：有 Node 无 pi → 安装引导页', async ({ launchElectronApp }) => {
-  const app = await launchElectronApp({ userPath: `${nodeBinDir}:${SYSTEM_BINS}` });
-  const page = await app.firstWindow();
-  await expect(page.getByRole('heading', { name: 'Install pi' })).toBeVisible();
-  await expect(page.getByText('npm i -g @earendil-works/pi-coding-agent')).toBeVisible();
+  const npmRoot = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-empty-root-'));
+  try {
+    const app = await launchElectronApp({
+      userPath: `${nodeBinDir}:${SYSTEM_BINS}`,
+      npmRoot,
+    });
+    const page = await app.firstWindow();
+    await expect(page.getByRole('heading', { name: 'Install pi' })).toBeVisible();
+    await expect(page.getByText('npm i -g @earendil-works/pi-coding-agent')).toBeVisible();
+  } finally {
+    await rm(npmRoot, { recursive: true, force: true });
+  }
 });
 
 test('场景3：非 npm 安装的 pi → 一键切换引导', async ({ launchElectronApp }) => {
@@ -93,6 +101,21 @@ test('场景5：npm 安装且版本达标 → 进入主界面', async ({ launchE
   try {
     const app = await launchElectronApp({
       userPath: `${fake.prefix}/bin:${nodeBinDir}:${SYSTEM_BINS}`,
+      npmRoot: fake.npmRoot,
+    });
+    const page = await app.firstWindow();
+    await expect(page.getByTestId('nav-chat')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Choose folder' })).toBeVisible();
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test('场景5b：npm 全局包已安装但 pi shim 不在 PATH → 仍进入主界面', async ({ launchElectronApp }) => {
+  const fake = await makeFakeNpmPrefix('0.83.0');
+  try {
+    const app = await launchElectronApp({
+      userPath: `${nodeBinDir}:${SYSTEM_BINS}`,
       npmRoot: fake.npmRoot,
     });
     const page = await app.firstWindow();

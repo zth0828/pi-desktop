@@ -42,8 +42,8 @@ export function needsWindowsCommandShell(
   return platform === 'win32' && /\.(?:cmd|bat)$/i.test(binPath);
 }
 
-function findOnPath(bin: string): string | null {
-  const exts = process.platform === 'win32' ? ['.cmd', '.exe', '.bat', ''] : [''];
+function findOnPath(bin: string, platform: NodeJS.Platform = process.platform): string | null {
+  const exts = platform === 'win32' ? ['.cmd', '.exe', '.bat', ''] : [''];
   // 开发期壳自身 node_modules/.bin 里的 pi（devDependency 类型包）会遮蔽用户
   // 环境的 pi，必须跳过——检测的目标是用户环境安装，不是壳的开发依赖。
   const ownModules = path.resolve(process.cwd(), 'node_modules');
@@ -117,10 +117,9 @@ export function isUnderDir(child: string, parent: string): boolean {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
-export function detectPiPackageRoot(
+function readPiPackageRoot(
   packageRoot: string,
   npm: NpmDetectResult,
-  devAllowsOutdated = false,
 ): PiDetectResult | null {
   try {
     const realPackageRoot = realpathSync(packageRoot);
@@ -152,12 +151,19 @@ export function detectPiPackageRoot(
       version: manifest.version,
       installKind,
       meetsMin,
-      devOverride: true,
-      devAllowsOutdated,
     };
   } catch {
     return null;
   }
+}
+
+export function detectPiPackageRoot(
+  packageRoot: string,
+  npm: NpmDetectResult,
+  devAllowsOutdated = false,
+): PiDetectResult | null {
+  const detected = readPiPackageRoot(packageRoot, npm);
+  return detected ? { ...detected, devOverride: true, devAllowsOutdated } : null;
 }
 
 function detectDevPiOverride(npm: NpmDetectResult): PiDetectResult | null {
@@ -173,8 +179,44 @@ function detectDevPiOverride(npm: NpmDetectResult): PiDetectResult | null {
   );
 }
 
-export function detectPi(npm: NpmDetectResult): PiDetectResult {
-  const binPath = findOnPath('pi');
+function sameDirectory(
+  left: string,
+  right: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  try {
+    const realLeft = realpathSync(left);
+    const realRight = realpathSync(right);
+    return platform === 'win32'
+      ? realLeft.toLowerCase() === realRight.toLowerCase()
+      : realLeft === realRight;
+  } catch {
+    return false;
+  }
+}
+
+function detectWindowsNpmShim(
+  binPath: string,
+  npm: NpmDetectResult,
+  platform: NodeJS.Platform,
+): PiDetectResult | null {
+  if (
+    !npm.globalRoot
+    || !needsWindowsCommandShell(binPath, platform)
+    || !sameDirectory(path.dirname(binPath), path.dirname(npm.globalRoot), platform)
+  ) {
+    return null;
+  }
+
+  const detected = readPiPackageRoot(path.join(npm.globalRoot, PI_PACKAGE_NAME), npm);
+  return detected ? { ...detected, binPath } : null;
+}
+
+export function detectPi(
+  npm: NpmDetectResult,
+  platform: NodeJS.Platform = process.platform,
+): PiDetectResult {
+  const binPath = findOnPath('pi', platform);
   const base: PiDetectResult = { found: false, meetsMin: false };
 
   if (binPath) {
@@ -202,19 +244,25 @@ export function detectPi(npm: NpmDetectResult): PiDetectResult {
       base.version = located.version;
       base.installKind = installKind;
       base.meetsMin = meetsMin;
+    } else {
+      // npm 在 Windows 上生成 pi.cmd/pi.bat，而不是指向包内 CLI 的 symlink。
+      // 仅当 shim 与 npm 全局 root 属于同一 prefix 时，才从全局包目录解析。
+      const npmShim = detectWindowsNpmShim(binPath, npm, platform);
+      if (npmShim) return npmShim;
     }
   }
 
   // PATH 遮蔽场景：PATH 里的 pi 是 bun/install.sh 的，但 npm root 下也装着 npm 版
   if (npm.globalRoot && base.installKind !== 'npm') {
-    const npmManifest = path.join(npm.globalRoot, PI_PACKAGE_NAME, 'package.json');
-    if (existsSync(npmManifest)) {
-      try {
-        const manifest = JSON.parse(readFileSync(npmManifest, 'utf8'));
-        if (typeof manifest.version === 'string') base.npmInstalledVersion = manifest.version;
-      } catch {
-        // 忽略
+    const npmPackageRoot = path.join(npm.globalRoot, PI_PACKAGE_NAME);
+    const npmPackage = readPiPackageRoot(npmPackageRoot, npm);
+    if (npmPackage) {
+      if (!base.found) {
+        // Windows 不可直接 spawn 包内的 .js。标准 npm shim 已在上面映射；
+        // shim 缺失或来自其他 prefix 时仍可直接加载 SDK，但不把它当 CLI 执行。
+        return platform === 'win32' ? { ...npmPackage, binPath: undefined } : npmPackage;
       }
+      base.npmInstalledVersion = npmPackage.version;
     }
   }
 
