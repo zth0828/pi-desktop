@@ -152,10 +152,11 @@ file against the published `SHA256SUMS-<platform>.txt` before opening it.
 The macOS release workflow has two modes. When Apple credentials are available,
 it produces Developer ID signed and notarized packages that open normally.
 Without those credentials, it produces a fully ad-hoc signed preview and adds
-`Install Pi Desktop.sh` plus installation instructions to the DMG. Run that
-installer through Terminal to install without changing Privacy & Security
-settings; direct Finder launch remains unavailable for unsigned applications.
-Windows and Linux preview packages are also unsigned.
+a prominent `Install Pi Desktop.command` to the DMG. Double-click the installer;
+if browser quarantine blocks it, run it through Terminal to install without
+changing Privacy & Security settings. Direct Finder launch of the app remains
+unavailable for unsigned applications. Windows and Linux preview packages are
+also unsigned.
 
 The `v0.1.0` macOS packages predate the bundled installer. After checking
 `SHA256SUMS-macOS.txt`, install the app and remove quarantine from this app only:
