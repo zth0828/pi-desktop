@@ -7,7 +7,11 @@ import { join, resolve } from 'node:path';
 // 放在 repo 的 .cache/（已 gitignore）。不能放 node_modules 里：
 // pi-detector 会跳过壳自身 node_modules 下的 pi（防止 devDependency 遮蔽）。
 const PREFIX = resolve('.cache/pi-test-prefix');
-const PKG_DIR = join(PREFIX, 'lib/node_modules/@earendil-works/pi-coding-agent');
+const NPM_ROOT = process.platform === 'win32'
+  ? join(PREFIX, 'node_modules')
+  : join(PREFIX, 'lib/node_modules');
+const NPM_BIN_DIR = process.platform === 'win32' ? PREFIX : join(PREFIX, 'bin');
+const PKG_DIR = join(NPM_ROOT, '@earendil-works/pi-coding-agent');
 const PI_PACKAGE = '@earendil-works/pi-coding-agent';
 const MIN_VERSION = '0.83.0';
 
@@ -34,6 +38,7 @@ export function ensurePiTestPrefix(): string {
   const version = installedVersion();
   if (!version || !gteMinor(version, MIN_VERSION)) {
     execFileSync('npm', ['i', '-g', '--prefix', PREFIX, `${PI_PACKAGE}@^${MIN_VERSION}`], {
+      shell: process.platform === 'win32',
       stdio: 'inherit',
       timeout: 300_000,
     });
@@ -41,11 +46,17 @@ export function ensurePiTestPrefix(): string {
   return PREFIX;
 }
 
-export function piTestEnv(): { piPrefix: string; piBinDir: string; npmRoot: string } {
+export function piTestEnv(): {
+  piPrefix: string;
+  piBinDir: string;
+  npmRoot: string;
+  piPackageRoot: string;
+} {
   const piPrefix = ensurePiTestPrefix();
   return {
     piPrefix,
-    piBinDir: join(piPrefix, 'bin'),
-    npmRoot: join(piPrefix, 'lib/node_modules'),
+    piBinDir: NPM_BIN_DIR,
+    npmRoot: NPM_ROOT,
+    piPackageRoot: PKG_DIR,
   };
 }

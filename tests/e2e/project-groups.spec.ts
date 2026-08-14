@@ -68,11 +68,8 @@ test.afterAll(() => {
 
 /** 直接用 SDK 在 workspaceB 里造一条会话（验证跨项目分组/切换的数据源） */
 async function seedSessionInB(text: string) {
-  const { piPrefix } = piTestEnv();
-  const entry = path.join(
-    piPrefix,
-    'lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js',
-  );
+  const { piPackageRoot } = piTestEnv();
+  const entry = path.join(piPackageRoot, 'dist/index.js');
   process.env.PI_CODING_AGENT_DIR = agentDir;
   const sdk = (await import(pathToFileURL(entry).href)) as typeof import('@earendil-works/pi-coding-agent');
   const modelRuntime = await sdk.ModelRuntime.create({
@@ -95,16 +92,13 @@ async function seedSessionInB(text: string) {
 
 /** 用 pi SessionManager 原生格式快速造大量会话，不调用模型。 */
 async function seedManySessions(cwd: string, count: number) {
-  const { piPrefix } = piTestEnv();
-  const entry = path.join(
-    piPrefix,
-    'lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js',
-  );
+  const { piPackageRoot } = piTestEnv();
+  const entry = path.join(piPackageRoot, 'dist/index.js');
   process.env.PI_CODING_AGENT_DIR = agentDir;
   const sdk = (await import(pathToFileURL(entry).href)) as typeof import('@earendil-works/pi-coding-agent');
   const sessionModulePath = path.join(
-    piPrefix,
-    'lib/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js',
+    piPackageRoot,
+    'dist/core/session-manager.js',
   );
   const sessionModule = (await import(pathToFileURL(sessionModulePath).href)) as {
     getDefaultSessionDir: (targetCwd: string, targetAgentDir?: string) => string;

@@ -20,11 +20,8 @@ let agentDir: string;
 let workspace: string;
 
 beforeAll(async () => {
-  const { piPrefix } = piTestEnv();
-  const entry = path.join(
-    piPrefix,
-    'lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js',
-  );
+  const { piPackageRoot } = piTestEnv();
+  const entry = path.join(piPackageRoot, 'dist/index.js');
   sdk = (await import(pathToFileURL(entry).href)) as PiSdk;
 
   mock = spawn(process.execPath, [resolveFixture('mock-openai-server.mjs')]);

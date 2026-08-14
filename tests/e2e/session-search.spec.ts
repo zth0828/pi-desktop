@@ -37,8 +37,8 @@ test.beforeAll(async () => {
     defaultModel: 'mock-1',
   }));
 
-  const { piPrefix } = piTestEnv();
-  const sdkEntry = path.join(piPrefix, 'lib/node_modules/@earendil-works/pi-coding-agent/dist/index.js');
+  const { piPackageRoot } = piTestEnv();
+  const sdkEntry = path.join(piPackageRoot, 'dist/index.js');
   process.env.PI_CODING_AGENT_DIR = agentDir;
   const sdk = (await import(pathToFileURL(sdkEntry).href)) as typeof import('@earendil-works/pi-coding-agent');
 
