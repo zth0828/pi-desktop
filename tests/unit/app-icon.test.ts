@@ -16,6 +16,6 @@ describe('resolveAppIconPath', () => {
       isPackaged: true,
       resourcesPath: '/Applications/Pi Desktop.app/Contents/Resources',
       mainDir: '/workspace/dist-electron/main',
-    })).toBe('/Applications/Pi Desktop.app/Contents/Resources/icon.ico');
+    })).toBe(path.join('/Applications/Pi Desktop.app/Contents/Resources', 'icon.ico'));
   });
 });
