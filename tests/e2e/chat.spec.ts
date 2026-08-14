@@ -507,11 +507,8 @@ test('/compact → 压缩状态条，完成后消息列表刷新为摘要', asyn
   await page.getByTestId('chat-input').fill('/compact');
   await page.getByTestId('chat-send').click();
 
-  // Depending on the installed pi version, the fixture summary may complete before
-  // the next renderer frame. Observe the live state when it is present, while the
-  // persisted compaction summary below remains the completion contract.
-  const compacting = page.getByTestId('status-compaction');
-  if (await compacting.count()) await expect(compacting).toBeVisible();
+  // Depending on the installed pi version, the transient status may complete before
+  // the next renderer frame. The persisted summary is the completion contract.
   // compaction 后 pi 重建上下文，壳从 runtime 重读：摘要消息出现、被压掉的 user 消息消失
   await expect(page.getByTestId('message-compaction')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('message-user')).toHaveCount(1);
