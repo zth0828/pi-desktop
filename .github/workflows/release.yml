@@ -64,7 +64,7 @@ jobs:
           for name in "${required[@]}"; do
             if [[ -z "${!name:-}" ]]; then
               echo "MACOS_RELEASE_SIGNED=false" >> "$GITHUB_ENV"
-              echo "Building an ad-hoc signed macOS preview; Apple release credentials are incomplete."
+              echo "Building an ad-hoc signed macOS release with the bundled installer."
               exit 0
             fi
           done
@@ -79,7 +79,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      - name: Build ad-hoc signed macOS preview packages
+      - name: Build ad-hoc signed macOS packages
         if: matrix.platform == 'macOS' && env.MACOS_RELEASE_SIGNED != 'true'
         run: ${{ matrix.command }} -c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false
       - name: Verify macOS release
@@ -149,7 +149,7 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - name: Publish preview
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -158,6 +158,5 @@ jobs:
           gh release create "$RELEASE_TAG" artifacts/* \
             --verify-tag \
             --generate-notes \
-            --prerelease \
-            --title "Pi Desktop ${RELEASE_TAG} (Preview)" \
+            --title "Pi Desktop ${RELEASE_TAG}" \
             --notes "$(cat .github/release-notes.md)"
