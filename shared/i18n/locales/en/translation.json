@@ -350,7 +350,9 @@
     "availableModels": "Available models",
     "noAvailableModels": "No available models",
     "setCurrent": "Set as current",
-    "current": "Current"
+    "current": "Current",
+    "reasoningSupport": "Reasoning",
+    "reasoningHint": "Third-party models are treated as reasoning-capable by default so the thinking-depth menu stays available. Turn off only if the provider rejects thinking parameters."
   },
   "sessions": {
     "title": "Sessions",

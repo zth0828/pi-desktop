@@ -119,7 +119,9 @@ export function mergeDiscoveredProviderModels(existing: unknown[], detected: Det
     return {
       id: model.id,
       name: model.name ?? model.id,
-      reasoning: model.reasoning ?? (typeof template.reasoning === 'boolean' ? template.reasoning : false),
+      // 第三方目录普遍不上报推理能力：缺省按支持处理，让思考深度可用；
+      // 供应商拒绝思考参数时用户可在 Models 页逐模型关闭（写入后不被发现流程覆盖）。
+      reasoning: model.reasoning ?? (typeof template.reasoning === 'boolean' ? template.reasoning : true),
       input: model.input ?? (Array.isArray(template.input) ? template.input : ['text']),
       cost: record(template.cost) ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       ...(model.contextWindow

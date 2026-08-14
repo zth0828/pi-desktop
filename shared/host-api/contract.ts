@@ -414,6 +414,12 @@ export type PiProviderProbePayload = {
   apiKey?: string;
   model?: string;
 };
+/** 切换 models.json 自定义模型的推理能力声明（决定思考深度菜单是否可用）。 */
+export type PiProviderSetModelReasoningPayload = {
+  providerId: string;
+  modelId: string;
+  reasoning: boolean;
+};
 export type PiProviderProbeProtocol = {
   api: string;
   available: boolean;
@@ -727,6 +733,11 @@ export type HostApiContract = {
     deleteCustom: (payload: { providerId: string }) => HostSuccess;
     startOAuth: (payload: { providerId: string }) => HostSuccess;
     addCustom: (payload: PiProviderAddCustomPayload) => HostSuccess;
+    /**
+     * 切换 models.json 自定义模型的 reasoning 声明。目录探测不上报推理能力时，
+     * 用户用此开关手动声明；活动会话正在使用该模型时同步重新应用模型定义。
+     */
+    setModelReasoning: (payload: PiProviderSetModelReasoningPayload) => HostSuccess;
     /** 首选模型（pi 原生 defaultProvider/defaultModel）；null = 未设置。 */
     getDefaultModel: () => PiDefaultModelResult;
     /**

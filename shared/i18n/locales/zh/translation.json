@@ -350,7 +350,9 @@
     "availableModels": "可用模型",
     "noAvailableModels": "暂无可用模型",
     "setCurrent": "设为当前模型",
-    "current": "当前"
+    "current": "当前",
+    "reasoningSupport": "支持推理",
+    "reasoningHint": "第三方模型默认按支持推理处理，保证思考深度菜单可用；仅当供应商拒绝思考参数时才关闭。"
   },
   "sessions": {
     "title": "会话",

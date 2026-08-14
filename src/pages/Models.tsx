@@ -112,6 +112,29 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
     }
   };
 
+  const setReasoning = async (modelId: string, reasoning: boolean) => {
+    setBusy(true);
+    setMessage(undefined);
+    const result = await hostApi.providers.setModelReasoning(provider.id, modelId, reasoning);
+    setBusy(false);
+    if (!result.success) {
+      setMessage(result.error);
+      return;
+    }
+    onChanged();
+    // 若活动会话正在使用该模型，同步会话状态，思考深度菜单立即恢复可用
+    const runtimeState = await hostApi.piRuntime.getState().catch(() => null);
+    if (runtimeState?.model) {
+      useChatStore.getState().applyModelUpdate({
+        success: true,
+        model: runtimeState.model,
+        thinkingLevel: runtimeState.thinkingLevel,
+        availableThinkingLevels: runtimeState.availableThinkingLevels,
+        contextUsage: runtimeState.contextUsage,
+      });
+    }
+  };
+
   const isDefault = (modelId: string) =>
     defaultModel?.provider === provider.id && defaultModel.id === modelId;
 
@@ -207,6 +230,21 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                         })}
                       </span>
                     </div>
+                    {provider.source === 'config' && (
+                      <label
+                        className="provider-model-reasoning"
+                        data-testid={`provider-model-reasoning-${provider.id}-${m.id}`}
+                        title={t('models.reasoningHint')}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(m.reasoning)}
+                          disabled={busy}
+                          onChange={(e) => void setReasoning(m.id, e.target.checked)}
+                        />
+                        <span>{t('models.reasoningSupport')}</span>
+                      </label>
+                    )}
                     <span className="spacer" />
                     {isDefault(m.id) ? (
                       <span

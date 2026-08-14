@@ -70,6 +70,8 @@ export const hostApi = {
       apiKey?: string;
       models: Array<{ id: string; name?: string }>;
     }) => invokeHost('providers', 'addCustom', payload),
+    setModelReasoning: (providerId: string, modelId: string, reasoning: boolean) =>
+      invokeHost('providers', 'setModelReasoning', { providerId, modelId, reasoning }),
     probe: (payload: { baseUrl: string; apiKey?: string; model?: string }) =>
       invokeHost('providers', 'probe', payload),
     getCompaction: () => invokeHost('providers', 'getCompaction'),

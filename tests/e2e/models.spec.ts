@@ -227,7 +227,7 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
   await expect(page.getByTestId('provider-status-added-provider')).toHaveClass(/configured/);
   await expect.poll(async () => {
     const models = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
-      providers: { 'added-provider': { apiKey?: string; models?: Array<{ contextWindow?: number }> } };
+      providers: { 'added-provider': { apiKey?: string; models?: Array<{ contextWindow?: number; reasoning?: boolean }> } };
     };
     const auth = JSON.parse(await readFile(path.join(agentDir, 'auth.json'), 'utf8')) as {
       'added-provider'?: { key?: string };
@@ -236,8 +236,10 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
       inlineKey: models.providers['added-provider'].apiKey,
       storedKey: auth['added-provider']?.key,
       contextWindow: models.providers['added-provider'].models?.[0]?.contextWindow,
+      // 第三方模型缺省按支持推理处理，思考深度菜单可用
+      reasoning: models.providers['added-provider'].models?.[0]?.reasoning,
     };
-  }).toEqual({ inlineKey: undefined, storedKey: 'added-secret', contextWindow: undefined });
+  }).toEqual({ inlineKey: undefined, storedKey: 'added-secret', contextWindow: undefined, reasoning: true });
 
   await added.locator('.provider-row-header').click();
   page.once('dialog', (dialog) => dialog.accept());
@@ -340,6 +342,51 @@ test('Models 页：已配置供应商展开显示可用模型，可设为当前�
   await expect
     .poll(async () => selector.getAttribute('data-value'), { timeout: 15_000 })
     .toBe('mock/mock-wide');
+});
+
+test('Models 页：推理开关恢复自定义模型的思考深度', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  // 初始 mock-1 reasoning=false → 模型菜单没有思考深度入口
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  await selector.click();
+  await expect(page.getByTestId('model-menu-models')).toBeVisible();
+  await expect(page.getByTestId('model-menu-thinking')).toHaveCount(0);
+  await selector.click();
+
+  // Models 页：为 mock-1 打开推理开关，models.json 持久化
+  await page.getByTestId('nav-models').click();
+  const row = page.getByTestId('provider-mock');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.provider-row-header').click();
+  const toggle = page.getByTestId('provider-model-reasoning-mock-mock-1').locator('input');
+  await expect(toggle).not.toBeChecked();
+  // 受控 checkbox：状态经 IPC 往返后异步刷新，不能用 check() 的同步断言
+  await toggle.click();
+  await expect(toggle).toBeChecked({ timeout: 15_000 });
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; reasoning?: boolean }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'mock-1')?.reasoning;
+    }, { timeout: 15_000 })
+    .toBe(true);
+
+  // 回到聊天：思考深度菜单出现且档位可选（活动会话同步生效，无需重开会话）
+  await page.getByTestId('nav-chat').click();
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  await selector.click();
+  const thinkingRow = page.getByTestId('model-menu-thinking');
+  await expect(thinkingRow).toBeVisible({ timeout: 15_000 });
+  await thinkingRow.click();
+  await expect(page.getByTestId('thinking-option')).toHaveCount(5);
+  await page.locator('[data-testid="thinking-option"][data-value="high"]').click();
+
+  await selector.click();
+  await expect(page.getByTestId('model-menu-thinking')).toContainText('High', { timeout: 15_000 });
 });
 
 /** Codex 风格模型菜单：触发器 → 「模型」行 → 子菜单里按 data-value 点选 */

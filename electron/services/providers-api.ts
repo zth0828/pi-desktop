@@ -13,6 +13,7 @@ import type {
   PiProviderSetKeyPayload,
   PiProviderProbePayload,
   PiProviderProbeResult,
+  PiProviderSetModelReasoningPayload,
   PiProviderSetKeyResult,
   PiCompactionSettings,
 } from '@shared/host-api/contract';
@@ -327,10 +328,12 @@ export const providersApi = {
       doc.providers[payload.id] = {
         baseUrl: normalizeBaseUrlForApi(payload.baseUrl, payload.api),
         api: payload.api,
+        // 第三方模型缺省按支持推理处理：思考深度菜单可用；网关拒绝思考参数时
+        // 用户可在 Models 页逐模型关闭。
         models: payload.models.map((m) => ({
           id: m.id,
           name: m.name ?? m.id,
-          reasoning: m.reasoning ?? false,
+          reasoning: m.reasoning ?? true,
           input: ['text'],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
           ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
@@ -348,6 +351,49 @@ export const providersApi = {
           prompt: async () => payload.apiKey!,
           notify: () => {},
         });
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /**
+   * 切换 models.json 自定义模型的 reasoning 声明。目录探测普遍不上报推理能力，
+   * 用户由此手动声明；活动会话正在使用该模型时用 pi 原生 setModel 重新应用定义，
+   * 思考深度菜单立即恢复可用。
+   */
+  setModelReasoning: async (payload: PiProviderSetModelReasoningPayload): Promise<HostSuccess> => {
+    try {
+      const sdk = await loadPiSdk();
+      let found = false;
+      const providerExists = updateConfiguredProvider(sdk.getAgentDir(), payload.providerId, (provider) => {
+        const models = Array.isArray(provider.models) ? provider.models : [];
+        for (const raw of models) {
+          const model = raw && typeof raw === 'object' && !Array.isArray(raw)
+            ? (raw as Record<string, unknown>)
+            : null;
+          if (model && model.id === payload.modelId) {
+            model.reasoning = payload.reasoning;
+            found = true;
+          }
+        }
+      });
+      if (!providerExists) {
+        return { success: false, error: `custom provider not found: ${payload.providerId}` };
+      }
+      if (!found) {
+        return { success: false, error: `model not found: ${payload.providerId}/${payload.modelId}` };
+      }
+      invalidateModelRuntime();
+      const active = await getActiveRuntimeReady();
+      if (active) {
+        await active.runtime.services.modelRuntime.refresh({ allowNetwork: false });
+        const current = active.runtime.session.model;
+        if (current?.provider === payload.providerId && current?.id === payload.modelId) {
+          const result = await piRuntimeApi.setModel({ provider: payload.providerId, id: payload.modelId });
+          if (!result.success) return { success: false, error: result.error };
+        }
       }
       return { success: true };
     } catch (err) {

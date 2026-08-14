@@ -2758,6 +2758,19 @@ button.danger-outline {
   line-height: 1.35;
 }
 
+.provider-model-reasoning {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.provider-model-reasoning input { cursor: pointer; }
+
 .provider-model-current {
   font-size: 12px;
   font-weight: 600;

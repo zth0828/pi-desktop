@@ -52,6 +52,22 @@ describe('configured provider model discovery', () => {
       ]);
   });
 
+  it('defaults new third-party models to reasoning-capable when neither directory nor template says', () => {
+    // 第三方目录普遍不上报推理能力：缺省按支持处理，让思考深度菜单可用
+    expect(mergeDiscoveredProviderModels([], [{ id: 'gateway-model' }]))
+      .toEqual([expect.objectContaining({ id: 'gateway-model', reasoning: true })]);
+    // 目录显式上报 false 时仍然尊重（如 LM Studio 能力探测）
+    expect(mergeDiscoveredProviderModels([], [{ id: 'plain-model', reasoning: false }]))
+      .toEqual([expect.objectContaining({ id: 'plain-model', reasoning: false })]);
+    // 模板显式 false 时新模型继承模板（用户已逐模型关闭的供应商）
+    const inherited = mergeDiscoveredProviderModels(
+      [{ id: 'manual', reasoning: false }],
+      [{ id: 'sibling' }],
+    );
+    expect(inherited.find((m) => m.id === 'sibling'))
+      .toEqual(expect.objectContaining({ id: 'sibling', reasoning: false }));
+  });
+
   it('requests /models with resolved auth and writes discovered ids to models.json', async () => {
     const agentDir = await mkdtemp(path.join(tmpdir(), 'pi-provider-discovery-'));
     tempDirs.push(agentDir);
