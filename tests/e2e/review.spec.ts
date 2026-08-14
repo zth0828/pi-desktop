@@ -340,8 +340,11 @@ test('右侧工作台：Markdown、PDF、Word、Excel 和 CSV 使用专用预览
   const markdown = panel.getByTestId('workspace-markdown-preview');
   await expect(markdown).toContainText('Preview Guide');
   await expect(markdown.locator('table')).toBeVisible();
-  const codeWhiteSpace = await markdown.locator('[data-streamdown="code-block-body"] code').evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).whiteSpace);
-  expect(codeWhiteSpace).toBe('pre');
+  await expect.poll(() =>
+    markdown.locator('[data-streamdown="code-block-body"] code').evaluate((node) =>
+      node.ownerDocument.defaultView!.getComputedStyle(node).whiteSpace
+    )
+  ).toBe('pre');
   await page.screenshot({ path: 'output/playwright/workspace-markdown-preview.png', fullPage: false });
   await markdown.getByRole('button', { name: 'Source' }).click();
   await expect(markdown.getByTestId('workspace-text-preview')).toContainText('# Preview Guide');
