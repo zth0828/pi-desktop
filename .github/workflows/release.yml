@@ -54,7 +54,7 @@ jobs:
           find . -maxdepth 1 -type f ! -name '*.blockmap' ! -name 'builder-*' -print0 \
             | sort -z \
             | xargs -0 shasum -a 256 > SHA256SUMS-${{ matrix.platform }}.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pi-desktop-${{ matrix.platform }}
           path: |
