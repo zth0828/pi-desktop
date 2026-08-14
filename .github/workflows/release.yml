@@ -98,26 +98,31 @@ jobs:
           node --input-type=module <<'NODE'
           import { createHash } from 'node:crypto';
           import { createReadStream } from 'node:fs';
-          import { readdir, writeFile } from 'node:fs/promises';
+          import { readdir, rename, writeFile } from 'node:fs/promises';
           import { join } from 'node:path';
 
           const outputDir = 'release';
+          const packageExtensions = ['.dmg', '.zip', '.exe', '.AppImage', '.deb'];
           const entries = (await readdir(outputDir, { withFileTypes: true }))
             .filter((entry) =>
               entry.isFile()
-              && !entry.name.endsWith('.blockmap')
-              && !entry.name.startsWith('builder-')
-              && !entry.name.startsWith('SHA256SUMS-')
+              && packageExtensions.some((extension) => entry.name.endsWith(extension))
             )
             .sort((left, right) => left.name.localeCompare(right.name));
 
           const lines = [];
           for (const entry of entries) {
+            // GitHub normalizes spaces in release asset names to periods. Rename before
+            // hashing so the published asset and checksum entry have the same name.
+            const publishedName = entry.name.replaceAll(' ', '.');
+            if (publishedName !== entry.name) {
+              await rename(join(outputDir, entry.name), join(outputDir, publishedName));
+            }
             const hash = createHash('sha256');
-            for await (const chunk of createReadStream(join(outputDir, entry.name))) {
+            for await (const chunk of createReadStream(join(outputDir, publishedName))) {
               hash.update(chunk);
             }
-            lines.push(`${hash.digest('hex')}  ${entry.name}`);
+            lines.push(`${hash.digest('hex')}  ${publishedName}`);
           }
 
           await writeFile(
