@@ -1,7 +1,7 @@
 // M4 验收：会话管理（列表/切换/重命名/删除，真 pi + mock provider，不烧 API quota）。
 // 每个测试独立 agentDir（会话文件互相隔离），模式同 models.spec.ts。
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
@@ -104,6 +104,62 @@ test('发消息 → Sessions 页出现该会话（firstMessage 匹配，标记�
   const row = sessionRows(page).filter({ hasText: 'Say PONG alpha' });
   await expect(row).toHaveCount(1, { timeout: 15_000 });
   await expect(row.getByTestId('session-current')).toBeVisible();
+});
+
+test('Sessions 页全局展示：跨工作区分组并显示位置信息（listAll）', async ({
+  launchElectronApp,
+}) => {
+  // 预置第二个项目的会话文件（不走 runtime，直接写 pi 会话格式）
+  const secondWorkspace = await realpath(await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-second-')));
+  const secondName = secondWorkspace.split('/').filter(Boolean).pop() ?? 'second';
+  const seedId = '019fe296-0000-7000-8000-000000000001';
+  const seedTs = '2026-08-08T18:15:18.828Z';
+  const encoded = `--${secondWorkspace.replace(/^\//, '').replace(/[\/\\:]/g, '-')}--`;
+  const seedDir = path.join(agentDir, 'sessions', encoded);
+  await mkdir(seedDir, { recursive: true });
+  await writeFile(
+    path.join(seedDir, `${seedTs.replace(/[:.]/g, '-')}_${seedId}.jsonl`),
+    [
+      JSON.stringify({ type: 'session', version: 3, id: seedId, timestamp: seedTs, cwd: secondWorkspace }),
+      JSON.stringify({
+        type: 'message',
+        id: 'aaaaaaaa',
+        parentId: null,
+        timestamp: '2026-08-08T18:15:25.270Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'seeded ZEBRA session' }], timestamp: Date.now() },
+      }),
+    ].join('\n') + '\n',
+  );
+
+  try {
+    const app = await launchElectronApp(launchOptions());
+    const page = await app.firstWindow();
+    await waitSessionReady(page);
+
+    // 当前工作区也发一条消息，保证两个分组都有会话
+    await sendAndWaitReply(page, 'Say PONG zebra-cross');
+
+    await page.getByTestId('nav-sessions').click();
+
+    // 第二个项目的分组头：项目名 + 完整路径（位置信息）+ 会话数
+    const secondHeader = page.getByTestId(`session-project-${secondName}`);
+    await expect(secondHeader).toBeVisible({ timeout: 15_000 });
+    await expect(secondHeader).toContainText(secondWorkspace);
+
+    // 预置会话出现在该项目分组下
+    const secondGroup = page.locator('.session-project-group').filter({ has: secondHeader });
+    await expect(secondGroup.locator('[data-testid^="session-row-"]').filter({ hasText: 'seeded ZEBRA session' })).toHaveCount(1);
+
+    // 当前工作区分组同样可见（含刚发的会话）；路径以 runtime 实际使用的 workspaceCwd 为准
+    const workspaceName = workspace.split('/').filter(Boolean).pop() ?? 'workspace';
+    const currentHeader = page.getByTestId(`session-project-${workspaceName}`);
+    await expect(currentHeader).toBeVisible();
+    await expect(currentHeader).toContainText(workspace);
+    const currentGroup = page.locator('.session-project-group').filter({ has: currentHeader });
+    await expect(currentGroup.locator('[data-testid^="session-row-"]').filter({ hasText: 'Say PONG zebra-cross' })).toHaveCount(1);
+  } finally {
+    await rm(secondWorkspace, { recursive: true, force: true });
+  }
 });
 
 test('导出 HTML → 统一系统目录并在重新进入页面后保留打开入口', async ({

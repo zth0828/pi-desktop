@@ -354,7 +354,6 @@
   },
   "sessions": {
     "title": "会话",
-    "empty": "当前工作目录还没有会话，先去聊几句吧。",
     "untitled": "未命名会话",
     "current": "当前",
     "running": "运行中",
@@ -380,7 +379,10 @@
     "lastExport": "最近导出",
     "openExport": "打开",
     "showInFolder": "在文件夹中显示",
-    "openExportFolder": "打开文件夹"
+    "openExportFolder": "打开文件夹",
+    "emptyAll": "还没有任何会话记录，先去聊几句吧。",
+    "projectCount": "{{count}} 个会话",
+    "openProjectFolder": "打开文件夹"
   },
   "extensions": {
     "title": "Packages",

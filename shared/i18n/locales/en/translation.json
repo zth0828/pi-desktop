@@ -354,7 +354,6 @@
   },
   "sessions": {
     "title": "Sessions",
-    "empty": "No sessions in this workspace yet. Start chatting first.",
     "untitled": "Untitled session",
     "current": "Current",
     "running": "Running",
@@ -380,7 +379,10 @@
     "lastExport": "Last export",
     "openExport": "Open",
     "showInFolder": "Show in folder",
-    "openExportFolder": "Open folder"
+    "openExportFolder": "Open folder",
+    "emptyAll": "No sessions yet. Start chatting first.",
+    "projectCount": "{{count}} sessions",
+    "openProjectFolder": "Open folder"
   },
   "extensions": {
     "title": "Packages",

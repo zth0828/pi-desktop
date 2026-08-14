@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, FolderOpen } from 'lucide-react';
+import { ExternalLink, Folder, FolderOpen } from 'lucide-react';
 import type { PiSessionExportInfo, PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
+import { groupByProject } from '../lib/session-groups';
 import { formatRelativeTime, sessionDisplayTitle } from '../lib/session-format';
 
 type RowProps = {
@@ -40,7 +41,7 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat }: Row
     }
   };
 
-  const switchTo = () => run(() => hostApi.piSessions.switch(session.path), true);
+  const switchTo = () => run(() => hostApi.piSessions.switch(session.path, session.cwd), true);
   const fork = () => run(() => hostApi.piSessions.fork(session.path), true);
   const archive = () => run(() => hostApi.piSessions.archive(session.path, !session.archived));
   const remove = () => run(() => hostApi.piSessions.remove(session.path));
@@ -165,7 +166,7 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
   const refresh = useCallback(() => {
     setLoading(true);
     hostApi.piSessions
-      .list()
+      .listAll()
       .then((r) => {
         setSessions(r.sessions);
         setError(undefined);
@@ -176,7 +177,14 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
 
   useEffect(refresh, [refresh]);
 
-  useEffect(() => onHostEvent('piRuntime', 'runtimeStateChanged', refresh), [refresh]);
+  useEffect(() => {
+    const unbindReplaced = onHostEvent('piRuntime', 'sessionReplaced', refresh);
+    const unbindState = onHostEvent('piRuntime', 'runtimeStateChanged', refresh);
+    return () => {
+      unbindReplaced();
+      unbindState();
+    };
+  }, [refresh]);
 
   useEffect(() => {
     void hostApi.piSessions.getExportInfo().then(setExportInfo).catch((err) => {
@@ -197,6 +205,8 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
   };
 
   const lastExportName = exportInfo?.lastPath?.split(/[\\/]/).pop();
+
+  const groups = useMemo(() => groupByProject(sessions), [sessions]);
 
   return (
     <div className="sessions-page">
@@ -247,18 +257,43 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
         </div>
       )}
       {!loading && !error && sessions.length === 0 ? (
-        <p className="hint" data-testid="sessions-empty">{t('sessions.empty')}</p>
+        <p className="hint" data-testid="sessions-empty">{t('sessions.emptyAll')}</p>
       ) : (
         <div className="session-list">
-          {sessions.map((s) => (
-            <SessionRow
-              key={s.path}
-              session={s}
-              onChanged={refresh}
-              onError={setError}
-              onExported={onExported}
-              onOpenChat={onOpenChat}
-            />
+          {groups.map((group) => (
+            <div className="session-project-group" key={group.cwd}>
+              <div className="session-project-header" data-testid={`session-project-${group.name}`}>
+                <Folder size={14} />
+                <span className="session-project-name" title={group.cwd}>
+                  {group.name}
+                </span>
+                <span className="session-project-path hint" title={group.cwd}>
+                  {group.cwd}
+                </span>
+                <span className="session-project-count">
+                  {t('sessions.projectCount', { count: group.sessions.length })}
+                </span>
+                <button
+                  className="pill session-project-open"
+                  data-testid={`session-project-open-${group.name}`}
+                  title={t('sessions.openProjectFolder')}
+                  onClick={() => void runShellAction(() => hostApi.shell.openPath(group.cwd))}
+                >
+                  <FolderOpen size={13} />
+                  {t('sessions.openProjectFolder')}
+                </button>
+              </div>
+              {group.sessions.map((s) => (
+                <SessionRow
+                  key={s.path}
+                  session={s}
+                  onChanged={refresh}
+                  onError={setError}
+                  onExported={onExported}
+                  onOpenChat={onOpenChat}
+                />
+              ))}
+            </div>
           ))}
         </div>
       )}

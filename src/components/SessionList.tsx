@@ -19,14 +19,8 @@ import {
 import type { PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
+import { groupByProject, type ProjectGroup } from '../lib/session-groups';
 import { useChatStore } from '../stores/chat';
-
-type ProjectGroup = {
-  cwd: string;
-  name: string;
-  sessions: PiSessionRow[];
-  latest: string;
-};
 
 type MenuPosition = { left: number; top: number };
 
@@ -34,22 +28,6 @@ const SESSION_PAGE_SIZE = 10;
 const MENU_WIDTH = 196;
 const SESSION_MENU_HEIGHT = 246;
 const PROJECT_MENU_HEIGHT = 48;
-
-function groupByProject(sessions: PiSessionRow[]): ProjectGroup[] {
-  const map = new Map<string, PiSessionRow[]>();
-  for (const s of sessions) {
-    const key = s.cwd || '(unknown)';
-    map.set(key, [...(map.get(key) ?? []), s]);
-  }
-  return [...map.entries()]
-    .map(([cwd, rows]) => ({
-      cwd,
-      name: cwd.split('/').filter(Boolean).pop() ?? cwd,
-      sessions: rows,
-      latest: rows[0]?.modified ?? '',
-    }))
-    .sort((a, b) => b.latest.localeCompare(a.latest));
-}
 
 type SessionListProps = {
   onOpenChat: () => void;
