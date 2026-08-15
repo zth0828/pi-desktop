@@ -9,6 +9,8 @@
 //   "USE_TOOL_WRITE_SIX" → 第一轮返回六个并行 write tool_call（改动卡折叠）
 //   "MCP_SEARCH"/"MCP_CALL" → 驱动 mcp 代理工具
 //   "SLOW ..." → 30 个 chunk × 100ms 慢速流（用于 abort 测试）
+//   "SLOW_ECHO ..." → 慢速回显最后一条 user 消息（多窗口并发流式互不串台断言用：
+//     两路 SSE 同时在途，回复携带各自 prompt 标记可区分归属）
 //   "HANG ..." → 持续流式输出直到客户端 abort（用于多会话并发测试）
 //   "FLAKE_429" → 首次请求返回 429（触发 pi 自动重试），后续正常 PONG
 //   "ECHO_USER" → 回显最后一条 user 消息（@文件 展开断言用）
@@ -280,6 +282,33 @@ const server = http.createServer((req, res) => {
       const timer = setInterval(() => {
         if (!res.writableEnded && !res.destroyed) send({ content: `waiting${i++} ` });
       }, 100);
+      res.on("close", () => clearInterval(timer));
+      return;
+    }
+
+    // SLOW_ECHO：慢速回显（须放在 SLOW 分支之前，否则被 "SLOW" 前缀命中）
+    if (lastUser.includes("SLOW_ECHO")) {
+      const text = ("ECHO:" + lastUser.slice(0, 160)).replace(/\\/g, " ").replace(/"/g, "'");
+      send({ role: "assistant", content: "" });
+      const chunks = [];
+      for (let c = 0; c < text.length; c += 8) chunks.push(text.slice(c, c + 8));
+      let i = 0;
+      const timer = setInterval(() => {
+        if (res.writableEnded || res.destroyed) {
+          clearInterval(timer);
+          return;
+        }
+        if (i < chunks.length) {
+          send({ content: chunks[i] });
+          i++;
+        } else {
+          clearInterval(timer);
+          send({}, "stop", { prompt_tokens: 10, completion_tokens: text.length, total_tokens: 10 + text.length });
+          res.write("data: [DONE]\n\n");
+          res.end();
+        }
+      }, 100);
+      // 同 HANG 分支：用 res 的 close 清理；req 的 close 在 POST body 收完即触发，会提前掐断流
       res.on("close", () => clearInterval(timer));
       return;
     }
