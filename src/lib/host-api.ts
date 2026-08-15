@@ -117,6 +117,10 @@ function createHostApi(sessionPath?: string) {
   },
   piSkills: {
     list: () => invoke('piSkills', 'list'),
+    read: (filePath: string) => invoke('piSkills', 'read', { filePath }),
+    scanExternal: (extraDirs?: string[]) => invoke('piSkills', 'scanExternal', { extraDirs }),
+    import: (skills: Array<{ name: string; dir: string; strategy: 'skip' | 'overwrite' | 'rename' }>) =>
+      invoke('piSkills', 'import', { skills }),
   },
   piFiles: {
     list: (cwd: string) => invoke('piFiles', 'list', { cwd }),

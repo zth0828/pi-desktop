@@ -530,6 +530,48 @@ export type PiSkillListResult = {
   runtimeActive: boolean;
 };
 
+/** 查看 skill 内容（SKILL.md 原文） */
+export type PiSkillReadPayload = { filePath: string };
+export type PiSkillReadResult = { content: string };
+
+/** 外部 skills 目录（其他编程工具）扫描结果 */
+export type PiExternalSkillStatus = 'new' | 'same' | 'conflict';
+export type PiExternalSkill = {
+  /** 目录名即 skill 名 */
+  name: string;
+  /** skill 目录绝对路径（含 SKILL.md） */
+  dir: string;
+  /** 与导入目标同名 skill 比较结果：无同名=new；SKILL.md 一致=same；不一致=conflict */
+  status: PiExternalSkillStatus;
+};
+export type PiSkillExternalSource = {
+  /** claude / codex / manual */
+  id: string;
+  dir: string;
+  exists: boolean;
+  skills: PiExternalSkill[];
+};
+export type PiSkillScanExternalPayload = { extraDirs?: string[] };
+export type PiSkillScanExternalResult = {
+  /** 导入目标目录（pi agentDir/skills） */
+  targetDir: string;
+  sources: PiSkillExternalSource[];
+};
+
+/** 冲突处理策略：skip=跳过；overwrite=覆盖目标；rename=以 name-2 等副本名导入 */
+export type PiSkillImportStrategy = 'skip' | 'overwrite' | 'rename';
+export type PiSkillImportItem = { name: string; dir: string; strategy: PiSkillImportStrategy };
+export type PiSkillImportPayload = { skills: PiSkillImportItem[] };
+export type PiSkillImportResult = {
+  results: Array<{
+    name: string;
+    ok: boolean;
+    /** imported / skipped / overwritten / renamed:<新名> */
+    action: string;
+    error?: string;
+  }>;
+};
+
 // —— piPackages：扩展包管理（SDK PackageManager 的封装）——
 
 export type PiPackageRow = {
@@ -801,6 +843,12 @@ export type HostApiContract = {
   piSkills: {
     /** 活动 runtime 的 skills（resourceLoader.getSkills()）；runtime 未启动返回空列表。 */
     list: () => PiSkillListResult;
+    /** 读取 skill 的 SKILL.md 原文（查看用）。 */
+    read: (payload: PiSkillReadPayload) => PiSkillReadResult;
+    /** 扫描外部 skills 目录（Claude/Codex/extraDirs），并与导入目标比较同名状态。 */
+    scanExternal: (payload?: PiSkillScanExternalPayload) => PiSkillScanExternalResult;
+    /** 导入 = 复制目录到 agentDir/skills（不建软链）；同名按 strategy 处理。 */
+    import: (payload: PiSkillImportPayload) => PiSkillImportResult;
   };
   piPackages: {
     /** settings.json 里配置的扩展包（user + project scope 合并）。 */
