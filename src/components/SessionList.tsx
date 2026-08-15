@@ -286,6 +286,11 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                 dragEscCleanup.current = () => document.removeEventListener('keydown', onEsc);
                 setOpenMenu(undefined);
                 setDraggingPath(session.path);
+                // 兜底：行组件若在拖拽中途因列表刷新卸载，React 合成 onDragEnd 可能不派发，
+                // 全局提示会卡住；document 原生监听与本行 onDragEnd 幂等，先触发先生效
+                const clearDragging = () => setDraggingPath(undefined);
+                document.addEventListener('drop', clearDragging, { once: true, capture: true });
+                document.addEventListener('dragend', clearDragging, { once: true, capture: true });
               }}
               onDragEnd={(event) => {
                 setDraggingPath(undefined);
