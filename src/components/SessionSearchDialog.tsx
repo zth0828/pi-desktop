@@ -90,7 +90,7 @@ export function SessionSearchDialog({ open, onClose, onOpenChat }: Props) {
     setSelectingPath(session.path);
     setError('');
     try {
-      // 多面板 P3：已在某面板打开 → 聚焦；否则替换活跃面板会话
+      // 已在某面板打开 → 聚焦；否则替换活跃面板会话
       const result = await panesStore.getState().openOrFocusSession(session.path, session.cwd);
       if (result && !result.success) {
         setError(result.error || t('sessionSearch.switchFailed'));

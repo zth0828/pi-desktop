@@ -1,4 +1,4 @@
-// 多窗口（docs/MULTI-WINDOW-PLAN.md）E2E：真 pi + mock provider，不烧 API quota。
+// 多窗口 E2E：真 pi + mock provider，不烧 API quota。
 // 1) 右键会话「Open in separate window」→ 第二窗口加载同会话历史；重复打开聚焦复用、不新增窗口；
 // 2) 主窗口与独立窗口各发 SLOW_ECHO 并发流式，事件按 sessionId 过滤、互不串台；
 // 3) 关闭独立窗口 → runtime 保活，主窗口切回该会话，历史完好且可继续对话。

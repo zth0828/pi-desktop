@@ -1,4 +1,4 @@
-// 多窗口 M3（docs/MULTI-WINDOW-PLAN.md）：会话行拖出开窗的几何判定。
+// 会话行拖出开窗的几何判定。
 // 纯函数不依赖 electron（方便单测）；window-manager.createSessionWindowAtPoint 组装调用。
 // 坐标系：渲染层 dragend 的 screenX/screenY 与 Electron screen 模块同为屏幕 DIP、左上原点。
 

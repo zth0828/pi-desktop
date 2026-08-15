@@ -140,7 +140,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const thinkingLevel = usePaneChatStore((s) => s.thinkingLevel);
   const availableThinkingLevels = usePaneChatStore((s) => s.availableThinkingLevels);
   // messages 只在 /copy 与首发自动命名时读取（调用时取快照，见下），不订阅——
-  // 否则流式每个 chunk 都会重渲染输入框组件树（多面板 P4 热路径）
+  // 否则流式每个 chunk 都会重渲染输入框组件树（流式热路径）
   const [models, setModels] = useState<PiModelRow[]>([]);
   const [modelKey, setModelKey] = useState('');
   const [usage, setUsage] = useState<PiRuntimeUsageResult | null>(null);

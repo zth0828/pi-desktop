@@ -1,6 +1,6 @@
-// pi 事件 → 壳事件契约的唯一映射点（AGENTS.md 铁律）。
-// pi 事件结构变化只改这一个文件。字段形状来自录制的真实事件
-// （tests/fixtures/pi-events/text-and-toolcall.json，pi 0.83.0）。
+// pi 事件 → 壳事件契约的唯一映射点。
+// pi 事件结构变化只改这一个文件。字段形状示例见
+// tests/fixtures/pi-events/text-and-toolcall.json。
 import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 
 export type CompactionReason = 'manual' | 'threshold' | 'overflow';

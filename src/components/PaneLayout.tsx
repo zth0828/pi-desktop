@@ -1,4 +1,4 @@
-// 分栏布局（多面板 P3，docs/MULTI-WINDOW-PANES-PLAN.md）：递归渲染 panes 二叉分栏树，
+// 分栏布局：递归渲染 panes 二叉分栏树，
 // split 节点 = flex 容器 + 可拖分隔条（pointer capture 拖 ratio，store 内 clamp 15%–85%），
 // 叶子 = ChatStoreProvider + ChatPane + 会话拖入落区（5 区：四边分栏 / 中心替换）。
 // ?session= attach / workspaceCwd 恢复只作用于窗口首个面板（primary = DEFAULT_CHAT_STORE_ID），
@@ -158,7 +158,7 @@ function PaneNode({ node, shared }: { node: SplitNode; shared: SharedProps }) {
 export function PaneLayout(props: PaneLayoutProps) {
   const root = useStore(panesStore, (s) => s.root);
   const leafCount = useMemo(() => countLeaves(root), [root]);
-  // 独立会话窗口（多窗口 M2）：?session=<path> 由 main 侧建窗时带上；dev 是 URL
+  // 独立会话窗口：?session=<path> 由 main 侧建窗时带上；dev 是 URL
   // searchParams，prod 是 loadFile query。只在窗口顶层读一次，下传给首个面板。
   const [attachSession] = useState(() => new URLSearchParams(window.location.search).get('session'));
   const shared: SharedProps = { ...props, leafCount, attachSession };

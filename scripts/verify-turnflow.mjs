@@ -1,4 +1,4 @@
-// 批次1+2 真实验证：聚合编辑卡、已处理折叠、新设置项
+// 真实验证：聚合编辑卡、已处理折叠、新设置项
 // 用法: PATH="$HOME/.npm-global/bin:$PATH" node scripts/verify-turnflow.mjs
 import electronBinaryPathImport from 'electron';
 import { _electron as electron } from '@playwright/test';
@@ -65,7 +65,7 @@ async function sendAndWait(text, maxSeconds = 240) {
 
 try {
   await page.getByTestId('chat-input').waitFor({ state: 'visible', timeout: 30_000 });
-  await page.waitForTimeout(3_000); // 等 start 完成（竞态修复已上，但留余量）
+  await page.waitForTimeout(3_000); // 等 start 完成，留余量
 
   // 第一轮：edit + write（聚合卡素材）
   await sendAndWait(

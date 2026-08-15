@@ -1,4 +1,4 @@
-// 分栏布局树的窗口级单例（多面板 P3）：装配 panes.ts 的真实依赖——chat store 实例
+// 分栏布局树的窗口级单例：装配 panes.ts 的真实依赖——chat store 实例
 // 创建/注册/销毁（chat-core + chat-registry）与活跃指针同步。node 侧单测请直接引用
 // stores/panes.ts 的 createPanesStore 工厂（本模块经 default-chat-store 依赖 window 桥）。
 import { onHostEvent } from '../lib/host-events';

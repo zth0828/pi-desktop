@@ -1,4 +1,4 @@
-// 窗口级分栏布局树（多面板 P3，docs/MULTI-WINDOW-PANES-PLAN.md）：二叉分栏 + 活跃面板指针。
+// 窗口级分栏布局树：二叉分栏 + 活跃面板指针。
 // node-safe 分层同 chat-core.ts：本模块不引 react / host-events，chat store 实例的
 // 创建/销毁/注册表同步全部经 deps 注入（web 侧装配见 stores/panes-default.ts），
 // node 侧单测用 mock 工厂直接引用。

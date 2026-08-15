@@ -1,4 +1,4 @@
-// 波次2 新交互真实验证：发送四态/队列、工具三态文案、thinking 计时、/session、导航 rail
+// 新交互真实验证：发送四态/队列、工具三态文案、thinking 计时、/session、导航 rail
 // 用法: PATH="$HOME/.npm-global/bin:$PATH" node scripts/verify-wave2.mjs
 import electronBinaryPathImport from 'electron';
 import { _electron as electron } from '@playwright/test';

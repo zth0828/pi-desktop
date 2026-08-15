@@ -5,7 +5,7 @@ export type HostRequest = {
   module: string;
   action: string;
   payload?: unknown;
-  // 多面板 P1：显式会话寻址（缺省由 main 侧回退窗口绑定 → 全局 active）
+  // 显式会话寻址（缺省由 main 侧回退窗口绑定 → 全局 active）
   sessionPath?: string;
 };
 

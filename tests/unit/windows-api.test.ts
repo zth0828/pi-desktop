@@ -1,4 +1,4 @@
-// windows-api（多窗口 M2）：契约 action 到 window-manager 的委托与回退。
+// windows-api：契约 action 到 window-manager 的委托与回退。
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({

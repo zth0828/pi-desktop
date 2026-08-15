@@ -1,4 +1,4 @@
-// 多面板 P2：chat store 实例隔离——两个 createChatStore() 实例绑定不同会话，
+// chat store 实例隔离——两个 createChatStore() 实例绑定不同会话，
 // 共享同一 host 事件总线时，事件只进匹配实例；dispose 后实例退订。
 import { describe, expect, it, vi } from 'vitest';
 import type { PiRuntimeEventEnvelope } from '@shared/pi-event-map';

@@ -1,4 +1,4 @@
-// piSkills：技能列表（M5）。数据源是活动 runtime 的 resourceLoader.getSkills()，
+// piSkills：技能列表。数据源是活动 runtime 的 resourceLoader.getSkills()，
 // runtime 未启动时返回空。SettingsManager 没有 per-skill 启停 API（只有路径增减），
 // 所以本模块只读——启停交给 pi 自己的配置，壳不乱造 settings.json 格式。
 import { realpathSync } from 'node:fs';
@@ -8,7 +8,7 @@ import type { PiSkillListResult, PiSkillRow, PiSkillSource } from '@shared/host-
 import { resolveRuntimeForContext } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
 
-/** macOS /tmp → /private/tmp symlink：路径比较前两边 realpath（AGENTS.md）。 */
+/** macOS /tmp → /private/tmp symlink：路径比较前两边 realpath。 */
 function safeRealpath(p: string): string {
   try {
     return realpathSync(p);

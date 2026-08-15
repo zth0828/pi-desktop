@@ -1,4 +1,4 @@
-// scopedHostApi（多面板 P1）：面板作用域 client 的信封透传、Map 缓存与同形性。
+// scopedHostApi：面板作用域 client 的信封透传、Map 缓存与同形性。
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { hostApi, scopedHostApi } from '@/lib/host-api';
 import type { HostRequest } from '@shared/host-api/types';

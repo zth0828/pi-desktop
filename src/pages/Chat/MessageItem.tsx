@@ -44,8 +44,8 @@ function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: stri
   );
 }
 
-/** 工具调用块：只按 id 订阅本工具的执行记录（多面板 P4）。原来整个 toolExecutions
- *  表订阅在 AssistantBlock 上，任何工具进度事件都会重渲染所有消息的所有 block。 */
+/** 工具调用块：只按 id 订阅本工具的执行记录；若整表订阅，任何工具进度事件都会
+ *  重渲染所有消息的所有 block。 */
 function ToolCallBlock({ block, expandTools }: { block: ContentBlock; expandTools?: boolean }) {
   const execution = usePaneChatStore((s) => (block.id ? s.toolExecutions[block.id] : undefined)) ?? {
     toolCallId: block.id ?? '',
@@ -121,7 +121,7 @@ function cacheMissEqual(a?: CacheMiss, b?: CacheMiss): boolean {
     && a.modelChanged === b.modelChanged;
 }
 
-/** memo 比较（多面板 P4）：message 引用不变 + 标量 props 相同即跳过重渲染；
+/** memo 比较：message 引用不变 + 标量 props 相同即跳过重渲染；
  *  流式期间只有被替换的那条消息对象引用变化，其余消息整树跳过。 */
 function messageItemPropsEqual(prev: MessageItemProps, next: MessageItemProps): boolean {
   return prev.message === next.message
@@ -320,7 +320,7 @@ function MessageItemView({
   );
 }
 
-// 多面板 P4：memo 化消息项——流式 chunk（合帧后）只重渲染正在变化的那条消息，
+// memo 化消息项——流式 chunk（合帧后）只重渲染正在变化的那条消息，
 // 不再整表重渲染。props 引用稳定性由父组件（index.tsx map 处）与上面的自定义比较保证。
 export const MessageItem = memo(MessageItemView, messageItemPropsEqual);
 

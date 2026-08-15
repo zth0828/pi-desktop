@@ -1,4 +1,4 @@
-// L2 契约测试：壳依赖的 pi SDK 封装点全链路验证（docs §7.1 L2）。
+// 契约测试：壳依赖的 pi SDK 封装点全链路验证。
 // 真 pi（隔离 npm prefix）+ mock provider（不烧真实 API quota）。
 // 覆盖：runtime 工厂模式、bindExtensions（无头）、prompt/事件序列、
 // abort 中断、SessionManager 持久化与 list、newSession 替换。
@@ -136,7 +136,7 @@ describe('pi SDK 契约（pi 0.83.x + mock provider）', () => {
     const lastAssistant = [...mapped].reverse().find((e) => e.type === 'message.ended');
     expect(JSON.stringify(lastAssistant)).toContain('FINAL:');
 
-    // 会话持久化：SessionManager.list 能找到（M4 依赖点）
+    // 会话持久化：SessionManager.list 能找到
     const sessions = await sdk.SessionManager.list(workspace);
     expect(sessions.length).toBeGreaterThan(0);
 

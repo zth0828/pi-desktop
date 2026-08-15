@@ -1,4 +1,4 @@
-// 多窗口 M2：渲染层按窗口绑定会话过滤事件/状态推送的判定逻辑（stores/chat 使用）。
+// 渲染层按窗口绑定会话过滤事件/状态推送的判定逻辑（stores/chat 使用）。
 import { describe, expect, it } from 'vitest';
 import { matchesBoundSession, shouldApplySessionReplaced } from '@/lib/session-binding';
 

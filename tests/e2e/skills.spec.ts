@@ -1,4 +1,4 @@
-// M5 验收：Skills 页 —— 活动 runtime 的 resourceLoader.getSkills() 列表。
+// Skills 页 —— 活动 runtime 的 resourceLoader.getSkills() 列表。
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

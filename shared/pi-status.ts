@@ -1,4 +1,4 @@
-// onboarding 五场景推导（docs/TECHNICAL-PLAN.md §3）。纯函数，单测覆盖。
+// onboarding 五场景推导。纯函数，单测覆盖。
 import type { PiEnvironment } from './host-api/contract';
 
 export type OnboardingState =

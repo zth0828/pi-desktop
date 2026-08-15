@@ -1,4 +1,4 @@
-// Packages 页验收：官方目录发现 + piPackages（SDK PackageManager）安装/卸载。
+// Packages 页 E2E：官方目录发现 + piPackages（SDK PackageManager）安装/卸载。
 // 不访问公网：目录与 npm registry 都由本地 fixture server 提供。
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';

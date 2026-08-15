@@ -39,7 +39,7 @@ function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
       void paneApi.piRuntime.getSessionInfo().then((info) => setName(info?.name ?? ''));
     };
     refresh();
-    // 每面板一条 1s 轮询（多面板 P4 核对结论：getSessionInfo 是 main 侧本地内存读取，
+    // 每面板一条 1s 轮询（getSessionInfo 是 main 侧本地内存读取，
     // 多面板下 N 条轮询开销可忽略，保留以跟随扩展/外部改名；非活跃面板降频暂不做）
     const timer = window.setInterval(refresh, 1000);
     return () => window.clearInterval(timer);
@@ -122,7 +122,7 @@ function ExtensionWidgets({ placement }: { placement: 'aboveEditor' | 'belowEdit
 type Props = {
   searchTarget?: { sessionId: string; messageIndex: number; nonce: number };
   onSearchTargetHandled?: () => void;
-  /** 窗口首个面板（多面板 P3）：仅它执行 ?session= attach / workspaceCwd 恢复与工作区选择 */
+  /** 窗口首个面板：仅它执行 ?session= attach / workspaceCwd 恢复与工作区选择 */
   primary?: boolean;
   /** ?session= attach 目标（PaneLayout 顶层读一次，仅 primary 面板使用） */
   attachSession?: string | null;
@@ -147,8 +147,8 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const workspaceVisible = usePaneChatStore((s) => s.workspaceOpen || s.reviewOpen);
   const start = usePaneChatStore((s) => s.start);
   const switchSession = usePaneChatStore((s) => s.switchSession);
-  // 独立会话窗口的 attach 目标由 PaneLayout 顶层读取一次后通过 prop 传入（多面板 P3：
-  // 不再每面板各自读 location.search）
+  // 独立会话窗口的 attach 目标由 PaneLayout 顶层读取一次后通过 prop 传入（
+  // 避免每个面板各自读 location.search）
   // 跨项目切换会话时以 runtime 的实际 cwd 为准
   const activeCwd = usePaneChatStore((s) => (s.started ? s.cwd : undefined));
   const effectiveCwd = activeCwd ?? cwd;
@@ -290,7 +290,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   }, [switchSession]);
 
   // 恢复上次的工作目录并启动会话；独立会话窗口跳过恢复，直接 attach 指定会话。
-  // 多面板 P3：仅窗口首个面板（primary）执行；其余面板由分栏树 splitAt/replacePane 驱动绑定。
+  // 仅窗口首个面板（primary）执行；其余面板由分栏树 splitAt/replacePane 驱动绑定。
   useEffect(() => {
     if (!primary) return;
     if (attachSession) {
@@ -602,7 +602,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
 }
 
 /**
- * 窗口级 Chat 页（多面板 P3）：渲染分栏布局树（PaneLayout）。初始 root = 单叶子
+ * 窗口级 Chat 页：渲染分栏布局树（PaneLayout）。初始 root = 单叶子
  * default 面板（绑定 defaultChatStore 实例，承载 ?session= attach / workspaceCwd
  * 恢复语义）；拖入分栏后由 panes store 驱动渲染 N 个 ChatStoreProvider + ChatPane。
  */

@@ -1,4 +1,4 @@
-// piSessions：会话管理（M4，docs §4.4）。
+// piSessions：会话管理。
 // 列表/切换/重命名/分叉走 pi SDK（SessionManager 静态方法 + runtime.switchSession）；
 // 删除 pi 无 SDK API（已确认），对齐 pi `/resume`：优先移入系统废纸篓。
 // 会话替换后必须 afterSessionReplaced（重订阅 + 重绑扩展 + 推 sessionReplaced）。
@@ -39,7 +39,7 @@ function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** 多窗口 M1：switch 成功后把调用方窗口绑定到目标会话（ctx 缺省 = 旧调用，跳过）。 */
+/** switch 成功后把调用方窗口绑定到目标会话（ctx 缺省 = 旧调用，跳过）。 */
 function bindSenderWindow(ctx: HostActionContext | undefined, sessionPath: string): void {
   if (ctx) bindWindowSession(ctx.sender.id, sessionPath);
 }
@@ -191,7 +191,7 @@ export const sessionsApi = {
       if (payload.cwd) await settingsApi.set({ key: 'workspaceCwd', value: payload.cwd });
       return { success: true };
     }
-    // 多窗口 M2：调用方窗口绑定着非活动会话（独立窗口 attach/切会话）时，
+    // 调用方窗口绑定着非活动会话（独立窗口 attach/切会话）时，
     // 为目标会话单独建保活 runtime，不挤占全局 active（主窗口）的运行时。
     const activeNow = getActiveRuntime();
     const boundToActive = Boolean(

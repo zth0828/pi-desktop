@@ -1,6 +1,5 @@
 // pi 安装检测：动态定位 Node/npm/pi，判定安装类型与版本。
-// 路径一律动态解析（npm root -g / PATH 逐级 realpath），禁止硬编码（AGENTS.md）。
-// 核心机制经 Spike A 验证（docs/TECHNICAL-PLAN.md §2）。
+// 路径一律动态解析（npm root -g / PATH 逐级 realpath），禁止硬编码。
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
@@ -86,7 +85,7 @@ export function detectNpm(): NpmDetectResult {
   const rootOut = process.env.PI_DESKTOP_NPM_ROOT ?? run(binPath, ['root', '-g']);
   let globalRoot: string | undefined;
   if (rootOut && existsSync(rootOut)) {
-    // macOS: /tmp → /private/tmp 等 symlink，比较前必须 realpath（Spike A 教训）
+    // macOS: /tmp → /private/tmp 等 symlink，比较前必须 realpath
     globalRoot = realpathSync(rootOut);
   }
   return { found: true, version, globalRoot };

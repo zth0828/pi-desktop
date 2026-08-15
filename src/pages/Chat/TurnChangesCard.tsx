@@ -135,7 +135,7 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
   );
 }
 
-// 多面板 P4：toolCallIds 来自 groupLogicalTurns 的 useMemo 重算（每次 messages 变化
+// toolCallIds 来自 groupLogicalTurns 的 useMemo 重算（每次 messages 变化
 // 都产生新数组），按元素浅比较保证 memo 不被击穿；卡片自身已按 id 订阅 toolExecutions。
 export const TurnChangesCard = memo(TurnChangesCardView, (prev, next) =>
   prev.toolCallIds.length === next.toolCallIds.length

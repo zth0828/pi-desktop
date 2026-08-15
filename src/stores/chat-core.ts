@@ -1,7 +1,6 @@
 // 聊天状态：pi 事件（经 shared/pi-event-map 映射 + generation 信封）→ 渲染状态。
-// Inspired by ClawX: src/stores/chat.ts 的 reducer 思路（按 pi 事件模型重写，§5.2）。
-// 多面板 P2（docs/MULTI-WINDOW-PANES-PLAN.md）：全局单例 → createChatStore() 工厂，
-// 每面板一实例。本模块保持 node-safe（不引 react / host-events / notify，同 chat-types.ts
+// Inspired by ClawX: src/stores/chat.ts 的 reducer 思路（按 pi 事件模型重写）。
+// createChatStore() 工厂，每面板一实例。本模块保持 node-safe（不引 react / host-events / notify，同 chat-types.ts
 // 分层约定）：事件订阅入口 onEvent 与通知上报 reporters 由调用方注入，node 侧单测可直接引用。
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import type { CompactionReason, PiRuntimeEventEnvelope } from '@shared/pi-event-map';
@@ -65,7 +64,7 @@ export type ChatState = {
   cwd?: string;
   sessionId?: string;
   /**
-   * 本面板绑定的会话 id（多面板 P2 / 多窗口 M2）：非本面板会话的事件/状态推送按它过滤。
+   * 本面板绑定的会话 id：非本面板会话的事件/状态推送按它过滤。
    * null = 尚未绑定（初始态）；start/switch/sessionReplaced 后更新。
    * 会话替换（newSession/fork 后 sessionId 会变）由 expectingReplacement 放行。
    */
@@ -158,7 +157,7 @@ function bindInstanceEvents(
   onEvent: HostEventSubscriber,
   reporters?: ChatEventReporters,
 ): () => void {
-  // 流式合帧（多面板 P4）：assistant.partial / tool.execution.updated 是替换式流式事件，
+  // 流式合帧：assistant.partial / tool.execution.updated 是替换式流式事件，
   // 在 ≤50ms 窗口内合并（同类只留最新）后批量进 store；其余关键事件直透（直透前先
   // flush 积压保序）。dispose 先停 batcher，避免悬挂 flush 打到已退订的实例。
   const batcher = createStreamBatcher<PiRuntimeEventEnvelope>(
@@ -213,7 +212,7 @@ function bindInstanceEvents(
 
 export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
   const store = createStore<ChatState>()((set, get) => {
-    // 面板内 host 调用寻址（多面板 P2）：已绑定会话走 scoped client（信封带会话文件路径，
+    // 面板内 host 调用寻址：已绑定会话走 scoped client（信封带会话文件路径，
     // main 侧优先于窗口绑定路由到本面板 runtime）；未绑定（start 引导期 / in-memory 会话）
     // 回退窗口级 hostApi，行为同单窗口。
     const api = (): HostApi => {
@@ -273,7 +272,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         set({ starting: true, startError: undefined });
         try {
           // 用切换前的绑定寻址本面板 runtime（main 侧据此决定复用/新建/改绑）；
-          // 尚未绑定（多面板 P3 新面板 attach）时按目标路径寻址：窗口级调用会把
+          // 尚未绑定（新面板 attach）时按目标路径寻址：窗口级调用会把
           // 全局 active runtime 切走，抢走别的面板正在用的会话。
           const fromPath = get().boundSessionPath;
           const result = await (fromPath ? scopedHostApi(fromPath) : scopedHostApi(path))

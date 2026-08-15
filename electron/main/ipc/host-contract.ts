@@ -1,4 +1,3 @@
-// Ported from ClawX: electron/main/ipc/host-contract.ts
 import type { WebContents } from 'electron';
 import type { HostApiContract } from '@shared/host-api/contract';
 
@@ -7,7 +6,7 @@ export type HostRequest = {
   module: string;
   action: string;
   payload?: unknown;
-  // 多面板 P1：显式会话寻址（缺省回退窗口绑定 → 全局 active）
+  // 显式会话寻址（缺省回退窗口绑定 → 全局 active）
   sessionPath?: string;
 };
 
@@ -18,7 +17,7 @@ export type HostResponse<T = unknown> =
   | { id?: string; ok: false; error: { code: HostErrorCode; message: string; details?: unknown } };
 
 /**
- * hostInvoke 调用方上下文（多窗口 M1，docs/MULTI-WINDOW-PLAN.md）：
+ * hostInvoke 调用方上下文：
  * 由 ipcMain.handle 注入，不经 IPC 传输（WebContents 不可序列化）。
  * sessionPath 是 sender 所属窗口绑定的会话（window-manager 解析，未绑定为 null），
  * action 据此路由到对应 runtime；缺省回退全局 active，单窗口行为不变。

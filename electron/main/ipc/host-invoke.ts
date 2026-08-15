@@ -1,5 +1,4 @@
-// Ported from ClawX: electron/main/ipc/host-invoke.ts
-// （去掉了扩展贡献注册——壳自身不做插件化，见 docs/TECHNICAL-PLAN.md §5.3）
+// hostInvoke IPC 单通道：请求校验 + registry 分发（壳自身不做插件化，无扩展贡献注册）。
 import { ipcMain } from 'electron';
 import {
   type HostActionContext,
@@ -94,8 +93,8 @@ export function createHostInvokeDispatcher(registryOrServices: HostApiRegistry |
 
 export function registerHostInvokeHandler(registry: HostApiRegistry): void {
   const dispatch = createHostInvokeDispatcher(registry);
-  // 多窗口 M1：sender → 窗口绑定会话，注入 action 的 ctx（sessionPath 查不到为 null）
-  // 多面板 P1：信封显式 sessionPath 优先于窗口绑定；都没有则 null 走全局 active
+  // sender → 窗口绑定会话，注入 action 的 ctx（sessionPath 查不到为 null）
+  // 信封显式 sessionPath 优先于窗口绑定；都没有则 null 走全局 active
   ipcMain.handle('host:invoke', async (event, request: unknown) => {
     const explicit = request && typeof request === 'object'
       ? (request as { sessionPath?: unknown }).sessionPath

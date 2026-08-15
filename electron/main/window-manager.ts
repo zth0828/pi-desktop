@@ -1,4 +1,4 @@
-// 多窗口 M1（docs/MULTI-WINDOW-PLAN.md）：窗口↔会话绑定的 main 侧注册表。
+// 窗口↔会话绑定的 main 侧注册表。
 // renderer 的 hostInvoke 不带 sessionId；main 经 event.sender（webContentsId）
 // 反查窗口绑定的会话，路由到对应 runtime（见 services/pi-runtime-api.ts 的
 // resolveRuntimeForContext）。窗口关闭只解绑，runtime 仍保活在 runtimes Set 里。
@@ -86,7 +86,7 @@ export function listWindows(): Array<{
     }));
 }
 
-/** 所有存活 app 窗口的屏幕 bounds（M3 拖出判定：落点在任一窗口内则不开窗）。 */
+/** 所有存活 app 窗口的屏幕 bounds（拖出判定：落点在任一窗口内则不开窗）。 */
 export function getWindowBounds(): DetachRect[] {
   return [...windows.values()]
     .filter((record) => !record.win.isDestroyed())
@@ -96,13 +96,13 @@ export function getWindowBounds(): DetachRect[] {
 type CreateWindowOptions = {
   isMain?: boolean;
   sessionPath?: string;
-  /** 预留（M2）：独立窗口的工作区路径，目前会话 cwd 仍由 runtime 决定 */
+  /** 预留：独立窗口的工作区路径，目前会话 cwd 仍由 runtime 决定 */
   cwd?: string;
-  /** M3：窗口左上角屏幕坐标（DIP）；缺省由 OS 层叠排布 */
+  /** 窗口左上角屏幕坐标（DIP）；缺省由 OS 层叠排布 */
   position?: { x: number; y: number };
 };
 
-/** 窗口默认尺寸（主窗口与独立会话窗口一致）；M3 按落点居中时复用同一尺寸。 */
+/** 窗口默认尺寸（主窗口与独立会话窗口一致）；按落点居中时复用同一尺寸。 */
 export function resolveWindowSize(): { width: number; height: number } {
   const workArea = screen.getPrimaryDisplay().workAreaSize;
   return {
@@ -142,7 +142,7 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
 
   const query: Record<string, string> = {};
   if (options.sessionPath) {
-    // 独立会话窗口：renderer 启动时按 ?session= 绑定该会话（M2 接线）
+    // 独立会话窗口：renderer 启动时按 ?session= 绑定该会话
     query.page = 'chat';
     query.session = options.sessionPath;
     query.detached = '1';
@@ -175,7 +175,7 @@ export function createMainWindow(): BrowserWindow {
   return createAppWindow({ isMain: true });
 }
 
-/** 独立会话窗口（M2 经 windows.openDetached 接线）：同会话已有窗口则聚焦复用。 */
+/** 独立会话窗口（经 windows.openDetached 接线）：同会话已有窗口则聚焦复用。 */
 export function createSessionWindow(
   sessionPath: string,
   cwd?: string,
@@ -191,7 +191,7 @@ export function createSessionWindow(
 }
 
 /**
- * 拖出开窗（M3，windows.openDetachedAt）：落点在任一 app 窗口内则不动（返回 null），
+ * 拖出开窗（windows.openDetachedAt）：落点在任一 app 窗口内则不动（返回 null），
  * 否则以落点为窗口中心创建，bounds clamp 到落点所在显示器的 workArea 内。
  */
 export function createSessionWindowAtPoint(

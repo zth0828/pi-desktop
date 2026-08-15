@@ -2563,7 +2563,7 @@ button.danger-outline {
   max-width: 820px;
 }
 
-/* 会话页：按项目分组（M4 fix：列表改为全局 listAll，组头展示位置信息） */
+/* 会话页：按项目分组（列表为全局 listAll，组头展示位置信息） */
 .session-project-group {
   display: flex;
   flex-direction: column;
@@ -4504,7 +4504,7 @@ button.danger-outline {
   .workspace-tree { width: min(280px, 82%); }
 }
 
-/* ---------- 多面板分栏（P3） ---------- */
+/* ---------- 多面板分栏 ---------- */
 
 .pane-layout {
   display: flex;

@@ -1,4 +1,4 @@
-// pi SDK 加载器：从用户环境的 npm 全局安装动态 import（Spike A 验证的机制）。
+// pi SDK 加载器：从用户环境的 npm 全局安装动态 import。
 // 只支持 npm 安装；检测不到/版本不够/非 npm 安装都在这里变成「未就绪」。
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -38,7 +38,7 @@ export async function loadPiSdk(): Promise<PiSdk> {
   if (!entryRel) throw new PiNotReadyError('entry-not-found');
   const entry = path.join(env.pi.packageRoot, entryRel);
 
-  // createRequire 只用于定位；ESM 包一律走 dynamic import(fileURL)（Spike A 结论）
+  // createRequire 只用于定位；ESM 包一律走 dynamic import(fileURL)
   cachedPackageRoot = env.pi.packageRoot;
   cached = import(pathToFileURL(entry).href) as Promise<PiSdk>;
   try {

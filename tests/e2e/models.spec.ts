@@ -1,4 +1,4 @@
-// M3 验收：providers 管理 + / 命令补全。
+// providers 管理 + / 命令补全 E2E。
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

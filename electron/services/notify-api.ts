@@ -15,9 +15,7 @@ export const notifyApi = {
     const uiRequestEnabled = payload.kind === 'uiRequest'
       ? ((await settingsApi.get({ key: 'notifyUiRequest' })) as boolean | undefined)
       : undefined;
-    // TODO(多窗口 M2)：通知链路尚无会话上下文，焦点判定按「任一窗口聚焦」、
-    // 点击聚焦落主窗口。后续把 sessionPath 带进 NotifyDispatchPayload 后，
-    // 改为 focusWindowForSession(sessionPath) 聚焦拥有该会话的窗口。
+    // TODO：通知链路尚无会话上下文，焦点判定按「任一窗口聚焦」、点击聚焦落主窗口。
     const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
     const anyFocused = windows.some((w) => w.isFocused());
     if (!shouldNotify(mode, anyFocused, payload.kind, uiRequestEnabled)) {

@@ -1,7 +1,6 @@
 /**
  * Host API contract — the single source of truth for Renderer↔Main calls.
- * Renderer 只允许通过这里声明的 module.action 调后端（见 AGENTS.md）。
- * 机制移植自 ClawX，module 清单按 Pi Desktop 收敛（M1 起步，按里程碑扩展）。
+ * Renderer 只允许通过这里声明的 module.action 调后端。
  */
 export type JsonRecord = Record<string, unknown>;
 export type HostSuccess = { success: boolean; error?: string };
@@ -27,7 +26,7 @@ export type ShellOpenPathWithPayload = {
 export type ShellOpenPathPayload = { path: string };
 export type AppClipboardWritePayload = { text: string };
 
-// —— piSystem：pi/Node/npm 环境检测与安装引导（M1）——
+// —— piSystem：pi/Node/npm 环境检测与安装引导 ——
 
 export type PiInstallKind = 'npm' | 'non-npm';
 
@@ -78,7 +77,7 @@ export type PiInstallResult = HostSuccess & {
   version?: string;
 };
 
-// —— piRuntime：SDK 会话运行时（M2）——
+// —— piRuntime：SDK 会话运行时 ——
 
 export type PiRuntimeStartPayload = { cwd: string };
 /**
@@ -351,10 +350,10 @@ export type DialogOpenPayload = {
 };
 export type DialogOpenResult = { canceled: boolean; filePaths: string[] };
 
-// —— windows：多窗口管理（多窗口 M2，docs/MULTI-WINDOW-PLAN.md）——
+// —— windows：多窗口管理 ——
 
 export type WindowsOpenDetachedPayload = { sessionPath: string; cwd?: string };
-/** 拖出开窗（多窗口 M3）：screenX/screenY 为松手点屏幕 DIP 坐标（渲染层 dragend 原样上报）。 */
+/** 拖出开窗：screenX/screenY 为松手点屏幕 DIP 坐标（渲染层 dragend 原样上报）。 */
 export type WindowsOpenDetachedAtPayload = WindowsOpenDetachedPayload & {
   screenX: number;
   screenY: number;
@@ -377,7 +376,7 @@ export type NotifyDispatchPayload = {
   body?: string;
 };
 
-// —— providers：模型/供应商管理（M3）——
+// —— providers：模型/供应商管理 ——
 
 export type PiProviderRow = {
   id: string;
@@ -465,12 +464,12 @@ export type PiOAuthProgressEvent = {
 export type PiDefaultModel = { provider: string; id: string };
 export type PiDefaultModelResult = { model: PiDefaultModel | null };
 
-// —— piRuntime 命令补全（M3，docs §4.3）——
+// —— piRuntime 命令补全 ——
 
 export type PiCommandRow = { name: string; description?: string; source: string };
 export type PiCommandListResult = { commands: PiCommandRow[] };
 
-// —— piSessions：会话管理（M4，docs §4.4）——
+// —— piSessions：会话管理 ——
 
 export type PiSessionRow = {
   path: string;
@@ -511,7 +510,7 @@ export type PiSessionExportInfo = { directory: string; lastPath?: string };
 export type PiFileListPayload = { cwd: string };
 export type PiFileListResult = { files: string[] };
 
-// —— piSkills：技能列表（M5）——
+// —— piSkills：技能列表 ——
 
 export type PiSkillSource = 'agentDir' | 'user' | 'project' | 'package';
 
@@ -531,7 +530,7 @@ export type PiSkillListResult = {
   runtimeActive: boolean;
 };
 
-// —— piPackages：扩展包管理（M5，SDK PackageManager 的封装）——
+// —— piPackages：扩展包管理（SDK PackageManager 的封装）——
 
 export type PiPackageRow = {
   /** settings.json 里的原始 source（npm:<pkg> / git:<url> / 本地路径） */
@@ -627,7 +626,7 @@ export type PiPackageProgressEvent = {
   message?: string;
 };
 
-// —— piMcp：MCP server 配置（M5，pi-mcp-adapter 的标准 mcpServers 格式，docs §4.7）——
+// —— piMcp：MCP server 配置（pi-mcp-adapter 的标准 mcpServers 格式）——
 
 export type PiMcpServerConfig = {
   command?: string;
@@ -696,7 +695,7 @@ export type HostApiContract = {
     checkLatest: () => PiLatestVersionResult;
     /**
      * 安装/升级到 npm 版 pi。执行的命令有且仅有
-     * `npm i -g @earendil-works/pi-coding-agent`（方案 B，见 docs §3）。
+     * `npm i -g @earendil-works/pi-coding-agent`。
      * 进度经 piSystem.installProgress 事件流式推送。
      */
     install: () => PiInstallResult;
@@ -707,7 +706,7 @@ export type HostApiContract = {
     getState: () => PiRuntimeStateResult | null;
     getContextUsage: () => PiRuntimeContextUsage | null;
     getUsage: () => PiRuntimeUsageResult | null;
-    /** 生成中调用按 payload.behavior 排队：默认 followUp（排队），'steer' = 当前轮插入（§4.1）。 */
+    /** 生成中调用按 payload.behavior 排队：默认 followUp（排队），'steer' = 当前轮插入。 */
     prompt: (payload: PiRuntimePromptPayload) => HostSuccess;
     abort: () => HostSuccess;
     /** 移除一条排队消息（pi 仅 clearQueue 全清：main 侧快照→全清→按原顺序重排其余项）。 */
@@ -781,7 +780,7 @@ export type HostApiContract = {
     archiveProject: (payload: PiSessionProjectArchivePayload) => HostSuccess;
     /** pi 无删除 SDK API：删当前会话前先 newSession，随后移入系统废纸篓。 */
     remove: (payload: PiSessionPathPayload) => HostSuccess;
-    /** v1 简化：只导当前会话（exportToHtml 在 AgentSession 上），非当前先 switch。 */
+    /** 只导当前会话（exportToHtml 在 AgentSession 上），非当前先 switch。 */
     exportHtml: (payload: PiSessionPathPayload) => PiSessionExportResult;
     /** 系统统一导出目录 + 最近成功导出路径。 */
     getExportInfo: () => PiSessionExportInfo;
@@ -835,7 +834,7 @@ export type HostApiContract = {
   windows: {
     /** 在独立窗口打开指定会话；同会话已有窗口则聚焦复用。 */
     openDetached: (payload: WindowsOpenDetachedPayload) => void;
-    /** 拖出开窗（多窗口 M3）：落点在任一 app 窗口内则不动，否则以落点为中心创建。 */
+    /** 拖出开窗：落点在任一 app 窗口内则不动，否则以落点为中心创建。 */
     openDetachedAt: (payload: WindowsOpenDetachedAtPayload) => void;
     /** 聚焦绑定指定会话的窗口；没有对应窗口则新建独立窗口。 */
     focus: (payload: WindowsFocusPayload) => void;

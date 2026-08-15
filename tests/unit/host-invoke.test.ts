@@ -1,4 +1,4 @@
-// host-invoke P1（docs/MULTI-WINDOW-PANES-PLAN.md）：ctx.sessionPath 优先级 =
+// host-invoke：ctx.sessionPath 优先级 =
 // 信封显式 sessionPath → 窗口绑定（resolveWindowSession）→ null（走全局 active）。
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HostActionContext } from '@electron/main/ipc/host-contract';

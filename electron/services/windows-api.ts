@@ -1,4 +1,4 @@
-// windows 模块：多窗口管理（多窗口 M2，docs/MULTI-WINDOW-PLAN.md）。
+// windows 模块：多窗口管理。
 // 窗口创建/聚焦全部委托 window-manager（窗口↔会话绑定的单一注册表）。
 import type {
   WindowListEntry,

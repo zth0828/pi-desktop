@@ -1,4 +1,4 @@
-// window-manager（多窗口 M1）注册表行为：注册/绑定/反查/销毁清理/按会话聚焦。
+// window-manager 注册表行为：注册/绑定/反查/销毁清理/按会话聚焦。
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 class FakeBrowserWindow {

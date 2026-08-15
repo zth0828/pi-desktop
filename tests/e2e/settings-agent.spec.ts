@@ -1,5 +1,5 @@
-// 设置页批次 2（对齐 Codex 常规页）E2E（真 pi + mock provider，不烧 API quota）。
-// 覆盖：四个新设置项渲染 + 切换落盘 config.json；followupBehavior=steer 时流式中
+// 设置页 E2E（真 pi + mock provider，不烧 API quota）。
+// 覆盖：四个设置项渲染 + 切换落盘 config.json；followupBehavior=steer 时流式中
 // Enter 直接 steering 入队；sendWith=cmdEnter 时 Enter 换行、Cmd+Enter 发送；
 // preventSleep 时 run 期间 powerSaveBlocker start/stop（观测钩子 PI_DESKTOP_E2E_POWER_LOG，
 // 同 notify 的 PI_DESKTOP_E2E_NOTIFY_LOG 模式）。

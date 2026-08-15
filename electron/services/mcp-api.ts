@@ -1,4 +1,4 @@
-// piMcp：MCP server 配置管理（M5，docs §4.7 Spike B 结论）。
+// piMcp：MCP server 配置管理。
 // 壳只读写两个文件：<agentDir>/mcp.json（全局）与 <cwd>/.mcp.json（项目），
 // 标准 mcpServers 格式，读写保留文件里其他字段（helpers 在 utils/mcp-config.ts）。
 // 状态展示是增强项：装了 pi-mcp-adapter 时读 eventBus 快照（pi-runtime-api 缓存）。
@@ -66,7 +66,7 @@ function detectAdapter(agentDir: string): boolean {
 }
 
 /**
- * 从 adapter 状态快照提取 per-server 状态。快照结构未定型（Spike B 只确认了
+ * 从 adapter 状态快照提取 per-server 状态。快照结构未定型（仅确认
  * per-server status/toolCount/disabled 存在），这里做防御式解析：支持
  * { servers: [...] } / { servers: {...} } / 顶层数组三种形态。
  */
@@ -113,7 +113,7 @@ export const mcpApi = {
     const projectPath = cwd ? path.join(cwd, '.mcp.json') : undefined;
     const statuses = parseStatusSnapshot();
 
-    // project 覆盖同名 global（与 adapter 的优先级一致，docs §4.7）
+    // project 覆盖同名 global（与 adapter 的优先级一致）
     const merged = new Map<string, PiMcpServerRow>();
     for (const { name, config } of listServers(readMcpConfigFile(globalPath))) {
       merged.set(name, { name, scope: 'global', config, status: statuses.get(name) });

@@ -1,7 +1,7 @@
 /**
  * Preload Script
  * Exposes the single host-api bridge to the renderer via contextBridge.
- * Renderer code must go through src/lib/host-api-client.ts (see AGENTS.md).
+ * Renderer code must go through src/lib/host-api-client.ts.
  */
 import { contextBridge, ipcRenderer } from 'electron';
 import type { HostRequest, HostResponse } from '@shared/host-api/types';

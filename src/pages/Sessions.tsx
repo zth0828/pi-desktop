@@ -42,7 +42,7 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat }: Row
     }
   };
 
-  // 多面板 P3：已在某面板打开 → 聚焦该面板；否则替换活跃面板会话
+  // 已在某面板打开 → 聚焦该面板；否则替换活跃面板会话
   const switchTo = () => run(() => panesStore.getState().openOrFocusSession(session.path, session.cwd) ?? Promise.resolve({ success: true }), true);
   const fork = () => run(() => hostApi.piSessions.fork(session.path), true);
   const archive = () => run(() => hostApi.piSessions.archive(session.path, !session.archived));

@@ -1,4 +1,4 @@
-// 图片上传单点验证（修复 payload 结构后重验）
+// 图片上传单点验证
 // 用法: PATH="$HOME/.npm-global/bin:$PATH" node scripts/verify-image.mjs
 import electronBinaryPathImport from 'electron';
 import { _electron as electron } from '@playwright/test';

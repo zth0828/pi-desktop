@@ -1,5 +1,5 @@
 // piSystem 服务：环境检测（带缓存）、最新版本查询、安装引导。
-// 安装命令有且仅有 npm i -g @earendil-works/pi-coding-agent（方案 B，docs §3）。
+// 安装命令有且仅有 npm i -g @earendil-works/pi-coding-agent。
 import { spawn } from 'node:child_process';
 import { PI_NPM_REGISTRY_URL, PI_PACKAGE_NAME } from '@shared/pi-compat';
 import type {
@@ -43,7 +43,7 @@ export const piSystemApi = {
       const data = (await res.json()) as { version?: string };
       return { latest: data.version, checkedAt };
     } catch {
-      // 网络失败静默（docs §3：带超时与失败静默）
+      // 网络失败静默
       return { checkedAt };
     }
   },

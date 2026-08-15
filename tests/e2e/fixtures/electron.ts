@@ -1,6 +1,4 @@
-// 极简 Electron E2E fixture。
-// Inspired by ClawX: tests/e2e/fixtures/electron.ts（只保留启动/关窗/隔离 HOME，
-// 去掉 gateway/attachment 等 ClawX 专属 mock 体系）。
+// 极简 Electron E2E fixture（启动/关窗/隔离 HOME）。
 // 环境隔离钩子：
 //   PI_DESKTOP_USER_PATH  — 覆盖 PATH 解析（onboarding 场景模拟）
 //   PI_DESKTOP_NPM_ROOT   — 覆盖 npm root -g 结果

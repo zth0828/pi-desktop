@@ -1,4 +1,4 @@
-// 多面板 P3：分栏布局树 action 全覆盖（split 四方向/ratio clamp/close 兄弟上位/根不可关/
+// 分栏布局树 action 全覆盖（split 四方向/ratio clamp/close 兄弟上位/根不可关/
 // openOrFocusSession 三分支/replacePane 复用实例改绑）。chat store 实例经 deps mock，node-safe。
 import { describe, expect, it, vi } from 'vitest';
 import type { HostSuccess } from '@shared/host-api/contract';

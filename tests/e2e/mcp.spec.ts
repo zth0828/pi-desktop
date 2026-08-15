@@ -1,4 +1,4 @@
-// M5 验收：MCP 页 —— mcpServers 配置 CRUD（<agentDir>/mcp.json，global scope）。
+// MCP 页 —— mcpServers 配置 CRUD（<agentDir>/mcp.json，global scope）。
 // 不起 runtime（不 seed workspaceCwd）：配置 CRUD 不依赖会话；adapter 未装 → 显示安装引导。
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

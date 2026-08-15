@@ -1,6 +1,5 @@
 /**
  * Host events contract — Main → Renderer 的推送通道。
- * 机制移植自 ClawX shared/host-events/contract.ts，通道清单按 Pi Desktop 收敛。
  */
 import type { PiRuntimeEventEnvelope } from '../pi-event-map';
 import type {
@@ -24,9 +23,9 @@ export type HostEventContract = {
   piRuntime: {
     /** pi 会话事件（envelope 内含 sessionId/generation，渲染层据此丢弃过期事件） */
     event: (payload: PiRuntimeEventEnvelope) => void;
-    /** new/switch/fork 后推送全量新状态，渲染层清空重载（payload 内含 sessionId，M2 按窗口绑定过滤） */
+    /** new/switch/fork 后推送全量新状态，渲染层清空重载（payload 内含 sessionId，供按窗口绑定过滤） */
     sessionReplaced: (payload: PiRuntimeStateResult) => void;
-    /** 任一保活 runtime 的运行状态变化；会话列表据此刷新后台任务指示（sessionId 供 M2 窗口过滤）。 */
+    /** 任一保活 runtime 的运行状态变化；会话列表据此刷新后台任务指示（sessionId 供窗口过滤）。 */
     runtimeStateChanged: (payload: { sessionId: string; sessionPath?: string; running: boolean }) => void;
     /** 会话元数据变更（删除/归档/重命名/分叉）；侧栏与会话页据此即时刷新。 */
     sessionsChanged: (payload: { reason: 'remove' | 'archive' | 'rename' | 'fork' }) => void;

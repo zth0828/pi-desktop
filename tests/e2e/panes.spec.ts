@@ -1,10 +1,12 @@
-// 应用内多面板平铺（docs/MULTI-WINDOW-PANES-PLAN.md P5）E2E：真 pi + mock provider，不烧 API quota。
+// 应用内多面板平铺 E2E：真 pi + mock provider，不烧 API quota。
 // 1) 侧栏拖会话到面板右缘落区 → 分两列，两面板各自加载各自会话历史；
 // 2) 两面板并发 SLOW_ECHO 慢速流式，回复各带标记、互不串台；
 // 3) 拖会话到面板中心落区 → 替换该面板会话，邻面板不受影响；
 // 4) 关闭面板 → 回单列，剩余面板内容完好可继续对话；
 // 5) 侧栏「已打开」标记 + 点击已打开会话聚焦对应面板（data-active 焦点态）；
 // 6) 拖出窗口（合成 dragstart/dragend + 窗口外坐标）→ 仍走 OS 级 openDetachedAt 开独立窗口。
+// 7) 拖出途中按 Esc 取消（dragend 带窗口外取消点坐标）→ 不开窗：mac 上取消坐标是取消点
+//    而非 (0,0)，坐标启发式接不住，靠 dragstart 后挂的 keydown 标记识别（session-drag.ts）。
 // HTML5 DnD 在 Playwright 无法原生拖拽，落区 drop 用合成 DragEvent（同 scripts/verify-panes-perf.mjs）。
 // 模式同 multi-window.spec.ts：每用例独立 agentDir，mock 走 tests/fixtures/mock-openai-server.mjs。
 import { spawn, type ChildProcess } from 'node:child_process';

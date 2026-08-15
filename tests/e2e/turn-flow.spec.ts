@@ -1,4 +1,4 @@
-// 消息流核心交互 E2E（Codex 对齐批次 1，真 pi + mock provider，不烧 API quota）：
+// 消息流核心交互 E2E（真 pi + mock provider，不烧 API quota）：
 // 1) 聚合编辑卡：一轮 edit+write → 「Edited N files +x -y」卡 → 撤销（git）→ 磁盘复原；
 //    非 git 目录保留清单但无撤销入口；「Review」按钮打开 Review 面板。
 // 2) 完成轮的 thinking/阶段文本/工具统一收进回合折叠，最终答复保持可见。

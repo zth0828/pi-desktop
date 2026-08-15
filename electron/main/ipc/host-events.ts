@@ -1,4 +1,4 @@
-// Main → Renderer 事件广播。机制参考 ClawX（按窗口 webContents.send）。
+// Main → Renderer 事件广播（按窗口 webContents.send）。
 import { BrowserWindow } from 'electron';
 import { HOST_EVENT_CHANNELS } from '@shared/host-events/contract';
 import type {

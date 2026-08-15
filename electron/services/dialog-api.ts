@@ -6,7 +6,7 @@ import { getMainWindow } from '../main/window-manager';
 
 export const dialogApi = {
   open: async (payload: DialogOpenPayload, ctx?: HostActionContext): Promise<DialogOpenResult> => {
-    // 多窗口 M2：对话框挂在发起调用的窗口上；取不到（旧调用/窗口已销毁）回退主窗口
+    // 对话框挂在发起调用的窗口上；取不到（旧调用/窗口已销毁）回退主窗口
     const win = (ctx && BrowserWindow.fromWebContents(ctx.sender)) || getMainWindow();
     const options = {
       title: payload.title,

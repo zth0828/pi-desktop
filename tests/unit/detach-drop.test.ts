@@ -1,4 +1,4 @@
-// detach-drop（多窗口 M3）：拖出落点的 bounds 判定与居中 clamp 纯函数。
+// detach-drop：拖出落点的 bounds 判定与居中 clamp 纯函数。
 import { describe, expect, it } from 'vitest';
 import { centerBoundsAtPoint, isPointInsideRects } from '@electron/utils/detach-drop';
 

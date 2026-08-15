@@ -1,4 +1,4 @@
-// 多面板 P2：chat store 实例注册表基本行为（注册/注销/活跃指针回退）。
+// chat store 实例注册表基本行为（注册/注销/活跃指针回退）。
 import { afterEach, describe, expect, it } from 'vitest';
 import { createChatStore } from '@/stores/chat';
 import {

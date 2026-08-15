@@ -64,7 +64,7 @@ export function invokeHost<
   return invokeHostImpl(undefined, module, action, payloadArgs);
 }
 
-// 多面板 P1：面板作用域调用，信封带显式 sessionPath（main 侧优先于窗口绑定）。
+// 面板作用域调用，信封带显式 sessionPath（main 侧优先于窗口绑定）。
 export function scopedInvokeHost<
   M extends HostApiModule,
   A extends HostApiAction<M>,

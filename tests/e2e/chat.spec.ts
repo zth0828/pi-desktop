@@ -1,5 +1,5 @@
-// M2 验收：聊天主链路 E2E（真 pi + mock provider，不烧 API quota）。
-// 覆盖 §7.2：事件完整性（流式渲染）、工具卡片、中断语义、新会话。
+// 聊天主链路 E2E（真 pi + mock provider，不烧 API quota）。
+// 覆盖：事件完整性（流式渲染）、工具卡片、中断语义、新会话。
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

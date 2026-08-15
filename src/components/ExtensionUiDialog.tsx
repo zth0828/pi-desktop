@@ -1,5 +1,5 @@
 // 扩展 UI 对话框：pi 扩展 ctx.ui.confirm/select/input 的渲染层承载。
-// 多面板 P2：对话框移入 ChatPane 内渲染（每面板渲染自己的 uiRequests 队列，取队首）；
+// 对话框在 ChatPane 内渲染（每面板渲染自己的 uiRequests 队列，取队首）；
 // 通知 toast 仍在 App 级，过滤改为遍历所有 chat store 实例。
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';

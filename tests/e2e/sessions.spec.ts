@@ -1,4 +1,4 @@
-// M4 验收：会话管理（列表/切换/重命名/删除，真 pi + mock provider，不烧 API quota）。
+// 会话管理 E2E（列表/切换/重命名/删除，真 pi + mock provider，不烧 API quota）。
 // 每个测试独立 agentDir（会话文件互相隔离），模式同 models.spec.ts。
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, mkdir, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';

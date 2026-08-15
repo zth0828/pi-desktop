@@ -6,9 +6,6 @@ import { createHostServices } from '../services';
 import { disposeAllRuntimes } from '../services/pi-runtime-api';
 import { resolveAppIconPath } from '../utils/app-icon';
 
-// M1 skeleton: minimal single window. Tray/menu/single-instance/session
-// recovery are ported from ClawX in later batches (see docs/TECHNICAL-PLAN.md §5.1).
-
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
 // 测试钩子：E2E 用隔离 userData（settings 等壳状态落在这里）

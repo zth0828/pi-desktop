@@ -1,4 +1,4 @@
-// 面板作用域的 chat store Context（多面板 P2）：每个 ChatPane 一个 store 实例。
+// 面板作用域的 chat store Context：每个 ChatPane 一个 store 实例。
 // 面板内组件一律用 usePaneChatStore(selector) 订阅（细粒度 selector，禁止无 selector
 // 全量订阅）；窗口级语义的消费方（侧栏/设置页等）用 useActiveChatStore / getActiveChatStore。
 import { createContext, useContext, type ReactNode } from 'react';
@@ -26,7 +26,7 @@ export function usePaneChatStore<T>(selector: (state: ChatState) => T): T {
 }
 
 /**
- * 面板作用域 host client（多面板 P3）：按本面板 boundSessionPath 返回 scopedHostApi，
+ * 面板作用域 host client：按本面板 boundSessionPath 返回 scopedHostApi，
  * 未绑定回退窗口级 hostApi（同 chat-core 内部 api() 语义）。scopedHostApi 按路径缓存，
  * 渲染期引用稳定；只有绑定变化才触发重渲染。
  */
@@ -36,7 +36,7 @@ export function usePaneHostApi(): HostApi {
 }
 
 /**
- * 窗口级语义：订阅活跃面板实例的字段。活跃指针跟随分栏树 activePaneId（多面板 P3：
+ * 窗口级语义：订阅活跃面板实例的字段。活跃指针跟随分栏树 activePaneId（
  * 订阅 panes store 再映射实例 selector，activePaneId 不变时不产生多余重渲染）。
  */
 export function useActiveChatStore<T>(selector: (state: ChatState) => T): T {

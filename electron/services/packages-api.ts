@@ -1,4 +1,4 @@
-// piPackages：扩展包管理（M5）。全部经 pi SDK 的 DefaultPackageManager
+// piPackages：扩展包管理。全部经 pi SDK 的 DefaultPackageManager
 // （list/installAndPersist/removeAndPersist/update/checkForAvailableUpdates），
 // 壳不直接改 settings.json 的 packages 字段。进度经 piPackages.progress 事件转发。
 // 官方目录查询在 Main 侧读取 pi.dev 服务端 HTML，安装动作仍完全复用 pi SDK。

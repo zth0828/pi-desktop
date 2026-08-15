@@ -1,4 +1,4 @@
-// Renderer 侧的 host-api 便捷封装：所有后端调用的唯一入口（AGENTS.md 边界规则）。
+// Renderer 侧的 host-api 便捷封装：所有后端调用的唯一入口。
 // 新能力 = contract.ts 加类型 + services/ 加实现 + 这里加一行。
 import { invokeHost, scopedInvokeHost } from './host-api-client';
 import type {
@@ -9,8 +9,8 @@ import type {
   SettingsSnapshot,
 } from '@shared/host-api/contract';
 
-// 多面板 P1（docs/MULTI-WINDOW-PANES-PLAN.md）：createHostApi(sessionPath) 产出面板作用域
-// client，所有调用在信封带显式 sessionPath；缺省为窗口级调用，行为不变。
+// createHostApi(sessionPath) 产出面板作用域 client，
+// 所有调用在信封带显式 sessionPath；缺省为窗口级调用，行为不变。
 function createHostApi(sessionPath?: string) {
   function invoke<M extends HostApiModule, A extends HostApiAction<M>>(
     module: M,

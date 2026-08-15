@@ -1,6 +1,6 @@
 // pi 会话运行时：壳与 pi SDK 的唯一接触面之一（会话生命周期 + 事件桥）。
 // 事件映射在 shared/pi-event-map.ts（单点）。会话替换（new/switch/fork）后
-// 必须重新 subscribe + bindExtensions（SDK 约定，见 docs/sdk.md）。
+// 必须重新 subscribe + bindExtensions（SDK 约定）。
 import {
   mapPiSessionEvent,
   type PiRuntimeEventEnvelope,
@@ -82,7 +82,7 @@ export type ActiveRuntime = {
   unsubscribe: () => void;
 };
 
-/** pi-mcp-adapter 的版本化状态通道（docs §4.7 Spike B 结论）。 */
+/** pi-mcp-adapter 的版本化状态通道。 */
 export const MCP_STATUS_CHANNEL = 'pi-mcp-adapter/status/v1';
 
 let active: ActiveRuntime | null = null;
@@ -105,7 +105,7 @@ export function getRuntimeForSession(sessionPath: string): ActiveRuntime | null 
 }
 
 /**
- * 按调用方上下文寻址 runtime（多窗口 M1）：ctx 带 sessionPath（窗口绑定的会话）
+ * 按调用方上下文寻址 runtime：ctx 带 sessionPath（窗口绑定的会话）
  * 时用该会话的保活 runtime；否则回退全局 active（单窗口行为不变）。
  */
 export function resolveRuntimeForContext(ctx?: { sessionPath?: string | null }): ActiveRuntime | null {
@@ -122,7 +122,7 @@ export async function resolveRuntimeForContextReady(
 }
 
 /**
- * 多窗口 M2：会话启动/替换后把调用方窗口绑到该 runtime 的会话文件。
+ * 会话启动/替换后把调用方窗口绑到该 runtime 的会话文件。
  * 缺了这一步，从未 switch 过的主窗口 sessionPath 为 null，prompt 会回退全局 active，
  * 被独立会话窗口 attach 时新建的 runtime 抢走路由（消息串到别的会话）。
  */
@@ -176,7 +176,7 @@ export function activateSessionRuntime(runtime: ActiveRuntime): PiRuntimeStateRe
   const state = snapshotState(runtime);
   sendHostEvent('piRuntime', 'sessionReplaced', state);
   for (const request of state.pendingUiRequests ?? []) sendHostEvent('piRuntime', 'uiRequest', request);
-  // 多窗口 M2：仍有窗口绑定着的 runtime 不回收（其他窗口正在看它）
+  // 仍有窗口绑定着的 runtime 不回收（其他窗口正在看它）
   const previousFile = previous?.runtime.session.sessionFile;
   const previousWatched = previousFile ? findWindowBySession(previousFile) !== null : false;
   if (previous && previous !== runtime && !previous.runtime.session.isStreaming && !previousWatched) {
@@ -411,7 +411,7 @@ function bridgeSessionEvents(runtime: ActiveRuntime): void {
 
 async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
   const session = runtime.runtime.session;
-  // Spike B 结论：不调 bindExtensions 扩展收不到 session_start（MCP 等全部失效）。
+  // 不调 bindExtensions 扩展收不到 session_start（MCP 等全部失效）。
   // 沿用 pi 的 print 宿主模式；桌面交互能力由显式 uiContext 提供。
   // uiContext 桥接 confirm/select/input 到渲染层对话框（electron/services/extension-ui.ts），
   // 不传则 hasUI=false，权限确认/plan mode/question 类扩展无法工作。
@@ -565,7 +565,7 @@ export async function afterSessionReplaced(runtime: ActiveRuntime): Promise<PiRu
   await bindCurrentSession(runtime);
   restorePreviewableExternalFiles(runtime);
   bridgeSessionEvents(runtime);
-  // 多窗口 M2：fork/newSession 会换新会话文件，绑定旧文件的窗口改绑到新文件，
+  // fork/newSession 会换新会话文件，绑定旧文件的窗口改绑到新文件，
   // 否则后续 hostInvoke 按旧路径寻址 runtime 会失败（必须在推事件前完成）
   const previousFile = runtime.sessionFile;
   const nextFile = runtime.runtime.session.sessionFile;
@@ -982,7 +982,7 @@ export const piRuntimeApi = {
   },
 
   /**
-   * / 补全数据源：壳内建命令 + prompt 模板 + 扩展 registerCommand 命令 + skills（docs §4.3）。
+   * / 补全数据源：壳内建命令 + prompt 模板 + 扩展 registerCommand 命令 + skills。
    * 扩展命令来源与 pi autocomplete 相同（extensionRunner.getRegisteredCommands），
    * 与内建同名的被 pi 跳过/改名，对外用 invocationName（interactive-mode 同款过滤）。
    */

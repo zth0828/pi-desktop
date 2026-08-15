@@ -1,5 +1,4 @@
-// Mock OpenAI-compatible server（openai-completions SSE），供 L2 契约测试与 E2E。
-// 从 spike 脚本搬入（/tmp/pi-desktop-spikes/mock-openai.mjs），新增 SLOW 模式验证 abort。
+// Mock OpenAI-compatible server（openai-completions SSE），供契约测试与 E2E。
 // 脚本协议（按最后一条 user 消息分派）：
 //   "USE_TOOL_LS" → 第一轮返回 tool_call(bash: ls)，之后回显工具结果
 //   "USE_TOOL_EDIT" / "update the release status" → 第一轮返回 tool_call(edit: alpha→beta)
@@ -60,7 +59,7 @@ const server = http.createServer((req, res) => {
     ] }));
     return;
   }
-  // 协议探测回归：站点路由可能返回 200 HTML，不能据此判定 API 可用。
+  // 协议探测：站点路由可能返回 200 HTML，不能据此判定 API 可用。
   if (req.method === "POST" && ["/chat/completions", "/responses", "/messages"].includes(req.url)) {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     res.end("<!doctype html><html><body>dashboard</body></html>");

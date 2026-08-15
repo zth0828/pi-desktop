@@ -160,7 +160,7 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
   const panel = page.getByTestId('review-panel');
   await expect(panel).toBeVisible();
 
-  // 评审态下标题栏开关同样能收起面板（回归：reviewOpen 时开关曾失效）
+  // 评审态下标题栏开关同样能收起面板
   await page.getByTestId('workspace-toggle').click();
   await expect(panel).toBeHidden();
   await openReview(page);

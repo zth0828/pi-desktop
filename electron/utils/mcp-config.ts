@@ -1,4 +1,4 @@
-// MCP 配置文件读写：标准 mcpServers 格式（pi-mcp-adapter 的配置，docs §4.7）。
+// MCP 配置文件读写：标准 mcpServers 格式（pi-mcp-adapter 的配置）。
 // 壳只读写 <agentDir>/mcp.json 与 <cwd>/.mcp.json 两个文件；读整份 JSON、
 // 只动 mcpServers 字段，其他字段原样保留。纯函数为主，便于单测。
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
