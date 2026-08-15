@@ -43,7 +43,7 @@ import {
   type ParsedFileDiff,
 } from '../../lib/review-diff';
 import { parseDiffLines } from '../../lib/tool-display';
-import { useChatStore } from '../../stores/chat';
+import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 import { FilePreviewContent } from './FilePreviewContent';
 
 type PendingRevert =
@@ -152,7 +152,7 @@ function SplitDiff({ parsed, onRevert }: { parsed: ParsedFileDiff; onRevert?: (i
 
 function FileExplorer({ selected, onSelect, onRootCount }: { selected: string | null; onSelect: (path: string) => void; onRootCount: (count: number) => void }) {
   const { t } = useTranslation();
-  const cwd = useChatStore((state) => state.cwd);
+  const cwd = usePaneChatStore((state) => state.cwd);
   const [children, setChildren] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['']));
   const [loading, setLoading] = useState<Set<string>>(new Set());
@@ -351,8 +351,9 @@ function FilePreview({ path }: { path: string }) {
 
 function ReviewWorkspace() {
   const { t } = useTranslation();
-  const toolExecutions = useChatStore((s) => s.toolExecutions);
-  const cwd = useChatStore((s) => s.cwd);
+  const paneApi = usePaneHostApi();
+  const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
+  const cwd = usePaneChatStore((s) => s.cwd);
   const [summary, setSummary] = useState<ReviewSummaryResult | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [diff, setDiff] = useState<ParsedFileDiff | null>(null);
@@ -387,10 +388,10 @@ function ReviewWorkspace() {
   );
 
   const refreshSummary = useCallback(async () => {
-    const next = await hostApi.review.getSummary().catch(() => null);
+    const next = await paneApi.review.getSummary().catch(() => null);
     setSummary(next);
     return next;
-  }, []);
+  }, [paneApi]);
   const loadDiff = useCallback(async (path: string) => {
     const fallback = toolFileFor(path);
     if (!isBaselineFile(path)) {
@@ -398,10 +399,10 @@ function ReviewWorkspace() {
       setToolDiff(fallback?.diff ?? null);
       return;
     }
-    const result = await hostApi.review.getFileDiff(path).catch(() => null);
+    const result = await paneApi.review.getFileDiff(path).catch(() => null);
     setDiff(result?.available && result.diff ? parseUnifiedDiff(result.diff) : null);
     setToolDiff(null);
-  }, [isBaselineFile, toolFileFor]);
+  }, [isBaselineFile, toolFileFor, paneApi]);
   useEffect(() => { void refreshSummary(); }, [refreshSummary]);
   useEffect(() => {
     if (reviewFiles.length === 0) {
@@ -417,8 +418,8 @@ function ReviewWorkspace() {
     const target = pendingRevert;
     setPendingRevert(null);
     const result = target.kind === 'file'
-      ? await hostApi.review.revertFile(target.path)
-      : await hostApi.review.revertHunk(target.path, target.patch);
+      ? await paneApi.review.revertFile(target.path)
+      : await paneApi.review.revertHunk(target.path, target.patch);
     if (!result.success) {
       setRevertError(result.error ?? 'unknown');
       return;
@@ -502,12 +503,12 @@ function ReviewWorkspace() {
 
 export function ReviewPanel() {
   const { t } = useTranslation();
-  const reviewOpen = useChatStore((s) => s.reviewOpen);
-  const workspaceOpen = useChatStore((s) => s.workspaceOpen);
-  const setReviewOpen = useChatStore((s) => s.setReviewOpen);
-  const setWorkspaceOpen = useChatStore((s) => s.setWorkspaceOpen);
-  const workspaceFileRequest = useChatStore((s) => s.workspaceFileRequest);
-  const cwd = useChatStore((s) => s.cwd);
+  const reviewOpen = usePaneChatStore((s) => s.reviewOpen);
+  const workspaceOpen = usePaneChatStore((s) => s.workspaceOpen);
+  const setReviewOpen = usePaneChatStore((s) => s.setReviewOpen);
+  const setWorkspaceOpen = usePaneChatStore((s) => s.setWorkspaceOpen);
+  const workspaceFileRequest = usePaneChatStore((s) => s.workspaceFileRequest);
+  const cwd = usePaneChatStore((s) => s.cwd);
   const [tab, setTab] = useState<WorkbenchTab>('files');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [openFiles, setOpenFiles] = useState<string[]>([]);

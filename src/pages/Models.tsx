@@ -4,7 +4,7 @@ import { RefreshCw } from 'lucide-react';
 import type { PiDefaultModel, PiModelRow, PiProviderProbeResult, PiProviderRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
-import { useChatStore } from '../stores/chat';
+import { getActiveChatStore } from '../stores/chat-registry';
 
 const CUSTOM_API_TYPES = [
   'openai-completions',
@@ -98,7 +98,7 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
     if (result.success) {
       const runtimeState = await hostApi.piRuntime.getState().catch(() => null);
       if (runtimeState?.model) {
-        useChatStore.getState().applyModelUpdate({
+        getActiveChatStore()?.getState().applyModelUpdate({
           success: true,
           model: runtimeState.model,
           thinkingLevel: runtimeState.thinkingLevel,
@@ -125,7 +125,7 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
     // 若活动会话正在使用该模型，同步会话状态，思考深度菜单立即恢复可用
     const runtimeState = await hostApi.piRuntime.getState().catch(() => null);
     if (runtimeState?.model) {
-      useChatStore.getState().applyModelUpdate({
+      getActiveChatStore()?.getState().applyModelUpdate({
         success: true,
         model: runtimeState.model,
         thinkingLevel: runtimeState.thinkingLevel,

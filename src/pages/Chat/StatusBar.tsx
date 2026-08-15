@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { retryRemainingSeconds } from '../../lib/retry-countdown';
-import { useChatStore } from '../../stores/chat';
+import { usePaneChatStore } from './chat-store-context';
 
 function QueueChip({ kind, items }: { kind: 'steering' | 'followUp'; items: string[] }) {
   const { t } = useTranslation();
@@ -22,12 +22,12 @@ function QueueChip({ kind, items }: { kind: 'steering' | 'followUp'; items: stri
  */
 export function StatusBar() {
   const { t } = useTranslation();
-  const isStreaming = useChatStore((s) => s.isStreaming);
-  const retry = useChatStore((s) => s.retry);
-  const compaction = useChatStore((s) => s.compaction);
-  const queue = useChatStore((s) => s.queue);
-  const extensionUi = useChatStore((s) => s.extensionUi);
-  const runningServerCommand = useChatStore((s) => Object.values(s.toolExecutions).find((execution) => {
+  const isStreaming = usePaneChatStore((s) => s.isStreaming);
+  const retry = usePaneChatStore((s) => s.retry);
+  const compaction = usePaneChatStore((s) => s.compaction);
+  const queue = usePaneChatStore((s) => s.queue);
+  const extensionUi = usePaneChatStore((s) => s.extensionUi);
+  const runningServerCommand = usePaneChatStore((s) => Object.values(s.toolExecutions).find((execution) => {
     if (execution.status !== 'running' || execution.toolName !== 'bash') return false;
     const command = (execution.args as { command?: unknown } | undefined)?.command;
     if (typeof command !== 'string') return false;

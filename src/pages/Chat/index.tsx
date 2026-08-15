@@ -5,7 +5,9 @@ import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
 import { groupLogicalTurns, groupTurnStages, turnDurationMs, turnFinalResponseIndex } from '../../lib/turn-changes';
-import { useChatStore } from '../../stores/chat';
+import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
+import { PaneLayout } from '../../components/PaneLayout';
+import { ExtensionUiDialog } from '../../components/ExtensionUiDialog';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
 import { MessageNavRail, type RailAnchor } from './MessageNavRail';
@@ -14,15 +16,16 @@ import { ReviewPanel } from './ReviewPanel';
 import { TreeDialog } from './TreeDialog';
 import { TurnChangesCard } from './TurnChangesCard';
 
-function SessionTitleBar() {
+function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
   const { t } = useTranslation();
-  const setReviewOpen = useChatStore((s) => s.setReviewOpen);
-  const workspaceOpen = useChatStore((s) => s.workspaceOpen);
-  const reviewOpen = useChatStore((s) => s.reviewOpen);
-  const setWorkspaceOpen = useChatStore((s) => s.setWorkspaceOpen);
-  const started = useChatStore((s) => s.started);
-  const sessionId = useChatStore((s) => s.sessionId);
-  const firstUserMessage = useChatStore((s) => s.messages.find((entry) => entry.role === 'user'));
+  const paneApi = usePaneHostApi();
+  const setReviewOpen = usePaneChatStore((s) => s.setReviewOpen);
+  const workspaceOpen = usePaneChatStore((s) => s.workspaceOpen);
+  const reviewOpen = usePaneChatStore((s) => s.reviewOpen);
+  const setWorkspaceOpen = usePaneChatStore((s) => s.setWorkspaceOpen);
+  const started = usePaneChatStore((s) => s.started);
+  const sessionId = usePaneChatStore((s) => s.sessionId);
+  const firstUserMessage = usePaneChatStore((s) => s.messages.find((entry) => entry.role === 'user'));
   const firstUserQuestion = firstUserMessage?.content
     .filter((block) => block.type === 'text')
     .map((block) => block.text ?? '')
@@ -33,12 +36,14 @@ function SessionTitleBar() {
   useEffect(() => {
     if (!started) return;
     const refresh = () => {
-      void hostApi.piRuntime.getSessionInfo().then((info) => setName(info?.name ?? ''));
+      void paneApi.piRuntime.getSessionInfo().then((info) => setName(info?.name ?? ''));
     };
     refresh();
+    // 每面板一条 1s 轮询（多面板 P4 核对结论：getSessionInfo 是 main 侧本地内存读取，
+    // 多面板下 N 条轮询开销可忽略，保留以跟随扩展/外部改名；非活跃面板降频暂不做）
     const timer = window.setInterval(refresh, 1000);
     return () => window.clearInterval(timer);
-  }, [started, sessionId]);
+  }, [started, sessionId, paneApi]);
   const displayName = name || (firstUserMessage
     ? sessionTitleFromQuestion(firstUserQuestion, t('chat.imageSessionTitle'))
     : t('chat.untitled'));
@@ -46,7 +51,7 @@ function SessionTitleBar() {
   const saveRename = async () => {
     const next = draft.trim();
     if (!next) { setEditing(false); return; }
-    const result = await hostApi.piRuntime.setSessionName(next);
+    const result = await paneApi.piRuntime.setSessionName(next);
     if (result.success) setName(result.name ?? next);
     setEditing(false);
   };
@@ -83,13 +88,24 @@ function SessionTitleBar() {
         >
           <PanelRight size={17} />
         </button>
+        {onClosePane && (
+          <button
+            className="icon-button"
+            data-testid="pane-close"
+            title={t('chat.closePane')}
+            aria-label={t('chat.closePane')}
+            onClick={onClosePane}
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
 function ExtensionWidgets({ placement }: { placement: 'aboveEditor' | 'belowEditor' }) {
-  const extensionUi = useChatStore((s) => s.extensionUi);
+  const extensionUi = usePaneChatStore((s) => s.extensionUi);
   const visible = extensionUi?.widgets.filter((widget) => widget.placement === placement) ?? [];
   if (visible.length === 0) return null;
   return (
@@ -106,27 +122,35 @@ function ExtensionWidgets({ placement }: { placement: 'aboveEditor' | 'belowEdit
 type Props = {
   searchTarget?: { sessionId: string; messageIndex: number; nonce: number };
   onSearchTargetHandled?: () => void;
+  /** 窗口首个面板（多面板 P3）：仅它执行 ?session= attach / workspaceCwd 恢复与工作区选择 */
+  primary?: boolean;
+  /** ?session= attach 目标（PaneLayout 顶层读一次，仅 primary 面板使用） */
+  attachSession?: string | null;
+  /** 分栏拖入的 attach 重试目标（splitAt/drop 带入的非 primary 面板） */
+  attachTarget?: { sessionPath: string; cwd?: string } | null;
+  /** 关闭面板（仅多面板时由 PaneLayout 传入；最后一个面板不可关） */
+  onClosePane?: () => void;
 };
 
-export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props) {
+export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachSession, attachTarget, onClosePane }: Props) {
   const { t } = useTranslation();
+  const chatStore = usePaneChatStoreApi();
   const [cwd, setCwd] = useState<string | undefined>();
-  const started = useChatStore((s) => s.started);
-  const starting = useChatStore((s) => s.starting);
-  const startError = useChatStore((s) => s.startError);
-  const messages = useChatStore((s) => s.messages);
-  const toolExecutions = useChatStore((s) => s.toolExecutions);
-  const isStreaming = useChatStore((s) => s.isStreaming);
-  const turnStats = useChatStore((s) => s.turnStats);
-  const sessionId = useChatStore((s) => s.sessionId);
-  const workspaceVisible = useChatStore((s) => s.workspaceOpen || s.reviewOpen);
-  const start = useChatStore((s) => s.start);
-  const switchSession = useChatStore((s) => s.switchSession);
-  // 独立会话窗口（多窗口 M2）：?session=<path> 由 main 侧建窗时带上；
-  // dev 是 URL searchParams，prod 是 loadFile query，两者都体现在 location.search
-  const [attachSession] = useState(() => new URLSearchParams(window.location.search).get('session'));
+  const started = usePaneChatStore((s) => s.started);
+  const starting = usePaneChatStore((s) => s.starting);
+  const startError = usePaneChatStore((s) => s.startError);
+  const messages = usePaneChatStore((s) => s.messages);
+  const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
+  const isStreaming = usePaneChatStore((s) => s.isStreaming);
+  const turnStats = usePaneChatStore((s) => s.turnStats);
+  const sessionId = usePaneChatStore((s) => s.sessionId);
+  const workspaceVisible = usePaneChatStore((s) => s.workspaceOpen || s.reviewOpen);
+  const start = usePaneChatStore((s) => s.start);
+  const switchSession = usePaneChatStore((s) => s.switchSession);
+  // 独立会话窗口的 attach 目标由 PaneLayout 顶层读取一次后通过 prop 传入（多面板 P3：
+  // 不再每面板各自读 location.search）
   // 跨项目切换会话时以 runtime 的实际 cwd 为准
-  const activeCwd = useChatStore((s) => (s.started ? s.cwd : undefined));
+  const activeCwd = usePaneChatStore((s) => (s.started ? s.cwd : undefined));
   const effectiveCwd = activeCwd ?? cwd;
   const listRef = useRef<HTMLDivElement>(null);
   // 一个 user 问题对应一个完整回合；完成后默认收起 thinking/阶段文本/工具调用。
@@ -265,8 +289,10 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
     await switchSession(sessionPath, row?.cwd);
   }, [switchSession]);
 
-  // 恢复上次的工作目录并启动会话；独立会话窗口跳过恢复，直接 attach 指定会话
+  // 恢复上次的工作目录并启动会话；独立会话窗口跳过恢复，直接 attach 指定会话。
+  // 多面板 P3：仅窗口首个面板（primary）执行；其余面板由分栏树 splitAt/replacePane 驱动绑定。
   useEffect(() => {
+    if (!primary) return;
     if (attachSession) {
       void attachDetached(attachSession);
       return;
@@ -468,16 +494,28 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
   };
 
   if (!effectiveCwd) {
-    // 独立会话窗口 attach 进行中/失败：不做 workspaceCwd 恢复，也不展示工作区选择
-    if (attachSession) {
+    // attach 进行中/失败（独立窗口 ?session= 或分栏拖入）：不做 workspaceCwd 恢复，
+    // 也不展示工作区选择；失败时按各自目标重试
+    const attachRetry = attachSession
+      ? () => void attachDetached(attachSession)
+      : attachTarget
+        ? () => void chatStore.getState().switchSession(attachTarget.sessionPath, attachTarget.cwd)
+        : null;
+    if (attachRetry || !primary) {
       return (
         <div className="chat-page chat-empty">
+          {onClosePane && (
+            <button className="icon-button pane-close-floating" data-testid="pane-close" title={t('chat.closePane')} aria-label={t('chat.closePane')} onClick={onClosePane}>
+              <X size={16} />
+            </button>
+          )}
           <p data-testid="chat-attaching">{startError ?? t('chat.starting')}</p>
-          {startError && (
-            <button className="primary" data-testid="attach-retry" onClick={() => void attachDetached(attachSession)}>
+          {startError && attachRetry && (
+            <button className="primary" data-testid="attach-retry" onClick={attachRetry}>
               {t('chat.startRetry')}
             </button>
           )}
+          <ExtensionUiDialog />
         </div>
       );
     }
@@ -487,6 +525,7 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
         <button className="primary" data-testid="choose-workspace" onClick={() => void chooseWorkspace()}>
           {t('chat.workspace.choose')}
         </button>
+        <ExtensionUiDialog />
       </div>
     );
   }
@@ -505,7 +544,12 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
       )}
 
       <div className="chat-column">
-        {started && <SessionTitleBar />}
+        {onClosePane && !started && (
+          <button className="icon-button pane-close-floating" data-testid="pane-close" title={t('chat.closePane')} aria-label={t('chat.closePane')} onClick={onClosePane}>
+            <X size={16} />
+          </button>
+        )}
+        {started && <SessionTitleBar onClosePane={onClosePane} />}
         <div className="chat-message-region">
           <div className="message-list" ref={listRef} data-testid="message-list">
             {!started && starting && (
@@ -552,6 +596,21 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
       </div>
       <TreeDialog />
       <ReviewPanel />
+      <ExtensionUiDialog />
     </div>
+  );
+}
+
+/**
+ * 窗口级 Chat 页（多面板 P3）：渲染分栏布局树（PaneLayout）。初始 root = 单叶子
+ * default 面板（绑定 defaultChatStore 实例，承载 ?session= attach / workspaceCwd
+ * 恢复语义）；拖入分栏后由 panes store 驱动渲染 N 个 ChatStoreProvider + ChatPane。
+ */
+export default function ChatPage(props: Props) {
+  return (
+    <PaneLayout
+      searchTarget={props.searchTarget}
+      onSearchTargetHandled={props.onSearchTargetHandled}
+    />
   );
 }

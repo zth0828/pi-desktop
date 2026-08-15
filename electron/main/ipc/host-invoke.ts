@@ -95,8 +95,14 @@ export function createHostInvokeDispatcher(registryOrServices: HostApiRegistry |
 export function registerHostInvokeHandler(registry: HostApiRegistry): void {
   const dispatch = createHostInvokeDispatcher(registry);
   // 多窗口 M1：sender → 窗口绑定会话，注入 action 的 ctx（sessionPath 查不到为 null）
-  ipcMain.handle('host:invoke', async (event, request: unknown) => dispatch(request, {
-    sender: event.sender,
-    sessionPath: resolveWindowSession(event.sender.id),
-  }));
+  // 多面板 P1：信封显式 sessionPath 优先于窗口绑定；都没有则 null 走全局 active
+  ipcMain.handle('host:invoke', async (event, request: unknown) => {
+    const explicit = request && typeof request === 'object'
+      ? (request as { sessionPath?: unknown }).sessionPath
+      : undefined;
+    return dispatch(request, {
+      sender: event.sender,
+      sessionPath: typeof explicit === 'string' ? explicit : resolveWindowSession(event.sender.id),
+    });
+  });
 }

@@ -14,13 +14,13 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { bindPiSystemEvents, usePiSystemStore } from './stores/pi-system';
-import { bindChatEvents, useChatStore } from './stores/chat';
+import { getActiveChatStore } from './stores/chat-registry';
 import { hostApi } from './lib/host-api';
 import { onNavigateToPage } from './lib/app-navigation';
 import { initTheme } from './lib/theme';
 import { SessionList } from './components/SessionList';
 import { SessionSearchDialog } from './components/SessionSearchDialog';
-import { ExtensionUiDialog, ExtensionUiNotifications } from './components/ExtensionUiDialog';
+import { ExtensionUiNotifications } from './components/ExtensionUiDialog';
 import Onboarding from './pages/Onboarding';
 import ChatPage from './pages/Chat';
 import ModelsPage from './pages/Models';
@@ -57,12 +57,10 @@ export default function App() {
   const [chatSearchTarget, setChatSearchTarget] = useState<ChatSearchTarget>();
   const state = usePiSystemStore((s) => s.state);
   const detect = usePiSystemStore((s) => s.detect);
-  const chatStarted = useChatStore((s) => s.started);
 
   useEffect(() => {
     const unbind = bindPiSystemEvents();
     const unbindNavigate = onNavigateToPage(setPage);
-    bindChatEvents();
     void detect();
     void initTheme();
     void hostApi.app.platform().then(setPlatform);
@@ -102,8 +100,9 @@ export default function App() {
 
   const newChat = () => {
     setPage('chat');
-    // 走 store 的 newSession：置位 expectingReplacement，sessionReplaced 事件据此改绑（多窗口 M2）
-    if (chatStarted) void useChatStore.getState().newSession();
+    // 走活跃面板 store 的 newSession：置位 expectingReplacement，sessionReplaced 事件据此改绑
+    const store = getActiveChatStore();
+    if (store?.getState().started) void store.getState().newSession();
   };
 
   const toggleSidebar = () => {
@@ -204,7 +203,6 @@ export default function App() {
           <SettingsPage />
         ) : null}
       </main>
-      <ExtensionUiDialog />
       <ExtensionUiNotifications />
       <SessionSearchDialog
         open={sessionSearchOpen}

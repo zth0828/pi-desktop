@@ -1,21 +1,21 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown } from 'lucide-react';
-import { hostApi } from '../../lib/host-api';
 import { collectTurnChanges } from '../../lib/turn-changes';
-import { useChatStore } from '../../stores/chat';
+import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 
 /**
  * 聚合编辑卡（Codex「已编辑 N 个文件 +x -y」范式）：一轮对话结束后在该轮尾部展示
  * 成功的 edit/write 汇总。「撤销」通过 review baseline 回滚该工具改动；
  * 「审核」打开完整 Review 面板。
  */
-export function TurnChangesCard({ toolCallIds }: { toolCallIds: string[] }) {
+export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) {
   const { t } = useTranslation();
-  const toolExecutions = useChatStore((s) => s.toolExecutions);
-  const setReviewOpen = useChatStore((s) => s.setReviewOpen);
-  const openWorkspaceFile = useChatStore((s) => s.openWorkspaceFile);
-  const cwd = useChatStore((s) => s.cwd);
+  const paneApi = usePaneHostApi();
+  const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
+  const setReviewOpen = usePaneChatStore((s) => s.setReviewOpen);
+  const openWorkspaceFile = usePaneChatStore((s) => s.openWorkspaceFile);
+  const cwd = usePaneChatStore((s) => s.cwd);
   const [gitAvailable, setGitAvailable] = useState(false);
   const [revertState, setRevertState] = useState<'idle' | 'reverting' | 'done' | 'error'>('idle');
   const [revertError, setRevertError] = useState('');
@@ -41,7 +41,7 @@ export function TurnChangesCard({ toolCallIds }: { toolCallIds: string[] }) {
 
   useEffect(() => {
     let alive = true;
-    hostApi.review
+    paneApi.review
       .getSummary()
       .then((summary) => {
         if (alive) setGitAvailable(summary.available);
@@ -50,14 +50,14 @@ export function TurnChangesCard({ toolCallIds }: { toolCallIds: string[] }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [paneApi]);
 
   if (changes.files.length === 0) return null;
 
   const revertAll = async () => {
     setRevertState('reverting');
     for (const file of changes.files) {
-      const result = await hostApi.review.revertFile(file.path);
+      const result = await paneApi.review.revertFile(file.path);
       if (!result.success) {
         setRevertState('error');
         setRevertError(result.error ?? '');
@@ -134,3 +134,9 @@ export function TurnChangesCard({ toolCallIds }: { toolCallIds: string[] }) {
     </div>
   );
 }
+
+// 多面板 P4：toolCallIds 来自 groupLogicalTurns 的 useMemo 重算（每次 messages 变化
+// 都产生新数组），按元素浅比较保证 memo 不被击穿；卡片自身已按 id 订阅 toolExecutions。
+export const TurnChangesCard = memo(TurnChangesCardView, (prev, next) =>
+  prev.toolCallIds.length === next.toolCallIds.length
+  && prev.toolCallIds.every((id, i) => id === next.toolCallIds[i]));

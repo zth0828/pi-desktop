@@ -3,7 +3,7 @@ import { Archive, LoaderCircle, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PiSessionSearchRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
-import { useChatStore } from '../stores/chat';
+import { panesStore } from '../stores/panes-default';
 
 type Props = {
   open: boolean;
@@ -90,8 +90,9 @@ export function SessionSearchDialog({ open, onClose, onOpenChat }: Props) {
     setSelectingPath(session.path);
     setError('');
     try {
-      const result = await useChatStore.getState().switchSession(session.path, session.cwd);
-      if (!result.success) {
+      // 多面板 P3：已在某面板打开 → 聚焦；否则替换活跃面板会话
+      const result = await panesStore.getState().openOrFocusSession(session.path, session.cwd);
+      if (result && !result.success) {
         setError(result.error || t('sessionSearch.switchFailed'));
         return;
       }

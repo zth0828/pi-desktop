@@ -4503,3 +4503,67 @@ button.danger-outline {
 @container (max-width: 700px) {
   .workspace-tree { width: min(280px, 82%); }
 }
+
+/* ---------- 多面板分栏（P3） ---------- */
+
+.pane-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane-split { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.pane-split-row { flex-direction: row; }
+.pane-split-column { flex-direction: column; }
+/* flex-basis:0 + flex-grow=ratio 占比分配；min-*:0 允许窄列内部滚动 */
+.pane-split-child { flex-basis: 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+
+.pane-leaf { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; }
+.pane-leaf > .chat-page { flex: 1; }
+
+/* 分隔条：视觉 1px，负 margin 外扩抓取区 */
+.pane-divider { flex: none; background: var(--border); transition: background 0.12s; z-index: 105; }
+.pane-divider.vertical { width: 5px; margin: 0 -2px; cursor: col-resize; }
+.pane-divider.horizontal { height: 5px; margin: -2px 0; cursor: row-resize; }
+.pane-divider:hover, .pane-divider:active { background: var(--accent); }
+
+/* 会话拖入落区：覆盖层不拦截指针（dragover 判定在 pane-leaf 上），高亮当前悬停区 */
+.pane-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 130;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.pane-drop-highlight {
+  position: absolute;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.pane-drop-highlight.zone-center { inset: 25%; }
+.pane-drop-highlight.zone-left { top: 6px; bottom: 6px; left: 6px; width: calc(25% - 6px); }
+.pane-drop-highlight.zone-right { top: 6px; bottom: 6px; right: 6px; width: calc(25% - 6px); }
+.pane-drop-highlight.zone-top { left: 6px; right: 6px; top: 6px; height: calc(25% - 6px); }
+.pane-drop-highlight.zone-bottom { left: 6px; right: 6px; bottom: 6px; height: calc(25% - 6px); }
+
+/* 未启动面板的浮动关闭按钮（已启动面板在标题栏内） */
+.pane-close-floating {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 132;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+}
+
+/* 侧栏会话行"已打开"标记（会话在分栏树中） */
+.sidebar-session-open {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--success);
+}

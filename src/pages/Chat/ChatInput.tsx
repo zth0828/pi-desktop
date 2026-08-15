@@ -14,7 +14,8 @@ import { filterFiles } from '../../lib/file-search';
 import { navigateToPage } from '../../lib/app-navigation';
 import { cacheHitRate, formatCost, formatHitRate } from '../../lib/usage-stats';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
-import { useChatStore, type ChatMessage } from '../../stores/chat';
+import type { ChatMessage } from '../../stores/chat';
+import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
 import { QueueList } from './QueueList';
 
@@ -126,17 +127,20 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const [atSuppressed, setAtSuppressed] = useState(false);
   const [fileList, setFileList] = useState<string[]>([]);
   const [fileSelected, setFileSelected] = useState(0);
-  const isStreaming = useChatStore((s) => s.isStreaming);
-  const started = useChatStore((s) => s.started);
-  const prompt = useChatStore((s) => s.prompt);
-  const abort = useChatStore((s) => s.abort);
-  const newSession = useChatStore((s) => s.newSession);
-  const setTreeOpen = useChatStore((s) => s.setTreeOpen);
-  const inputDraft = useChatStore((s) => s.inputDraft);
-  const model = useChatStore((s) => s.model);
-  const thinkingLevel = useChatStore((s) => s.thinkingLevel);
-  const availableThinkingLevels = useChatStore((s) => s.availableThinkingLevels);
-  const messages = useChatStore((s) => s.messages);
+  const chatStore = usePaneChatStoreApi();
+  const paneApi = usePaneHostApi();
+  const isStreaming = usePaneChatStore((s) => s.isStreaming);
+  const started = usePaneChatStore((s) => s.started);
+  const prompt = usePaneChatStore((s) => s.prompt);
+  const abort = usePaneChatStore((s) => s.abort);
+  const newSession = usePaneChatStore((s) => s.newSession);
+  const setTreeOpen = usePaneChatStore((s) => s.setTreeOpen);
+  const inputDraft = usePaneChatStore((s) => s.inputDraft);
+  const model = usePaneChatStore((s) => s.model);
+  const thinkingLevel = usePaneChatStore((s) => s.thinkingLevel);
+  const availableThinkingLevels = usePaneChatStore((s) => s.availableThinkingLevels);
+  // messages 只在 /copy 与首发自动命名时读取（调用时取快照，见下），不订阅——
+  // 否则流式每个 chunk 都会重渲染输入框组件树（多面板 P4 热路径）
   const [models, setModels] = useState<PiModelRow[]>([]);
   const [modelKey, setModelKey] = useState('');
   const [usage, setUsage] = useState<PiRuntimeUsageResult | null>(null);
@@ -226,11 +230,11 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
 
   useEffect(() => {
     if (started) {
-      void hostApi.piRuntime.getCommands().then((r) => setCommands(r.commands));
+      void paneApi.piRuntime.getCommands().then((r) => setCommands(r.commands));
       void hostApi.providers.listModels().then((r) => setModels(r.models)).catch(() => {});
-      void hostApi.piSkills.list().then((r) => setSkills(r.skills)).catch(() => setSkills([]));
+      void paneApi.piSkills.list().then((r) => setSkills(r.skills)).catch(() => setSkills([]));
       const refreshUsage = () => {
-        void hostApi.piRuntime.getUsage().then(setUsage).catch(() => setUsage(null));
+        void paneApi.piRuntime.getUsage().then(setUsage).catch(() => setUsage(null));
       };
       refreshUsage();
       const timer = window.setInterval(refreshUsage, 1000);
@@ -288,13 +292,13 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     const previous = modelKey;
     setModelKey(next);
     const [provider, ...rest] = next.split('/');
-    void hostApi.piRuntime.setModel(provider, rest.join('/')).then(async (result) => {
+    void paneApi.piRuntime.setModel(provider, rest.join('/')).then(async (result) => {
       if (!result.success) {
         setModelKey(previous);
         return;
       }
-      useChatStore.getState().applyModelUpdate(result);
-      setUsage(await hostApi.piRuntime.getUsage());
+      chatStore.getState().applyModelUpdate(result);
+      setUsage(await paneApi.piRuntime.getUsage());
     });
   };
 
@@ -318,7 +322,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         return void setTreeOpen(true);
       case 'compact':
         // pi /compact <instructions>：handleCompactCommand 的自定义压缩指令
-        return void hostApi.piRuntime.compact(arg || undefined);
+        return void paneApi.piRuntime.compact(arg || undefined);
       case 'model': {
         if (!arg) {
           // pi /model 无参 = 打开模型选择器 → 壳展开聊天页模型菜单
@@ -345,7 +349,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       case 'name': {
         if (!arg) {
           // pi /name 无参 = 显示当前会话名（未命名则提示用法）
-          const info = await hostApi.piRuntime.getSessionInfo().catch(() => null);
+          const info = await paneApi.piRuntime.getSessionInfo().catch(() => null);
           showNotice(
             info?.name
               ? t('chat.notice.currentName', { name: info.name })
@@ -353,14 +357,14 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
           );
           return;
         }
-        const result = await hostApi.piRuntime.setSessionName(arg);
+        const result = await paneApi.piRuntime.setSessionName(arg);
         if (result.success) showNotice(t('chat.notice.renamed', { name: result.name ?? arg }));
         else showNotice(t('chat.notice.renameFailed', { message: result.error ?? 'unknown' }));
         return;
       }
       case 'copy': {
         // pi /copy：session.getLastAssistantText → 剪贴板
-        const text = lastAssistantText(messages);
+        const text = lastAssistantText(chatStore.getState().messages);
         if (!text) {
           showNotice(t('chat.notice.nothingToCopy'));
           return;
@@ -370,13 +374,13 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         return;
       }
       case 'export': {
-        const result = await hostApi.piRuntime.exportHtml(arg || undefined);
+        const result = await paneApi.piRuntime.exportHtml(arg || undefined);
         if (result.success) showNotice(t('chat.notice.exported', { path: result.path ?? '' }));
         else showNotice(t('chat.notice.exportFailed', { message: result.error ?? 'unknown' }));
         return;
       }
       case 'session': {
-        const info = await hostApi.piRuntime.getSessionInfo().catch(() => null);
+        const info = await paneApi.piRuntime.getSessionInfo().catch(() => null);
         if (info) setSessionInfo(info);
         return;
       }
@@ -390,11 +394,11 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         // pi /resume = 会话选择器 → 壳的 Sessions 页
         return navigateToPage('sessions');
       case 'reload': {
-        const result = await hostApi.piRuntime.reload();
+        const result = await paneApi.piRuntime.reload();
         if (result.success) {
           showNotice(t('chat.notice.reloaded'));
           // 扩展/skills/prompts 可能变化，重建命令补全列表（TUI setupAutocompleteProvider）
-          void hostApi.piRuntime.getCommands().then((r) => setCommands(r.commands));
+          void paneApi.piRuntime.getCommands().then((r) => setCommands(r.commands));
         } else {
           showNotice(t('chat.notice.reloadFailed', { message: result.error ?? 'unknown' }));
         }
@@ -477,7 +481,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         return;
       }
     }
-    const autoTitle = messages.length === 0
+    const autoTitle = chatStore.getState().messages.length === 0
       ? sessionTitleFromQuestion(text, t('chat.imageSessionTitle'))
       : null;
     void prompt(
@@ -488,8 +492,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     ).then(async () => {
       // 等 prompt 返回后再持久化，避免 sessionReplaced 与扩展 UI 请求竞态。
       if (!autoTitle) return;
-      const info = await hostApi.piRuntime.getSessionInfo().catch(() => null);
-      if (!info?.name) await hostApi.piRuntime.setSessionName(autoTitle, false).catch(() => {});
+      const info = await paneApi.piRuntime.getSessionInfo().catch(() => null);
+      if (!info?.name) await paneApi.piRuntime.setSessionName(autoTitle, false).catch(() => {});
     });
   };
 
@@ -869,8 +873,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                           data-value={level}
                           onClick={() => {
                             setModelMenuOpen(false);
-                            void hostApi.piRuntime.setThinkingLevel(level).then((result) => {
-                              useChatStore.getState().applyModelUpdate(result);
+                            void paneApi.piRuntime.setThinkingLevel(level).then((result) => {
+                              chatStore.getState().applyModelUpdate(result);
                             });
                           }}
                         >

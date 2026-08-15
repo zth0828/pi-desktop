@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Copy, FileText, GitFork } from 'lucide-react';
 import { parseUserMessage } from '@shared/message-attachments';
@@ -6,7 +6,8 @@ import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
 import { formatDuration } from '../../lib/tool-display';
 import { hostApi } from '../../lib/host-api';
-import { useChatStore, type ChatMessage, type ContentBlock, type TurnStats } from '../../stores/chat';
+import type { ChatMessage, ContentBlock, TurnStats } from '../../stores/chat';
+import { usePaneChatStore } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
 
@@ -17,7 +18,7 @@ import { ToolCallCard } from './ToolCallCard';
  */
 function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: string; active: boolean; expanded?: boolean; grouped?: boolean }) {
   const { t } = useTranslation();
-  const hiddenThinkingLabel = useChatStore((s) => s.extensionUi?.hiddenThinkingLabel);
+  const hiddenThinkingLabel = usePaneChatStore((s) => s.extensionUi?.hiddenThinkingLabel);
   const startedRef = useRef<number | null>(null);
   const endedRef = useRef<number | null>(null);
   if (active && startedRef.current === null) startedRef.current = Date.now();
@@ -43,6 +44,18 @@ function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: stri
   );
 }
 
+/** 工具调用块：只按 id 订阅本工具的执行记录（多面板 P4）。原来整个 toolExecutions
+ *  表订阅在 AssistantBlock 上，任何工具进度事件都会重渲染所有消息的所有 block。 */
+function ToolCallBlock({ block, expandTools }: { block: ContentBlock; expandTools?: boolean }) {
+  const execution = usePaneChatStore((s) => (block.id ? s.toolExecutions[block.id] : undefined)) ?? {
+    toolCallId: block.id ?? '',
+    toolName: block.name ?? 'unknown',
+    args: block.arguments,
+    status: 'running' as const,
+  };
+  return <ToolCallCard execution={execution} expandByDefault={expandTools} />;
+}
+
 function AssistantBlock({
   block,
   streaming,
@@ -58,8 +71,6 @@ function AssistantBlock({
   expandTools?: boolean;
   groupedThinking?: boolean;
 }) {
-  const toolExecutions = useChatStore((s) => s.toolExecutions);
-
   if (block.type === 'text') {
     return <Markdown text={block.text ?? ''} streaming={streaming} />;
   }
@@ -67,29 +78,12 @@ function AssistantBlock({
     return <ThinkingBlock thinking={block.thinking ?? ''} active={active ?? false} expanded={expandThinking} grouped={groupedThinking} />;
   }
   if (block.type === 'toolCall' && block.id) {
-    const execution = toolExecutions[block.id] ?? {
-      toolCallId: block.id,
-      toolName: block.name ?? 'unknown',
-      args: block.arguments,
-      status: 'running' as const,
-    };
-    return <ToolCallCard execution={execution} expandByDefault={expandTools} />;
+    return <ToolCallBlock block={block} expandTools={expandTools} />;
   }
   return null;
 }
 
-export function MessageItem({
-  message,
-  anchorId,
-  highlighted,
-  cacheMiss,
-  turnStats,
-  contentOverride,
-  expandThinking,
-  expandTools,
-  groupedThinking,
-  suppressTail,
-}: {
+type MessageItemProps = {
   message: ChatMessage;
   anchorId?: string;
   /** 搜索跳转后的短暂定位反馈。 */
@@ -108,10 +102,55 @@ export function MessageItem({
   groupedThinking?: boolean;
   /** 最终 assistant 消息被拆成「过程 block」与「答复文本」时，尾部元数据只渲染一次。 */
   suppressTail?: boolean;
-}) {
+};
+
+/** block 数组按元素引用比较（父组件 filter 产生新数组但元素引用稳定） */
+function contentBlocksEqual(a?: ContentBlock[], b?: ContentBlock[]): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((block, i) => block === b[i]);
+}
+
+/** collectCacheMisses 每次重算产生新对象，按字段比较避免击穿 memo */
+function cacheMissEqual(a?: CacheMiss, b?: CacheMiss): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.missedTokens === b.missedTokens
+    && a.missedCost === b.missedCost
+    && a.idleMs === b.idleMs
+    && a.modelChanged === b.modelChanged;
+}
+
+/** memo 比较（多面板 P4）：message 引用不变 + 标量 props 相同即跳过重渲染；
+ *  流式期间只有被替换的那条消息对象引用变化，其余消息整树跳过。 */
+function messageItemPropsEqual(prev: MessageItemProps, next: MessageItemProps): boolean {
+  return prev.message === next.message
+    && prev.anchorId === next.anchorId
+    && prev.highlighted === next.highlighted
+    && cacheMissEqual(prev.cacheMiss, next.cacheMiss)
+    && prev.turnStats === next.turnStats
+    && contentBlocksEqual(prev.contentOverride, next.contentOverride)
+    && prev.expandThinking === next.expandThinking
+    && prev.expandTools === next.expandTools
+    && prev.groupedThinking === next.groupedThinking
+    && prev.suppressTail === next.suppressTail;
+}
+
+function MessageItemView({
+  message,
+  anchorId,
+  highlighted,
+  cacheMiss,
+  turnStats,
+  contentOverride,
+  expandThinking,
+  expandTools,
+  groupedThinking,
+  suppressTail,
+}: MessageItemProps) {
   const { t } = useTranslation();
-  const forkFrom = useChatStore((s) => s.forkFrom);
-  const isStreaming = useChatStore((s) => s.isStreaming);
+  const forkFrom = usePaneChatStore((s) => s.forkFrom);
+  const isStreaming = usePaneChatStore((s) => s.isStreaming);
   const [copied, setCopied] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   if (message.role === 'user') {
@@ -280,6 +319,10 @@ export function MessageItem({
     </div>
   );
 }
+
+// 多面板 P4：memo 化消息项——流式 chunk（合帧后）只重渲染正在变化的那条消息，
+// 不再整表重渲染。props 引用稳定性由父组件（index.tsx map 处）与上面的自定义比较保证。
+export const MessageItem = memo(MessageItemView, messageItemPropsEqual);
 
 function TurnStatsCard({ stats }: { stats: TurnStats }) {
   const { t } = useTranslation();

@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { X, Zap } from 'lucide-react';
-import { useChatStore } from '../../stores/chat';
+import { usePaneChatStore } from './chat-store-context';
 
 const KINDS = ['steering', 'followUp'] as const;
 
@@ -11,9 +11,9 @@ const KINDS = ['steering', 'followUp'] as const;
  */
 export function QueueList() {
   const { t } = useTranslation();
-  const queue = useChatStore((s) => s.queue);
-  const queueRemove = useChatStore((s) => s.queueRemove);
-  const queueSteerNow = useChatStore((s) => s.queueSteerNow);
+  const queue = usePaneChatStore((s) => s.queue);
+  const queueRemove = usePaneChatStore((s) => s.queueRemove);
+  const queueSteerNow = usePaneChatStore((s) => s.queueSteerNow);
 
   if (queue.steering.length === 0 && queue.followUp.length === 0) return null;
 

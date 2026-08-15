@@ -6,7 +6,7 @@ import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { groupByProject } from '../lib/session-groups';
 import { formatRelativeTime, sessionDisplayTitle } from '../lib/session-format';
-import { useChatStore } from '../stores/chat';
+import { panesStore } from '../stores/panes-default';
 
 type RowProps = {
   session: PiSessionRow;
@@ -42,7 +42,8 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat }: Row
     }
   };
 
-  const switchTo = () => run(() => useChatStore.getState().switchSession(session.path, session.cwd), true);
+  // 多面板 P3：已在某面板打开 → 聚焦该面板；否则替换活跃面板会话
+  const switchTo = () => run(() => panesStore.getState().openOrFocusSession(session.path, session.cwd) ?? Promise.resolve({ success: true }), true);
   const fork = () => run(() => hostApi.piSessions.fork(session.path), true);
   const archive = () => run(() => hostApi.piSessions.archive(session.path, !session.archived));
   const remove = () => run(() => hostApi.piSessions.remove(session.path));

@@ -7,6 +7,8 @@ export type HostRequest = {
   module: string;
   action: string;
   payload?: unknown;
+  // 多面板 P1：显式会话寻址（缺省回退窗口绑定 → 全局 active）
+  sessionPath?: string;
 };
 
 export type HostErrorCode = 'VALIDATION' | 'UNSUPPORTED' | 'INTERNAL';
@@ -60,5 +62,6 @@ export function isHostRequest(value: unknown): value is HostRequest {
     && typeof record.module === 'string'
     && record.module.length > 0
     && typeof record.action === 'string'
-    && record.action.length > 0;
+    && record.action.length > 0
+    && (record.sessionPath === undefined || typeof record.sessionPath === 'string');
 }

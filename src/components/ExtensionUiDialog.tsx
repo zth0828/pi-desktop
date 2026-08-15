@@ -1,16 +1,18 @@
 // 扩展 UI 对话框：pi 扩展 ctx.ui.confirm/select/input 的渲染层承载。
-// App 级挂载（扩展 UI 不一定发生在聊天上下文）；队列在 chat store，这里只取队首。
+// 多面板 P2：对话框移入 ChatPane 内渲染（每面板渲染自己的 uiRequests 队列，取队首）；
+// 通知 toast 仍在 App 级，过滤改为遍历所有 chat store 实例。
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import type { PiExtensionUiNotification } from '@shared/host-api/contract';
 import { onHostEvent } from '../lib/host-events';
-import { useChatStore } from '../stores/chat';
+import { getAllChatStores } from '../stores/chat-registry';
+import { usePaneChatStore } from '../pages/Chat/chat-store-context';
 
 export function ExtensionUiDialog() {
   const { t } = useTranslation();
-  const req = useChatStore((s) => s.uiRequests[0]);
-  const respondUi = useChatStore((s) => s.respondUi);
+  const req = usePaneChatStore((s) => s.uiRequests[0]);
+  const respondUi = usePaneChatStore((s) => s.respondUi);
   const [text, setText] = useState('');
   const [remaining, setRemaining] = useState<number | null>(null);
 
@@ -116,8 +118,12 @@ export function ExtensionUiNotifications() {
   const { t } = useTranslation();
   const [notification, setNotification] = useState<PiExtensionUiNotification | null>(null);
   useEffect(() => onHostEvent('piRuntime', 'uiNotification', (next) => {
-    const current = useChatStore.getState();
-    if (next.sessionId !== current.sessionId || next.generation !== current.generation) return;
+    // 任一面板实例持有该会话（sessionId + generation 匹配）才展示
+    const owned = getAllChatStores().some((store) => {
+      const current = store.getState();
+      return next.sessionId === current.sessionId && next.generation === current.generation;
+    });
+    if (!owned) return;
     setNotification(next);
     window.setTimeout(() => setNotification((current) => current === next ? null : current), 5000);
   }), []);

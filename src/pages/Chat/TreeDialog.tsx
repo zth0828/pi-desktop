@@ -1,24 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PiRuntimeTreeNode } from '@shared/host-api/contract';
-import { hostApi } from '../../lib/host-api';
-import { useChatStore } from '../../stores/chat';
+import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 
 /** 会话分支树面板（/tree）：列出当前会话文件里的分支节点，点击跳转 navigateTree。 */
 export function TreeDialog() {
   const { t } = useTranslation();
-  const open = useChatStore((s) => s.treeOpen);
-  const setTreeOpen = useChatStore((s) => s.setTreeOpen);
-  const navigateTo = useChatStore((s) => s.navigateTo);
+  const open = usePaneChatStore((s) => s.treeOpen);
+  const setTreeOpen = usePaneChatStore((s) => s.setTreeOpen);
+  const navigateTo = usePaneChatStore((s) => s.navigateTo);
+  const paneApi = usePaneHostApi();
   const [nodes, setNodes] = useState<PiRuntimeTreeNode[]>([]);
 
   useEffect(() => {
     if (!open) return;
-    void hostApi.piRuntime
+    void paneApi.piRuntime
       .getTree()
       .then((r) => setNodes(r.nodes))
       .catch(() => setNodes([]));
-  }, [open]);
+  }, [open, paneApi]);
 
   if (!open) return null;
   return (

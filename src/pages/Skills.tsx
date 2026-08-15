@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PiSkillRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
-import { useChatStore } from '../stores/chat';
+import { useActiveChatStore } from './Chat/chat-store-context';
 
 export default function SkillsPage() {
   const { t } = useTranslation();
@@ -10,7 +10,7 @@ export default function SkillsPage() {
   const [query, setQuery] = useState('');
   const [runtimeActive, setRuntimeActive] = useState(false);
   const [error, setError] = useState<string>();
-  const chatStarted = useChatStore((s) => s.started);
+  const chatStarted = useActiveChatStore((s) => s.started);
 
   const refresh = useCallback(() => {
     hostApi.piSkills

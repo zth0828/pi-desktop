@@ -8,7 +8,7 @@ import type {
 } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
-import { useChatStore } from '../stores/chat';
+import { useActiveChatStore } from './Chat/chat-store-context';
 
 type FormState = {
   originalName?: string;
@@ -93,7 +93,7 @@ export default function McpPage() {
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string>();
-  const chatStarted = useChatStore((s) => s.started);
+  const chatStarted = useActiveChatStore((s) => s.started);
 
   const refresh = useCallback(() => {
     hostApi.piMcp

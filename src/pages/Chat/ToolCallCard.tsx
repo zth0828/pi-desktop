@@ -12,7 +12,8 @@ import {
   toolSummary,
   type ToolWarning,
 } from '../../lib/tool-display';
-import { useChatStore, type ToolExecution } from '../../stores/chat';
+import type { ToolExecution } from '../../stores/chat';
+import { usePaneChatStore } from './chat-store-context';
 
 /** 折叠态输出预览保留的尾部行数（pi bash 折叠态口径） */
 const PREVIEW_LINES = 5;
@@ -68,7 +69,7 @@ export function ToolCallCard({
   expandByDefault?: boolean;
 }) {
   const { t } = useTranslation();
-  const openWorkspaceFile = useChatStore((s) => s.openWorkspaceFile);
+  const openWorkspaceFile = usePaneChatStore((s) => s.openWorkspaceFile);
   // null = 跟随阶段默认值；单独点击后为本地覆盖
   const [localExpanded, setLocalExpanded] = useState<boolean | null>(null);
   const expanded = localExpanded ?? expandByDefault;

@@ -1,126 +1,145 @@
 // Renderer 侧的 host-api 便捷封装：所有后端调用的唯一入口（AGENTS.md 边界规则）。
 // 新能力 = contract.ts 加类型 + services/ 加实现 + 这里加一行。
-import { invokeHost } from './host-api-client';
-import type { SettingsSnapshot } from '@shared/host-api/contract';
+import { invokeHost, scopedInvokeHost } from './host-api-client';
+import type {
+  HostApiAction,
+  HostApiModule,
+  HostApiPayloadArgs,
+  HostApiResult,
+  SettingsSnapshot,
+} from '@shared/host-api/contract';
 
-export const hostApi = {
+// 多面板 P1（docs/MULTI-WINDOW-PANES-PLAN.md）：createHostApi(sessionPath) 产出面板作用域
+// client，所有调用在信封带显式 sessionPath；缺省为窗口级调用，行为不变。
+function createHostApi(sessionPath?: string) {
+  function invoke<M extends HostApiModule, A extends HostApiAction<M>>(
+    module: M,
+    action: A,
+    ...payloadArgs: HostApiPayloadArgs<M, A>
+  ): Promise<HostApiResult<M, A>> {
+    return sessionPath === undefined
+      ? invokeHost(module, action, ...payloadArgs)
+      : scopedInvokeHost(sessionPath, module, action, ...payloadArgs);
+  }
+
+  return {
   app: {
-    version: () => invokeHost('app', 'version'),
-    name: () => invokeHost('app', 'name'),
-    platform: () => invokeHost('app', 'platform'),
-    writeClipboard: (text: string) => invokeHost('app', 'writeClipboard', { text }),
+    version: () => invoke('app', 'version'),
+    name: () => invoke('app', 'name'),
+    platform: () => invoke('app', 'platform'),
+    writeClipboard: (text: string) => invoke('app', 'writeClipboard', { text }),
   },
   shell: {
-    openExternal: (url: string) => invokeHost('shell', 'openExternal', { url }),
-    listApplications: () => invokeHost('shell', 'listApplications'),
-    openPath: (path: string) => invokeHost('shell', 'openPath', { path }),
+    openExternal: (url: string) => invoke('shell', 'openExternal', { url }),
+    listApplications: () => invoke('shell', 'listApplications'),
+    openPath: (path: string) => invoke('shell', 'openPath', { path }),
     openPathWith: (path: string, application: { id: string; name: string; path: string; iconDataUrl?: string }) =>
-      invokeHost('shell', 'openPathWith', { path, application }),
-    showInFolder: (path: string) => invokeHost('shell', 'showInFolder', { path }),
+      invoke('shell', 'openPathWith', { path, application }),
+    showInFolder: (path: string) => invoke('shell', 'showInFolder', { path }),
   },
   piSystem: {
-    detect: (force?: boolean) => invokeHost('piSystem', 'detect', force ? { force } : undefined),
-    checkLatest: () => invokeHost('piSystem', 'checkLatest'),
-    install: () => invokeHost('piSystem', 'install'),
+    detect: (force?: boolean) => invoke('piSystem', 'detect', force ? { force } : undefined),
+    checkLatest: () => invoke('piSystem', 'checkLatest'),
+    install: () => invoke('piSystem', 'install'),
   },
   piRuntime: {
-    start: (cwd: string) => invokeHost('piRuntime', 'start', { cwd }),
-    getState: () => invokeHost('piRuntime', 'getState'),
-    getContextUsage: () => invokeHost('piRuntime', 'getContextUsage'),
-    getUsage: () => invokeHost('piRuntime', 'getUsage'),
+    start: (cwd: string) => invoke('piRuntime', 'start', { cwd }),
+    getState: () => invoke('piRuntime', 'getState'),
+    getContextUsage: () => invoke('piRuntime', 'getContextUsage'),
+    getUsage: () => invoke('piRuntime', 'getUsage'),
     prompt: (text: string, images?: unknown[], behavior?: 'steer' | 'followUp') =>
-      invokeHost('piRuntime', 'prompt', { text, images, behavior }),
-    abort: () => invokeHost('piRuntime', 'abort'),
+      invoke('piRuntime', 'prompt', { text, images, behavior }),
+    abort: () => invoke('piRuntime', 'abort'),
     queueRemove: (kind: 'steering' | 'followUp', index: number) =>
-      invokeHost('piRuntime', 'queueRemove', { kind, index }),
+      invoke('piRuntime', 'queueRemove', { kind, index }),
     queueSteerNow: (kind: 'steering' | 'followUp', index: number) =>
-      invokeHost('piRuntime', 'queueSteerNow', { kind, index }),
-    newSession: () => invokeHost('piRuntime', 'newSession'),
+      invoke('piRuntime', 'queueSteerNow', { kind, index }),
+    newSession: () => invoke('piRuntime', 'newSession'),
     compact: (customInstructions?: string) =>
-      invokeHost('piRuntime', 'compact', customInstructions ? { customInstructions } : undefined),
-    fork: (entryId: string) => invokeHost('piRuntime', 'fork', { entryId }),
-    getTree: () => invokeHost('piRuntime', 'getTree'),
-    navigateTree: (targetId: string) => invokeHost('piRuntime', 'navigateTree', { targetId }),
-    setThinkingLevel: (level: string) => invokeHost('piRuntime', 'setThinkingLevel', { level }),
-    setModel: (provider: string, id: string) => invokeHost('piRuntime', 'setModel', { provider, id }),
-    setSessionName: (name: string, notify = true) => invokeHost('piRuntime', 'setSessionName', { name, notify }),
-    getSessionInfo: () => invokeHost('piRuntime', 'getSessionInfo'),
-    reload: () => invokeHost('piRuntime', 'reload'),
+      invoke('piRuntime', 'compact', customInstructions ? { customInstructions } : undefined),
+    fork: (entryId: string) => invoke('piRuntime', 'fork', { entryId }),
+    getTree: () => invoke('piRuntime', 'getTree'),
+    navigateTree: (targetId: string) => invoke('piRuntime', 'navigateTree', { targetId }),
+    setThinkingLevel: (level: string) => invoke('piRuntime', 'setThinkingLevel', { level }),
+    setModel: (provider: string, id: string) => invoke('piRuntime', 'setModel', { provider, id }),
+    setSessionName: (name: string, notify = true) => invoke('piRuntime', 'setSessionName', { name, notify }),
+    getSessionInfo: () => invoke('piRuntime', 'getSessionInfo'),
+    reload: () => invoke('piRuntime', 'reload'),
     exportHtml: (outputPath?: string) =>
-      invokeHost('piRuntime', 'exportHtml', outputPath ? { outputPath } : undefined),
-    getCommands: () => invokeHost('piRuntime', 'getCommands'),
+      invoke('piRuntime', 'exportHtml', outputPath ? { outputPath } : undefined),
+    getCommands: () => invoke('piRuntime', 'getCommands'),
     uiResponse: (payload: { requestId: string; value?: string | boolean; cancelled?: boolean }) =>
-      invokeHost('piRuntime', 'uiResponse', payload),
+      invoke('piRuntime', 'uiResponse', payload),
   },
   providers: {
-    list: () => invokeHost('providers', 'list'),
-    listModels: () => invokeHost('providers', 'listModels'),
-    refresh: () => invokeHost('providers', 'refresh'),
+    list: () => invoke('providers', 'list'),
+    listModels: () => invoke('providers', 'listModels'),
+    refresh: () => invoke('providers', 'refresh'),
     setApiKey: (providerId: string, apiKey: string) =>
-      invokeHost('providers', 'setApiKey', { providerId, apiKey }),
+      invoke('providers', 'setApiKey', { providerId, apiKey }),
     removeCredential: (providerId: string) =>
-      invokeHost('providers', 'removeCredential', { providerId }),
+      invoke('providers', 'removeCredential', { providerId }),
     deleteCustom: (providerId: string) =>
-      invokeHost('providers', 'deleteCustom', { providerId }),
-    startOAuth: (providerId: string) => invokeHost('providers', 'startOAuth', { providerId }),
+      invoke('providers', 'deleteCustom', { providerId }),
+    startOAuth: (providerId: string) => invoke('providers', 'startOAuth', { providerId }),
     addCustom: (payload: {
       id: string;
       baseUrl: string;
       api: string;
       apiKey?: string;
       models: Array<{ id: string; name?: string }>;
-    }) => invokeHost('providers', 'addCustom', payload),
+    }) => invoke('providers', 'addCustom', payload),
     setModelReasoning: (providerId: string, modelId: string, reasoning: boolean) =>
-      invokeHost('providers', 'setModelReasoning', { providerId, modelId, reasoning }),
+      invoke('providers', 'setModelReasoning', { providerId, modelId, reasoning }),
     probe: (payload: { baseUrl: string; apiKey?: string; model?: string }) =>
-      invokeHost('providers', 'probe', payload),
-    getCompaction: () => invokeHost('providers', 'getCompaction'),
+      invoke('providers', 'probe', payload),
+    getCompaction: () => invoke('providers', 'getCompaction'),
     setCompaction: (payload: { reserveTokens?: number; keepRecentTokens?: number; enabled?: boolean }) =>
-      invokeHost('providers', 'setCompaction', payload),
-    getDefaultModel: () => invokeHost('providers', 'getDefaultModel'),
+      invoke('providers', 'setCompaction', payload),
+    getDefaultModel: () => invoke('providers', 'getDefaultModel'),
     setDefaultModel: (provider: string, id: string) =>
-      invokeHost('providers', 'setDefaultModel', { provider, id }),
+      invoke('providers', 'setDefaultModel', { provider, id }),
   },
   piSessions: {
-    list: () => invokeHost('piSessions', 'list'),
-    listAll: () => invokeHost('piSessions', 'listAll'),
-    search: (query: string, limit?: number) => invokeHost('piSessions', 'search', { query, limit }),
-    switch: (path: string, cwd?: string) => invokeHost('piSessions', 'switch', { path, cwd }),
-    rename: (path: string, name: string) => invokeHost('piSessions', 'rename', { path, name }),
-    fork: (path: string) => invokeHost('piSessions', 'fork', { path }),
+    list: () => invoke('piSessions', 'list'),
+    listAll: () => invoke('piSessions', 'listAll'),
+    search: (query: string, limit?: number) => invoke('piSessions', 'search', { query, limit }),
+    switch: (path: string, cwd?: string) => invoke('piSessions', 'switch', { path, cwd }),
+    rename: (path: string, name: string) => invoke('piSessions', 'rename', { path, name }),
+    fork: (path: string) => invoke('piSessions', 'fork', { path }),
     archive: (path: string, archived: boolean) =>
-      invokeHost('piSessions', 'archive', { path, archived }),
+      invoke('piSessions', 'archive', { path, archived }),
     archiveProject: (cwd: string, archived: boolean) =>
-      invokeHost('piSessions', 'archiveProject', { cwd, archived }),
-    remove: (path: string) => invokeHost('piSessions', 'remove', { path }),
-    exportHtml: (path: string) => invokeHost('piSessions', 'exportHtml', { path }),
-    getExportInfo: () => invokeHost('piSessions', 'getExportInfo'),
+      invoke('piSessions', 'archiveProject', { cwd, archived }),
+    remove: (path: string) => invoke('piSessions', 'remove', { path }),
+    exportHtml: (path: string) => invoke('piSessions', 'exportHtml', { path }),
+    getExportInfo: () => invoke('piSessions', 'getExportInfo'),
   },
   piSkills: {
-    list: () => invokeHost('piSkills', 'list'),
+    list: () => invoke('piSkills', 'list'),
   },
   piFiles: {
-    list: (cwd: string) => invokeHost('piFiles', 'list', { cwd }),
+    list: (cwd: string) => invoke('piFiles', 'list', { cwd }),
   },
   piPackages: {
-    list: () => invokeHost('piPackages', 'list'),
-    install: (source: string) => invokeHost('piPackages', 'install', { source }),
+    list: () => invoke('piPackages', 'list'),
+    install: (source: string) => invoke('piPackages', 'install', { source }),
     remove: (source: string, scope: 'user' | 'project') =>
-      invokeHost('piPackages', 'remove', { source, scope }),
-    update: (source?: string) => invokeHost('piPackages', 'update', { source }),
-    checkUpdates: () => invokeHost('piPackages', 'checkUpdates'),
+      invoke('piPackages', 'remove', { source, scope }),
+    update: (source?: string) => invoke('piPackages', 'update', { source }),
+    checkUpdates: () => invoke('piPackages', 'checkUpdates'),
     catalog: (query: {
       name?: string;
       type?: '' | 'extension' | 'skill' | 'theme' | 'prompt';
       sort?: 'downloads' | 'recent' | 'name';
       page?: number;
       refresh?: boolean;
-    }) => invokeHost('piPackages', 'catalog', query),
+    }) => invoke('piPackages', 'catalog', query),
     detail: (name: string, refresh = false) =>
-      invokeHost('piPackages', 'detail', { name, refresh }),
+      invoke('piPackages', 'detail', { name, refresh }),
   },
   piMcp: {
-    list: () => invokeHost('piMcp', 'list'),
+    list: () => invoke('piMcp', 'list'),
     upsert: (payload: {
       scope: 'global' | 'project';
       name: string;
@@ -134,45 +153,61 @@ export const hostApi = {
         disabled?: boolean;
         lifecycle?: string;
       };
-    }) => invokeHost('piMcp', 'upsert', payload),
+    }) => invoke('piMcp', 'upsert', payload),
     remove: (scope: 'global' | 'project', name: string) =>
-      invokeHost('piMcp', 'remove', { scope, name }),
+      invoke('piMcp', 'remove', { scope, name }),
     setDisabled: (scope: 'global' | 'project', name: string, disabled: boolean) =>
-      invokeHost('piMcp', 'setDisabled', { scope, name, disabled }),
-    installAdapter: () => invokeHost('piMcp', 'installAdapter'),
+      invoke('piMcp', 'setDisabled', { scope, name, disabled }),
+    installAdapter: () => invoke('piMcp', 'installAdapter'),
   },
   settings: {
-    getAll: () => invokeHost('settings', 'getAll'),
+    getAll: () => invoke('settings', 'getAll'),
     get: <K extends keyof SettingsSnapshot>(key: K) =>
-      invokeHost('settings', 'get', { key }) as Promise<SettingsSnapshot[K]>,
+      invoke('settings', 'get', { key }) as Promise<SettingsSnapshot[K]>,
     set: (key: keyof SettingsSnapshot, value: string | boolean | undefined) =>
-      invokeHost('settings', 'set', { key, value }),
+      invoke('settings', 'set', { key, value }),
   },
   notify: {
     dispatch: (payload: { kind: 'runCompleted' | 'uiRequest'; title: string; body?: string }) =>
-      invokeHost('notify', 'dispatch', payload),
+      invoke('notify', 'dispatch', payload),
   },
   review: {
-    getSummary: () => invokeHost('review', 'getSummary'),
-    getFileDiff: (path: string) => invokeHost('review', 'getFileDiff', { path }),
-    revertFile: (path: string) => invokeHost('review', 'revertFile', { path }),
+    getSummary: () => invoke('review', 'getSummary'),
+    getFileDiff: (path: string) => invoke('review', 'getFileDiff', { path }),
+    revertFile: (path: string) => invoke('review', 'revertFile', { path }),
     revertHunk: (path: string, patch: string) =>
-      invokeHost('review', 'revertHunk', { path, patch }),
+      invoke('review', 'revertHunk', { path, patch }),
   },
   workspace: {
-    listChildren: (path = '') => invokeHost('workspace', 'listChildren', { path }),
-    readFile: (path: string) => invokeHost('workspace', 'readFile', { path }),
+    listChildren: (path = '') => invoke('workspace', 'listChildren', { path }),
+    readFile: (path: string) => invoke('workspace', 'readFile', { path }),
   },
   dialog: {
     openDirectory: (title?: string, defaultPath?: string) =>
-      invokeHost('dialog', 'open', { title, defaultPath, properties: ['openDirectory', 'createDirectory'] }),
+      invoke('dialog', 'open', { title, defaultPath, properties: ['openDirectory', 'createDirectory'] }),
   },
   windows: {
     openDetached: (payload: { sessionPath: string; cwd?: string }) =>
-      invokeHost('windows', 'openDetached', payload),
+      invoke('windows', 'openDetached', payload),
     openDetachedAt: (payload: { sessionPath: string; cwd?: string; screenX: number; screenY: number }) =>
-      invokeHost('windows', 'openDetachedAt', payload),
-    focus: (sessionPath: string) => invokeHost('windows', 'focus', { sessionPath }),
-    list: () => invokeHost('windows', 'list'),
+      invoke('windows', 'openDetachedAt', payload),
+    focus: (sessionPath: string) => invoke('windows', 'focus', { sessionPath }),
+    list: () => invoke('windows', 'list'),
   },
-};
+  };
+}
+
+export type HostApi = ReturnType<typeof createHostApi>;
+
+export const hostApi = createHostApi();
+
+// 面板作用域 client：同 sessionPath 返回同一对象（Map 缓存，保证渲染期引用稳定）。
+const scopedApis = new Map<string, HostApi>();
+export function scopedHostApi(sessionPath: string): HostApi {
+  let api = scopedApis.get(sessionPath);
+  if (!api) {
+    api = createHostApi(sessionPath);
+    scopedApis.set(sessionPath, api);
+  }
+  return api;
+}
