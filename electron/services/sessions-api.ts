@@ -21,6 +21,9 @@ import type {
 import {
   afterSessionReplaced,
   activateSessionRuntime,
+  awaitPendingPrewarm,
+  clearPrewarmMark,
+  consumePrewarmedSessionRuntime,
   createSessionRuntime,
   getActiveRuntime,
   getLiveSessionRows,
@@ -188,8 +191,25 @@ export const sessionsApi = {
 
   switch: async (payload: PiSessionPathPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     timingMark('switch:recv');
+    const activeForCheck = getActiveRuntime();
+    const boundToActive = Boolean(
+      ctx?.sessionPath
+      && activeForCheck?.runtime.session.sessionFile
+      && samePath(ctx.sessionPath, activeForCheck.runtime.session.sessionFile),
+    );
+    // 独立窗口 attach：优先消费 openDetached 的预热产物（在途等完成），
+    // 按 attach 语义绑定（activate=false 建出来的，不挤占全局 active）
+    if (ctx?.sessionPath && !boundToActive && payload.cwd
+      && await consumePrewarmedSessionRuntime(payload.path)) {
+      timingMark('switch:prewarm-hit');
+      bindSenderWindow(ctx, payload.path);
+      return { success: true };
+    }
+    // 非 attach 调用方撞上在途预热（罕见竞态）：等其完成再按 live 复用，避免重复建 runtime
+    await awaitPendingPrewarm(payload.path);
     const live = getRuntimeForSession(payload.path);
     if (live) {
+      clearPrewarmMark(payload.path);
       timingMark('switch:live-hit');
       // 先改绑再 activate：activate 会回收无窗口绑定的旧 active；
       // 单窗口下调用方窗口随即改绑到目标会话，旧 runtime 仍被回收，行为不变
@@ -200,12 +220,6 @@ export const sessionsApi = {
     }
     // 调用方窗口绑定着非活动会话（独立窗口 attach/切会话）时，
     // 为目标会话单独建保活 runtime，不挤占全局 active（主窗口）的运行时。
-    const activeNow = getActiveRuntime();
-    const boundToActive = Boolean(
-      ctx?.sessionPath
-      && activeNow?.runtime.session.sessionFile
-      && samePath(ctx.sessionPath, activeNow.runtime.session.sessionFile),
-    );
     if (ctx?.sessionPath && !boundToActive && payload.cwd) {
       try {
         timingMark('switch:create-runtime:start');

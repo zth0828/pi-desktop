@@ -558,6 +558,45 @@ export async function createSessionRuntime(
   return activateSessionRuntime(runtime);
 }
 
+// 独立窗口打开的 runtime 预热：openDetached 在建窗/页面加载的同时就开始建保活 runtime；
+// renderer attach 的 switch 到达（约 250ms 后）时在途则等其完成复用，不重复创建。
+// completedPrewarms 标记预热产物：attach 语义的 switch 消费它（不挤占全局 active），
+// 常规切换经 live 分支接管时用 clearPrewarmMark 清除。
+const pendingSessionRuntimes = new Map<string, Promise<void>>();
+const completedPrewarms = new Set<string>();
+
+export function prewarmSessionRuntime(sessionPath: string, cwd?: string): void {
+  // switch 需要 cwd 才能建 runtime；缺 cwd 不预热（attach 回退 listAll 推导，走正常路径）
+  if (!cwd) return;
+  if (getRuntimeForSession(sessionPath) || pendingSessionRuntimes.has(sessionPath)) return;
+  timingMark('prewarm:start');
+  const pending = createSessionRuntime(cwd, sessionPath, { activate: false })
+    .then(() => {
+      timingMark('prewarm:done');
+      completedPrewarms.add(sessionPath);
+    })
+    .catch(() => undefined) // 失败静默：switch 会走正常创建路径并报错
+    .finally(() => pendingSessionRuntimes.delete(sessionPath));
+  pendingSessionRuntimes.set(sessionPath, pending);
+}
+
+/** 等预热在途完成（无预热立即返回）。 */
+export async function awaitPendingPrewarm(sessionPath: string): Promise<void> {
+  await pendingSessionRuntimes.get(sessionPath);
+}
+
+/** attach 语义消费预热产物：在途等完成；确为预热产物且 runtime 可用才算命中。 */
+export async function consumePrewarmedSessionRuntime(sessionPath: string): Promise<boolean> {
+  await awaitPendingPrewarm(sessionPath);
+  if (!completedPrewarms.delete(sessionPath)) return false;
+  return getRuntimeForSession(sessionPath) !== null;
+}
+
+/** 预热产物被常规切换路径（live 分支）接管时清除完成标记。 */
+export function clearPrewarmMark(sessionPath: string): void {
+  completedPrewarms.delete(sessionPath);
+}
+
 /** 会话替换（new/switch/fork）后的统一收尾：重绑 + 重订阅 + 通知渲染层清空。 */
 export async function afterSessionReplaced(runtime: ActiveRuntime): Promise<PiRuntimeStateResult> {
   runtime.unsubscribe();
