@@ -2888,7 +2888,63 @@ button.danger-outline {
   border: 1px solid var(--border);
 }
 
-.rename-form {
+/* 会话页卡片：标题/元信息两行层级，操作按钮收在卡片右侧、默认低透明，hover/聚焦时显现。
+   按钮在正常文档流（不做覆盖层 + pointer-events 开关），避免隐形区域拦截行点击。 */
+.sessions-page .session-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sessions-page .session-row-main {
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  text-align: left;
+}
+
+.sessions-page .session-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.sessions-page .session-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0;
+  font-size: 12px;
+}
+
+.sessions-page .session-actions {
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  margin-top: 0;
+  max-width: 300px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.sessions-page .session-row:hover .session-actions,
+.sessions-page .session-row:focus-within .session-actions {
+  opacity: 1;
+}
+
+.sessions-page .session-actions button {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.sessions-page .rename-form {
   display: flex;
   gap: 8px;
   margin-top: 10px;
