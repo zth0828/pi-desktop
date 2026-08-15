@@ -4,6 +4,7 @@ import { ArrowDown, Check, ChevronRight, PanelRight, X } from 'lucide-react';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
+import { timingMark } from '../../lib/timing';
 import { groupLogicalTurns, groupTurnStages, turnDurationMs, turnFinalResponseIndex } from '../../lib/turn-changes';
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
 import { PaneLayout } from '../../components/PaneLayout';
@@ -280,13 +281,20 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     return () => window.clearTimeout(timer);
   }, [searchHighlightIndex]);
 
-  // 独立会话窗口的 attach：cwd 从会话元数据推导（与 SessionList 点击会话一致）；
-  // 找不到元数据时 cwd 缺省，由 main 侧 switch 报错
+  // 独立会话窗口的 attach：cwd 优先取建窗 query（main 侧已随 ?cwd= 下发），
+  // 缺省再回退全量 listAll 推导；都找不到时 cwd 缺省，由 main 侧 switch 报错
   const attachDetached = useCallback(async (sessionPath: string) => {
-    const row = await hostApi.piSessions.listAll()
-      .then((r) => r.sessions.find((session) => session.path === sessionPath))
-      .catch(() => undefined);
-    await switchSession(sessionPath, row?.cwd);
+    timingMark('attach:start');
+    let cwd = new URLSearchParams(window.location.search).get('cwd') ?? undefined;
+    if (!cwd) {
+      const row = await hostApi.piSessions.listAll()
+        .then((r) => r.sessions.find((session) => session.path === sessionPath))
+        .catch(() => undefined);
+      cwd = row?.cwd;
+      timingMark('attach:listAll-done');
+    }
+    await switchSession(sessionPath, cwd);
+    timingMark('attach:switch-done');
   }, [switchSession]);
 
   // 恢复上次的工作目录并启动会话；独立会话窗口跳过恢复，直接 attach 指定会话。

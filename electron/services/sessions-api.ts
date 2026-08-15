@@ -35,6 +35,7 @@ import { samePath } from '../utils/same-path';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { ensureSessionExportDirectory, sessionExportPath } from '../utils/session-export';
 import { searchSessions } from './session-search';
+import { timingMark } from '../utils/timing';
 
 function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -186,8 +187,10 @@ export const sessionsApi = {
   },
 
   switch: async (payload: PiSessionPathPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    timingMark('switch:recv');
     const live = getRuntimeForSession(payload.path);
     if (live) {
+      timingMark('switch:live-hit');
       // 先改绑再 activate：activate 会回收无窗口绑定的旧 active；
       // 单窗口下调用方窗口随即改绑到目标会话，旧 runtime 仍被回收，行为不变
       bindSenderWindow(ctx, payload.path);
@@ -205,7 +208,9 @@ export const sessionsApi = {
     );
     if (ctx?.sessionPath && !boundToActive && payload.cwd) {
       try {
+        timingMark('switch:create-runtime:start');
         await createSessionRuntime(payload.cwd, payload.path, { activate: false });
+        timingMark('switch:create-runtime:done');
         bindSenderWindow(ctx, payload.path);
         return { success: true };
       } catch (err) {

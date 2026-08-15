@@ -12,9 +12,11 @@ import {
   focusWindowForSession,
   listWindows,
 } from '../main/window-manager';
+import { timingMark } from '../utils/timing';
 
 export const windowsApi = {
   openDetached: (payload: WindowsOpenDetachedPayload): void => {
+    timingMark('openDetached:recv');
     createSessionWindow(payload.sessionPath, payload.cwd);
   },
   openDetachedAt: (payload: WindowsOpenDetachedAtPayload): void => {

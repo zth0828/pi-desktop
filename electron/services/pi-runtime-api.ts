@@ -60,6 +60,7 @@ import {
 import { captureReviewBaseline, clearReviewBaseline } from './review-api';
 import { noteRunEnded, noteRunStarted } from './power-save';
 import { settingsApi } from './settings-api';
+import { timingMark } from '../utils/timing';
 
 export type ActiveRuntime = {
   instanceId: string;
@@ -456,11 +457,14 @@ async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
 }
 
 async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveRuntime> {
+  timingMark('runtime:create:start');
   const sdk = await loadPiSdk();
+  timingMark('runtime:sdk-loaded');
   const agentDir = sdk.getAgentDir();
   // LM Studio 的原生目录包含视觉能力和真实上下文；先同步到 pi 的公开模型配置，
   // 再让 pi 创建会话服务，模型选择与图片能力判定仍完全由 pi 负责。
   await syncLmStudioModels(agentDir);
+  timingMark('runtime:lmstudio-synced');
   // 扩展 spawn pi 子进程时的入口约定（Electron 里 process.argv[1] 是壳的 main.js，
   // 扩展按 CLI 假设会误 spawn 壳自身；如官方 subagent 示例）。检测到 pi 即写入。
   const piBin = detectPiEnvironment().pi.binPath;
@@ -505,6 +509,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
     agentDir,
     sessionManager: sessionPath ? sdk.SessionManager.open(sessionPath) : sdk.SessionManager.create(cwd),
   });
+  timingMark('runtime:session-runtime-created');
   const active_: ActiveRuntime = {
     instanceId: `runtime-${++runtimeSequence}`,
     sdk,
@@ -528,11 +533,13 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
     }
   });
   await bindCurrentSession(active_);
+  timingMark('runtime:extensions-bound');
   restorePreviewableExternalFiles(active_);
   bridgeSessionEvents(active_);
   // Review baseline 必须在首次 run 前固定：Git 仓库固定 HEAD，非 Git 目录固定
   // 会话启动快照。失败不阻塞会话启动（面板按不可用降级）。
   await captureReviewBaseline(cwd);
+  timingMark('runtime:baseline-captured');
   runtimes.add(active_);
   return active_;
 }

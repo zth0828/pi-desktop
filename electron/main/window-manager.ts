@@ -8,6 +8,7 @@ import { resolveAppPageId } from '@shared/app-page';
 import { resolveAppIconPath } from '../utils/app-icon';
 import { centerBoundsAtPoint, isPointInsideRects, type DetachPoint, type DetachRect } from '../utils/detach-drop';
 import { samePath } from '../utils/same-path';
+import { timingEnabled, timingMark } from '../utils/timing';
 
 export type WindowRecord = {
   win: BrowserWindow;
@@ -113,6 +114,7 @@ export function resolveWindowSize(): { width: number; height: number } {
 
 /** 统一的窗口创建入口：主窗口与独立会话窗口共用配置，创建即注册。 */
 export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindow {
+  timingMark('window:create:start');
   const { width, height } = resolveWindowSize();
   const icon = resolveAppIconPath('png', {
     isPackaged: app.isPackaged,
@@ -141,11 +143,15 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
   });
 
   const query: Record<string, string> = {};
+  // 耗时插桩随窗口传给渲染层（渲染层按 ?timing=1 开启同格式打点）
+  if (timingEnabled()) query.timing = '1';
   if (options.sessionPath) {
-    // 独立会话窗口：renderer 启动时按 ?session= 绑定该会话
+    // 独立会话窗口：renderer 启动时按 ?session= 绑定该会话；cwd 一并带上，
+    // renderer attach 直接用，省掉一次全量 listAll 扫描
     query.page = 'chat';
     query.session = options.sessionPath;
     query.detached = '1';
+    if (options.cwd) query.cwd = options.cwd;
   } else {
     const canUseInitialPage = Boolean(process.env.VITE_DEV_SERVER_URL)
       || process.env.PI_DESKTOP_E2E === '1';
@@ -168,6 +174,10 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
 
   registerWindow(win, { isMain: options.isMain });
   if (options.sessionPath) bindWindowSession(win.webContents.id, options.sessionPath);
+  timingMark('window:create:done');
+  if (timingEnabled()) {
+    win.webContents.once('did-finish-load', () => timingMark('window:did-finish-load'));
+  }
   return win;
 }
 
