@@ -4,6 +4,7 @@
 import { appendFileSync } from 'node:fs';
 import { BrowserWindow, Notification } from 'electron';
 import type { HostSuccess, NotifyDispatchPayload } from '@shared/host-api/contract';
+import { getMainWindow } from '../main/window-manager';
 import { shouldNotify, type NotifyMode } from './notify-policy';
 import { settingsApi } from './settings-api';
 
@@ -14,8 +15,12 @@ export const notifyApi = {
     const uiRequestEnabled = payload.kind === 'uiRequest'
       ? ((await settingsApi.get({ key: 'notifyUiRequest' })) as boolean | undefined)
       : undefined;
-    const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
-    if (!shouldNotify(mode, win?.isFocused() ?? false, payload.kind, uiRequestEnabled)) {
+    // TODO(多窗口 M2)：通知链路尚无会话上下文，焦点判定按「任一窗口聚焦」、
+    // 点击聚焦落主窗口。后续把 sessionPath 带进 NotifyDispatchPayload 后，
+    // 改为 focusWindowForSession(sessionPath) 聚焦拥有该会话的窗口。
+    const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
+    const anyFocused = windows.some((w) => w.isFocused());
+    if (!shouldNotify(mode, anyFocused, payload.kind, uiRequestEnabled)) {
       return { success: true };
     }
 
@@ -32,9 +37,10 @@ export const notifyApi = {
     try {
       const notification = new Notification({ title: payload.title, body: payload.body ?? '' });
       notification.on('click', () => {
-        if (win && !win.isDestroyed()) {
-          win.show();
-          win.focus();
+        const target = getMainWindow() ?? windows.find((w) => !w.isDestroyed());
+        if (target) {
+          target.show();
+          target.focus();
         }
       });
       notification.show();

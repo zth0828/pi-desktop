@@ -27,6 +27,8 @@ import {
   getRuntimeForSession,
   isSessionRunning,
 } from './pi-runtime-api';
+import { bindWindowSession } from '../main/window-manager';
+import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 import { samePath } from '../utils/same-path';
@@ -35,6 +37,11 @@ import { searchSessions } from './session-search';
 
 function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** 多窗口 M1：switch 成功后把调用方窗口绑定到目标会话（ctx 缺省 = 旧调用，跳过）。 */
+function bindSenderWindow(ctx: HostActionContext | undefined, sessionPath: string): void {
+  if (ctx) bindWindowSession(ctx.sender.id, sessionPath);
 }
 
 function currentSessionFile(): string | undefined {
@@ -174,12 +181,32 @@ export const sessionsApi = {
     return { sessions };
   },
 
-  switch: async (payload: PiSessionPathPayload): Promise<HostSuccess> => {
+  switch: async (payload: PiSessionPathPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const live = getRuntimeForSession(payload.path);
     if (live) {
+      // 先改绑再 activate：activate 会回收无窗口绑定的旧 active；
+      // 单窗口下调用方窗口随即改绑到目标会话，旧 runtime 仍被回收，行为不变
+      bindSenderWindow(ctx, payload.path);
       activateSessionRuntime(live);
       if (payload.cwd) await settingsApi.set({ key: 'workspaceCwd', value: payload.cwd });
       return { success: true };
+    }
+    // 多窗口 M2：调用方窗口绑定着非活动会话（独立窗口 attach/切会话）时，
+    // 为目标会话单独建保活 runtime，不挤占全局 active（主窗口）的运行时。
+    const activeNow = getActiveRuntime();
+    const boundToActive = Boolean(
+      ctx?.sessionPath
+      && activeNow?.runtime.session.sessionFile
+      && samePath(ctx.sessionPath, activeNow.runtime.session.sessionFile),
+    );
+    if (ctx?.sessionPath && !boundToActive && payload.cwd) {
+      try {
+        await createSessionRuntime(payload.cwd, payload.path, { activate: false });
+        bindSenderWindow(ctx, payload.path);
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: toError(err) };
+      }
     }
     // 跨项目切换：目标会话的 cwd 与当前 runtime 不同时先重建 runtime
     let before = getActiveRuntime();
@@ -196,15 +223,20 @@ export const sessionsApi = {
     }
     const active = getActiveRuntime();
     if (!active) return { success: false, error: 'session not started' };
-    if (samePath(payload.path, currentSessionFile())) return { success: true };
+    if (samePath(payload.path, currentSessionFile())) {
+      bindSenderWindow(ctx, payload.path);
+      return { success: true };
+    }
     try {
       if (active.runtime.session.isStreaming) {
         await createSessionRuntime(payload.cwd ?? active.cwd, payload.path);
+        bindSenderWindow(ctx, payload.path);
         return { success: true };
       }
       const result = await active.runtime.switchSession(payload.path);
       if (result.cancelled) return { success: false, error: 'cancelled' };
       await afterSessionReplaced(active);
+      bindSenderWindow(ctx, payload.path);
       return { success: true };
     } catch (err) {
       return { success: false, error: toError(err) };

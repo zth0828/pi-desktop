@@ -21,7 +21,8 @@ import type {
 import type { DefaultPackageManager } from '@earendil-works/pi-coding-agent';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
-import { getActiveRuntime } from './pi-runtime-api';
+import { resolveRuntimeForContext } from './pi-runtime-api';
+import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 import { fetchPackageCatalog, fetchPackageDetail } from './package-catalog';
 
@@ -31,10 +32,10 @@ type PmEntry = { key: string; pm: Pm };
 let cached: PmEntry | null = null;
 
 /** runtime 活动则复用其 settingsManager（避免壳另开实例写 settings.json 后被运行时缓存覆盖）。 */
-async function getPackageManager(): Promise<{ sdk: PiSdk; pm: Pm; agentDir: string }> {
+async function getPackageManager(ctx?: HostActionContext): Promise<{ sdk: PiSdk; pm: Pm; agentDir: string }> {
   const sdk = await loadPiSdk();
   const agentDir = sdk.getAgentDir();
-  const active = getActiveRuntime();
+  const active = resolveRuntimeForContext(ctx);
   const cwd = active?.cwd ?? (await settingsApi.get({ key: 'workspaceCwd' })) ?? homedir();
   // generation 进 key：会话替换后 services/settingsManager 可能已重建
   const key = `${cwd}::${agentDir}::${active ? `rt${active.generation}` : 'standalone'}`;
@@ -80,8 +81,8 @@ function toError(err: unknown): string {
 }
 
 export const packagesApi = {
-  list: async (): Promise<PiPackageListResult> => {
-    const { pm } = await getPackageManager();
+  list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiPackageListResult> => {
+    const { pm } = await getPackageManager(ctx);
     const packages: PiPackageRow[] = pm.listConfiguredPackages().map((p) => ({
       source: p.source,
       scope: p.scope,
@@ -93,11 +94,11 @@ export const packagesApi = {
     return { packages };
   },
 
-  install: async (payload: PiPackageInstallPayload): Promise<HostSuccess> => {
+  install: async (payload: PiPackageInstallPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const source = payload.source.trim();
     if (!source) return { success: false, error: 'empty source' };
     try {
-      const { pm } = await getPackageManager();
+      const { pm } = await getPackageManager(ctx);
       await pm.installAndPersist(source);
       return { success: true };
     } catch (err) {
@@ -105,9 +106,9 @@ export const packagesApi = {
     }
   },
 
-  remove: async (payload: PiPackageRemovePayload): Promise<HostSuccess> => {
+  remove: async (payload: PiPackageRemovePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
-      const { pm } = await getPackageManager();
+      const { pm } = await getPackageManager(ctx);
       await pm.removeAndPersist(payload.source, { local: payload.scope === 'project' });
       return { success: true };
     } catch (err) {
@@ -115,9 +116,9 @@ export const packagesApi = {
     }
   },
 
-  update: async (payload: PiPackageUpdatePayload): Promise<HostSuccess> => {
+  update: async (payload: PiPackageUpdatePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
-      const { pm } = await getPackageManager();
+      const { pm } = await getPackageManager(ctx);
       await pm.update(payload.source);
       return { success: true };
     } catch (err) {
@@ -125,8 +126,8 @@ export const packagesApi = {
     }
   },
 
-  checkUpdates: async (): Promise<PiPackageCheckUpdatesResult> => {
-    const { pm } = await getPackageManager();
+  checkUpdates: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiPackageCheckUpdatesResult> => {
+    const { pm } = await getPackageManager(ctx);
     const updates = await pm.checkForAvailableUpdates();
     return {
       updates: updates.map((u) => ({

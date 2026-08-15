@@ -167,4 +167,12 @@ export const hostApi = {
     openDirectory: (title?: string, defaultPath?: string) =>
       invokeHost('dialog', 'open', { title, defaultPath, properties: ['openDirectory', 'createDirectory'] }),
   },
+  windows: {
+    openDetached: (payload: { sessionPath: string; cwd?: string }) =>
+      invokeHost('windows', 'openDetached', payload),
+    openDetachedAt: (payload: { sessionPath: string; cwd?: string; screenX: number; screenY: number }) =>
+      invokeHost('windows', 'openDetachedAt', payload),
+    focus: (sessionPath: string) => invokeHost('windows', 'focus', { sessionPath }),
+    list: () => invokeHost('windows', 'list'),
+  },
 };

@@ -5,7 +5,8 @@ import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type { PiSkillListResult, PiSkillRow, PiSkillSource } from '@shared/host-api/contract';
-import { getActiveRuntime } from './pi-runtime-api';
+import { resolveRuntimeForContext } from './pi-runtime-api';
+import type { HostActionContext } from '../main/ipc/host-contract';
 
 /** macOS /tmp → /private/tmp symlink：路径比较前两边 realpath（AGENTS.md）。 */
 function safeRealpath(p: string): string {
@@ -35,8 +36,8 @@ function classifySource(
 }
 
 export const skillsApi = {
-  list: async (): Promise<PiSkillListResult> => {
-    const active = getActiveRuntime();
+  list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiSkillListResult> => {
+    const active = resolveRuntimeForContext(ctx);
     if (!active) return { skills: [], runtimeActive: false };
     const agentDir = active.sdk.getAgentDir();
     const { skills } = active.runtime.services.resourceLoader.getSkills();

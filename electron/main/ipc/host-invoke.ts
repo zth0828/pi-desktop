@@ -2,11 +2,13 @@
 // （去掉了扩展贡献注册——壳自身不做插件化，见 docs/TECHNICAL-PLAN.md §5.3）
 import { ipcMain } from 'electron';
 import {
+  type HostActionContext,
   type HostResponse,
   type HostServiceRegistry,
   type RuntimeHostAction,
   isHostRequest,
 } from './host-contract';
+import { resolveWindowSession } from '../window-manager';
 
 export class HostApiRegistry {
   private modules = new Map<string, Map<string, RuntimeHostAction>>();
@@ -46,7 +48,10 @@ function toHostApiRegistry(registryOrServices: HostApiRegistry | HostServiceRegi
 
 export function createHostInvokeDispatcher(registryOrServices: HostApiRegistry | HostServiceRegistry) {
   const registry = toHostApiRegistry(registryOrServices);
-  return async function dispatchHostRequest(request: unknown): Promise<HostResponse> {
+  return async function dispatchHostRequest(
+    request: unknown,
+    ctx?: HostActionContext,
+  ): Promise<HostResponse> {
     const requestId = request && typeof request === 'object'
       ? String((request as Record<string, unknown>).id ?? '')
       : undefined;
@@ -72,7 +77,7 @@ export function createHostInvokeDispatcher(registryOrServices: HostApiRegistry |
     }
 
     try {
-      const data = await action(request.payload);
+      const data = await action(request.payload, ctx);
       return { id: request.id, ok: true, data };
     } catch (error) {
       return {
@@ -89,5 +94,9 @@ export function createHostInvokeDispatcher(registryOrServices: HostApiRegistry |
 
 export function registerHostInvokeHandler(registry: HostApiRegistry): void {
   const dispatch = createHostInvokeDispatcher(registry);
-  ipcMain.handle('host:invoke', async (_event, request: unknown) => dispatch(request));
+  // 多窗口 M1：sender → 窗口绑定会话，注入 action 的 ctx（sessionPath 查不到为 null）
+  ipcMain.handle('host:invoke', async (event, request: unknown) => dispatch(request, {
+    sender: event.sender,
+    sessionPath: resolveWindowSession(event.sender.id),
+  }));
 }

@@ -364,6 +364,7 @@
     "rename": "Rename",
     "renamePlaceholder": "Session name",
     "copyId": "Copy session ID",
+    "openDetached": "Open in separate window",
     "continueNewChat": "Continue in new chat",
     "showMore": "Show more ({{count}} remaining)",
     "save": "Save",

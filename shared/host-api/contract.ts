@@ -351,6 +351,22 @@ export type DialogOpenPayload = {
 };
 export type DialogOpenResult = { canceled: boolean; filePaths: string[] };
 
+// —— windows：多窗口管理（多窗口 M2，docs/MULTI-WINDOW-PLAN.md）——
+
+export type WindowsOpenDetachedPayload = { sessionPath: string; cwd?: string };
+/** 拖出开窗（多窗口 M3）：screenX/screenY 为松手点屏幕 DIP 坐标（渲染层 dragend 原样上报）。 */
+export type WindowsOpenDetachedAtPayload = WindowsOpenDetachedPayload & {
+  screenX: number;
+  screenY: number;
+};
+export type WindowsFocusPayload = { sessionPath: string };
+export type WindowListEntry = {
+  windowId: number;
+  sessionPath: string | null;
+  isMain: boolean;
+  focused: boolean;
+};
+
 // —— notify：macOS 系统通知（渲染层只上报事件，焦点判定与弹通知都在 main）——
 
 export type NotifyKind = 'runCompleted' | 'uiRequest';
@@ -815,6 +831,16 @@ export type HostApiContract = {
   };
   dialog: {
     open: (payload: DialogOpenPayload) => DialogOpenResult;
+  };
+  windows: {
+    /** 在独立窗口打开指定会话；同会话已有窗口则聚焦复用。 */
+    openDetached: (payload: WindowsOpenDetachedPayload) => void;
+    /** 拖出开窗（多窗口 M3）：落点在任一 app 窗口内则不动，否则以落点为中心创建。 */
+    openDetachedAt: (payload: WindowsOpenDetachedAtPayload) => void;
+    /** 聚焦绑定指定会话的窗口；没有对应窗口则新建独立窗口。 */
+    focus: (payload: WindowsFocusPayload) => void;
+    /** 窗口↔会话绑定清单（调试/测试用）。 */
+    list: () => WindowListEntry[];
   };
   review: {
     /** Git HEAD 或非 Git 会话 baseline ↔ 当前磁盘快照的改动汇总。 */

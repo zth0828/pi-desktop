@@ -102,7 +102,8 @@ export default function App() {
 
   const newChat = () => {
     setPage('chat');
-    if (chatStarted) void hostApi.piRuntime.newSession();
+    // 走 store 的 newSession：置位 expectingReplacement，sessionReplaced 事件据此改绑（多窗口 M2）
+    if (chatStarted) void useChatStore.getState().newSession();
   };
 
   const toggleSidebar = () => {

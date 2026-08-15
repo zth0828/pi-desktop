@@ -1,7 +1,7 @@
-import { app, BrowserWindow, screen } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
-import { resolveAppPageId } from '@shared/app-page';
 import { HostApiRegistry, registerHostInvokeHandler } from './ipc/host-invoke';
+import { createMainWindow } from './window-manager';
 import { createHostServices } from '../services';
 import { disposeAllRuntimes } from '../services/pi-runtime-api';
 import { resolveAppIconPath } from '../utils/app-icon';
@@ -26,54 +26,6 @@ process.env.PI_PACKAGE_CATALOG_CACHE_DIR = path.join(app.getPath('userData'), 'p
 const hostRegistry = new HostApiRegistry();
 hostRegistry.registerCoreServices(createHostServices());
 registerHostInvokeHandler(hostRegistry);
-
-function createMainWindow(): BrowserWindow {
-  const workArea = screen.getPrimaryDisplay().workAreaSize;
-  const width = Math.min(1440, Math.max(960, workArea.width - 64));
-  const height = Math.min(900, Math.max(640, workArea.height - 64));
-  const icon = resolveAppIconPath('png', {
-    isPackaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
-    mainDir: __dirname,
-  });
-  const win = new BrowserWindow({
-    width,
-    height,
-    // 侧栏 + 聊天列(420) + 右侧面板的最小可用宽度；窄于此面板自动转覆盖层（CSS 媒体查询）
-    minWidth: 960,
-    minHeight: 640,
-    title: 'Pi Desktop',
-    icon,
-    // 让 macOS 原生红黄绿按钮叠在应用内容上，避免额外占一整行标题栏。
-    ...(process.platform === 'darwin'
-      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 14 } }
-      : {}),
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  const canUseInitialPage = Boolean(process.env.VITE_DEV_SERVER_URL)
-    || process.env.PI_DESKTOP_E2E === '1';
-  const initialPage = canUseInitialPage
-    ? resolveAppPageId(process.env.PI_DESKTOP_DEV_INITIAL_PAGE)
-    : undefined;
-
-  if (process.env.VITE_DEV_SERVER_URL) {
-    const url = new URL(process.env.VITE_DEV_SERVER_URL);
-    if (initialPage) url.searchParams.set('page', initialPage);
-    win.loadURL(url.toString());
-  } else {
-    win.loadFile(
-      path.join(__dirname, '../../dist/index.html'),
-      initialPage ? { query: { page: initialPage } } : undefined,
-    );
-  }
-  return win;
-}
 
 app.whenReady().then(() => {
   if (process.platform === 'darwin') {

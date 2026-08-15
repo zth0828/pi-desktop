@@ -21,15 +21,20 @@ import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 import { isLmStudioProvider, syncLmStudioModels } from '../utils/lmstudio-models';
 import { syncConfiguredProviderModels } from '../utils/configured-provider-models';
-import { getActiveRuntime, getActiveRuntimeReady, piRuntimeApi } from './pi-runtime-api';
+import {
+  piRuntimeApi,
+  resolveRuntimeForContext,
+  resolveRuntimeForContextReady,
+} from './pi-runtime-api';
+import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 
 type ModelRuntime = Awaited<ReturnType<PiSdk['ModelRuntime']['create']>>;
 
 let runtimePromise: Promise<ModelRuntime> | null = null;
 
-async function getModelRuntime(): Promise<{ sdk: PiSdk; runtime: ModelRuntime }> {
-  const active = await getActiveRuntimeReady();
+async function getModelRuntime(ctx?: HostActionContext): Promise<{ sdk: PiSdk; runtime: ModelRuntime }> {
+  const active = await resolveRuntimeForContextReady(ctx);
   if (active) {
     return { sdk: active.sdk, runtime: active.runtime.services.modelRuntime };
   }
@@ -152,8 +157,8 @@ async function resolveStandaloneCwd(): Promise<string> {
 }
 
 export const providersApi = {
-  list: async (): Promise<PiProviderListResult> => {
-    const { sdk, runtime } = await getModelRuntime();
+  list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiProviderListResult> => {
+    const { sdk, runtime } = await getModelRuntime(ctx);
     const configuredProvidersById = configuredProviders(sdk.getAgentDir());
     const extensionProviderIds = new Set(runtime.getRegisteredProviderIds());
     const rows: PiProviderRow[] = [];
@@ -183,8 +188,8 @@ export const providersApi = {
     return { providers: rows };
   },
 
-  listModels: async () => {
-    const { sdk, runtime } = await getModelRuntime();
+  listModels: async (_payload?: unknown, ctx?: HostActionContext) => {
+    const { sdk, runtime } = await getModelRuntime(ctx);
     const configuredProvidersById = configuredProviders(sdk.getAgentDir());
     const providerNames = new Map(runtime.getProviders().map((provider) => [provider.id, provider.name]));
     const available = await runtime.getAvailable();
@@ -208,8 +213,8 @@ export const providersApi = {
     };
   },
 
-  refresh: async () => {
-    const { sdk, runtime } = await getModelRuntime();
+  refresh: async (_payload?: unknown, ctx?: HostActionContext) => {
+    const { sdk, runtime } = await getModelRuntime(ctx);
     const signal = AbortSignal.timeout(15_000);
     try {
       const configured = await syncConfiguredCatalogs(runtime, sdk.getAgentDir());
@@ -230,8 +235,8 @@ export const providersApi = {
     }
   },
 
-  setApiKey: async (payload: PiProviderSetKeyPayload): Promise<PiProviderSetKeyResult> => {
-    const { sdk, runtime } = await getModelRuntime();
+  setApiKey: async (payload: PiProviderSetKeyPayload, ctx?: HostActionContext): Promise<PiProviderSetKeyResult> => {
+    const { sdk, runtime } = await getModelRuntime(ctx);
     try {
       // login('api_key') 的 interaction.prompt 直接回传 GUI 录入的 key；
       // 持久化由 pi auth-storage 完成
@@ -258,8 +263,8 @@ export const providersApi = {
     }
   },
 
-  removeCredential: async (payload: { providerId: string }): Promise<HostSuccess> => {
-    const { sdk, runtime } = await getModelRuntime();
+  removeCredential: async (payload: { providerId: string }, ctx?: HostActionContext): Promise<HostSuccess> => {
+    const { sdk, runtime } = await getModelRuntime(ctx);
     try {
       await runtime.logout(payload.providerId);
       updateConfiguredProvider(sdk.getAgentDir(), payload.providerId, (provider) => {
@@ -276,8 +281,8 @@ export const providersApi = {
     }
   },
 
-  deleteCustom: async (payload: { providerId: string }): Promise<HostSuccess> => {
-    const { sdk, runtime } = await getModelRuntime();
+  deleteCustom: async (payload: { providerId: string }, ctx?: HostActionContext): Promise<HostSuccess> => {
+    const { sdk, runtime } = await getModelRuntime(ctx);
     try {
       const configured = configuredProviders(sdk.getAgentDir());
       if (!configured[payload.providerId]) {
@@ -296,8 +301,8 @@ export const providersApi = {
   },
 
   /** OAuth：pi 的 provider-owned 流程；授权 URL 等经 providers.oauthProgress 事件推给 GUI。 */
-  startOAuth: async (payload: { providerId: string }): Promise<HostSuccess> => {
-    const { runtime } = await getModelRuntime();
+  startOAuth: async (payload: { providerId: string }, ctx?: HostActionContext): Promise<HostSuccess> => {
+    const { runtime } = await getModelRuntime(ctx);
     try {
       await runtime.login(payload.providerId, 'oauth', {
         prompt: async () => '',
@@ -315,7 +320,7 @@ export const providersApi = {
   },
 
   /** 自定义供应商：合并写入 <agentDir>/models.json（pi 文档定义的公开配置格式）。 */
-  addCustom: async (payload: PiProviderAddCustomPayload): Promise<HostSuccess> => {
+  addCustom: async (payload: PiProviderAddCustomPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
       const sdk = await loadPiSdk();
       const agentDir = sdk.getAgentDir();
@@ -343,8 +348,8 @@ export const providersApi = {
       mkdirSync(agentDir, { recursive: true });
       writeFileSync(modelsPath, JSON.stringify(doc, null, 2));
       invalidateModelRuntime();
-      const active = await getActiveRuntimeReady();
-      const runtime = active?.runtime.services.modelRuntime ?? (await getModelRuntime()).runtime;
+      const active = await resolveRuntimeForContextReady(ctx);
+      const runtime = active?.runtime.services.modelRuntime ?? (await getModelRuntime(ctx)).runtime;
       if (active) await runtime.refresh({ allowNetwork: false });
       if (payload.apiKey) {
         await runtime.login(payload.id, 'api_key', {
@@ -363,7 +368,7 @@ export const providersApi = {
    * 用户由此手动声明；活动会话正在使用该模型时用 pi 原生 setModel 重新应用定义，
    * 思考深度菜单立即恢复可用。
    */
-  setModelReasoning: async (payload: PiProviderSetModelReasoningPayload): Promise<HostSuccess> => {
+  setModelReasoning: async (payload: PiProviderSetModelReasoningPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
       const sdk = await loadPiSdk();
       let found = false;
@@ -386,12 +391,12 @@ export const providersApi = {
         return { success: false, error: `model not found: ${payload.providerId}/${payload.modelId}` };
       }
       invalidateModelRuntime();
-      const active = await getActiveRuntimeReady();
+      const active = await resolveRuntimeForContextReady(ctx);
       if (active) {
         await active.runtime.services.modelRuntime.refresh({ allowNetwork: false });
         const current = active.runtime.session.model;
         if (current?.provider === payload.providerId && current?.id === payload.modelId) {
-          const result = await piRuntimeApi.setModel({ provider: payload.providerId, id: payload.modelId });
+          const result = await piRuntimeApi.setModel({ provider: payload.providerId, id: payload.modelId }, ctx);
           if (!result.success) return { success: false, error: result.error };
         }
       }
@@ -587,9 +592,9 @@ export const providersApi = {
   },
 
   /** 首选模型 = pi settings.json 的 defaultProvider/defaultModel（新会话的初始模型来源）。 */
-  getDefaultModel: async (): Promise<PiDefaultModelResult> => {
+  getDefaultModel: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiDefaultModelResult> => {
     try {
-      const active = getActiveRuntime();
+      const active = resolveRuntimeForContext(ctx);
       const sdk = active ? null : await loadPiSdk();
       const settingsManager = active
         ? active.runtime.services.settingsManager
@@ -608,12 +613,12 @@ export const providersApi = {
    * 所以有活动会话时直接复用 piRuntime.setModel；无会话时用独立
    * SettingsManager 写同一份 settings.json，语义完全一致。
    */
-  setDefaultModel: async (payload: PiDefaultModel): Promise<HostSuccess> => {
-    const active = await getActiveRuntimeReady();
-    if (active) return piRuntimeApi.setModel(payload);
+  setDefaultModel: async (payload: PiDefaultModel, ctx?: HostActionContext): Promise<HostSuccess> => {
+    const active = await resolveRuntimeForContextReady(ctx);
+    if (active) return piRuntimeApi.setModel(payload, ctx);
     try {
       const sdk = await loadPiSdk();
-      const { runtime } = await getModelRuntime();
+      const { runtime } = await getModelRuntime(ctx);
       if (!runtime.getModel(payload.provider, payload.id)) {
         return { success: false, error: `model not found: ${payload.provider}/${payload.id}` };
       }

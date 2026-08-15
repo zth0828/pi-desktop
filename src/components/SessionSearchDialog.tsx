@@ -3,6 +3,7 @@ import { Archive, LoaderCircle, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PiSessionSearchRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
+import { useChatStore } from '../stores/chat';
 
 type Props = {
   open: boolean;
@@ -89,7 +90,7 @@ export function SessionSearchDialog({ open, onClose, onOpenChat }: Props) {
     setSelectingPath(session.path);
     setError('');
     try {
-      const result = await hostApi.piSessions.switch(session.path, session.cwd);
+      const result = await useChatStore.getState().switchSession(session.path, session.cwd);
       if (!result.success) {
         setError(result.error || t('sessionSearch.switchFailed'));
         return;

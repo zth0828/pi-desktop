@@ -26,7 +26,8 @@ import {
   upsertServer,
   writeMcpConfigFile,
 } from '../utils/mcp-config';
-import { getActiveRuntime, getLatestMcpStatusSnapshot } from './pi-runtime-api';
+import { getLatestMcpStatusSnapshot, resolveRuntimeForContext } from './pi-runtime-api';
+import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 
 const ADAPTER_PACKAGE = 'pi-mcp-adapter';
@@ -36,10 +37,10 @@ function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-async function resolvePaths(): Promise<{ agentDir: string; cwd?: string }> {
+async function resolvePaths(ctx?: HostActionContext): Promise<{ agentDir: string; cwd?: string }> {
   const sdk = await loadPiSdk();
   const agentDir = sdk.getAgentDir();
-  const active = getActiveRuntime();
+  const active = resolveRuntimeForContext(ctx);
   const cwd = active?.cwd ?? (await settingsApi.get({ key: 'workspaceCwd' })) ?? undefined;
   return { agentDir, cwd };
 }
@@ -106,8 +107,8 @@ function parseStatusSnapshot(): Map<string, PiMcpServerStatus> {
 }
 
 export const mcpApi = {
-  list: async (): Promise<PiMcpListResult> => {
-    const { agentDir, cwd } = await resolvePaths();
+  list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiMcpListResult> => {
+    const { agentDir, cwd } = await resolvePaths(ctx);
     const globalPath = path.join(agentDir, 'mcp.json');
     const projectPath = cwd ? path.join(cwd, '.mcp.json') : undefined;
     const statuses = parseStatusSnapshot();
@@ -131,14 +132,14 @@ export const mcpApi = {
     };
   },
 
-  upsert: async (payload: PiMcpUpsertPayload): Promise<HostSuccess> => {
+  upsert: async (payload: PiMcpUpsertPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const name = payload.name.trim();
     if (!name) return { success: false, error: 'empty name' };
     if (!payload.config.command && !payload.config.url) {
       return { success: false, error: 'command or url required' };
     }
     try {
-      const { agentDir, cwd } = await resolvePaths();
+      const { agentDir, cwd } = await resolvePaths(ctx);
       const filePath =
         payload.scope === 'project'
           ? cwd
@@ -159,9 +160,9 @@ export const mcpApi = {
     }
   },
 
-  remove: async (payload: PiMcpServerRefPayload): Promise<HostSuccess> => {
+  remove: async (payload: PiMcpServerRefPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
-      const { agentDir, cwd } = await resolvePaths();
+      const { agentDir, cwd } = await resolvePaths(ctx);
       const filePath =
         payload.scope === 'project' && cwd
           ? path.join(cwd, '.mcp.json')
@@ -173,9 +174,9 @@ export const mcpApi = {
     }
   },
 
-  setDisabled: async (payload: PiMcpSetDisabledPayload): Promise<HostSuccess> => {
+  setDisabled: async (payload: PiMcpSetDisabledPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
-      const { agentDir, cwd } = await resolvePaths();
+      const { agentDir, cwd } = await resolvePaths(ctx);
       const filePath =
         payload.scope === 'project' && cwd
           ? path.join(cwd, '.mcp.json')

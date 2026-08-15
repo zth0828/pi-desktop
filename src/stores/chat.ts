@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import type { CompactionReason, PiRuntimeEventEnvelope } from '@shared/pi-event-map';
 import type {
+  HostSuccess,
   PiExtensionUiState,
   PiRuntimeUsageTurn,
   PiRuntimeModelInfo,
@@ -13,6 +14,7 @@ import type {
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { reportRunCompleted, reportUiRequest } from '../lib/notify';
+import { matchesBoundSession, shouldApplySessionReplaced } from '../lib/session-binding';
 import {
   rebuildToolExecutionsFromMessages,
   type ChatMessage,
@@ -52,6 +54,14 @@ type ChatState = {
   startError?: string;
   cwd?: string;
   sessionId?: string;
+  /**
+   * 本窗口绑定的会话 id（多窗口 M2）：非本窗口会话的事件/状态推送按它过滤。
+   * null = 尚未绑定（主窗口初始态）；start/switch/sessionReplaced 后更新。
+   * 会话替换（newSession/fork 后 sessionId 会变）由 expectingReplacement 放行。
+   */
+  boundSessionId: string | null;
+  /** 本窗口刚发起会话替换动作，下一个 sessionReplaced 无论 sessionId 都接受并改绑 */
+  expectingReplacement: boolean;
   generation: number;
   model?: PiRuntimeModelInfo;
   thinkingLevel: string;
@@ -80,6 +90,8 @@ type ChatState = {
   extensionUi?: PiExtensionUiState;
 
   start: (cwd: string) => Promise<void>;
+  /** 切换本窗口绑定的会话（多窗口 M2）：main 侧已同步改绑窗口，成功后按本窗口上下文重取全量状态 */
+  switchSession: (path: string, cwd?: string) => Promise<HostSuccess>;
   /** behavior：流式中提交的排队方式（默认 followUp 排队；'steer' 当前轮插入） */
   prompt: (text: string, images?: unknown[], behavior?: 'steer' | 'followUp') => Promise<void>;
   abort: () => Promise<void>;
@@ -111,6 +123,8 @@ type ChatState = {
 export const useChatStore = create<ChatState>((set, get) => ({
   started: false,
   starting: false,
+  boundSessionId: null,
+  expectingReplacement: false,
   generation: 0,
   thinkingLevel: 'off',
   availableThinkingLevels: [],
@@ -146,9 +160,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }),
       ]);
       get().applyState(state);
-      set({ started: true, starting: false });
+      set({ started: true, starting: false, boundSessionId: state.sessionId });
     } catch (err) {
       set({ starting: false, startError: err instanceof Error ? err.message : String(err) });
+    }
+  },
+
+  switchSession: async (path, cwd) => {
+    set({ starting: true, startError: undefined });
+    try {
+      const result = await hostApi.piSessions.switch(path, cwd);
+      if (!result.success) {
+        set({ starting: false, startError: result.error });
+        return result;
+      }
+      // switch 已在 main 侧把本窗口改绑到目标会话；目标即当前会话的早退路径
+      // 不推事件，统一按本窗口上下文重取状态（事件晚到时 sessionId 已匹配，幂等）
+      const state = await hostApi.piRuntime.getState().catch(() => null);
+      if (state) {
+        get().applyState(state);
+        set({ started: true, starting: false, boundSessionId: state.sessionId });
+      } else {
+        // 取不到状态时放行下一次 sessionReplaced 兜底
+        set({ starting: false, expectingReplacement: true });
+      }
+      return { success: true };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      set({ starting: false, startError: error });
+      return { success: false, error };
     }
   },
 
@@ -177,7 +217,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   newSession: async () => {
-    await hostApi.piRuntime.newSession();
+    // 新会话 sessionId 会变：放行随后的 sessionReplaced 并改绑（多窗口 M2）
+    set({ expectingReplacement: true });
+    const result = await hostApi.piRuntime.newSession();
+    if (!result.success) set({ expectingReplacement: false, startError: result.error });
     // sessionReplaced 事件会带回新状态
   },
 
@@ -206,9 +249,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   forkFrom: async (entryId) => {
+    // fork 产生新会话（sessionId 变）：放行随后的 sessionReplaced 并改绑（多窗口 M2）
+    set({ expectingReplacement: true });
     const result = await hostApi.piRuntime.fork(entryId);
     if (!result.success) {
-      set({ startError: result.error });
+      set({ expectingReplacement: false, startError: result.error });
       return;
     }
     // sessionReplaced 事件刷新消息列表；被选消息文本回填输入框供编辑重发
@@ -289,6 +334,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   applyEnvelope: (envelope) => {
     const s = get();
+    // 多窗口 M2：非本窗口绑定会话的事件丢弃（bound 为 null 的初始态保持原行为）
+    if (!matchesBoundSession(s.boundSessionId, envelope.sessionId)) return;
     if (envelope.generation !== s.generation) return; // 过期会话的事件丢弃
     const { event } = envelope;
     switch (event.type) {
@@ -436,10 +483,18 @@ export function bindChatEvents(): void {
     useChatStore.getState().applyEnvelope(envelope);
   });
   onHostEvent('piRuntime', 'sessionReplaced', (state) => {
-    useChatStore.getState().applyState(state);
+    const s = useChatStore.getState();
+    // 多窗口 M2：非本窗口绑定会话的状态推送丢弃。本窗口发起的会话替换
+    // （newSession/fork 后 sessionId 会变）由 expectingReplacement 放行并改绑；
+    // switch 链路在 switchSession 里已用 getState 直接应用并改绑，晚到的
+    // 广播事件 sessionId 与 bound 一致，重复应用幂等。
+    if (!shouldApplySessionReplaced(s.boundSessionId, state.sessionId, s.expectingReplacement)) return;
+    s.applyState(state);
+    useChatStore.setState({ boundSessionId: state.sessionId, expectingReplacement: false });
   });
   onHostEvent('piRuntime', 'uiRequest', (req) => {
     const s = useChatStore.getState();
+    if (!matchesBoundSession(s.boundSessionId, req.sessionId)) return; // 非本窗口会话的请求丢弃（多窗口 M2）
     if (req.generation !== s.generation) return; // 过期会话的请求丢弃（main 侧会兜底取消）
     useChatStore.setState({ uiRequests: [...s.uiRequests, req] });
     // 挂起的确认/输入请求也走系统通知（"需要确认/输入"类）

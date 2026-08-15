@@ -9,7 +9,8 @@ import type {
 } from '@shared/host-api/contract';
 import { resolveWorkspacePath } from '../utils/workspace-path';
 import { normalizePreviewablePath } from '../utils/previewable-files';
-import { getActiveRuntime } from './pi-runtime-api';
+import { resolveRuntimeForContext } from './pi-runtime-api';
+import type { HostActionContext } from '../main/ipc/host-contract';
 
 const EXCLUDED_DIRS = new Set(['.git', 'node_modules']);
 const MAX_TEXT_BYTES = 1024 * 1024;
@@ -32,8 +33,8 @@ const BINARY_PREVIEW: Record<string, { kind: WorkspaceReadResult['kind']; mimeTy
   '.xlsx': { kind: 'spreadsheet', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
 };
 
-function activeRoot(): string {
-  const runtime = getActiveRuntime();
+function activeRoot(ctx?: HostActionContext): string {
+  const runtime = resolveRuntimeForContext(ctx);
   if (!runtime) throw new Error('session not started');
   return runtime.cwd;
 }
@@ -42,8 +43,8 @@ function activeRoot(): string {
  * 相对路径始终限制在当前工作区。绝对路径只有在 pi 本次 runtime 的 read/edit/write
  * 工具调用里真实出现过时才允许预览，避免 Renderer 通过 IPC 任意读取本机文件。
  */
-async function resolvePreviewFile(pathValue: string): Promise<string> {
-  const runtime = getActiveRuntime();
+async function resolvePreviewFile(pathValue: string, ctx?: HostActionContext): Promise<string> {
+  const runtime = resolveRuntimeForContext(ctx);
   if (!runtime) throw new Error('session not started');
   const root = await realpath(runtime.cwd);
   if (!path.isAbsolute(pathValue)) return resolveWorkspacePath(root, pathValue);
@@ -63,8 +64,8 @@ function looksBinary(buffer: Buffer): boolean {
 }
 
 export const workspaceApi = {
-  listChildren: async (payload: WorkspaceListPayload): Promise<WorkspaceListResult> => {
-    const root = await realpath(activeRoot());
+  listChildren: async (payload: WorkspaceListPayload, ctx?: HostActionContext): Promise<WorkspaceListResult> => {
+    const root = await realpath(activeRoot(ctx));
     const dir = await resolveWorkspacePath(root, payload.path ?? '');
     if (!(await lstat(dir)).isDirectory()) throw new Error('path is not a directory');
     const children = await readdir(dir, { withFileTypes: true });
@@ -86,8 +87,8 @@ export const workspaceApi = {
     return { path: relativePath(root, dir), entries };
   },
 
-  readFile: async (payload: WorkspaceReadPayload): Promise<WorkspaceReadResult> => {
-    const file = await resolvePreviewFile(payload.path);
+  readFile: async (payload: WorkspaceReadPayload, ctx?: HostActionContext): Promise<WorkspaceReadResult> => {
+    const file = await resolvePreviewFile(payload.path, ctx);
     const stat = await lstat(file);
     if (!stat.isFile()) throw new Error('path is not a file');
     const extension = path.extname(file).toLowerCase();

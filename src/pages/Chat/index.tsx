@@ -121,6 +121,10 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
   const sessionId = useChatStore((s) => s.sessionId);
   const workspaceVisible = useChatStore((s) => s.workspaceOpen || s.reviewOpen);
   const start = useChatStore((s) => s.start);
+  const switchSession = useChatStore((s) => s.switchSession);
+  // 独立会话窗口（多窗口 M2）：?session=<path> 由 main 侧建窗时带上；
+  // dev 是 URL searchParams，prod 是 loadFile query，两者都体现在 location.search
+  const [attachSession] = useState(() => new URLSearchParams(window.location.search).get('session'));
   // 跨项目切换会话时以 runtime 的实际 cwd 为准
   const activeCwd = useChatStore((s) => (s.started ? s.cwd : undefined));
   const effectiveCwd = activeCwd ?? cwd;
@@ -252,8 +256,21 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
     return () => window.clearTimeout(timer);
   }, [searchHighlightIndex]);
 
-  // 恢复上次的工作目录并启动会话
+  // 独立会话窗口的 attach：cwd 从会话元数据推导（与 SessionList 点击会话一致）；
+  // 找不到元数据时 cwd 缺省，由 main 侧 switch 报错
+  const attachDetached = useCallback(async (sessionPath: string) => {
+    const row = await hostApi.piSessions.listAll()
+      .then((r) => r.sessions.find((session) => session.path === sessionPath))
+      .catch(() => undefined);
+    await switchSession(sessionPath, row?.cwd);
+  }, [switchSession]);
+
+  // 恢复上次的工作目录并启动会话；独立会话窗口跳过恢复，直接 attach 指定会话
   useEffect(() => {
+    if (attachSession) {
+      void attachDetached(attachSession);
+      return;
+    }
     void hostApi.settings.get('workspaceCwd').then((saved) => {
       if (saved) {
         setCwd(saved);
@@ -451,6 +468,19 @@ export default function ChatPage({ searchTarget, onSearchTargetHandled }: Props)
   };
 
   if (!effectiveCwd) {
+    // 独立会话窗口 attach 进行中/失败：不做 workspaceCwd 恢复，也不展示工作区选择
+    if (attachSession) {
+      return (
+        <div className="chat-page chat-empty">
+          <p data-testid="chat-attaching">{startError ?? t('chat.starting')}</p>
+          {startError && (
+            <button className="primary" data-testid="attach-retry" onClick={() => void attachDetached(attachSession)}>
+              {t('chat.startRetry')}
+            </button>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="chat-page chat-empty">
         <p>{t('chat.workspace.required')}</p>

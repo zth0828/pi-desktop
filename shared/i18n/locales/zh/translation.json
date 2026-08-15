@@ -364,6 +364,7 @@
     "rename": "重命名",
     "renamePlaceholder": "会话名称",
     "copyId": "复制会话 ID",
+    "openDetached": "在独立窗口打开",
     "continueNewChat": "在新聊天中继续",
     "showMore": "显示更多（剩余 {{count}} 条）",
     "save": "保存",

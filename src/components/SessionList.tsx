@@ -3,6 +3,7 @@ import { useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  AppWindow,
   Archive,
   ArchiveRestore,
   Check,
@@ -26,7 +27,8 @@ type MenuPosition = { left: number; top: number };
 
 const SESSION_PAGE_SIZE = 10;
 const MENU_WIDTH = 196;
-const SESSION_MENU_HEIGHT = 246;
+// 7 个菜单项（含「在独立窗口打开」）+ 分隔线的估算高度
+const SESSION_MENU_HEIGHT = 280;
 const PROJECT_MENU_HEIGHT = 48;
 
 type SessionListProps = {
@@ -45,6 +47,8 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   const [menuPosition, setMenuPosition] = useState<MenuPosition>();
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
+  const [draggingPath, setDraggingPath] = useState<string>();
+  const dragPayload = useRef<{ sessionPath: string; cwd: string } | undefined>(undefined);
   const refreshSequence = useRef(0);
   const started = useChatStore((s) => s.started);
   const isStreaming = useChatStore((s) => s.isStreaming);
@@ -228,7 +232,35 @@ export function SessionList({ onOpenChat }: SessionListProps) {
           return (
             <div
               key={session.id}
-              className="sidebar-session-row"
+              className={
+                draggingPath === session.path ? 'sidebar-session-row dragging' : 'sidebar-session-row'
+              }
+              draggable
+              onDragStart={(event) => {
+                // 多窗口 M3：拖出会话行；松手在 app 窗口外 → 独立窗口（落点判定在 main 侧）
+                dragPayload.current = { sessionPath: session.path, cwd: session.cwd };
+                event.dataTransfer.setData(
+                  'application/x-pi-session',
+                  JSON.stringify(dragPayload.current),
+                );
+                event.dataTransfer.effectAllowed = 'move';
+                setOpenMenu(undefined);
+                setDraggingPath(session.path);
+              }}
+              onDragEnd={(event) => {
+                setDraggingPath(undefined);
+                const payload = dragPayload.current;
+                dragPayload.current = undefined;
+                // 部分平台 Esc 取消拖拽时 dragend 坐标为 (0,0)，视为取消不上报
+                if (!payload || (event.screenX === 0 && event.screenY === 0)) return;
+                // 窗口内松手也会走到这里；main 侧按窗口 bounds 判定兜住（窗口内 = 不开窗）
+                void hostApi.windows.openDetachedAt({
+                  sessionPath: payload.sessionPath,
+                  cwd: payload.cwd,
+                  screenX: event.screenX,
+                  screenY: event.screenY,
+                });
+              }}
               onContextMenu={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -242,7 +274,8 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                 onClick={() => {
                   setOpenMenu(undefined);
                   onOpenChat();
-                  if (!session.isCurrent) void hostApi.piSessions.switch(session.path, session.cwd);
+                  // 切换本窗口绑定的会话（独立窗口里点会话 = 改绑本窗口，多窗口 M2）
+                  if (!session.isCurrent) void useChatStore.getState().switchSession(session.path, session.cwd);
                 }}
               >
                 {session.isRunning && (
@@ -323,6 +356,16 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                       >
                         <Copy size={14} />
                         {t('sessions.copyId')}
+                      </button>
+                      <button
+                        data-testid={`sidebar-session-open-detached-${session.id}`}
+                        onClick={() => {
+                          void hostApi.windows.openDetached({ sessionPath: session.path, cwd: session.cwd });
+                          setOpenMenu(undefined);
+                        }}
+                      >
+                        <AppWindow size={14} />
+                        {t('sessions.openDetached')}
                       </button>
                       <button
                         data-testid={`sidebar-session-fork-${session.id}`}

@@ -1,4 +1,5 @@
 // Ported from ClawX: electron/main/ipc/host-contract.ts
+import type { WebContents } from 'electron';
 import type { HostApiContract } from '@shared/host-api/contract';
 
 export type HostRequest = {
@@ -14,7 +15,21 @@ export type HostResponse<T = unknown> =
   | { id?: string; ok: true; data: T }
   | { id?: string; ok: false; error: { code: HostErrorCode; message: string; details?: unknown } };
 
-export type RuntimeHostAction = (payload?: unknown) => Promise<unknown> | unknown;
+/**
+ * hostInvoke 调用方上下文（多窗口 M1，docs/MULTI-WINDOW-PLAN.md）：
+ * 由 ipcMain.handle 注入，不经 IPC 传输（WebContents 不可序列化）。
+ * sessionPath 是 sender 所属窗口绑定的会话（window-manager 解析，未绑定为 null），
+ * action 据此路由到对应 runtime；缺省回退全局 active，单窗口行为不变。
+ */
+export type HostActionContext = {
+  sender: WebContents;
+  sessionPath: string | null;
+};
+
+export type RuntimeHostAction = (
+  payload?: unknown,
+  ctx?: HostActionContext,
+) => Promise<unknown> | unknown;
 type MaybePromise<T> = T | Promise<T>;
 
 type HostServiceFunction<TFunction> = TFunction extends (...args: infer Args) => infer Result

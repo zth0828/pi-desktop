@@ -16,7 +16,8 @@ import type {
   ReviewRevertHunkPayload,
   ReviewSummaryResult,
 } from '@shared/host-api/contract';
-import { getActiveRuntime } from './pi-runtime-api';
+import { resolveRuntimeForContext, type ActiveRuntime } from './pi-runtime-api';
+import type { HostActionContext } from '../main/ipc/host-contract';
 
 type GitResult = { code: number; stdout: string; stderr: string };
 
@@ -167,10 +168,8 @@ export function clearReviewBaseline(): void {
   baselineFailure = null;
 }
 
-/** 当前活动 runtime 的 baseline（cwd 不一致视为没有）。 */
-function currentBaseline(): Baseline | null {
-  const active = getActiveRuntime();
-  if (!active) return null;
+/** 调用方 runtime 的 baseline（cwd 不一致视为没有）。 */
+function currentBaseline(active: ActiveRuntime): Baseline | null {
   return baselines.get(active.cwd) ?? null;
 }
 
@@ -226,10 +225,10 @@ async function conflictPaths(cwd: string, base: Baseline): Promise<Set<string>> 
 }
 
 export const reviewApi = {
-  getSummary: async (): Promise<ReviewSummaryResult> => {
-    const active = getActiveRuntime();
+  getSummary: async (_payload?: unknown, ctx?: HostActionContext): Promise<ReviewSummaryResult> => {
+    const active = resolveRuntimeForContext(ctx);
     if (!active) return unavailable('not-started');
-    const base = currentBaseline();
+    const base = currentBaseline(active);
     if (!base) return unavailable(baselineFailure ?? 'not-a-git-repo');
     try {
       const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
@@ -251,9 +250,9 @@ export const reviewApi = {
     }
   },
 
-  getFileDiff: async (payload: ReviewFileDiffPayload): Promise<ReviewFileDiffResult> => {
-    const active = getActiveRuntime();
-    const base = currentBaseline();
+  getFileDiff: async (payload: ReviewFileDiffPayload, ctx?: HostActionContext): Promise<ReviewFileDiffResult> => {
+    const active = resolveRuntimeForContext(ctx);
+    const base = active ? currentBaseline(active) : null;
     if (!active || !base) {
       return { available: false, reason: baselineFailure ?? 'not-started', path: payload.path, diff: '' };
     }
@@ -273,9 +272,9 @@ export const reviewApi = {
   },
 
   /** 文件级回滚：baseline→当前 的整文件 diff 反向 apply（新增文件被删、删除文件被还原）。 */
-  revertFile: async (payload: ReviewRevertFilePayload): Promise<HostSuccess> => {
-    const active = getActiveRuntime();
-    const base = currentBaseline();
+  revertFile: async (payload: ReviewRevertFilePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    const active = resolveRuntimeForContext(ctx);
+    const base = active ? currentBaseline(active) : null;
     if (!active || !base) return { success: false, error: baselineFailure ?? 'not-started' };
     try {
       if ((await conflictPaths(active.cwd, base)).has(payload.path)) {
@@ -294,9 +293,9 @@ export const reviewApi = {
   },
 
   /** hunk 级回滚：渲染层重建的单 hunk patch，直接 git apply -R（失败原文返回给 UI）。 */
-  revertHunk: async (payload: ReviewRevertHunkPayload): Promise<HostSuccess> => {
-    const active = getActiveRuntime();
-    const base = currentBaseline();
+  revertHunk: async (payload: ReviewRevertHunkPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    const active = resolveRuntimeForContext(ctx);
+    const base = active ? currentBaseline(active) : null;
     if (!active || !base) return { success: false, error: baselineFailure ?? 'not-started' };
     if (!payload.patch.trim()) return { success: false, error: 'empty patch' };
     try {

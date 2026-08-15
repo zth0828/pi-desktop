@@ -3631,6 +3631,10 @@ button.danger-outline {
   min-width: 0;
 }
 
+.sidebar-session-row.dragging {
+  opacity: 0.5;
+}
+
 .sidebar-session-row .sidebar-session {
   flex: 1;
   min-width: 0;
