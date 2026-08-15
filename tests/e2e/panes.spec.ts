@@ -96,9 +96,11 @@ type DomEnv = {
   document: {
     querySelector(selector: string): DomElementLike | null;
     querySelectorAll(selector: string): ArrayLike<DomElementLike>;
+    dispatchEvent(event: unknown): boolean;
   };
   DataTransfer: new () => { setData(type: string, value: string): void };
   DragEvent: new (type: string, init: Record<string, unknown>) => unknown;
+  KeyboardEvent: new (type: string, init: Record<string, unknown>) => unknown;
 };
 
 /** 等会话启动（模型选择器/徽标出现 = runtime 就绪） */
@@ -356,5 +358,43 @@ test('拖出窗口仍开 OS 独立窗口（与分栏共存回归）', async ({ l
   });
   // 主窗口仍停留在 BETA 会话，且未被拖出动作分栏
   await expect(page.getByTestId('message-user').last()).toContainText('main BETA');
+  await expect(page.locator('.pane-leaf')).toHaveCount(1);
+});
+
+test('拖出途中按 Esc 取消 → 不开独立窗口', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'Say PONG dragesc ALPHA');
+
+  // 合成 dragstart → Escape keydown → dragend（窗口外取消点坐标，模拟 mac 上 Esc 取消
+  // 时 dragend 坐标=取消点的真实行为）：Esc 标记命中 → 不上报 openDetachedAt。
+  const alphaRow = page.locator('.sidebar-session-row').filter({ hasText: 'dragesc ALPHA' });
+  const sessionTestId = await alphaRow
+    .locator('[data-testid^="sidebar-session-"]')
+    .first()
+    .getAttribute('data-testid');
+  const sessionId = sessionTestId!.replace('sidebar-session-', '');
+  await page.evaluate((id) => {
+    const dom = globalThis as unknown as DomEnv;
+    const button = dom.document.querySelector(`[data-testid="sidebar-session-${id}"]`);
+    const row = button?.closest('.sidebar-session-row');
+    if (!row) throw new Error('sidebar session row not found');
+    const dt = new dom.DataTransfer();
+    row.dispatchEvent(new dom.DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    dom.document.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    row.dispatchEvent(new dom.DragEvent('dragend', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: dt,
+      screenX: -3000,
+      screenY: -3000,
+    }));
+  }, sessionId);
+
+  // 给潜在的开窗一个出现窗口期，再断言窗口数不变
+  await page.waitForTimeout(1_500);
+  expect(app.windows()).toHaveLength(1);
   await expect(page.locator('.pane-leaf')).toHaveCount(1);
 });

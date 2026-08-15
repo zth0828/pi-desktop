@@ -21,7 +21,13 @@ import type { PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { groupByProject, type ProjectGroup } from '../lib/session-groups';
-import { consumeSessionDroppedInWindow, resetSessionDroppedInWindow } from '../lib/session-drag';
+import {
+  consumeSessionDragCancelled,
+  consumeSessionDroppedInWindow,
+  markSessionDragCancelled,
+  resetSessionDragCancelled,
+  resetSessionDroppedInWindow,
+} from '../lib/session-drag';
 import { sessionPathsInTree } from '../stores/panes';
 import { panesStore } from '../stores/panes-default';
 import { useActiveChatStore } from '../pages/Chat/chat-store-context';
@@ -53,11 +59,13 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   const [busy, setBusy] = useState(false);
   const [draggingPath, setDraggingPath] = useState<string>();
   const dragPayload = useRef<{ sessionPath: string; cwd: string } | undefined>(undefined);
+  // 拖拽期间挂的 Esc keydown 监听（dragend 摘除）；Esc 取消坐标启发式接不住 mac，见 session-drag.ts
+  const dragEscCleanup = useRef<(() => void) | undefined>(undefined);
   const refreshSequence = useRef(0);
   const started = useActiveChatStore((s) => s.started);
   const isStreaming = useActiveChatStore((s) => s.isStreaming);
   const activeCwd = useActiveChatStore((s) => s.cwd);
-  // 分栏树中已打开的会话（多面板 P3）：行内"已打开"标记；实例绑定由 watcher 回写叶子
+  // 分栏树中已打开的会话：行内"已打开"标记；实例绑定由 watcher 回写叶子
   const paneRoot = useStore(panesStore, (s) => s.root);
   const openSessionPaths = useMemo(() => new Set(sessionPathsInTree(paneRoot)), [paneRoot]);
 
@@ -244,23 +252,34 @@ export function SessionList({ onOpenChat }: SessionListProps) {
               }
               draggable
               onDragStart={(event) => {
-                // 多窗口 M3：拖出会话行；松手在 app 窗口外 → 独立窗口（落点判定在 main 侧）
+                // 拖出会话行；松手在 app 窗口外 → 独立窗口（落点判定在 main 侧）
                 resetSessionDroppedInWindow();
+                resetSessionDragCancelled();
                 dragPayload.current = { sessionPath: session.path, cwd: session.cwd };
                 event.dataTransfer.setData(
                   'application/x-pi-session',
                   JSON.stringify(dragPayload.current),
                 );
                 event.dataTransfer.effectAllowed = 'move';
+                // Esc 取消：mac 上取消时 dragend 坐标是取消点而非 (0,0)，靠 keydown 标记识别
+                const onEsc = (e: KeyboardEvent) => {
+                  if (e.key === 'Escape') markSessionDragCancelled();
+                };
+                document.addEventListener('keydown', onEsc);
+                dragEscCleanup.current = () => document.removeEventListener('keydown', onEsc);
                 setOpenMenu(undefined);
                 setDraggingPath(session.path);
               }}
               onDragEnd={(event) => {
                 setDraggingPath(undefined);
+                dragEscCleanup.current?.();
+                dragEscCleanup.current = undefined;
                 const payload = dragPayload.current;
                 dragPayload.current = undefined;
-                // 多面板 P3：分栏落区已消化本次拖拽（分栏/替换/同会话激活），不再上报 OS 开窗
+                // 分栏落区已消化本次拖拽（分栏/替换/同会话激活），不再上报 OS 开窗
                 if (consumeSessionDroppedInWindow()) return;
+                // Esc 取消拖拽：不上报 OS 开窗（坐标启发式在 mac 接不住，见 session-drag.ts）
+                if (consumeSessionDragCancelled()) return;
                 // 部分平台 Esc 取消拖拽时 dragend 坐标为 (0,0)，视为取消不上报
                 if (!payload || (event.screenX === 0 && event.screenY === 0)) return;
                 // 窗口内松手也会走到这里；main 侧按窗口 bounds 判定兜住（窗口内 = 不开窗）
@@ -284,8 +303,8 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                 onClick={() => {
                   setOpenMenu(undefined);
                   onOpenChat();
-                  // 已在某面板打开 → 聚焦该面板；否则替换活跃面板会话（多面板 P3；
-                  // 独立窗口里点会话 = 改绑本窗口活跃面板，多窗口 M2）
+                  // 已在某面板打开 → 聚焦该面板；否则替换活跃面板会话（
+                  // 独立窗口里点会话 = 改绑本窗口活跃面板）
                   panesStore.getState().openOrFocusSession(session.path, session.cwd);
                 }}
               >
