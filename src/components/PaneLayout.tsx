@@ -3,9 +3,10 @@
 // 叶子 = ChatStoreProvider + ChatPane + 会话拖入落区（5 区：四边分栏 / 中心替换）。
 // ?session= attach / workspaceCwd 恢复只作用于窗口首个面板（primary = DEFAULT_CHAT_STORE_ID），
 // 在本文件顶层读取一次后下传，避免每个新面板挂载都跑一遍恢复逻辑。
-import { useMemo, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import { useStore } from 'zustand';
-import { markSessionDroppedInWindow } from '../lib/session-drag';
+import { useTranslation } from 'react-i18next';
+import { markSessionDroppedInWindow, setPaneDropHoverActive } from '../lib/session-drag';
 import { getChatStore } from '../stores/chat-registry';
 import { DEFAULT_CHAT_STORE_ID } from '../stores/default-chat-store';
 import type { BranchNode, LeafNode, SplitNode } from '../stores/panes';
@@ -22,6 +23,14 @@ export type PaneLayoutProps = {
 
 /** 落区判定：面板边缘约 25% 区域为四边分栏区，其余为中心替换区 */
 type DropZone = 'left' | 'right' | 'top' | 'bottom' | 'center';
+
+const DROP_HINT_KEYS: Record<DropZone, string> = {
+  left: 'panes.dropSplitLeft',
+  right: 'panes.dropSplitRight',
+  top: 'panes.dropSplitTop',
+  bottom: 'panes.dropSplitBottom',
+  center: 'panes.dropReplace',
+};
 
 function zoneFromPoint(event: DragEvent<HTMLDivElement>): DropZone {
   const rect = event.currentTarget.getBoundingClientRect();
@@ -45,9 +54,15 @@ type SharedProps = PaneLayoutProps & {
 };
 
 function PaneLeaf({ node, shared }: { node: LeafNode; shared: SharedProps }) {
+  const { t } = useTranslation();
   const [dropZone, setDropZone] = useState<DropZone | null>(null);
   const isActive = useStore(panesStore, (s) => s.activePaneId === node.paneId);
   const store = getChatStore(node.paneId);
+  // 落区激活状态同步给 SessionList 的全局拖拽提示（hover 落区时提示弱化让位）
+  useEffect(() => {
+    setPaneDropHoverActive(dropZone !== null);
+    return () => setPaneDropHoverActive(false);
+  }, [dropZone]);
   if (!store) return null; // closePane 瞬态：实例已销毁、树尚未重渲染
   const primary = node.paneId === DEFAULT_CHAT_STORE_ID;
   const closable = shared.leafCount > 1;
@@ -105,6 +120,9 @@ function PaneLeaf({ node, shared }: { node: LeafNode; shared: SharedProps }) {
       {dropZone && (
         <div className="pane-drop-overlay" data-testid="pane-drop-overlay">
           <div className={`pane-drop-highlight zone-${dropZone}`} data-testid="pane-drop-highlight" />
+          <div className="pane-drop-label" data-testid="pane-drop-label">
+            {t(DROP_HINT_KEYS[dropZone])}
+          </div>
         </div>
       )}
     </div>

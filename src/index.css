@@ -4549,6 +4549,43 @@ button.danger-outline {
 .pane-drop-highlight.zone-top { left: 6px; right: 6px; top: 6px; height: calc(25% - 6px); }
 .pane-drop-highlight.zone-bottom { left: 6px; right: 6px; bottom: 6px; height: calc(25% - 6px); }
 
+/* 落区操作描述：固定在覆盖层中心（指针在边缘区时也落在面板中心，不遮挡高亮块） */
+.pane-drop-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* 会话拖拽全局提示：窗口顶部居中浮条，dragstart 出现 / dragend（含 Esc 取消）消失；
+   悬停落区时弱化（.muted），给落区中心的操作描述让位 */
+.session-drag-hint {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.18);
+  transition: opacity 0.12s;
+}
+.session-drag-hint.muted { opacity: 0.3; }
+
 /* 未启动面板的浮动关闭按钮（已启动面板在标题栏内） */
 .pane-close-floating {
   position: absolute;

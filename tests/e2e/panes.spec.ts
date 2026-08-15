@@ -7,6 +7,9 @@
 // 6) 拖出窗口（合成 dragstart/dragend + 窗口外坐标）→ 仍走 OS 级 openDetachedAt 开独立窗口。
 // 7) 拖出途中按 Esc 取消（dragend 带窗口外取消点坐标）→ 不开窗：mac 上取消坐标是取消点
 //    而非 (0,0)，坐标启发式接不住，靠 dragstart 后挂的 keydown 标记识别（session-drag.ts）。
+// 8) 落区操作描述：合成 dragover 到右缘/中心 → overlay 中心显示分栏/替换描述并随指针切换，
+//    dragleave 后消失（需求 1）。
+// 9) 拖拽全局提示：dragstart → 顶部浮条出现，悬停落区时弱化（muted），dragend → 消失（需求 2）。
 // HTML5 DnD 在 Playwright 无法原生拖拽，落区 drop 用合成 DragEvent（同 scripts/verify-panes-perf.mjs）。
 // 模式同 multi-window.spec.ts：每用例独立 agentDir，mock 走 tests/fixtures/mock-openai-server.mjs。
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -399,4 +402,104 @@ test('拖出途中按 Esc 取消 → 不开独立窗口', async ({ launchElectro
   await page.waitForTimeout(1_500);
   expect(app.windows()).toHaveLength(1);
   await expect(page.locator('.pane-leaf')).toHaveCount(1);
+});
+
+/** 合成 dragover/dragleave 到指定面板的指定位置（right 缘 / center），dataTransfer 带会话 MIME */
+async function dragOverPaneLeaf(
+  page: Page,
+  action: 'dragover-right' | 'dragover-center' | 'dragleave',
+) {
+  await page.evaluate((act) => {
+    const dom = globalThis as unknown as DomEnv;
+    const target = dom.document.querySelectorAll('.pane-leaf')[0];
+    const rect = target.getBoundingClientRect();
+    const dt = new dom.DataTransfer();
+    dt.setData('application/x-pi-session', JSON.stringify({ sessionPath: '/tmp/x', cwd: '/tmp' }));
+    const type = act === 'dragleave' ? 'dragleave' : 'dragover';
+    target.dispatchEvent(new dom.DragEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      clientX: act === 'dragover-center' ? rect.left + rect.width / 2 : rect.right - 10,
+      clientY: rect.top + rect.height / 2,
+      dataTransfer: dt,
+    }));
+  }, action);
+}
+
+test('落区操作描述：dragover 右缘显示分栏描述，移到中心切换为替换描述，dragleave 消失', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 右缘 → 分栏描述（zh「分栏」/ en「split」）
+  await dragOverPaneLeaf(page, 'dragover-right');
+  await expect(page.getByTestId('pane-drop-overlay')).toBeVisible();
+  const label = page.getByTestId('pane-drop-label');
+  await expect(label).toBeVisible();
+  await expect(label).toHaveText(/分栏|split/i);
+  await expect(page.getByTestId('pane-drop-highlight')).toHaveClass(/zone-right/);
+
+  // 指针移到中心 → 实时切换为替换描述（zh「替换」/ en「replace」）
+  await dragOverPaneLeaf(page, 'dragover-center');
+  await expect(label).toHaveText(/替换|replace/i);
+  await expect(page.getByTestId('pane-drop-highlight')).toHaveClass(/zone-center/);
+
+  // dragleave → overlay 与描述一起消失
+  await dragOverPaneLeaf(page, 'dragleave');
+  await expect(page.getByTestId('pane-drop-overlay')).toHaveCount(0);
+  await expect(page.getByTestId('pane-drop-label')).toHaveCount(0);
+});
+
+test('拖拽全局提示：dragstart 出现浮条，悬停落区弱化，dragend 消失', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'Say PONG draghint ALPHA');
+  const alphaRow = page.locator('.sidebar-session-row').filter({ hasText: 'draghint ALPHA' });
+  const sessionTestId = await alphaRow
+    .locator('[data-testid^="sidebar-session-"]')
+    .first()
+    .getAttribute('data-testid');
+  const sessionId = sessionTestId!.replace('sidebar-session-', '');
+
+  // dragstart → 全局提示浮条出现
+  await page.evaluate((id) => {
+    const dom = globalThis as unknown as DomEnv;
+    const button = dom.document.querySelector(`[data-testid="sidebar-session-${id}"]`);
+    const row = button?.closest('.sidebar-session-row');
+    if (!row) throw new Error('sidebar session row not found');
+    const dt = new dom.DataTransfer();
+    row.dispatchEvent(new dom.DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }, sessionId);
+  const hint = page.getByTestId('session-drag-hint');
+  await expect(hint).toBeVisible();
+  await expect(hint).toHaveText(/分栏|split/i);
+  await expect(hint).not.toHaveClass(/muted/);
+
+  // 悬停落区 → 浮条弱化让位（落区中心描述接管）
+  await dragOverPaneLeaf(page, 'dragover-right');
+  await expect(page.getByTestId('pane-drop-label')).toBeVisible();
+  await expect(hint).toHaveClass(/muted/);
+
+  // dragleave → 落区描述消失（真实浏览器在 dragend 前会先触发 dragleave）
+  await dragOverPaneLeaf(page, 'dragleave');
+  await expect(page.getByTestId('pane-drop-overlay')).toHaveCount(0);
+
+  // dragend（screenX/Y=0 → 视为取消，不开窗）→ 浮条消失
+  await page.evaluate((id) => {
+    const dom = globalThis as unknown as DomEnv;
+    const button = dom.document.querySelector(`[data-testid="sidebar-session-${id}"]`);
+    const row = button?.closest('.sidebar-session-row');
+    if (!row) throw new Error('sidebar session row not found');
+    const dt = new dom.DataTransfer();
+    row.dispatchEvent(new dom.DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }, sessionId);
+  await expect(hint).toHaveCount(0);
+  await page.waitForTimeout(500);
+  expect(app.windows()).toHaveLength(1);
 });

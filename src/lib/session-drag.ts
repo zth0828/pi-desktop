@@ -39,3 +39,27 @@ export function consumeSessionDragCancelled(): boolean {
   dragCancelled = false;
   return value;
 }
+
+// 落区悬停标记：拖拽指针悬停在某面板落区时置位，SessionList 的全局拖拽提示
+// 据此弱化让位，避免与落区中心的操作描述视觉打架。
+let paneDropHover = false;
+const paneDropHoverListeners = new Set<() => void>();
+
+/** PaneLeaf 的落区激活/消失时同步（含 unmount 兜底复位） */
+export function setPaneDropHoverActive(active: boolean): void {
+  if (paneDropHover === active) return;
+  paneDropHover = active;
+  paneDropHoverListeners.forEach((listener) => listener());
+}
+
+/** useSyncExternalStore 订阅接口 */
+export function subscribePaneDropHover(listener: () => void): () => void {
+  paneDropHoverListeners.add(listener);
+  return () => {
+    paneDropHoverListeners.delete(listener);
+  };
+}
+
+export function isPaneDropHoverActive(): boolean {
+  return paneDropHover;
+}

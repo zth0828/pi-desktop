@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -24,9 +24,11 @@ import { groupByProject, type ProjectGroup } from '../lib/session-groups';
 import {
   consumeSessionDragCancelled,
   consumeSessionDroppedInWindow,
+  isPaneDropHoverActive,
   markSessionDragCancelled,
   resetSessionDragCancelled,
   resetSessionDroppedInWindow,
+  subscribePaneDropHover,
 } from '../lib/session-drag';
 import { sessionPathsInTree } from '../stores/panes';
 import { panesStore } from '../stores/panes-default';
@@ -44,6 +46,21 @@ const PROJECT_MENU_HEIGHT = 48;
 type SessionListProps = {
   onOpenChat: () => void;
 };
+
+/** 拖拽全程的全局提示浮条：窗口内分栏/替换 vs 窗口外独立窗口；悬停落区时弱化让位 */
+function SessionDragHint() {
+  const { t } = useTranslation();
+  const paneHover = useSyncExternalStore(subscribePaneDropHover, isPaneDropHoverActive);
+  return createPortal(
+    <div
+      className={paneHover ? 'session-drag-hint muted' : 'session-drag-hint'}
+      data-testid="session-drag-hint"
+    >
+      {t('panes.dragHint')}
+    </div>,
+    document.body,
+  );
+}
 
 /** 侧栏会话列表：按项目分组，支持项目/会话归档与删除。 */
 export function SessionList({ onOpenChat }: SessionListProps) {
@@ -466,6 +483,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
 
   return (
     <div className="sidebar-sessions" data-testid="sidebar-sessions">
+      {draggingPath && <SessionDragHint />}
       {started && activeGroups.map((group) => renderGroup(group, false))}
       {started && archivedGroups.length > 0 && (
         <div className="archived-sessions" data-testid="archived-sessions">

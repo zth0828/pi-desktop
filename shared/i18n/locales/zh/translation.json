@@ -682,5 +682,13 @@
     "spreadsheetFailed": "无法解析这个表格。可使用右上角菜单在默认应用中打开。",
     "emptySheet": "这个工作表没有内容。",
     "sheetLimited": "预览最多显示 {{rows}} 行 × {{columns}} 列"
+  },
+  "panes": {
+    "dropSplitLeft": "松手在左侧分栏",
+    "dropSplitRight": "松手在右侧分栏",
+    "dropSplitTop": "松手在上方分栏",
+    "dropSplitBottom": "松手在下方分栏",
+    "dropReplace": "松手替换当前面板会话",
+    "dragHint": "拖到面板边缘分栏 / 中心替换；拖出窗口打开独立窗口；Esc 取消"
   }
 }

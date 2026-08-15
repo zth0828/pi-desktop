@@ -682,5 +682,13 @@
     "spreadsheetFailed": "This spreadsheet could not be parsed. Use the menu above to open it in the default application.",
     "emptySheet": "This sheet is empty.",
     "sheetLimited": "Preview limited to {{rows}} rows × {{columns}} columns"
+  },
+  "panes": {
+    "dropSplitLeft": "Release to split on the left",
+    "dropSplitRight": "Release to split on the right",
+    "dropSplitTop": "Release to split above",
+    "dropSplitBottom": "Release to split below",
+    "dropReplace": "Release to replace this pane's session",
+    "dragHint": "Drop on a pane edge to split, center to replace; drag outside the window to open a detached window; Esc to cancel"
   }
 }
