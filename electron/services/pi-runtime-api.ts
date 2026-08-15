@@ -27,6 +27,7 @@ import type {
   PiUiResponsePayload,
   PiRuntimeQueueItemPayload,
 } from '@shared/host-api/contract';
+import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import type {
   AgentSession,
   AgentSessionRuntime,
@@ -918,8 +919,10 @@ export const piRuntimeApi = {
     if (!active) return null;
     const session = active.runtime.session;
     const stats = session.getSessionStats();
+    // pi 自动命名可能把附件信封带进会话名，标题栏展示前剥离（与列表出口 toRow 一致）
+    const name = session.sessionManager.getSessionName();
     return {
-      name: session.sessionManager.getSessionName(),
+      name: name ? stripAttachmentEnvelope(name) || undefined : name,
       sessionId: stats.sessionId,
       sessionFile: stats.sessionFile,
       model: session.model
