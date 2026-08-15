@@ -2944,7 +2944,9 @@ button.danger-outline {
   font-size: 12px;
 }
 
-.sessions-page .rename-form {
+.sessions-page .rename-form { margin-top: 0; }
+
+.rename-form {
   display: flex;
   gap: 8px;
   margin-top: 10px;
