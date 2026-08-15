@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatOrderedAttachmentPrompt,
   parseUserMessage,
+  stripAttachmentEnvelope,
 } from '../../shared/message-attachments';
 
 describe('ordered message attachments', () => {
@@ -39,5 +40,33 @@ describe('ordered message attachments', () => {
       { kind: 'image', name: 'a & b.png' },
     ]));
     expect(parsed.attachments[0].name).toBe('a & b.png');
+  });
+});
+
+describe('stripAttachmentEnvelope — 标题等纯文本场景剥离附件信封', () => {
+  it('strips envelope and keeps user text', () => {
+    const prompt = formatOrderedAttachmentPrompt('看看这张图像什么', [
+      { kind: 'image', name: 'image.png' },
+    ]);
+    expect(stripAttachmentEnvelope(prompt)).toBe('看看这张图像什么');
+  });
+
+  it('returns empty for attachment-only messages', () => {
+    const prompt = formatOrderedAttachmentPrompt('', [
+      { kind: 'image', name: 'image.png' },
+    ]);
+    expect(stripAttachmentEnvelope(prompt)).toBe('');
+  });
+
+  it('strips file blocks and envelopes anywhere in the text', () => {
+    const prompt = formatOrderedAttachmentPrompt('解释一下', [
+      { kind: 'file', name: 'notes.txt', text: 'alpha' },
+    ]);
+    expect(stripAttachmentEnvelope(prompt)).toBe('解释一下');
+    expect(stripAttachmentEnvelope('前缀 <attachments>\n<attachment index="1" kind="image" name="a.png"></attachment>\n</attachments> 后缀')).toBe('前缀  后缀');
+  });
+
+  it('leaves plain text untouched', () => {
+    expect(stripAttachmentEnvelope('ordinary question')).toBe('ordinary question');
   });
 });

@@ -32,6 +32,7 @@ import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
 import { samePath } from '../utils/same-path';
+import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { ensureSessionExportDirectory, sessionExportPath } from '../utils/session-export';
 import { searchSessions } from './session-search';
 
@@ -105,12 +106,15 @@ function toRow(s: {
   created: Date;
   modified: Date;
 }, current: string | undefined, sdk: PiSdk): PiSessionRow {
+  // 附件 XML 信封不属于标题文字：name/firstMessage 都可能带（pi 按首条消息自动命名时），
+  // 列表出口统一剥离，历史脏标题在展示层一并清净
+  const cleanName = s.name ? stripAttachmentEnvelope(s.name) : '';
   return {
     path: s.path,
     id: s.id,
     cwd: s.cwd,
-    name: s.name,
-    firstMessage: s.firstMessage,
+    name: cleanName || undefined,
+    firstMessage: stripAttachmentEnvelope(s.firstMessage),
     messageCount: s.messageCount,
     created: s.created.toISOString(),
     modified: s.modified.toISOString(),

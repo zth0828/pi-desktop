@@ -8,7 +8,7 @@ import type {
   PiRuntimeUsageResult,
 } from '@shared/host-api/contract';
 import { isProbablyBinary, MAX_FILE_TEXT_BYTES } from '@shared/file-references';
-import { formatOrderedAttachmentPrompt } from '@shared/message-attachments';
+import { formatOrderedAttachmentPrompt, stripAttachmentEnvelope } from '@shared/message-attachments';
 import { hostApi } from '../../lib/host-api';
 import { filterFiles } from '../../lib/file-search';
 import { navigateToPage } from '../../lib/app-navigation';
@@ -493,7 +493,9 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       // 等 prompt 返回后再持久化，避免 sessionReplaced 与扩展 UI 请求竞态。
       if (!autoTitle) return;
       const info = await paneApi.piRuntime.getSessionInfo().catch(() => null);
-      if (!info?.name) await paneApi.piRuntime.setSessionName(autoTitle, false).catch(() => {});
+      // pi 可能已按首条消息（含附件信封）自动命名，脏名也用干净标题覆盖
+      const dirtyName = info?.name ? stripAttachmentEnvelope(info.name) !== info.name : false;
+      if (!info?.name || dirtyName) await paneApi.piRuntime.setSessionName(autoTitle, false).catch(() => {});
     });
   };
 

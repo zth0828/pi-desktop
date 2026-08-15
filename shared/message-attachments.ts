@@ -27,6 +27,15 @@ const ATTACHMENT_RE = /<attachment\s+([^>]+)><\/attachment>/g;
 const ATTRIBUTE_RE = /([\w-]+)="([^"]*)"/g;
 const FILE_RE = /<file name="([^"]*)">\n?([\s\S]*?)\n?<\/file>\n?/g;
 
+// 标题等纯文本场景用：位置不限、可多处出现（MANIFEST_RE 锚定开头，只服务解析）。
+const ENVELOPE_RE = /<attachments>[\s\S]*?<\/attachments>/g;
+const FILE_BLOCK_RE = /<file name="[^"]*">[\s\S]*?<\/file>/g;
+
+/** 去掉附件信封与文件块后剩余的纯文字（会话标题等展示场景用）。 */
+export function stripAttachmentEnvelope(text: string): string {
+  return text.replace(ENVELOPE_RE, '').replace(FILE_BLOCK_RE, '').trim();
+}
+
 function encodeAttribute(value: string): string {
   return value
     .replaceAll('&', '&amp;')
