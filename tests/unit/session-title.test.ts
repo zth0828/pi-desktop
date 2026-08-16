@@ -15,4 +15,10 @@ describe('sessionTitleFromQuestion', () => {
   it('纯附件首问使用本地化回退名', () => {
     expect(sessionTitleFromQuestion('', 'Image conversation')).toBe('Image conversation');
   });
+
+  it('剥离附件信封（标题栏 fallback 直接吃首条消息原文）', () => {
+    const raw = '<attachments>\n<attachment index="1" kind="image" name="image.png" image-index="1"></attachment>\n</attachments>\n你看看这个问题';
+    expect(sessionTitleFromQuestion(raw, '图片会话')).toBe('你看看这个问题');
+    expect(sessionTitleFromQuestion('<attachments>\n<attachment index="1" kind="image" name="a.png"></attachment>\n</attachments>', '图片会话')).toBe('图片会话');
+  });
 });
