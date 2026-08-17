@@ -57,6 +57,8 @@ export function invalidatePiSdkCache(): void {
   cachedPackageRoot = null;
   cachedProjectTrust = null;
   cachedProjectTrustRoot = null;
+  cachedToolsManager = null;
+  cachedToolsManagerRoot = null;
 }
 
 // resolveProjectTrusted 未从包根导出（package exports 只放行 "."），
@@ -85,6 +87,32 @@ export type PiProjectTrustModule = {
 
 let cachedProjectTrust: Promise<PiProjectTrustModule> | null = null;
 let cachedProjectTrustRoot: string | null = null;
+let cachedToolsManager: Promise<PiToolsManagerModule> | null = null;
+let cachedToolsManagerRoot: string | null = null;
+
+export type PiToolsManagerModule = {
+  /** pi TUI 的 fd/rg 解析：优先系统已装，缺失时下载到 pi bin 目录。 */
+  ensureTool: (tool: 'fd' | 'rg', silent?: boolean) => Promise<string>;
+};
+
+/** tools-manager 未从包根导出，与 loadPiProjectTrust 同款按文件 URL 加载。 */
+export async function loadPiToolsManager(): Promise<PiToolsManagerModule> {
+  const env = detectPiEnvironment();
+  if (!env.pi.found || !env.pi.packageRoot) throw new PiNotReadyError('not-installed');
+  if (cachedToolsManager && cachedToolsManagerRoot === env.pi.packageRoot) return cachedToolsManager;
+  cachedToolsManagerRoot = env.pi.packageRoot;
+  cachedToolsManager = import(
+    pathToFileURL(path.join(env.pi.packageRoot, 'dist/utils/tools-manager.js')).href
+  ) as Promise<PiToolsManagerModule>;
+  try {
+    await cachedToolsManager;
+  } catch (err) {
+    cachedToolsManager = null;
+    cachedToolsManagerRoot = null;
+    throw err;
+  }
+  return cachedToolsManager;
+}
 
 export async function loadPiProjectTrust(): Promise<PiProjectTrustModule> {
   const env = detectPiEnvironment();

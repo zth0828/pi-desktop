@@ -1,5 +1,5 @@
 // @ 文件引用 E2E：补全面板出现 → 选中插入 → 发送时 Main 侧展开（mock 断言收到文件内容）。
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess, execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -27,6 +27,10 @@ test.beforeAll(async () => {
   await writeFile(path.join(workspace, 'hello-e2e.txt'), 'UNIQUE_FILE_TOKEN_12345\n');
   await mkdir(path.join(workspace, 'sub'));
   await writeFile(path.join(workspace, 'sub', 'inner-e2e.md'), '# inner\n');
+  // .gitignore 场景：fd 与 pi TUI 一样尊重忽略规则（需 git 仓库语义，同 TUI 的 fd 调用）
+  await writeFile(path.join(workspace, 'ignored-e2e.txt'), 'IGNORED\n');
+  await writeFile(path.join(workspace, '.gitignore'), 'ignored-e2e.txt\n');
+  execFileSync('git', ['init'], { cwd: workspace, stdio: 'ignore' });
   await writeFile(
     path.join(agentDir, 'models.json'),
     JSON.stringify({
@@ -82,6 +86,18 @@ test('@ 触发文件补全面板，选中后插入 @相对路径', async ({ laun
 
   await panel.getByTestId('file-option').first().click();
   await expect(page.getByTestId('chat-input')).toHaveValue('@hello-e2e.txt ');
+});
+
+test('@ 补全尊重 .gitignore（fd 语义，与 pi TUI 一致）', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('chat-input').fill('@e2e');
+  const panel = page.getByTestId('file-panel');
+  await expect(panel).toBeVisible({ timeout: 10_000 });
+  await expect(panel.getByTestId('file-option').filter({ hasText: 'hello-e2e.txt' })).toHaveCount(1);
+  await expect(panel.getByTestId('file-option').filter({ hasText: 'ignored-e2e.txt' })).toHaveCount(0);
 });
 
 test('发送时 @path 展开为文件内容（mock 收到 <file> 块）', async ({ launchElectronApp }) => {
