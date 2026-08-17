@@ -200,7 +200,13 @@
         "user": "用户",
         "assistant": "助手",
         "other": "其他"
-      }
+      },
+      "summarizeQuestion": "离开当前分支前，是否摘要被弃分支的内容？",
+      "summaryNo": "不摘要",
+      "summaryYes": "摘要",
+      "summaryCustom": "用自定义指令摘要",
+      "summaryCustomPrompt": "自定义摘要指令",
+      "summarizing": "正在摘要分支…"
     },
     "attachFile": "添加图片或文本文件",
     "removeAttachment": "移除附件",

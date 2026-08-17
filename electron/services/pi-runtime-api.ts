@@ -336,6 +336,7 @@ function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
     messageEntryIds: messageEntryIds(session),
     sessionFile: session.sessionFile,
     contextUsage: contextUsage(session),
+    branchSummarySkipPrompt: runtime.runtime.services.settingsManager.getBranchSummarySkipPrompt(),
     extensionUi: getExtensionUiStateSnapshot({
       sessionId: runtime.sessionId,
       generation: runtime.generation,
@@ -1075,13 +1076,22 @@ export const piRuntimeApi = {
   navigateTree: async (payload: PiRuntimeNavigatePayload, ctx?: HostActionContext): Promise<PiRuntimeNavigateResult> => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
+    const summarize = payload.summarize === true;
     try {
-      const result = await active.runtime.session.navigateTree(payload.targetId);
+      // 摘要进行中标记：stop 按钮据此分发 abortBranchSummary（pi 无对应事件）
+      if (summarize) active.summarizingBranch = true;
+      const result = await active.runtime.session.navigateTree(payload.targetId, {
+        summarize: payload.summarize,
+        customInstructions: payload.customInstructions,
+      });
+      if (result.aborted) return { success: false, aborted: true, error: 'aborted' };
       if (result.cancelled) return { success: false, error: 'cancelled' };
       sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));
       return { success: true, editorText: result.editorText };
     } catch (err) {
       return { success: false, error: toError(err) };
+    } finally {
+      if (summarize) active.summarizingBranch = false;
     }
   },
 

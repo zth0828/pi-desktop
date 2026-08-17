@@ -1710,6 +1710,28 @@ button.danger-outline {
   color: var(--text);
 }
 
+.tree-summary-choice {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tree-summary-question {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.tree-summary-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tree-summary-choice .extui-footer {
+  justify-content: flex-end;
+}
+
 .tree-node:disabled {
   cursor: default;
 }

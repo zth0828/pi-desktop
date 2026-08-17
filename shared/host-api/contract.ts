@@ -154,6 +154,8 @@ export type PiRuntimeStateResult = {
   messageEntryIds: (string | null)[];
   sessionFile?: string;
   contextUsage?: PiRuntimeContextUsage;
+  /** pi branchSummary.skipPrompt 设置：true 时跳分支默认不询问摘要（TUI 同款语义）。 */
+  branchSummarySkipPrompt?: boolean;
   extensionUi?: PiExtensionUiState;
   /** 后台 runtime 等待中的扩展确认；切回会话时恢复对话框。 */
   pendingUiRequests?: PiUiRequestPayload[];
@@ -179,10 +181,18 @@ export type PiRuntimeTreeNode = {
   onCurrentPath: boolean;
 };
 export type PiRuntimeTreeResult = { nodes: PiRuntimeTreeNode[] };
-export type PiRuntimeNavigatePayload = { targetId: string };
+export type PiRuntimeNavigatePayload = {
+  targetId: string;
+  /** 离开当前分支前是否先摘要被弃分支（TUI 跳分支询问的 summarize 选项）。 */
+  summarize?: boolean;
+  /** summarize 的自定义摘要指令（TUI 的 "Summarize with custom prompt"）。 */
+  customInstructions?: string;
+};
 export type PiRuntimeNavigateResult = HostSuccess & {
   /** 目标是 user 消息时 pi 把文本退回编辑器（TUI /tree 语义） */
   editorText?: string;
+  /** 摘要进行中被打断（abortBranchSummary）：TUI 此时重新打开分支树。 */
+  aborted?: boolean;
 };
 
 // —— piRuntime 斜杠命令配套（TUI onSubmit 内建命令的壳映射）——

@@ -200,7 +200,13 @@
         "user": "User",
         "assistant": "Assistant",
         "other": "Other"
-      }
+      },
+      "summarizeQuestion": "Summarize the branch you're leaving before navigating away?",
+      "summaryNo": "No summary",
+      "summaryYes": "Summarize",
+      "summaryCustom": "Summarize with custom prompt",
+      "summaryCustomPrompt": "Custom summarization instructions",
+      "summarizing": "Summarizing branch…"
     },
     "attachFile": "Attach image or text file",
     "removeAttachment": "Remove attachment",

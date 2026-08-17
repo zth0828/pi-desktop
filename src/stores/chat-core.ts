@@ -11,6 +11,7 @@ import type {
   PiRuntimeUsageTurn,
   PiRuntimeModelInfo,
   PiRuntimeModelUpdateResult,
+  PiRuntimeNavigateResult,
   PiRuntimeStateResult,
   PiUiRequestPayload,
 } from '@shared/host-api/contract';
@@ -88,6 +89,8 @@ export type ChatState = {
   compaction: { reason: CompactionReason } | null;
   retry: RetryState | null;
   queue: QueueState;
+  /** pi branchSummary.skipPrompt 设置：true 时跳分支不询问摘要（TUI 同款语义） */
+  branchSummarySkipPrompt: boolean;
   /** 分支树面板（/tree）开关 */
   treeOpen: boolean;
   /** Review 面板（会话改动评审）开关 */
@@ -122,7 +125,10 @@ export type ChatState = {
   /** 消息级 fork：从指定 user 消息分叉新会话（sessionReplaced 事件负责刷新列表） */
   forkFrom: (entryId: string) => Promise<void>;
   /** 跳分支：同会话文件内移动 leaf（navigateTree 后 main 推全量状态刷新） */
-  navigateTo: (targetId: string) => Promise<void>;
+  navigateTo: (
+    targetId: string,
+    options?: { summarize?: boolean; customInstructions?: string },
+  ) => Promise<PiRuntimeNavigateResult>;
   /** 扩展 UI 对话框的用户响应：出队 + 回传 main（value 缺省 = 取消） */
   respondUi: (requestId: string, value?: string | boolean) => Promise<void>;
   applyState: (state: PiRuntimeStateResult) => void;
@@ -237,6 +243,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       compaction: null,
       retry: null,
       queue: { steering: [], followUp: [] },
+      branchSummarySkipPrompt: false,
       treeOpen: false,
       reviewOpen: false,
       workspaceOpen: false,
@@ -368,14 +375,16 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         if (result.selectedText) set({ inputDraft: { text: result.selectedText, nonce: Date.now() } });
       },
 
-      navigateTo: async (targetId) => {
-        const result = await api().piRuntime.navigateTree(targetId);
+      navigateTo: async (targetId, options) => {
+        const result = await api().piRuntime.navigateTree(targetId, options);
         if (!result.success) {
-          set({ startError: result.error });
-          return;
+          // aborted（摘要被打断）由 TreeDialog 收回交互，不进错误条
+          if (!result.aborted) set({ startError: result.error });
+          return result;
         }
         // 目标是 user 消息时 pi 把文本退回编辑器（/tree 语义）
         if (result.editorText) set({ inputDraft: { text: result.editorText, nonce: Date.now() } });
+        return result;
       },
 
       respondUi: async (requestId, value) => {
@@ -405,6 +414,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           compaction: null,
           retry: null,
           queue: { steering: [], followUp: [] },
+          branchSummarySkipPrompt: state.branchSummarySkipPrompt ?? false,
           uiRequests: state.pendingUiRequests ?? [],
           extensionUi: state.extensionUi,
         });

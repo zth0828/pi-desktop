@@ -129,6 +129,9 @@ test('/tree 分支导航：跳到历史节点开新分支，再跳回原分支',
 
   // 点「first question」user 节点：leaf 移到其父（root），文本退回编辑器
   await page.getByTestId('tree-node').filter({ hasText: 'first question' }).click();
+  // 跳分支前先问是否摘要被弃分支（branchSummarySkipPrompt=false 默认询问）
+  await expect(page.getByTestId('tree-summary-choice')).toBeVisible();
+  await page.getByTestId('tree-summary-no').click();
   await expect(page.getByTestId('tree-dialog')).toHaveCount(0);
   await expect(page.getByTestId('message-user')).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByTestId('chat-input')).toHaveValue('first question');
@@ -146,9 +149,40 @@ test('/tree 分支导航：跳到历史节点开新分支，再跳回原分支',
     page.getByTestId('tree-node').filter({ hasText: 'branch question' }),
   ).toHaveCount(1);
 
-  // 跳回第一条分支：点「second question」user 节点 → 列表回到第一轮，文本回填
+  // 跳回第一条分支：点「second question」user 节点 → 不摘要 → 列表回到第一轮，文本回填
   await page.getByTestId('tree-node').filter({ hasText: 'second question' }).click();
+  await page.getByTestId('tree-summary-no').click();
   await expect(page.getByTestId('message-user')).toHaveCount(1, { timeout: 30_000 });
   await expect(page.getByTestId('message-user').first()).toContainText('first question');
   await expect(page.getByTestId('chat-input')).toHaveValue('second question');
+});
+
+test('/tree 跳分支选「摘要」：被弃分支写入 branch_summary 节点', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'first question');
+  await sendAndWaitReply(page, 'second question');
+
+  // 跳到第一条分支起点并改发新消息，长出第二条分支
+  await openTree(page);
+  await page.getByTestId('tree-node').filter({ hasText: 'first question' }).click();
+  await page.getByTestId('tree-summary-no').click();
+  await expect(page.getByTestId('chat-input')).toHaveValue('first question', { timeout: 30_000 });
+  await sendAndWaitReply(page, 'branch question');
+
+  // 跳回第一条分支，这次选「摘要」：被弃的 branch 分支应留下摘要节点
+  await openTree(page);
+  await page.getByTestId('tree-node').filter({ hasText: 'second question' }).click();
+  await page.getByTestId('tree-summary-yes').click();
+  // 摘要进行中显示等待态，完成后对话框关闭、列表切到目标分支
+  await expect(page.getByTestId('tree-dialog')).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId('message-user').first()).toContainText('first question', {
+    timeout: 30_000,
+  });
+
+  // 分支树里出现摘要节点（kind=other，内容是 mock 摘要文本）
+  await openTree(page);
+  await expect(page.locator('.tree-node[data-kind="other"]').first()).toBeVisible();
 });
