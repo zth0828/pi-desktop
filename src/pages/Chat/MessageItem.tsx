@@ -267,7 +267,22 @@ function MessageItemView({
   const raw = message.raw as { stopReason?: string; errorMessage?: string } | undefined;
   const showTail = !message.streaming && !suppressTail;
   const plainText = content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
-  if (content.length === 0) return null;
+  // 失败的回合（stopReason=error）content 为空，错误信息仍要渲染，否则用户看到"发了没反应"。
+  if (content.length === 0 && !(showTail && raw?.errorMessage)) return null;
+  if (content.length === 0) {
+    return (
+      <div
+        className={`message message-assistant${highlighted ? ' search-target' : ''}`}
+        data-testid="message-assistant"
+        id={anchorId}
+        tabIndex={highlighted ? -1 : undefined}
+      >
+        <div className="message-notice error" data-testid="message-error">
+          {raw!.errorMessage}
+        </div>
+      </div>
+    );
+  }
   const copy = async () => {
     if (!plainText) return;
     try {
