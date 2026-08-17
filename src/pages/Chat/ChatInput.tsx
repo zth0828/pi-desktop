@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, FileText, Folder, ListPlus, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
+import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
   PiCommandRow,
   PiModelRow,
@@ -14,14 +15,14 @@ import { filterFiles } from '../../lib/file-search';
 import { navigateToPage } from '../../lib/app-navigation';
 import { cacheHitRate, formatCost, formatHitRate } from '../../lib/usage-stats';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
-import type { ChatMessage } from '../../stores/chat';
+import type { ChatMessage, ComposerAttachment } from '../../stores/chat';
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
 import { QueueList } from './QueueList';
 
-type StagedImage = { kind: 'image'; name: string; data: string; mediaType: string; previewUrl: string };
-type StagedFile = { kind: 'file'; name: string; text: string };
-type StagedAttachment = StagedImage | StagedFile;
+type StagedImage = Extract<ComposerAttachment, { kind: 'image' }>;
+type StagedFile = Extract<ComposerAttachment, { kind: 'file' }>;
+type StagedAttachment = ComposerAttachment;
 
 /** 光标处的 @ token（@ 前需行首/空白，对齐 pi-tui 编辑器触发规则） */
 type AtToken = { start: number; end: number; query: string };
@@ -118,8 +119,6 @@ function lastAssistantText(messages: ChatMessage[]): string | null {
 
 export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const { t } = useTranslation();
-  const [value, setValue] = useState('');
-  const [attachments, setAttachments] = useState<StagedAttachment[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [commands, setCommands] = useState<PiCommandRow[]>([]);
   const [selected, setSelected] = useState(0);
@@ -140,6 +139,13 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const newSession = usePaneChatStore((s) => s.newSession);
   const setTreeOpen = usePaneChatStore((s) => s.setTreeOpen);
   const inputDraft = usePaneChatStore((s) => s.inputDraft);
+  const value = usePaneChatStore((s) => s.composerText);
+  const attachments = usePaneChatStore((s) => s.composerAttachments);
+  const sessionId = usePaneChatStore((s) => s.sessionId);
+  const generation = usePaneChatStore((s) => s.generation);
+  const setComposerText = usePaneChatStore((s) => s.setComposerText);
+  const setComposerAttachments = usePaneChatStore((s) => s.setComposerAttachments);
+  const clearInputDraft = usePaneChatStore((s) => s.clearInputDraft);
   const model = usePaneChatStore((s) => s.model);
   const thinkingLevel = usePaneChatStore((s) => s.thinkingLevel);
   const availableThinkingLevels = usePaneChatStore((s) => s.availableThinkingLevels);
@@ -167,6 +173,13 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const usageControlRef = useRef<HTMLDivElement>(null);
   const noticeTimerRef = useRef<number | null>(null);
   const composerScrollTimerRef = useRef<number | null>(null);
+
+  const setValue = (next: string | ((current: string) => string)) => {
+    setComposerText(typeof next === 'function' ? next(chatStore.getState().composerText) : next);
+  };
+  const setAttachments = (next: StagedAttachment[] | ((current: StagedAttachment[]) => StagedAttachment[])) => {
+    setComposerAttachments(typeof next === 'function' ? next(chatStore.getState().composerAttachments) : next);
+  };
 
   const resizeComposer = () => {
     const textarea = textareaRef.current;
@@ -233,18 +246,26 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   };
 
   useEffect(() => {
+    let disposed = false;
     if (started) {
-      void paneApi.piRuntime.getCommands().then((r) => setCommands(r.commands));
-      void hostApi.providers.listModels().then((r) => setModels(r.models)).catch(() => {});
-      void paneApi.piSkills.list().then((r) => setSkills(r.skills)).catch(() => setSkills([]));
+      void paneApi.piRuntime.getCommands().then((r) => { if (!disposed) setCommands(r.commands); });
+      void hostApi.providers.listModels().then((r) => { if (!disposed) setModels(r.models); }).catch(() => {});
+      void paneApi.piSkills.list().then((r) => { if (!disposed) setSkills(r.skills); }).catch(() => {});
       const refreshUsage = () => {
-        void paneApi.piRuntime.getUsage().then(setUsage).catch(() => setUsage(null));
+        void paneApi.piRuntime.getUsage()
+          .then((next) => { if (!disposed) setUsage(next); })
+          .catch(() => { if (!disposed) setUsage(null); });
       };
       refreshUsage();
-      const timer = window.setInterval(refreshUsage, 1000);
-      return () => window.clearInterval(timer);
+      const timer = window.setInterval(refreshUsage, isStreaming || compacting ? 400 : 1000);
+      return () => {
+        disposed = true;
+        window.clearInterval(timer);
+      };
     }
-  }, [started]);
+    setUsage(null);
+    return () => { disposed = true; };
+  }, [started, sessionId, generation, paneApi, isStreaming, compacting]);
 
   useEffect(() => {
     void hostApi.settings
@@ -261,8 +282,9 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   useEffect(() => {
     if (!inputDraft) return;
     setValue(inputDraft.text);
+    clearInputDraft();
     textareaRef.current?.focus();
-  }, [inputDraft]);
+  }, [inputDraft, clearInputDraft]);
 
   const contextUsage = usage?.context ?? null;
   const usageTotals = usage?.session ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
@@ -281,13 +303,15 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     else modelGroups.set(label, [m]);
   }
   const contextWindow = model?.contextWindow ?? selectedModel?.contextWindow
-    ?? (contextUsage?.contextWindow && contextUsage.contextWindow > 0 ? contextUsage.contextWindow : null);
-  const contextPercent = contextUsage?.tokens != null && contextWindow
-    ? (contextUsage.tokens / contextWindow) * 100
-    : contextUsage?.percent;
-  const contextLabel = contextUsage?.tokens == null || contextPercent == null
-    ? t('chat.tokenUnknown')
-    : `${Math.round(contextPercent)}%`;
+    ?? (contextUsage?.contextWindow && contextUsage.contextWindow > 0 ? contextUsage.contextWindow : DEFAULT_CONTEXT_WINDOW);
+  // pi 在压缩后可能明确返回 tokens=null：这表示暂时未知，不应伪装成 0%。
+  const contextTokens = contextUsage?.tokens ?? null;
+  const contextPercent = contextUsage?.percent != null
+    ? Math.max(0, Math.min(100, contextUsage.percent))
+    : contextTokens != null && contextWindow > 0
+      ? Math.max(0, Math.min(100, (contextTokens / contextWindow) * 100))
+      : null;
+  const contextLabel = contextPercent == null ? t('chat.tokenUnknown') : `${Math.round(contextPercent)}%`;
   const formatTokens = (value: number | null | undefined) =>
     value == null ? t('chat.tokenUnknown') : value.toLocaleString();
 
@@ -302,7 +326,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         return;
       }
       chatStore.getState().applyModelUpdate(result);
-      setUsage(await paneApi.piRuntime.getUsage());
+      const nextUsage = await paneApi.piRuntime.getUsage();
+      setUsage(nextUsage);
     });
   };
 
@@ -310,7 +335,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const commandDescription = (cmd: PiCommandRow): string => {
     if (cmd.source !== 'built-in') return cmd.description ?? '';
     if (cmd.name === 'compact') {
-      return contextUsage?.tokens == null || contextPercent == null
+      return contextPercent == null
         ? t('chat.commands.compactUnknown')
         : t('chat.commands.compact', { percent: Math.round(contextPercent) });
     }
@@ -847,6 +872,11 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 <span className="model-menu-trigger-name">
                   {selectedModel ? modelDisplayName(selectedModel) : (model?.name ?? model?.id ?? t('chat.model'))}
                 </span>
+                {reasoning && thinkingLevel && (
+                  <span className="model-menu-trigger-thinking" data-testid="model-trigger-thinking">
+                    · {t(`chat.thinkingLevels.${thinkingLevel}`, { defaultValue: thinkingLevel })}
+                  </span>
+                )}
                 <ChevronDown size={13} />
               </button>
               {modelMenuOpen && (
@@ -941,8 +971,9 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
               <div className="usage-popover" role="dialog" data-testid="token-usage-popover">
                 <div className="usage-popover-title">{t('chat.tokenUsage')}</div>
                 <div className="usage-section-label">{t('chat.currentModelUsage')}</div>
-                <div className="usage-row" data-testid="usage-context-used"><span>{t('chat.contextUsed')}</span><strong>{formatTokens(contextUsage?.tokens)}</strong></div>
+                <div className="usage-row" data-testid="usage-context-used"><span>{t('chat.contextUsed')}</span><strong>{formatTokens(contextTokens)}</strong></div>
                 <div className="usage-row" data-testid="usage-context-window"><span>{t('chat.contextWindow')}</span><strong>{formatTokens(contextWindow)}</strong></div>
+                {contextUsage?.estimated && <div className="usage-note" data-testid="usage-context-estimated">{t('chat.contextEstimated')}</div>}
                 {(model?.maxTokens ?? selectedModel?.maxTokens) != null && <div className="usage-row" data-testid="usage-max-output"><span>{t('chat.maxOutputTokens')}</span><strong>{formatTokens(model?.maxTokens ?? selectedModel?.maxTokens)}</strong></div>}
                 <div className="usage-section-label">{t('chat.sessionTotals')}</div>
                 <div className="usage-row" data-testid="usage-session-input"><span>{t('chat.inputTokens')}</span><strong>{formatTokens(usageTotals.input)}</strong></div>

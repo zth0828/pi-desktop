@@ -154,4 +154,121 @@ describe('chat store 实例隔离（多面板 P2）', () => {
       delete (globalThis as { window?: unknown }).window;
     }
   });
+
+  it('compaction.ended 后 refreshMessages 用完整分支历史（messages 仍为压缩上下文）', async () => {
+    const bus = createFakeBus();
+    (globalThis as { window?: unknown }).window = {
+      pidesktop: {
+        hostInvoke: vi.fn(async (request: HostRequest) => {
+          if (request.action === 'getState') {
+            return {
+              id: request.id,
+              ok: true,
+              data: {
+                sessionId: 's1',
+                cwd: '/tmp/ws',
+                generation: 1,
+                thinkingLevel: 'off',
+                availableThinkingLevels: [],
+                isStreaming: false,
+                // 压缩后 pi 只暴露摘要 + 保留尾部
+                messages: [
+                  { role: 'compactionSummary', content: [{ type: 'text', text: 'summary' }] },
+                  { role: 'user', content: [{ type: 'text', text: 'tail q' }] },
+                  { role: 'assistant', content: [{ type: 'text', text: 'tail a' }] },
+                ],
+                // session entry 仍保留完整分支
+                historyMessages: [
+                  { role: 'user', content: [{ type: 'text', text: 'q1' }] },
+                  { role: 'assistant', content: [{ type: 'text', text: 'a1' }] },
+                  { role: 'user', content: [{ type: 'text', text: 'q2' }] },
+                  { role: 'compactionSummary', content: [{ type: 'text', text: 'summary' }] },
+                  { role: 'user', content: [{ type: 'text', text: 'tail q' }] },
+                  { role: 'assistant', content: [{ type: 'text', text: 'tail a' }] },
+                ],
+                messageEntryIds: [null, 'e3', null],
+                historyMessageEntryIds: ['e1', null, 'e2', null, 'e3', null],
+                sessionFile: '/tmp/s1.jsonl',
+              },
+            };
+          }
+          return { id: request.id, ok: true, data: { success: true } };
+        }),
+      },
+    };
+    try {
+      const store = createChatStore({ onEvent: bus.onEvent });
+      store.setState({ boundSessionId: 's1', sessionId: 's1', generation: 1 });
+      bus.emit('piRuntime.event', {
+        sessionId: 's1',
+        generation: 1,
+        at: Date.now(),
+        event: { type: 'compaction.ended', reason: 'manual' },
+      } as PiRuntimeEventEnvelope);
+      await vi.waitFor(() => {
+        expect(store.getState().historyMessages).toHaveLength(6);
+      });
+      expect(store.getState().messages).toHaveLength(3);
+      expect(store.getState().historyMessages[0].entryId).toBe('e1');
+      expect(store.getState().historyMessages[3].role).toBe('compactionSummary');
+      expect(store.getState().historyMessages[4].entryId).toBe('e3');
+    } finally {
+      delete (globalThis as { window?: unknown }).window;
+    }
+  });
+
+  it('composer 草稿保存在面板 store 中，会话状态替换不会清空', () => {
+    const store = createChatStore();
+    store.getState().setComposerText('unsent draft');
+    store.getState().setComposerAttachments([
+      { kind: 'file', name: 'notes.txt', text: 'draft file' },
+    ]);
+    store.getState().applyState({
+      sessionId: 'next-session',
+      cwd: '/tmp/ws',
+      generation: 2,
+      thinkingLevel: 'off',
+      availableThinkingLevels: [],
+      isStreaming: false,
+      messages: [],
+      messageEntryIds: [],
+    });
+    expect(store.getState().composerText).toBe('unsent draft');
+    expect(store.getState().composerAttachments).toEqual([
+      { kind: 'file', name: 'notes.txt', text: 'draft file' },
+    ]);
+  });
+
+  it('流式 partial / message.ended 同时追加到 messages 与 historyMessages', async () => {
+    const bus = createFakeBus();
+    const store = createChatStore({ onEvent: bus.onEvent });
+    store.setState({ boundSessionId: 's1', sessionId: 's1', generation: 1 });
+    bus.emit('piRuntime.event', {
+      sessionId: 's1',
+      generation: 1,
+      at: Date.now(),
+      event: {
+        type: 'assistant.partial',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'hel' }] },
+      },
+    } as PiRuntimeEventEnvelope);
+    await vi.waitFor(() => {
+      expect(store.getState().messages).toHaveLength(1);
+    });
+    expect(store.getState().historyMessages).toHaveLength(1);
+    bus.emit('piRuntime.event', {
+      sessionId: 's1',
+      generation: 1,
+      at: Date.now(),
+      event: {
+        type: 'message.ended',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+      },
+    } as PiRuntimeEventEnvelope);
+    await vi.waitFor(() => {
+      expect(store.getState().messages[0]?.content[0]?.text).toBe('hello');
+    });
+    expect(store.getState().historyMessages[0]?.content[0]?.text).toBe('hello');
+    expect(store.getState().messages[0]?.streaming).toBeFalsy();
+  });
 });

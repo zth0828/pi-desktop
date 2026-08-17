@@ -19,6 +19,10 @@ export type ChatMessage = {
   raw: unknown;
 };
 
+export type ComposerAttachment =
+  | { kind: 'image'; name: string; data: string; mediaType: string; previewUrl: string }
+  | { kind: 'file'; name: string; text: string };
+
 export type ToolExecution = {
   toolCallId: string;
   toolName: string;

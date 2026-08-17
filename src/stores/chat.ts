@@ -12,4 +12,4 @@ export type {
   RetryState,
   TurnStats,
 } from './chat-core';
-export type { ChatMessage, ContentBlock, ToolExecution } from '../lib/chat-types';
+export type { ChatMessage, ComposerAttachment, ContentBlock, ToolExecution } from '../lib/chat-types';

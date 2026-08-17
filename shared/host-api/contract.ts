@@ -77,6 +77,9 @@ export type PiInstallResult = HostSuccess & {
   version?: string;
 };
 
+// 未从供应商目录返回上下文长度时，统一使用 256K，避免不同入口出现不同默认值。
+export const DEFAULT_CONTEXT_WINDOW = 262_144;
+
 // —— piRuntime：SDK 会话运行时 ——
 
 export type PiRuntimeStartPayload = { cwd: string };
@@ -109,6 +112,8 @@ export type PiRuntimeContextUsage = {
   tokens: number | null;
   contextWindow: number;
   percent: number | null;
+  /** pi 没有可用 usage 时由 SDK estimator 计算的近似值。 */
+  estimated?: boolean;
 };
 
 export type PiRuntimeUsageTurn = {
@@ -144,14 +149,21 @@ export type PiRuntimeStateResult = {
   thinkingLevel: string;
   availableThinkingLevels: string[];
   isStreaming: boolean;
-  /** pi AgentMessage[]，渲染层按结构渲染（user/assistant/toolResult） */
+  /** 当前 pi 上下文中的 AgentMessage[]，用于运行时增量更新。 */
   messages: unknown[];
+  /**
+   * 当前分支的完整展示历史。上下文压缩后 pi 的 messages 会只保留摘要和尾部，
+   * 但 session entry 仍保留完整历史；渲染层用这个字段恢复可定位的完整对话。
+   */
+  historyMessages?: unknown[];
   /**
    * 与 messages 平行的会话 entry id（仅 user 消息 entry 有值，其余为 null）。
    * pi 的 AgentMessage 本身不带 entryId；这里按 buildSessionContext 的
    * flatMap(sessionEntryToContextMessages) 对齐重建，供消息级 fork 使用。
    */
   messageEntryIds: (string | null)[];
+  /** 与 historyMessages 平行的完整分支 entry id。 */
+  historyMessageEntryIds?: (string | null)[];
   sessionFile?: string;
   contextUsage?: PiRuntimeContextUsage;
   /** pi branchSummary.skipPrompt 设置：true 时跳分支默认不询问摘要（TUI 同款语义）。 */

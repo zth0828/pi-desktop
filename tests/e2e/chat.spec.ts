@@ -512,12 +512,40 @@ test('新会话 → 消息列表清空', async ({ launchElectronApp }) => {
 
   await page.getByTestId('new-chat').click();
   await expect(page.getByTestId('message-assistant')).toHaveCount(0);
+  await page.getByTestId('chat-input').fill('draft survives new session and page switch');
+  await page.getByTestId('nav-settings').click();
+  await expect(page.getByTestId('settings-compaction')).toBeVisible();
+  await page.getByTestId('nav-chat').click();
+  await expect(page.getByTestId('chat-input')).toHaveValue('draft survives new session and page switch');
+  await page.getByTestId('chat-input').fill('');
   // 新会话仍可继续对话
   await page.getByTestId('chat-input').fill('Say PONG again');
   await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
     timeout: 30_000,
   });
+});
+
+test('切回历史会话后恢复上下文与整个会话 Token 统计', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('chat-input').fill('USAGE RESTORE A');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+  await page.getByTestId('new-chat').click();
+  await page.getByTestId('chat-input').fill('USAGE RESTORE B');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+
+  const original = page.locator('.sidebar-session-row').filter({ hasText: 'USAGE RESTORE A' });
+  await expect(original).toBeVisible({ timeout: 15_000 });
+  await original.locator('.sidebar-session').click();
+  await expect(page.getByTestId('message-user').last()).toContainText('USAGE RESTORE A', { timeout: 30_000 });
+  await page.getByTestId('token-usage').click();
+  await expect(page.getByTestId('usage-context-used').locator('strong')).not.toHaveText(/^(0|—)$/);
+  await expect(page.getByTestId('usage-session-input').locator('strong')).not.toHaveText(/^(0|—)$/);
 });
 
 test('缓存失效 → assistant 尾部显示 cache miss 警告', async ({ launchElectronApp }) => {
@@ -570,8 +598,24 @@ test('/compact → 压缩状态条，完成后消息列表刷新为摘要', asyn
 
   // Depending on the installed pi version, the transient status may complete before
   // the next renderer frame. The persisted summary is the completion contract.
-  // compaction 后 pi 重建上下文，壳从 runtime 重读：摘要消息出现、被压掉的 user 消息消失
+  // compaction 后 pi 重建上下文，壳从 runtime 重读：摘要消息出现；
+  // 渲染层改用完整分支历史展示，被摘要掉的历史仍可浏览/定位。
   await expect(page.getByTestId('message-compaction')).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('message-user')).toHaveCount(1);
+  await expect(page.getByTestId('compaction-result')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('message-user')).toHaveCount(2);
+  await expect(page.getByTestId('token-usage')).not.toContainText('0%');
   await expect(page.getByTestId('status-compaction')).toHaveCount(0, { timeout: 30_000 });
+
+  // 压缩检查点独立 rail：悬浮显示摘要内容
+  await expect(page.getByTestId('compaction-rail')).toBeVisible();
+  const compactionDot = page.getByTestId('compaction-rail-dot-chat-msg-4');
+  await compactionDot.hover();
+  await expect(compactionDot.getByTestId('compaction-rail-tooltip')).toBeVisible();
+
+  // 点击第一条 user 消息圆点：仍能回到对话最开始（压缩前也成立）
+  await page.getByTestId('msg-rail-dot-chat-msg-0').click();
+  await expect
+    .poll(() => page.getByTestId('message-list').evaluate((el) => el.scrollTop), { timeout: 10_000 })
+    .toBeLessThan(60);
+  await expect(page.locator('#chat-msg-0')).toBeInViewport();
 });

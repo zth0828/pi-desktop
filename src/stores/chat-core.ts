@@ -3,7 +3,7 @@
 // createChatStore() 工厂，每面板一实例。本模块保持 node-safe（不引 react / host-events / notify，同 chat-types.ts
 // 分层约定）：事件订阅入口 onEvent 与通知上报 reporters 由调用方注入，node 侧单测可直接引用。
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import type { CompactionReason, PiRuntimeEventEnvelope } from '@shared/pi-event-map';
+import type { CompactionReason, PiCompactionResult, PiRuntimeEventEnvelope } from '@shared/pi-event-map';
 import type { HostEventArgs, HostEventModule, HostEventName } from '@shared/host-events/contract';
 import type {
   HostSuccess,
@@ -21,6 +21,7 @@ import { createStreamBatcher } from '../lib/stream-throttle';
 import {
   rebuildToolExecutionsFromMessages,
   type ChatMessage,
+  type ComposerAttachment,
   type ContentBlock,
   type ToolExecution,
 } from '../lib/chat-types';
@@ -85,8 +86,15 @@ export type ChatState = {
   runStartedAt: number | null;
   turnStats: TurnStats | null;
   messages: ChatMessage[];
+  /** 完整当前分支，用于压缩后仍可浏览被摘要掉的历史。 */
+  historyMessages: ChatMessage[];
+  /** 面板级 composer 草稿，跨 ChatPane 重挂载保留，发送后显式清空。 */
+  composerText: string;
+  composerAttachments: ComposerAttachment[];
   toolExecutions: Record<string, ToolExecution>;
   compaction: { reason: CompactionReason } | null;
+  /** 最近一次压缩结果，供状态栏展示压缩前后与摘要请求用量。 */
+  lastCompaction: PiCompactionResult | null;
   retry: RetryState | null;
   queue: QueueState;
   /** pi branchSummary.skipPrompt 设置：true 时跳分支不询问摘要（TUI 同款语义） */
@@ -126,6 +134,9 @@ export type ChatState = {
   setReviewOpen: (open: boolean) => void;
   setWorkspaceOpen: (open: boolean) => void;
   openWorkspaceFile: (path: string) => void;
+  setComposerText: (text: string) => void;
+  setComposerAttachments: (attachments: ComposerAttachment[]) => void;
+  clearInputDraft: () => void;
   /** 消息级 fork：从指定 user 消息分叉新会话（sessionReplaced 事件负责刷新列表） */
   forkFrom: (entryId: string) => Promise<void>;
   /** 跳分支：同会话文件内移动 leaf（navigateTree 后 main 推全量状态刷新） */
@@ -156,6 +167,14 @@ function asMessage(raw: unknown, streaming = false): ChatMessage {
     timestamp: m.timestamp,
     raw,
   };
+}
+
+function appendOrReplaceMessage(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
+  const next = [...messages];
+  const last = next[next.length - 1];
+  if (message.role === 'assistant' && last?.streaming) next[next.length - 1] = message;
+  else next.push(message);
+  return next;
 }
 
 /**
@@ -243,8 +262,12 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       runStartedAt: null,
       turnStats: null,
       messages: [],
+      historyMessages: [],
+      composerText: '',
+      composerAttachments: [],
       toolExecutions: {},
       compaction: null,
+      lastCompaction: null,
       retry: null,
       queue: { steering: [], followUp: [] },
       branchSummarySkipPrompt: false,
@@ -363,6 +386,10 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
 
       setWorkspaceOpen: (open) => set({ workspaceOpen: open, ...(open ? { reviewOpen: false } : {}) }),
 
+      setComposerText: (text) => set({ composerText: text }),
+      setComposerAttachments: (attachments) => set({ composerAttachments: attachments }),
+      clearInputDraft: () => set({ inputDraft: null }),
+
       openWorkspaceFile: (rawPath) => {
         const cwd = get().cwd?.replace(/\/$/, '');
         const normalized = rawPath.replace(/\\/g, '/');
@@ -410,6 +437,10 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           ...asMessage(m),
           entryId: state.messageEntryIds?.[i] ?? undefined,
         }));
+        const historyMessages = (state.historyMessages ?? state.messages).map((m, i) => ({
+          ...asMessage(m),
+          entryId: state.historyMessageEntryIds?.[i] ?? undefined,
+        }));
         set({
           cwd: state.cwd,
           sessionId: state.sessionId,
@@ -422,9 +453,11 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           runStartedAt: null,
           turnStats: null,
           messages,
-          // 恢复/切换会话：事件累积的执行表为空，从消息历史重建（结果 + 中断标记）
-          toolExecutions: rebuildToolExecutionsFromMessages(messages),
+          historyMessages,
+          // 恢复/切换会话：事件累积的执行表为空，从完整展示历史重建（结果 + 中断标记）
+          toolExecutions: rebuildToolExecutionsFromMessages(historyMessages),
           compaction: null,
+          lastCompaction: null,
           retry: null,
           queue: { steering: [], followUp: [] },
           bashDraft: null,
@@ -452,10 +485,18 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           set({ boundSessionPath: state.sessionFile });
         }
         const ids = state.messageEntryIds ?? [];
+        const historyIds = state.historyMessageEntryIds ?? [];
+        const current = get();
+        const historyMessages = (state.historyMessages ?? state.messages).map((m, i) => ({
+          ...asMessage(m),
+          entryId: historyIds[i] ?? undefined,
+        }));
         set({
-          messages: get().messages.map((m, i) =>
+          messages: current.messages.map((m, i) =>
             m.entryId === (ids[i] ?? undefined) ? m : { ...m, entryId: ids[i] ?? undefined },
           ),
+          historyMessages,
+          toolExecutions: rebuildToolExecutionsFromMessages(historyMessages),
         });
       },
 
@@ -465,10 +506,18 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         if (state.sessionFile && state.sessionFile !== get().boundSessionPath) {
           set({ boundSessionPath: state.sessionFile });
         }
-        const messages = state.messages.map((m) => asMessage(m));
+        const messages = state.messages.map((m, i) => ({
+          ...asMessage(m),
+          entryId: state.messageEntryIds?.[i] ?? undefined,
+        }));
+        const historyMessages = (state.historyMessages ?? state.messages).map((m, i) => ({
+          ...asMessage(m),
+          entryId: state.historyMessageEntryIds?.[i] ?? undefined,
+        }));
         set({
           messages,
-          toolExecutions: rebuildToolExecutionsFromMessages(messages),
+          historyMessages,
+          toolExecutions: rebuildToolExecutionsFromMessages(historyMessages),
         });
       },
 
@@ -527,23 +576,18 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           }
           case 'assistant.partial': {
             const partial = asMessage(event.message, true);
-            const messages = [...s.messages];
-            const last = messages[messages.length - 1];
-            if (last?.streaming) messages[messages.length - 1] = partial;
-            else messages.push(partial);
-            set({ messages });
+            set({
+              messages: appendOrReplaceMessage(s.messages, partial),
+              historyMessages: appendOrReplaceMessage(s.historyMessages, partial),
+            });
             break;
           }
           case 'message.ended': {
             const msg = asMessage(event.message);
-            const messages = [...s.messages];
-            const last = messages[messages.length - 1];
-            if (msg.role === 'assistant' && last?.streaming) {
-              messages[messages.length - 1] = msg;
-            } else {
-              messages.push(msg);
-            }
-            set({ messages });
+            set({
+              messages: appendOrReplaceMessage(s.messages, msg),
+              historyMessages: appendOrReplaceMessage(s.historyMessages, msg),
+            });
             break;
           }
           case 'tool.execution.started':
@@ -610,10 +654,10 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             break;
           }
           case 'compaction.started':
-            set({ compaction: { reason: event.reason } });
+            set({ compaction: { reason: event.reason }, lastCompaction: null });
             break;
           case 'compaction.ended': {
-            set({ compaction: null });
+            set({ compaction: null, lastCompaction: event.result ?? null });
             // compaction 重建了 pi 侧上下文（summary + 保留尾部），本地事件累积的
             // 消息列表已不一致；非 abort 时从 runtime 重读（对齐 TUI 重建消息列表）。
             if (!event.aborted) void get().refreshMessages();
