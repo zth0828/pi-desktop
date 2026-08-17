@@ -199,15 +199,22 @@ function detectWindowsNpmShim(
   npm: NpmDetectResult,
   platform: NodeJS.Platform,
 ): PiDetectResult | null {
+  if (!needsWindowsCommandShell(binPath, platform)) return null;
+  const shimDir = path.dirname(binPath);
+  // 标准 npm 全局布局：shim 与全局 root 同属一个 prefix 目录
   if (
-    !npm.globalRoot
-    || !needsWindowsCommandShell(binPath, platform)
-    || !sameDirectory(path.dirname(binPath), path.dirname(npm.globalRoot), platform)
+    npm.globalRoot
+    && sameDirectory(shimDir, path.dirname(npm.globalRoot), platform)
   ) {
-    return null;
+    const detected = readPiPackageRoot(path.join(npm.globalRoot, PI_PACKAGE_NAME), npm);
+    if (detected) return { ...detected, binPath };
   }
-
-  const detected = readPiPackageRoot(path.join(npm.globalRoot, PI_PACKAGE_NAME), npm);
+  // npm --prefix <P> 的安装：包在 P/node_modules，shim 可能不属于当前全局 root；
+  // 按 shim 自身 prefix 布局解析，是否算 npm 安装仍由 globalRoot 归属判定
+  const detected = readPiPackageRoot(
+    path.join(shimDir, 'node_modules', PI_PACKAGE_NAME),
+    npm,
+  );
   return detected ? { ...detected, binPath } : null;
 }
 
