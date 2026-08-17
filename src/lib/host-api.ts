@@ -196,6 +196,9 @@ function createHostApi(sessionPath?: string) {
     openDetachedAt: (payload: { sessionPath: string; cwd?: string; screenX: number; screenY: number }) =>
       invoke('windows', 'openDetachedAt', payload),
     focus: (sessionPath: string) => invoke('windows', 'focus', { sessionPath }),
+    focusIfOpen: (sessionPath: string) => invoke('windows', 'focusIfOpen', { sessionPath }),
+    setSessions: (payload: { sessionPaths: string[]; activeSessionPath?: string }) =>
+      invoke('windows', 'setSessions', payload),
     list: () => invoke('windows', 'list'),
   },
   };

@@ -12,19 +12,29 @@ import { timingEnabled, timingMark } from '../utils/timing';
 
 export type WindowRecord = {
   win: BrowserWindow;
-  /** 窗口当前绑定的会话文件；未绑定（如主窗口初始）为 null */
+  /** 窗口当前用于未显式寻址请求的会话文件；未绑定时为 null。 */
   sessionPath: string | null;
+  /** 窗口内所有面板占用的会话文件，用于跨窗口重复打开判定。 */
+  sessionPaths: Set<string>;
   isMain: boolean;
 };
 
 const windows = new Map<number, WindowRecord>();
 
 /** 注册窗口（webContentsId 为键）；窗口 destroyed 时自动清除。 */
-export function registerWindow(win: BrowserWindow, options: { isMain?: boolean } = {}): void {
+export function registerWindow(
+  win: BrowserWindow,
+  options: { isMain?: boolean; sessionPath?: string } = {},
+): void {
   // 注意先取 id：'closed' 触发时 webContents 已销毁，再访问 .id 会抛
   // "Object has been destroyed"（uncaught → Electron 打断 quit 流程，进程退不掉）
   const id = win.webContents.id;
-  windows.set(id, { win, sessionPath: null, isMain: options.isMain ?? false });
+  windows.set(id, {
+    win,
+    sessionPath: options.sessionPath ?? null,
+    sessionPaths: options.sessionPath ? new Set([options.sessionPath]) : new Set(),
+    isMain: options.isMain ?? false,
+  });
   win.on('closed', () => {
     windows.delete(id);
   });
@@ -32,19 +42,69 @@ export function registerWindow(win: BrowserWindow, options: { isMain?: boolean }
 
 export function bindWindowSession(webContentsId: number, sessionPath: string): void {
   const record = windows.get(webContentsId);
-  if (record) record.sessionPath = sessionPath;
+  if (!record) return;
+  record.sessionPath = sessionPath;
+  record.sessionPaths.add(sessionPath);
+}
+
+/** 替换窗口内所有面板的会话占用清单，并同步窗口级默认路由。 */
+export function setWindowSessions(
+  webContentsId: number,
+  sessionPaths: string[],
+  activeSessionPath?: string,
+): void {
+  const record = windows.get(webContentsId);
+  if (!record) return;
+  record.sessionPaths = new Set(sessionPaths);
+  const active = activeSessionPath && sessionPaths.some((sessionPath) => samePath(sessionPath, activeSessionPath))
+    ? activeSessionPath
+    : record.sessionPath && sessionPaths.some((sessionPath) => samePath(sessionPath, record.sessionPath!))
+      ? record.sessionPath
+      : sessionPaths[0];
+  record.sessionPath = active ?? null;
 }
 
 export function resolveWindowSession(webContentsId: number): string | null {
   return windows.get(webContentsId)?.sessionPath ?? null;
 }
 
-export function findWindowBySession(sessionPath: string): BrowserWindow | null {
-  for (const record of windows.values()) {
+export function findWindowBySession(sessionPath: string, options: { detachedOnly?: boolean; excludeWindowId?: number } = {}): BrowserWindow | null {
+  for (const [windowId, record] of windows.entries()) {
     if (record.win.isDestroyed()) continue;
+    if (options.excludeWindowId === windowId) continue;
+    if (options.detachedOnly && record.isMain) continue;
     if (record.sessionPath && samePath(record.sessionPath, sessionPath)) return record.win;
+    if ([...record.sessionPaths].some((candidate) => samePath(candidate, sessionPath))) return record.win;
   }
   return null;
+}
+
+/** 是否还有其他窗口正在查看该会话；同一会话可被多个窗口同时查看。 */
+export function hasSessionInOtherWindow(sessionPath: string, webContentsId: number): boolean {
+  return findWindowBySession(sessionPath, { excludeWindowId: webContentsId }) !== null;
+}
+
+export function isMainWindow(webContentsId: number): boolean {
+  return windows.get(webContentsId)?.isMain === true;
+}
+
+/** 只查找独立窗口，主窗口中的同一会话仍可另开一个独立窗口。 */
+export function findDetachedWindowBySession(sessionPath: string): BrowserWindow | null {
+  return findWindowBySession(sessionPath, { detachedOnly: true });
+}
+
+/** 只更新发起替换操作的窗口，避免同一会话被多个窗口查看时一起改绑。 */
+export function rebindWindowSessionForWindow(
+  webContentsId: number,
+  oldPath: string,
+  newPath: string,
+): void {
+  const record = windows.get(webContentsId);
+  if (!record) return;
+  if (record.sessionPath && samePath(record.sessionPath, oldPath)) record.sessionPath = newPath;
+  record.sessionPaths = new Set([...record.sessionPaths].map((sessionPath) =>
+    samePath(sessionPath, oldPath) ? newPath : sessionPath,
+  ));
 }
 
 export function getMainWindow(): BrowserWindow | null {
@@ -67,6 +127,10 @@ export function focusWindowForSession(sessionPath: string): boolean {
 export function rebindWindowSession(oldPath: string, newPath: string): void {
   for (const record of windows.values()) {
     if (record.sessionPath && samePath(record.sessionPath, oldPath)) record.sessionPath = newPath;
+    const replacement = [...record.sessionPaths].map((sessionPath) =>
+      samePath(sessionPath, oldPath) ? newPath : sessionPath,
+    );
+    record.sessionPaths = new Set(replacement);
   }
 }
 
@@ -185,13 +249,13 @@ export function createMainWindow(): BrowserWindow {
   return createAppWindow({ isMain: true });
 }
 
-/** 独立会话窗口（经 windows.openDetached 接线）：同会话已有窗口则聚焦复用。 */
+/** 独立会话窗口（经 windows.openDetached 接线）：独立窗口内同会话复用，主窗口可另开一份。 */
 export function createSessionWindow(
   sessionPath: string,
   cwd?: string,
   position?: { x: number; y: number },
 ): BrowserWindow {
-  const existing = findWindowBySession(sessionPath);
+  const existing = findDetachedWindowBySession(sessionPath);
   if (existing) {
     if (existing.isMinimized()) existing.restore();
     existing.focus();

@@ -5,13 +5,18 @@ import type {
   WindowsFocusPayload,
   WindowsOpenDetachedAtPayload,
   WindowsOpenDetachedPayload,
+  WindowsSetSessionsPayload,
 } from '@shared/host-api/contract';
 import {
   createSessionWindow,
   createSessionWindowAtPoint,
+  findWindowBySession,
   focusWindowForSession,
   listWindows,
+  setWindowSessions,
 } from '../main/window-manager';
+import type { HostActionContext } from '../main/ipc/host-contract';
+import { sendHostEventToWindow } from '../main/ipc/host-events';
 import { prewarmSessionRuntime } from './pi-runtime-api';
 import { timingMark } from '../utils/timing';
 
@@ -32,6 +37,19 @@ export const windowsApi = {
   },
   focus: (payload: WindowsFocusPayload): void => {
     if (!focusWindowForSession(payload.sessionPath)) createSessionWindow(payload.sessionPath);
+  },
+  /** 只查询并聚焦已有窗口；未找到时由渲染层决定是在当前面板打开。 */
+  focusIfOpen: (payload: WindowsFocusPayload): boolean => {
+    const win = findWindowBySession(payload.sessionPath);
+    if (!win) return false;
+    if (win.isMinimized()) win.restore();
+    win.focus();
+    sendHostEventToWindow(win, 'windows', 'focusSession', { sessionPath: payload.sessionPath });
+    return true;
+  },
+  setSessions: (payload: WindowsSetSessionsPayload, ctx?: HostActionContext): void => {
+    if (!ctx) return;
+    setWindowSessions(ctx.sender.id, payload.sessionPaths, payload.activeSessionPath);
   },
   list: (): WindowListEntry[] => listWindows(),
 };

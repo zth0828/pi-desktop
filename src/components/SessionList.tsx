@@ -82,9 +82,18 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   const started = useActiveChatStore((s) => s.started);
   const isStreaming = useActiveChatStore((s) => s.isStreaming);
   const activeCwd = useActiveChatStore((s) => s.cwd);
+  const activeSessionPath = useActiveChatStore((s) => s.boundSessionPath);
   // 分栏树中已打开的会话：行内"已打开"标记；实例绑定由 watcher 回写叶子
   const paneRoot = useStore(panesStore, (s) => s.root);
   const openSessionPaths = useMemo(() => new Set(sessionPathsInTree(paneRoot)), [paneRoot]);
+
+  /** 侧栏普通点击：同窗口已有该会话时只激活原面板。 */
+  const focusOpenSession = useCallback((sessionPath: string, cwd?: string): boolean => {
+    const panes = panesStore.getState();
+    if (!panes.findPaneBySession(sessionPath)) return false;
+    panes.openOrFocusSession(sessionPath, cwd);
+    return true;
+  }, []);
 
   const refresh = useCallback(() => {
     const sequence = ++refreshSequence.current;
@@ -325,9 +334,12 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                 onClick={() => {
                   setOpenMenu(undefined);
                   onOpenChat();
-                  // 已在某面板打开 → 聚焦该面板；否则替换活跃面板会话（
-                  // 独立窗口里点会话 = 改绑本窗口活跃面板）
-                  panesStore.getState().openOrFocusSession(session.path, session.cwd);
+                  // 先在当前窗口查面板，再查其他窗口；只有全局都未打开时
+                  // 才替换当前活跃面板，避免同一会话同时出现在多个窗口。
+                  if (focusOpenSession(session.path, session.cwd)) return;
+                  void hostApi.windows.focusIfOpen(session.path).then((focused) => {
+                    if (!focused) panesStore.getState().openOrFocusSession(session.path, session.cwd);
+                  });
                 }}
               >
                 {session.isRunning && (
@@ -420,7 +432,13 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                       <button
                         data-testid={`sidebar-session-open-detached-${session.id}`}
                         onClick={() => {
-                          void hostApi.windows.openDetached({ sessionPath: session.path, cwd: session.cwd });
+                          // 非活跃分栏中的会话仍在当前窗口内聚焦；活跃面板的会话
+                          // 才按“在独立窗口打开”语义创建/复用 detached window。
+                          if (openSessionPaths.has(session.path) && session.path !== activeSessionPath) {
+                            focusOpenSession(session.path, session.cwd);
+                          } else {
+                            void hostApi.windows.openDetached({ sessionPath: session.path, cwd: session.cwd });
+                          }
                           setOpenMenu(undefined);
                         }}
                       >

@@ -6,13 +6,15 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import { useStore } from 'zustand';
 import { useTranslation } from 'react-i18next';
+import { hostApi } from '../lib/host-api';
+import { onHostEvent } from '../lib/host-events';
 import { markSessionDroppedInWindow, setPaneDropHoverActive } from '../lib/session-drag';
 import { getChatStore } from '../stores/chat-registry';
 import { DEFAULT_CHAT_STORE_ID } from '../stores/default-chat-store';
-import type { BranchNode, LeafNode, SplitNode } from '../stores/panes';
+import { sessionPathsInTree, type BranchNode, type LeafNode, type SplitNode } from '../stores/panes';
 import { panesStore } from '../stores/panes-default';
 import { ChatPane } from '../pages/Chat';
-import { ChatStoreProvider } from '../pages/Chat/chat-store-context';
+import { ChatStoreProvider, useActiveChatStore } from '../pages/Chat/chat-store-context';
 
 const SESSION_MIME = 'application/x-pi-session';
 
@@ -175,10 +177,26 @@ function PaneNode({ node, shared }: { node: SplitNode; shared: SharedProps }) {
 
 export function PaneLayout(props: PaneLayoutProps) {
   const root = useStore(panesStore, (s) => s.root);
-  const leafCount = useMemo(() => countLeaves(root), [root]);
+  const activeSessionPath = useActiveChatStore((s) => s.boundSessionPath);
   // 独立会话窗口：?session=<path> 由 main 侧建窗时带上；dev 是 URL
   // searchParams，prod 是 loadFile query。只在窗口顶层读一次，下传给首个面板。
   const [attachSession] = useState(() => new URLSearchParams(window.location.search).get('session'));
+  const leafCount = useMemo(() => countLeaves(root), [root]);
+  const sessionPaths = useMemo(() => {
+    const paths = sessionPathsInTree(root);
+    // detached 窗口首帧的 pane 尚未完成 attach，保留建窗时的 URL 会话占用，
+    // 防止这段 IPC 竞态期间另一窗口再次创建同一会话。
+    return paths.length > 0 || !attachSession ? paths : [attachSession];
+  }, [attachSession, root]);
+  useEffect(() => {
+    void hostApi.windows.setSessions({
+      sessionPaths,
+      activeSessionPath: activeSessionPath ?? undefined,
+    });
+  }, [activeSessionPath, sessionPaths]);
+  useEffect(() => onHostEvent('windows', 'focusSession', ({ sessionPath }) => {
+    panesStore.getState().openOrFocusSession(sessionPath);
+  }), []);
   const shared: SharedProps = { ...props, leafCount, attachSession };
   return (
     <div className="pane-layout" data-testid="pane-layout">

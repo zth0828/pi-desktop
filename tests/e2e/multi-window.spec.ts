@@ -192,6 +192,63 @@ test('右键会话 → 独立窗口加载同会话历史；重复打开聚焦复
   await page.waitForTimeout(1_000);
   expect(app.windows()).toHaveLength(2);
   expect(await listHostWindows(page)).toHaveLength(2);
+
+  // 普通点击已在其他窗口的会话也只聚焦目标窗口，不把它重新绑定到主窗口。
+  await alphaRow.locator('[data-testid^="sidebar-session-"]').first().click();
+  await expect(page.getByTestId('message-user').last()).toContainText('main BETA');
+  await expect(detached.locator('.pane-leaf[data-active]')).toContainText('multiwin ALPHA');
+  expect(app.windows()).toHaveLength(2);
+});
+
+test('同一会话可在主窗口与独立窗口同时查看；独立窗口新建会话不清空主窗口', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'Say PONG shared ORIGINAL');
+  const originalPath = await sessionPathOf(page, 'shared ORIGINAL');
+  const detached = await openDetachedWindow(app, page, 'shared ORIGINAL');
+  await waitSessionReady(detached);
+  await expect(detached.getByTestId('message-user')).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.getByTestId('message-user').last()).toContainText('shared ORIGINAL');
+
+  // 新会话操作由 detached 发起；它只能替换自己的 pane/runtime。
+  await detached.getByTestId('new-chat').click();
+  await expect(detached.getByTestId('chat-greeting')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('message-user').last()).toContainText('shared ORIGINAL');
+  await expect(page.getByTestId('message-user')).toHaveCount(1);
+
+  await sendAndWaitReply(detached, 'Say PONG detached NEW');
+  await expect(detached.getByTestId('message-user').last()).toContainText('detached NEW');
+  await expect(page.getByTestId('message-user').filter({ hasText: 'detached NEW' })).toHaveCount(0);
+
+  const listed = await listHostWindows(page);
+  expect(listed.filter((entry) => entry.sessionPath === originalPath)).toHaveLength(1);
+});
+
+test('同一会话被两窗口查看时，主窗口切换会话不改绑独立窗口', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'Say PONG switch TARGET');
+  await page.getByTestId('new-chat').click();
+  await sendAndWaitReply(page, 'Say PONG shared SOURCE');
+  const detached = await openDetachedWindow(app, page, 'shared SOURCE');
+  await waitSessionReady(detached);
+
+  const targetRow = page.locator('.sidebar-session-row').filter({ hasText: 'switch TARGET' });
+  await targetRow.locator('[data-testid^="sidebar-session-"]').first().click();
+
+  await expect(page.getByTestId('message-user').last()).toContainText('switch TARGET', {
+    timeout: 30_000,
+  });
+  await expect(detached.getByTestId('message-user').last()).toContainText('shared SOURCE');
+  await expect(detached.getByTestId('message-user').filter({ hasText: 'switch TARGET' })).toHaveCount(0);
 });
 
 test('两窗口并发流式：各自收到自己的回复，事件互不串台', async ({ launchElectronApp }) => {

@@ -320,6 +320,30 @@ test('侧栏联动：已打开会话带标记，点击已打开会话聚焦对�
   await expect(page.locator('.pane-leaf')).toHaveCount(2);
 });
 
+test('已在分栏中的会话再次请求独立窗口 → 只聚焦原面板且不重复开窗', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await setupTwoPanes(page, 'no-duplicate ALPHA', 'no-duplicate BETA');
+  const alphaRow = page.locator('.sidebar-session-row').filter({ hasText: 'no-duplicate ALPHA' });
+  const alphaButton = alphaRow.locator('[data-testid^="sidebar-session-"]').first();
+  const alphaTestId = await alphaButton.getAttribute('data-testid');
+  const alphaId = alphaTestId!.replace('sidebar-session-', '');
+
+  // 当前新建面板是 ALPHA，但先切到 BETA，确保测试的是非活跃面板。
+  await page.locator('.sidebar-session-row').filter({ hasText: 'no-duplicate BETA' })
+    .locator('[data-testid^="sidebar-session-"]').first().click();
+  await expect(page.locator('.pane-leaf[data-active]')).toContainText('no-duplicate BETA');
+
+  await alphaRow.click({ button: 'right' });
+  await page.getByTestId(`sidebar-session-open-detached-${alphaId}`).click();
+
+  await expect(page.locator('.pane-leaf[data-active]')).toContainText('no-duplicate ALPHA');
+  await expect(page.locator('.pane-leaf')).toHaveCount(2);
+  expect(app.windows()).toHaveLength(1);
+});
+
 test('拖出窗口仍开 OS 独立窗口（与分栏共存回归）', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

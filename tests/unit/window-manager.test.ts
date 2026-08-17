@@ -106,6 +106,17 @@ describe('window-manager registry', () => {
     expect(wm.getMainWindow()).toBe(main);
   });
 
+  it('setWindowSessions 可反查窗口内非活跃面板会话', () => {
+    const win = fakeWindow();
+    wm.registerWindow(win as never);
+    wm.setWindowSessions(win.webContents.id, ['/tmp/session-a.jsonl', '/tmp/session-b.jsonl'], '/tmp/session-a.jsonl');
+    expect(wm.findWindowBySession('/tmp/session-b.jsonl')).toBe(win);
+    expect(wm.resolveWindowSession(win.webContents.id)).toBe('/tmp/session-a.jsonl');
+    wm.setWindowSessions(win.webContents.id, ['/tmp/session-c.jsonl'], '/tmp/session-c.jsonl');
+    expect(wm.findWindowBySession('/tmp/session-b.jsonl')).toBeNull();
+    expect(wm.findWindowBySession('/tmp/session-c.jsonl')).toBe(win);
+  });
+
   it('focusWindowForSession 聚焦绑定窗口（最小化先 restore）', () => {
     const win = fakeWindow();
     wm.registerWindow(win as never);

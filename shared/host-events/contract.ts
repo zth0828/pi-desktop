@@ -17,6 +17,10 @@ export type PiInstallProgressEvent = {
 };
 
 export type HostEventContract = {
+  windows: {
+    /** 目标窗口收到后激活包含该会话的面板。 */
+    focusSession: (payload: { sessionPath: string }) => void;
+  };
   piSystem: {
     installProgress: (payload: PiInstallProgressEvent) => void;
   };
@@ -64,6 +68,9 @@ export type HostEventArgs<
 > = HostEventHandler<M, E> extends (...args: infer Args) => void ? Args : never;
 
 export const HOST_EVENT_CHANNELS = {
+  windows: {
+    focusSession: 'windows:focus-session',
+  },
   piSystem: {
     installProgress: 'pi-system:install-progress',
   },

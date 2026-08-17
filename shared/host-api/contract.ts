@@ -359,6 +359,11 @@ export type WindowsOpenDetachedAtPayload = WindowsOpenDetachedPayload & {
   screenY: number;
 };
 export type WindowsFocusPayload = { sessionPath: string };
+/** 当前窗口内所有面板占用的会话，用于窗口级路由和生命周期同步。 */
+export type WindowsSetSessionsPayload = {
+  sessionPaths: string[];
+  activeSessionPath?: string;
+};
 export type WindowListEntry = {
   windowId: number;
   sessionPath: string | null;
@@ -886,6 +891,10 @@ export type HostApiContract = {
     openDetachedAt: (payload: WindowsOpenDetachedAtPayload) => void;
     /** 聚焦绑定指定会话的窗口；没有对应窗口则新建独立窗口。 */
     focus: (payload: WindowsFocusPayload) => void;
+    /** 只聚焦已有会话窗口；返回 false 表示会话尚未被其他窗口占用。 */
+    focusIfOpen: (payload: WindowsFocusPayload) => boolean;
+    /** 同步当前窗口的全部面板会话，避免同一会话从其他入口重复开窗。 */
+    setSessions: (payload: WindowsSetSessionsPayload) => void;
     /** 窗口↔会话绑定清单（调试/测试用）。 */
     list: () => WindowListEntry[];
   };

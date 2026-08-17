@@ -4,15 +4,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   createSessionWindow: vi.fn(),
   createSessionWindowAtPoint: vi.fn(),
+  findWindowBySession: vi.fn(),
   focusWindowForSession: vi.fn(),
+  setWindowSessions: vi.fn(),
   listWindows: vi.fn(),
 }));
 
 vi.mock('@electron/main/window-manager', () => ({
   createSessionWindow: mocks.createSessionWindow,
   createSessionWindowAtPoint: mocks.createSessionWindowAtPoint,
+  findWindowBySession: mocks.findWindowBySession,
   focusWindowForSession: mocks.focusWindowForSession,
+  setWindowSessions: mocks.setWindowSessions,
   listWindows: mocks.listWindows,
+}));
+
+vi.mock('@electron/main/ipc/host-events', () => ({
+  sendHostEventToWindow: vi.fn(),
 }));
 
 import { windowsApi } from '@electron/services/windows-api';
@@ -47,6 +55,38 @@ describe('windowsApi', () => {
     mocks.focusWindowForSession.mockReturnValue(false);
     windowsApi.focus({ sessionPath: '/tmp/b.jsonl' });
     expect(mocks.createSessionWindow).toHaveBeenCalledWith('/tmp/b.jsonl');
+  });
+
+  it('focusIfOpen 未找到窗口时返回 false，不创建窗口', () => {
+    mocks.findWindowBySession.mockReturnValue(null);
+    expect(windowsApi.focusIfOpen({ sessionPath: '/tmp/missing.jsonl' })).toBe(false);
+    expect(mocks.createSessionWindow).not.toHaveBeenCalled();
+  });
+
+  it('focusIfOpen 找到窗口时返回 true', () => {
+    const win = {
+      isMinimized: vi.fn(() => false),
+      restore: vi.fn(),
+      focus: vi.fn(),
+      isDestroyed: vi.fn(() => false),
+      webContents: { send: vi.fn() },
+    };
+    mocks.findWindowBySession.mockReturnValue(win);
+    expect(windowsApi.focusIfOpen({ sessionPath: '/tmp/a.jsonl' })).toBe(true);
+    expect(win.focus).toHaveBeenCalled();
+  });
+
+  it('setSessions 按 sender 绑定当前窗口的面板清单', () => {
+    const sender = { id: 42 };
+    windowsApi.setSessions(
+      { sessionPaths: ['/tmp/a.jsonl', '/tmp/b.jsonl'], activeSessionPath: '/tmp/b.jsonl' },
+      { sender } as never,
+    );
+    expect(mocks.setWindowSessions).toHaveBeenCalledWith(
+      42,
+      ['/tmp/a.jsonl', '/tmp/b.jsonl'],
+      '/tmp/b.jsonl',
+    );
   });
 
   it('list 返回 window-manager 的绑定清单', () => {

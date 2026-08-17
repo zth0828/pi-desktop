@@ -25,12 +25,18 @@ import {
   clearPrewarmMark,
   consumePrewarmedSessionRuntime,
   createSessionRuntime,
+  createSessionRuntimeForWindow,
   getActiveRuntime,
   getLiveSessionRows,
   getRuntimeForSession,
+  sendRuntimeStateToWindow,
   isSessionRunning,
 } from './pi-runtime-api';
-import { bindWindowSession } from '../main/window-manager';
+import {
+  bindWindowSession,
+  hasSessionInOtherWindow,
+  isMainWindow,
+} from '../main/window-manager';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
@@ -139,34 +145,34 @@ function mergeLiveSessions(sessions: SessionInfo[]): SessionInfo[] {
 }
 
 export const sessionsApi = {
-  list: async (): Promise<PiSessionListResult> => {
+  list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiSessionListResult> => {
     const cwd = await resolveCwd();
     if (!cwd) return { sessions: [] };
     const sdk = await loadPiSdk();
     const infos = await sdk.SessionManager.list(cwd);
-    const current = currentSessionFile();
+    const current = ctx?.sessionPath ?? currentSessionFile();
     const sessions = mergeLiveSessions(infos)
       .map((s) => toRow(s, current, sdk))
       .sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
   },
 
-  listAll: async (): Promise<PiSessionListResult> => {
+  listAll: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiSessionListResult> => {
     const sdk = await loadPiSdk();
     const infos = await sdk.SessionManager.listAll();
-    const current = currentSessionFile();
+    const current = ctx?.sessionPath ?? currentSessionFile();
     const sessions = mergeLiveSessions(infos)
       .map((s) => toRow(s, current, sdk))
       .sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
   },
 
-  search: async (payload: PiSessionSearchPayload): Promise<PiSessionSearchResult> => {
+  search: async (payload: PiSessionSearchPayload, ctx?: HostActionContext): Promise<PiSessionSearchResult> => {
     const query = payload.query.trim();
     if (!query) return { sessions: [] };
     const sdk = await loadPiSdk();
     const infos = await sdk.SessionManager.listAll();
-    const current = currentSessionFile();
+    const current = ctx?.sessionPath ?? currentSessionFile();
     const limit = Math.max(1, Math.min(payload.limit ?? 50, 100));
     const candidates = searchSessions(infos, query, limit);
     const preciseCandidates = candidates.map((candidate) => {
@@ -211,10 +217,11 @@ export const sessionsApi = {
     if (live) {
       clearPrewarmMark(payload.path);
       timingMark('switch:live-hit');
-      // 先改绑再 activate：activate 会回收无窗口绑定的旧 active；
-      // 单窗口下调用方窗口随即改绑到目标会话，旧 runtime 仍被回收，行为不变
+      // 独立窗口切换到已有 runtime 时只向该窗口发状态；不能 activate 广播，
+      // 否则其他窗口可能把这次切换误认为自己的 session replacement。
       bindSenderWindow(ctx, payload.path);
-      activateSessionRuntime(live);
+      if (ctx && !isMainWindow(ctx.sender.id)) sendRuntimeStateToWindow(live, ctx);
+      else activateSessionRuntime(live);
       if (payload.cwd) await settingsApi.set({ key: 'workspaceCwd', value: payload.cwd });
       return { success: true };
     }
@@ -226,6 +233,24 @@ export const sessionsApi = {
         await createSessionRuntime(payload.cwd, payload.path, { activate: false });
         timingMark('switch:create-runtime:done');
         bindSenderWindow(ctx, payload.path);
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: toError(err) };
+      }
+    }
+    // 当前 runtime 还被其他窗口查看时，不能在它上面原地 switch，也不能走
+    // 跨工作区 start 释放它。为发起窗口直接创建目标 runtime 并定向推送状态。
+    const current = getActiveRuntime();
+    const currentPath = current?.runtime.session.sessionFile;
+    if (
+      ctx
+      && current
+      && currentPath
+      && hasSessionInOtherWindow(currentPath, ctx.sender.id)
+    ) {
+      try {
+        await createSessionRuntimeForWindow(payload.cwd ?? current.cwd, payload.path, ctx);
+        if (payload.cwd) await settingsApi.set({ key: 'workspaceCwd', value: payload.cwd });
         return { success: true };
       } catch (err) {
         return { success: false, error: toError(err) };
@@ -258,7 +283,7 @@ export const sessionsApi = {
       }
       const result = await active.runtime.switchSession(payload.path);
       if (result.cancelled) return { success: false, error: 'cancelled' };
-      await afterSessionReplaced(active);
+      await afterSessionReplaced(active, ctx);
       bindSenderWindow(ctx, payload.path);
       return { success: true };
     } catch (err) {

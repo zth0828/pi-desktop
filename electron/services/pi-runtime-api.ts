@@ -37,9 +37,16 @@ import type {
   SessionTreeNode,
 } from '@earendil-works/pi-coding-agent';
 import path from 'node:path';
-import { sendHostEvent } from '../main/ipc/host-events';
+import { sendHostEvent, sendHostEventToWebContents } from '../main/ipc/host-events';
 import type { HostActionContext } from '../main/ipc/host-contract';
-import { bindWindowSession, findWindowBySession, rebindWindowSession } from '../main/window-manager';
+import {
+  bindWindowSession,
+  findWindowBySession,
+  hasSessionInOtherWindow,
+  isMainWindow,
+  rebindWindowSession,
+  rebindWindowSessionForWindow,
+} from '../main/window-manager';
 import { expandFileReferences } from '../utils/file-expand';
 import { detectPiEnvironment } from '../utils/pi-detector';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
@@ -106,6 +113,12 @@ export function getRuntimeForSession(sessionPath: string): ActiveRuntime | null 
   return null;
 }
 
+/** 将已有 runtime 的完整状态只发送给一个窗口，用于独立窗口 attach/切换。 */
+export function sendRuntimeStateToWindow(runtime: ActiveRuntime, target: HostActionContext): void {
+  const state = snapshotState(runtime);
+  sendHostEventToWebContents(target.sender, 'piRuntime', 'sessionReplaced', state);
+}
+
 /**
  * 按调用方上下文寻址 runtime：ctx 带 sessionPath（窗口绑定的会话）
  * 时用该会话的保活 runtime；否则回退全局 active（单窗口行为不变）。
@@ -135,6 +148,11 @@ function bindSenderToRuntime(ctx: HostActionContext | undefined, runtime: Active
 
 export function isSessionRunning(sessionPath: string): boolean {
   return getRuntimeForSession(sessionPath)?.runtime.session.isStreaming === true;
+}
+
+/** 开发热更新等待安全重启时使用，覆盖主窗口和独立窗口的保活 runtime。 */
+export function hasStreamingRuntimes(): boolean {
+  return [...runtimes].some((runtime) => runtime.runtime.session.isStreaming);
 }
 
 /** SDK 列表暂未收录的保活会话（通常是仍在流式输出的首次 run）。 */
@@ -558,6 +576,43 @@ export async function createSessionRuntime(
   return activateSessionRuntime(runtime);
 }
 
+/**
+ * 为指定窗口创建并绑定 runtime。主窗口会更新全局 active，独立窗口则保持
+ * 主窗口 active 不变；状态事件也只发给调用窗口。
+ */
+export async function createSessionRuntimeForWindow(
+  cwd: string,
+  sessionPath: string,
+  target: HostActionContext,
+): Promise<PiRuntimeStateResult> {
+  const previousActive = active;
+  const runtime = await createRuntime(cwd, sessionPath);
+  const nextFile = runtime.runtime.session.sessionFile;
+  if (target.sessionPath && nextFile && !samePath(target.sessionPath, nextFile)) {
+    rebindWindowSessionForWindow(target.sender.id, target.sessionPath, nextFile);
+  } else if (nextFile) {
+    bindWindowSession(target.sender.id, nextFile);
+  }
+  if (isMainWindow(target.sender.id)) {
+    active = runtime;
+    latestMcpStatus = runtime.mcpStatus;
+    sendHostEvent('piMcp', 'statusChanged', { snapshot: latestMcpStatus });
+  }
+  sendRuntimeStateToWindow(runtime, target);
+
+  const previousFile = previousActive?.runtime.session.sessionFile;
+  const previousWatched = previousFile ? findWindowBySession(previousFile) !== null : false;
+  if (
+    previousActive
+    && previousActive !== runtime
+    && !previousActive.runtime.session.isStreaming
+    && !previousWatched
+  ) {
+    disposeRuntime(previousActive);
+  }
+  return snapshotState(runtime);
+}
+
 // 独立窗口打开的 runtime 预热：openDetached 在建窗/页面加载的同时就开始建保活 runtime；
 // renderer attach 的 switch 到达（约 250ms 后）时在途则等其完成复用，不重复创建。
 // completedPrewarms 标记预热产物：attach 语义的 switch 消费它（不挤占全局 active），
@@ -598,7 +653,11 @@ export function clearPrewarmMark(sessionPath: string): void {
 }
 
 /** 会话替换（new/switch/fork）后的统一收尾：重绑 + 重订阅 + 通知渲染层清空。 */
-export async function afterSessionReplaced(runtime: ActiveRuntime): Promise<PiRuntimeStateResult> {
+export async function afterSessionReplaced(
+  runtime: ActiveRuntime,
+  target?: HostActionContext,
+): Promise<PiRuntimeStateResult> {
+  const previousActive = active;
   runtime.unsubscribe();
   // 旧会话挂起的扩展 UI 请求全部取消（渲染层同步移除对话框）
   cancelPendingUiForContext({ sessionId: runtime.sessionId, generation: runtime.generation });
@@ -618,11 +677,49 @@ export async function afterSessionReplaced(runtime: ActiveRuntime): Promise<PiRu
   const nextFile = runtime.runtime.session.sessionFile;
   runtime.sessionFile = nextFile;
   if (previousFile && nextFile && !samePath(previousFile, nextFile)) {
-    rebindWindowSession(previousFile, nextFile);
+    if (target) rebindWindowSessionForWindow(target.sender.id, previousFile, nextFile);
+    else rebindWindowSession(previousFile, nextFile);
+  }
+  // 主窗口发起的隔离替换要更新全局 active（侧栏 isCurrent / 无 scope 回退）；
+  // 独立窗口发起时则保持主窗口 active 不变。
+  if (target && isMainWindow(target.sender.id)) {
+    active = runtime;
+    latestMcpStatus = runtime.mcpStatus;
+    sendHostEvent('piMcp', 'statusChanged', { snapshot: latestMcpStatus });
   }
   const state = snapshotState(runtime);
-  sendHostEvent('piRuntime', 'sessionReplaced', state);
+  if (target) sendHostEventToWebContents(target.sender, 'piRuntime', 'sessionReplaced', state);
+  else sendHostEvent('piRuntime', 'sessionReplaced', state);
+
+  const previousActiveFile = previousActive?.runtime.session.sessionFile;
+  const previousActiveWatched = previousActiveFile
+    ? findWindowBySession(previousActiveFile) !== null
+    : false;
+  if (
+    previousActive &&
+    previousActive !== runtime &&
+    !previousActive.runtime.session.isStreaming &&
+    !previousActiveWatched
+  ) {
+    disposeRuntime(previousActive);
+  }
   return state;
+}
+
+function shouldIsolateSessionReplacement(runtime: ActiveRuntime, ctx?: HostActionContext): boolean {
+  const sessionPath = runtime.runtime.session.sessionFile;
+  return Boolean(sessionPath && ctx && hasSessionInOtherWindow(sessionPath, ctx.sender.id));
+}
+
+async function createReplacementRuntime(
+  current: ActiveRuntime,
+  ctx?: HostActionContext,
+): Promise<ActiveRuntime> {
+  const replacement = await createRuntime(current.cwd);
+  if (ctx) await afterSessionReplaced(replacement, ctx);
+  else activateSessionRuntime(replacement);
+  if (ctx) bindSenderToRuntime(ctx, replacement);
+  return replacement;
 }
 
 function toError(err: unknown): string {
@@ -839,19 +936,18 @@ export const piRuntimeApi = {
   newSession: async (_payload?: unknown, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    if (active.runtime.session.isStreaming) {
+    // 同一会话可同时显示在多个窗口。此时不能在共享 runtime 上原地
+    // newSession，否则所有窗口都会收到 sessionReplaced；只为发起窗口创建新 runtime。
+    if (active.runtime.session.isStreaming || shouldIsolateSessionReplacement(active, ctx)) {
       try {
-        await createSessionRuntime(active.cwd);
-        // createSessionRuntime 已激活新 runtime：把调用方窗口绑到新会话文件
-        const created = getActiveRuntime();
-        if (created) bindSenderToRuntime(ctx, created);
+        await createReplacementRuntime(active, ctx);
         return { success: true };
       } catch (err) {
         return { success: false, error: toError(err) };
       }
     }
     await active.runtime.newSession();
-    await afterSessionReplaced(active);
+    await afterSessionReplaced(active, ctx);
     bindSenderToRuntime(ctx, active);
     return { success: true };
   },
@@ -861,14 +957,28 @@ export const piRuntimeApi = {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
     if (active.runtime.session.isStreaming) return { success: false, error: 'session is streaming' };
+    let forkRuntime = active;
+    let isolated = false;
     try {
-      const result = await active.runtime.fork(payload.entryId);
-      if (result.cancelled) return { success: false, error: 'cancelled' };
+      // fork 也会改变 runtime 的 session file。共享会话时先从原文件创建独立
+      // runtime，避免另一个窗口收到 fork 后被错误改绑。
+      if (shouldIsolateSessionReplacement(active, ctx)) {
+        const sessionPath = active.runtime.session.sessionFile;
+        if (!sessionPath) return { success: false, error: 'session has no file' };
+        forkRuntime = await createRuntime(active.cwd, sessionPath);
+        isolated = true;
+      }
+      const result = await forkRuntime.runtime.fork(payload.entryId);
+      if (result.cancelled) {
+        if (isolated) disposeRuntime(forkRuntime);
+        return { success: false, error: 'cancelled' };
+      }
       // fork 产生新会话文件并整体替换 runtime：走既有 sessionReplaced 刷新流程
-      await afterSessionReplaced(active);
-      bindSenderToRuntime(ctx, active);
+      await afterSessionReplaced(forkRuntime, ctx);
+      bindSenderToRuntime(ctx, forkRuntime);
       return { success: true, selectedText: result.selectedText };
     } catch (err) {
+      if (isolated) disposeRuntime(forkRuntime);
       return { success: false, error: toError(err) };
     }
   },
