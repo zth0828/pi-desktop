@@ -121,18 +121,26 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
+  const isMac = process.platform === 'darwin';
   const sidebar = page.locator('.sidebar');
   const windowControls = page.getByTestId('app-window-controls');
-  await expect(windowControls).toBeVisible();
-  await expect(windowControls).not.toContainText('Pi');
+  // macOS：悬浮控件层常驻（hiddenInset 标题栏）；Windows：按钮在侧栏顶部栏，收起时改由悬浮层提供
+  if (isMac) {
+    await expect(windowControls).toBeVisible();
+    await expect(windowControls).not.toContainText('Pi');
+  } else {
+    await expect(page.getByTestId('sidebar-toggle')).toBeVisible();
+  }
   await expect(page.getByTestId('session-search-trigger')).toBeVisible();
-  const controlsBox = await windowControls.boundingBox();
+  const controlsBox = isMac ? await windowControls.boundingBox() : null;
   const expandedSidebarBox = await sidebar.boundingBox();
-  expect(controlsBox).not.toBeNull();
   expect(expandedSidebarBox).not.toBeNull();
-  expect(controlsBox!.x + controlsBox!.width).toBeLessThanOrEqual(expandedSidebarBox!.x + expandedSidebarBox!.width - 8);
-  expect(controlsBox!.x).toBeGreaterThan(expandedSidebarBox!.x + expandedSidebarBox!.width / 2);
-  expect(controlsBox!.y).toBeLessThan(12);
+  if (isMac) {
+    expect(controlsBox).not.toBeNull();
+    expect(controlsBox!.x + controlsBox!.width).toBeLessThanOrEqual(expandedSidebarBox!.x + expandedSidebarBox!.width - 8);
+    expect(controlsBox!.x).toBeGreaterThan(expandedSidebarBox!.x + expandedSidebarBox!.width / 2);
+    expect(controlsBox!.y).toBeLessThan(12);
+  }
   await expect(page.locator('.content')).toHaveCSS('border-top-left-radius', '0px');
 
   const composerBox = await page.locator('.chat-input-card').boundingBox();
@@ -157,7 +165,12 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   expect(collapsedContentBox).not.toBeNull();
   expect(collapsedSidebarBox!.width).toBe(0);
   expect(collapsedContentBox!.x).toBe(0);
-  expect(collapsedControlsBox!.x).toBe(controlsBox!.x);
+  if (isMac) {
+    expect(collapsedControlsBox!.x).toBe(controlsBox!.x);
+  } else {
+    // Windows：收起后悬浮控件层落在内容区左上角
+    expect(collapsedControlsBox!.x).toBeLessThan(60);
+  }
   expect(collapsedControlsBox!.y).toBeLessThan(12);
   await page.screenshot({ path: 'output/playwright/sidebar-collapsed-refined.png', fullPage: false });
   await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(expandedWidth - 100);

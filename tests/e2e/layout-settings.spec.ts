@@ -71,15 +71,20 @@ test('侧栏：新会话按钮 + 发消息后会话列表出现', async ({ launc
     seedSettings: { workspaceCwd: workspace },
   });
   const page = await app.firstWindow();
-  const dragStrip = page.getByTestId('window-drag-strip');
-  await expect(dragStrip).toBeVisible();
-  await expect(dragStrip).toHaveCSS('-webkit-app-region', 'drag');
-  await expect(page.getByTestId('new-chat')).toBeVisible();
-  const dragBox = await dragStrip.boundingBox();
-  const newChatBox = await page.getByTestId('new-chat').boundingBox();
-  expect(dragBox).not.toBeNull();
-  expect(newChatBox).not.toBeNull();
-  expect(newChatBox!.y).toBeGreaterThanOrEqual(dragBox!.height + 8);
+  // 拖拽层只存在于 macOS 无框标题栏；Windows 用原生标题栏
+  if (process.platform === 'darwin') {
+    const dragStrip = page.getByTestId('window-drag-strip');
+    await expect(dragStrip).toBeVisible();
+    await expect(dragStrip).toHaveCSS('-webkit-app-region', 'drag');
+    await expect(page.getByTestId('new-chat')).toBeVisible();
+    const dragBox = await dragStrip.boundingBox();
+    const newChatBox = await page.getByTestId('new-chat').boundingBox();
+    expect(dragBox).not.toBeNull();
+    expect(newChatBox).not.toBeNull();
+    expect(newChatBox!.y).toBeGreaterThanOrEqual(dragBox!.height + 8);
+  } else {
+    await expect(page.getByTestId('new-chat')).toBeVisible();
+  }
   await expect(page.locator('.chat-header')).toHaveCount(0);
   await expect(page.getByTestId('chat-workspace')).toBeVisible();
   await expect(page.getByTestId('model-select').or(page.getByTestId('model-badge')).first()).toBeVisible({

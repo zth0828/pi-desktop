@@ -5,6 +5,7 @@
 //   PI_CODING_AGENT_DIR   — pi 自己的配置目录隔离（models.json/sessions 等）
 import electronBinaryPathImport from 'electron';
 import { _electron as electron, test as base, type ElectronApplication, type Page } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path, { join, resolve } from 'node:path';
@@ -45,10 +46,30 @@ const repoRoot = resolve(process.cwd());
 const electronEntry = join(repoRoot, 'dist-electron/main/index.js');
 const nodeBinDir = path.dirname(process.execPath);
 
+// Windows 上只杀主进程会留下 renderer/GPU/utility 孤儿进程，继续占用
+// user-data 里的文件（DIPS 等），导致后续 rm EBUSY；必须杀整棵进程树。
+function killProcessTree(pid: number): void {
+  if (process.platform === 'win32') {
+    try {
+      execFileSync('taskkill', ['/pid', String(pid), '/t', '/f'], { stdio: 'ignore' });
+      return;
+    } catch {
+      // 落入通用分支
+    }
+  }
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    // ignore
+  }
+}
+
 async function closeElectronApp(app: ElectronApplication, timeoutMs = 5_000): Promise<void> {
+  let pid: number | undefined;
   try {
     const child = app.process();
     if (child.exitCode !== null || child.signalCode !== null) return;
+    pid = child.pid;
   } catch {
     return;
   }
@@ -56,18 +77,32 @@ async function closeElectronApp(app: ElectronApplication, timeoutMs = 5_000): Pr
     .waitForEvent('close', { timeout: timeoutMs })
     .then(() => true)
     .catch(() => false);
-  await app.evaluate(({ app: electronApp }) => electronApp.quit()).catch(() => undefined);
-  const closed = await closeEvent;
-  if (closed) return;
-  const forceClosed = await Promise.race([
-    app.close().then(() => true).catch(() => false),
-    new Promise<false>((resolveFalse) => setTimeout(() => resolveFalse(false), timeoutMs)),
+  // evaluate 本身也可能挂住（CDP 目标无响应），必须限时
+  await Promise.race([
+    app.evaluate(({ app: electronApp }) => electronApp.quit()).catch(() => undefined),
+    new Promise<void>((resolveWait) => setTimeout(resolveWait, timeoutMs)),
   ]);
-  if (forceClosed) return;
-  try {
-    app.process().kill('SIGKILL');
-  } catch {
-    // ignore
+  let closed = await closeEvent;
+  if (!closed) {
+    closed = await Promise.race([
+      app.close().then(() => true).catch(() => false),
+      new Promise<false>((resolveFalse) => setTimeout(() => resolveFalse(false), timeoutMs)),
+    ]);
+  }
+  if (!closed && pid !== undefined) {
+    killProcessTree(pid);
+  }
+  // 等进程真正退出；Windows 上文件句柄释放晚于进程终止，稍候避免 rm EBUSY
+  if (pid !== undefined) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        process.kill(pid, 0);
+      } catch {
+        break;
+      }
+      await new Promise((resolveWait) => setTimeout(resolveWait, 200));
+    }
   }
 }
 
@@ -77,7 +112,19 @@ export const test = base.extend<ElectronFixtures>({
     try {
       await provideHomeDir(homeDir);
     } finally {
-      await rm(homeDir, { recursive: true, force: true });
+      // Windows 上文件锁释放有延迟，重试几次避免 EBUSY 污染测试结果
+      let lastError: unknown;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          await rm(homeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 300 });
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          await new Promise((resolveWait) => setTimeout(resolveWait, 500));
+        }
+      }
+      if (lastError) throw lastError;
     }
   },
 
@@ -92,18 +139,25 @@ export const test = base.extend<ElectronFixtures>({
           await writeFile(join(userDataDir, 'config.json'), JSON.stringify(options.seedSettings));
         }
         const piEnv = options.withPi ? piTestEnv() : null;
+        // Windows 的 PATH 用 `;` 分隔且没有 /usr/bin:/bin；POSIX 形态的默认值在
+        // Windows 上会被当成单个目录，导致 node/npm/pi 全部检测失败。
+        // 懒求值：仅 withPi 场景才有 piEnv
+        const defaultUserPath = () => (process.platform === 'win32'
+          ? [piEnv!.piBinDir, nodeBinDir].join(path.delimiter)
+          : `${piEnv!.piBinDir}:${nodeBinDir}:/usr/bin:/bin`);
         const app = await electron.launch({
           executablePath: electronBinaryPath,
           args: ['--lang=en-US', electronEntry],
           env: {
             ...process.env,
             HOME: homeDir,
+            // Windows 的 os.homedir()/Electron 读 USERPROFILE 而非 HOME，不隔离会穿透到真实用户目录
+            ...(process.platform === 'win32' ? { USERPROFILE: homeDir } : {}),
             LANG: 'en_US.UTF-8',
             LC_ALL: 'en_US.UTF-8',
             ...(options.userPath !== undefined || piEnv
               ? {
-                PI_DESKTOP_USER_PATH: options.userPath
-                  ?? `${piEnv!.piBinDir}:${nodeBinDir}:/usr/bin:/bin`,
+                PI_DESKTOP_USER_PATH: options.userPath ?? defaultUserPath(),
               }
               : {}),
             ...(options.npmRoot ?? piEnv

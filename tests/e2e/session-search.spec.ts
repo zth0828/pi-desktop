@@ -115,19 +115,27 @@ test('top controls stay stable and global search opens active or archived chats'
   const page = await app.firstWindow();
   await expect(page.getByTestId('nav-settings')).toHaveClass(/active/, { timeout: 30_000 });
 
+  const isMac = process.platform === 'darwin';
   const controls = page.getByTestId('app-window-controls');
-  await expect(controls).toBeVisible();
-  await expect(controls).not.toContainText('Pi');
+  // macOS：悬浮控件层常驻；Windows：按钮在侧栏顶部栏，收起后改由悬浮层提供
+  if (isMac) {
+    await expect(controls).toBeVisible();
+    await expect(controls).not.toContainText('Pi');
+  }
   await expect(page.getByTestId('session-search-trigger')).toBeVisible();
-  const expandedBox = await controls.boundingBox();
-  expect(expandedBox).not.toBeNull();
+  const expandedBox = isMac ? await controls.boundingBox() : null;
+  if (isMac) expect(expandedBox).not.toBeNull();
 
   await page.getByTestId('sidebar-toggle').click();
   await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
-  const collapsedBox = await controls.boundingBox();
-  expect(collapsedBox).not.toBeNull();
-  expect(collapsedBox!.x).toBe(expandedBox!.x);
-  expect(collapsedBox!.y).toBe(expandedBox!.y);
+  if (isMac) {
+    const collapsedBox = await controls.boundingBox();
+    expect(collapsedBox).not.toBeNull();
+    expect(collapsedBox!.x).toBe(expandedBox!.x);
+    expect(collapsedBox!.y).toBe(expandedBox!.y);
+  } else {
+    await expect(controls).toBeVisible();
+  }
 
   await page.getByTestId('session-search-trigger').click();
   const input = page.getByTestId('session-search-input');

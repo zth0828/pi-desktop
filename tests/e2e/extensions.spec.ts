@@ -29,7 +29,11 @@ test.beforeAll(async () => {
       pi: { extensions: ['index.ts'] },
     }),
   );
-  await execFileAsync('npm', ['pack', '--silent', '--pack-destination', fixtureRoot], { cwd: extDir });
+  // Windows 上 npm 是 .cmd shim，execFile 不经 shell 无法执行
+  await execFileAsync('npm', ['pack', '--silent', '--pack-destination', fixtureRoot], {
+    cwd: extDir,
+    shell: process.platform === 'win32',
+  });
   const tarballName = (await readdir(fixtureRoot)).find((name) => name.endsWith('.tgz'));
   if (!tarballName) throw new Error('catalog fixture tarball not created');
   catalogServer = spawn(process.execPath, [

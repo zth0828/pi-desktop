@@ -40,6 +40,8 @@ test.beforeAll(async () => {
   repoWorkspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-repo-'));
   plainWorkspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-plain-'));
   dirtyWorkspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-dirty-repo-'));
+  // Windows 上 /tmp/... 解析为 <盘符>:\tmp\...，目录不一定存在；POSIX 上 mkdir 幂等
+  await mkdir(path.dirname(externalHistoryFile), { recursive: true });
   await writeFile(externalHistoryFile, 'external history preview\n');
 
   // edit 工具 E2E 的目标文件（mock 会把 alpha → beta）；git 仓库含一个初始 commit

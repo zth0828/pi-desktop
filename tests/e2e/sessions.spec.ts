@@ -111,7 +111,7 @@ test('Sessions 页全局展示：跨工作区分组并显示位置信息（listA
 }) => {
   // 预置第二个项目的会话文件（不走 runtime，直接写 pi 会话格式）
   const secondWorkspace = await realpath(await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-second-')));
-  const secondName = secondWorkspace.split('/').filter(Boolean).pop() ?? 'second';
+  const secondName = secondWorkspace.split(/[\\/]/).filter(Boolean).pop() ?? 'second';
   const seedId = '019fe296-0000-7000-8000-000000000001';
   const seedTs = '2026-08-08T18:15:18.828Z';
   const encoded = `--${secondWorkspace.replace(/^\//, '').replace(/[\/\\:]/g, '-')}--`;
@@ -151,7 +151,7 @@ test('Sessions 页全局展示：跨工作区分组并显示位置信息（listA
     await expect(secondGroup.locator('[data-testid^="session-row-"]').filter({ hasText: 'seeded ZEBRA session' })).toHaveCount(1);
 
     // 当前工作区分组同样可见（含刚发的会话）；路径以 runtime 实际使用的 workspaceCwd 为准
-    const workspaceName = workspace.split('/').filter(Boolean).pop() ?? 'workspace';
+    const workspaceName = workspace.split(/[\\/]/).filter(Boolean).pop() ?? 'workspace';
     const currentHeader = page.getByTestId(`session-project-${workspaceName}`);
     await expect(currentHeader).toBeVisible();
     await expect(currentHeader).toContainText(workspace);
