@@ -116,8 +116,11 @@ export default function App() {
   return (
     <div className={`${isMac ? 'app-layout is-macos' : 'app-layout'}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
       {dragStrip}
-      {isMac && (
-        <div className="app-window-controls" data-testid="app-window-controls">
+      {(isMac || sidebarCollapsed) && (
+        <div
+          className={`app-window-controls${isMac ? '' : ' is-native-frame'}`}
+          data-testid="app-window-controls"
+        >
           <button
             className="icon-button sidebar-toggle"
             data-testid="sidebar-toggle"
@@ -141,7 +144,9 @@ export default function App() {
         </div>
       )}
       <nav className="sidebar">
-        {!isMac && <div className="sidebar-topbar">
+        {/* 非 mac 收起时顶部栏随侧栏隐藏，展开入口改由悬浮控件层提供，
+            避免同一 testid 出现两份 */}
+        {!isMac && !sidebarCollapsed && <div className="sidebar-topbar">
           <button
             className="icon-button sidebar-toggle"
             data-testid="sidebar-toggle"

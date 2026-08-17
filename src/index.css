@@ -249,6 +249,14 @@ button.danger-outline {
   -webkit-app-region: no-drag;
 }
 
+/* Windows/Linux 用原生标题栏：悬浮控件层只在侧栏收起时出现，
+   落在内容区左上角，提供展开入口 */
+.app-window-controls.is-native-frame {
+  left: 8px;
+  top: 6px;
+  height: 40px;
+}
+
 /* Electron 的拖拽层覆盖整个标题高度；交互控件必须明确声明可点击。 */
 .session-titlebar,
 .session-titlebar * {
