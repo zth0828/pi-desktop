@@ -200,7 +200,7 @@ test('右键会话 → 独立窗口加载同会话历史；重复打开聚焦复
   expect(app.windows()).toHaveLength(2);
 });
 
-test('同一会话可在主窗口与独立窗口同时查看；独立窗口新建会话不清空主窗口', async ({
+test('同一会话已在主窗口打开时不创建独立窗口', async ({
   launchElectronApp,
 }) => {
   const app = await launchElectronApp(launchOptions());
@@ -209,26 +209,23 @@ test('同一会话可在主窗口与独立窗口同时查看；独立窗口新�
 
   await sendAndWaitReply(page, 'Say PONG shared ORIGINAL');
   const originalPath = await sessionPathOf(page, 'shared ORIGINAL');
-  const detached = await openDetachedWindow(app, page, 'shared ORIGINAL');
-  await waitSessionReady(detached);
-  await expect(detached.getByTestId('message-user')).toHaveCount(1, { timeout: 30_000 });
+  const row = page.locator('.sidebar-session-row').filter({ hasText: 'shared ORIGINAL' });
+  const sessionId = (await row.locator('[data-testid^="sidebar-session-"]').first().getAttribute('data-testid'))
+    ?.replace('sidebar-session-', '');
+  expect(sessionId).toBeTruthy();
+
+  await row.click({ button: 'right' });
+  await page.getByTestId(`sidebar-session-open-detached-${sessionId}`).click();
+  await page.waitForTimeout(500);
+
+  // 同一会话已经在主窗口的面板中，所谓“独立打开”只激活原面板，不新增窗口。
+  expect(app.windows()).toHaveLength(1);
   await expect(page.getByTestId('message-user').last()).toContainText('shared ORIGINAL');
-
-  // 新会话操作由 detached 发起；它只能替换自己的 pane/runtime。
-  await detached.getByTestId('new-chat').click();
-  await expect(detached.getByTestId('chat-greeting')).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('message-user').last()).toContainText('shared ORIGINAL');
-  await expect(page.getByTestId('message-user')).toHaveCount(1);
-
-  await sendAndWaitReply(detached, 'Say PONG detached NEW');
-  await expect(detached.getByTestId('message-user').last()).toContainText('detached NEW');
-  await expect(page.getByTestId('message-user').filter({ hasText: 'detached NEW' })).toHaveCount(0);
-
   const listed = await listHostWindows(page);
   expect(listed.filter((entry) => entry.sessionPath === originalPath)).toHaveLength(1);
 });
 
-test('同一会话被两窗口查看时，主窗口切换会话不改绑独立窗口', async ({
+test('独立窗口持有会话时，主窗口切换会话不改绑独立窗口', async ({
   launchElectronApp,
 }) => {
   const app = await launchElectronApp(launchOptions());
@@ -238,6 +235,8 @@ test('同一会话被两窗口查看时，主窗口切换会话不改绑独立�
   await sendAndWaitReply(page, 'Say PONG switch TARGET');
   await page.getByTestId('new-chat').click();
   await sendAndWaitReply(page, 'Say PONG shared SOURCE');
+  // 先切到第三个会话，让 SOURCE 只由后续独立窗口持有。
+  await page.getByTestId('new-chat').click();
   const detached = await openDetachedWindow(app, page, 'shared SOURCE');
   await waitSessionReady(detached);
 

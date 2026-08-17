@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   createSessionWindow: vi.fn(),
   createSessionWindowAtPoint: vi.fn(),
   findWindowBySession: vi.fn(),
+  claimWindowSession: vi.fn(),
   focusWindowForSession: vi.fn(),
   setWindowSessions: vi.fn(),
   listWindows: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('@electron/main/window-manager', () => ({
   createSessionWindow: mocks.createSessionWindow,
   createSessionWindowAtPoint: mocks.createSessionWindowAtPoint,
   findWindowBySession: mocks.findWindowBySession,
+  claimWindowSession: mocks.claimWindowSession,
   focusWindowForSession: mocks.focusWindowForSession,
   setWindowSessions: mocks.setWindowSessions,
   listWindows: mocks.listWindows,
@@ -57,9 +59,13 @@ describe('windowsApi', () => {
     expect(mocks.createSessionWindow).toHaveBeenCalledWith('/tmp/b.jsonl');
   });
 
-  it('focusIfOpen 未找到窗口时返回 false，不创建窗口', () => {
+  it('focusIfOpen 未找到窗口时返回 false，并为调用窗口预占会话', () => {
     mocks.findWindowBySession.mockReturnValue(null);
-    expect(windowsApi.focusIfOpen({ sessionPath: '/tmp/missing.jsonl' })).toBe(false);
+    expect(windowsApi.focusIfOpen(
+      { sessionPath: '/tmp/missing.jsonl' },
+      { sender: { id: 42 } } as never,
+    )).toBe(false);
+    expect(mocks.claimWindowSession).toHaveBeenCalledWith(42, '/tmp/missing.jsonl');
     expect(mocks.createSessionWindow).not.toHaveBeenCalled();
   });
 

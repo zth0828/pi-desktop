@@ -88,10 +88,16 @@ function PaneLeaf({ node, shared }: { node: LeafNode; shared: SharedProps }) {
       const payload = JSON.parse(raw) as { sessionPath: string; cwd?: string };
       if (!payload.sessionPath) return;
       const zone = zoneFromPoint(event);
-      const panes = panesStore.getState();
-      // 边缘 → 分栏；中心 → 替换（同会话由 store 内部降级为激活）
-      if (zone === 'center') panes.replacePane(node.paneId, payload);
-      else panes.splitAt(node.paneId, zone, payload);
+      const applyDrop = () => {
+        const panes = panesStore.getState();
+        // 边缘 → 分栏；中心 → 替换（同窗口内同会话由 store 降级为激活）
+        if (zone === 'center') panes.replacePane(node.paneId, payload);
+        else panes.splitAt(node.paneId, zone, payload);
+      };
+      // 先让 main 侧检查其他窗口，保证会话全局只归一个窗口；未打开时再执行本窗口分栏。
+      void hostApi.windows.focusIfOpen(payload.sessionPath)
+        .then((focused) => { if (!focused) applyDrop(); })
+        .catch(applyDrop);
       // 窗口内已消化：抑制 SessionList dragend 的 OS 级 openDetachedAt
       markSessionDroppedInWindow();
     } catch {

@@ -79,7 +79,7 @@ export function findWindowBySession(sessionPath: string, options: { detachedOnly
   return null;
 }
 
-/** 是否还有其他窗口正在查看该会话；同一会话可被多个窗口同时查看。 */
+/** 是否还有其他窗口正在查看该会话；同一会话只允许由一个窗口持有。 */
 export function hasSessionInOtherWindow(sessionPath: string, webContentsId: number): boolean {
   return findWindowBySession(sessionPath, { excludeWindowId: webContentsId }) !== null;
 }
@@ -120,6 +120,19 @@ export function focusWindowForSession(sessionPath: string): boolean {
   if (!win) return false;
   if (win.isMinimized()) win.restore();
   win.focus();
+  return true;
+}
+
+/**
+ * 在 renderer 更新 pane tree 前先占用会话路径。IPC action 按 main 进程事件循环串行执行，
+ * 因此“查找并占用”不会被另一个窗口的同类请求插入，避免两个窗口同时打开同一会话。
+ */
+export function claimWindowSession(webContentsId: number, sessionPath: string): boolean {
+  const record = windows.get(webContentsId);
+  if (!record || record.win.isDestroyed()) return false;
+  const existing = findWindowBySession(sessionPath);
+  if (existing && existing.webContents.id !== webContentsId) return false;
+  record.sessionPaths.add(sessionPath);
   return true;
 }
 
@@ -249,13 +262,13 @@ export function createMainWindow(): BrowserWindow {
   return createAppWindow({ isMain: true });
 }
 
-/** 独立会话窗口（经 windows.openDetached 接线）：独立窗口内同会话复用，主窗口可另开一份。 */
+/** 独立会话窗口：会话已被任一窗口持有时复用并聚焦，避免跨窗口重复查看。 */
 export function createSessionWindow(
   sessionPath: string,
   cwd?: string,
   position?: { x: number; y: number },
 ): BrowserWindow {
-  const existing = findDetachedWindowBySession(sessionPath);
+  const existing = findWindowBySession(sessionPath);
   if (existing) {
     if (existing.isMinimized()) existing.restore();
     existing.focus();

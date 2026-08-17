@@ -88,6 +88,16 @@ describe('window-manager registry', () => {
     expect(wm.findWindowBySession('/tmp/other.jsonl')).toBeNull();
   });
 
+  it('claimWindowSession 在 renderer 更新 pane 前占用会话且拒绝其他窗口', () => {
+    const first = fakeWindow();
+    const second = fakeWindow();
+    wm.registerWindow(first as never, { isMain: true });
+    wm.registerWindow(second as never, { isMain: true });
+    expect(wm.claimWindowSession(first.webContents.id, '/tmp/session-claim.jsonl')).toBe(true);
+    expect(wm.findWindowBySession('/tmp/session-claim.jsonl')).toBe(first);
+    expect(wm.claimWindowSession(second.webContents.id, '/tmp/session-claim.jsonl')).toBe(false);
+  });
+
   it('窗口 destroyed 时自动从注册表清除', () => {
     const win = fakeWindow();
     wm.registerWindow(win as never, { isMain: true });
@@ -134,6 +144,15 @@ describe('window-manager registry', () => {
     const again = wm.createSessionWindow('/tmp/session-d.jsonl') as unknown as FakeBrowserWindow;
     expect(again).toBe(win);
     expect(again.focused).toBe(true);
+  });
+
+  it('createSessionWindow 复用主窗口中的会话，不创建独立窗口', () => {
+    const main = wm.createMainWindow() as unknown as FakeBrowserWindow;
+    wm.setWindowSessions(main.webContents.id, ['/tmp/session-main.jsonl'], '/tmp/session-main.jsonl');
+    const result = wm.createSessionWindow('/tmp/session-main.jsonl') as unknown as FakeBrowserWindow;
+    expect(result).toBe(main);
+    expect(wm.listWindows()).toHaveLength(1);
+    expect(main.focused).toBe(true);
   });
 
   it('createMainWindow 注册为主窗口且不带会话绑定', () => {

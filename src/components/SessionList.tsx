@@ -82,7 +82,6 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   const started = useActiveChatStore((s) => s.started);
   const isStreaming = useActiveChatStore((s) => s.isStreaming);
   const activeCwd = useActiveChatStore((s) => s.cwd);
-  const activeSessionPath = useActiveChatStore((s) => s.boundSessionPath);
   // 分栏树中已打开的会话：行内"已打开"标记；实例绑定由 watcher 回写叶子
   const paneRoot = useStore(panesStore, (s) => s.root);
   const openSessionPaths = useMemo(() => new Set(sessionPathsInTree(paneRoot)), [paneRoot]);
@@ -432,9 +431,9 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                       <button
                         data-testid={`sidebar-session-open-detached-${session.id}`}
                         onClick={() => {
-                          // 非活跃分栏中的会话仍在当前窗口内聚焦；活跃面板的会话
-                          // 才按“在独立窗口打开”语义创建/复用 detached window。
-                          if (openSessionPaths.has(session.path) && session.path !== activeSessionPath) {
+                          // 同一会话已经在当前窗口的任一面板时，只聚焦已有面板；
+                          // 不再从活跃面板重复创建独立窗口。
+                          if (openSessionPaths.has(session.path)) {
                             focusOpenSession(session.path, session.cwd);
                           } else {
                             void hostApi.windows.openDetached({ sessionPath: session.path, cwd: session.cwd });
