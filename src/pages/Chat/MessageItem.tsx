@@ -263,6 +263,40 @@ function MessageItemView({
       </details>
     );
   }
+  if (message.role === 'bashExecution') {
+    // `!` bash 执行结果（pi recordBashResult 落的消息）；streaming 草稿走同一卡片
+    const rawBash = message.raw as {
+      command?: string;
+      output?: string;
+      exitCode?: number;
+      cancelled?: boolean;
+      truncated?: boolean;
+      excludeFromContext?: boolean;
+    } | undefined;
+    return (
+      <div className="message message-bash" data-testid="message-bash">
+        <div className="bash-header">
+          <span className="bash-command" data-testid="bash-command">$ {rawBash?.command}</span>
+          {rawBash?.excludeFromContext && (
+            <span className="bash-badge">{t('chat.bash.excluded')}</span>
+          )}
+          {rawBash?.cancelled && <span className="bash-badge">{t('chat.bash.cancelled')}</span>}
+          {rawBash?.exitCode !== undefined && (
+            <span
+              className={`bash-badge${rawBash.exitCode === 0 ? '' : ' error'}`}
+              data-testid="bash-exit-code"
+            >
+              {t('chat.bash.exitCode', { code: rawBash.exitCode })}
+            </span>
+          )}
+        </div>
+        {rawBash?.output && (
+          <pre className="bash-output" data-testid="bash-output">{rawBash.output}</pre>
+        )}
+        {message.streaming && <span className="cursor-blink">▍</span>}
+      </div>
+    );
+  }
   const content = contentOverride ?? message.content;
   const raw = message.raw as { stopReason?: string; errorMessage?: string } | undefined;
   const showTail = !message.streaming && !suppressTail;

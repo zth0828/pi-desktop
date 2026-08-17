@@ -26,6 +26,7 @@ import type {
   PiSessionExportResult,
   PiUiResponsePayload,
   PiRuntimeQueueItemPayload,
+  PiRuntimeBashPayload,
 } from '@shared/host-api/contract';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import type {
@@ -980,7 +981,8 @@ export const piRuntimeApi = {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
     const session = active.runtime.session;
-    if (session.isCompacting) session.abortCompaction();
+    if (session.isBashRunning) session.abortBash();
+    else if (session.isCompacting) session.abortCompaction();
     else if (active.summarizingBranch) session.abortBranchSummary();
     else if (session.isRetrying) session.abortRetry();
     else await session.abort();
@@ -1103,6 +1105,41 @@ export const piRuntimeApi = {
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /** `!` bash 命令（TUI handleBashCommand 语义：扩展可经 user_bash 事件拦截执行）。 */
+  executeBash: async (payload: PiRuntimeBashPayload, ctx?: HostActionContext) => {
+    const active = resolveRuntimeForContext(ctx);
+    if (!active) return { success: false, error: 'session not started' };
+    const session = active.runtime.session;
+    // TUI：已有 bash 在跑时拒绝并发（先 Esc 取消）
+    if (session.isBashRunning) return { success: false, error: 'bash already running' };
+    try {
+      const excludeFromContext = payload.excludeFromContext === true;
+      const eventResult = await session.extensionRunner.emitUserBash({
+        type: 'user_bash',
+        command: payload.command,
+        excludeFromContext,
+        cwd: session.sessionManager.getCwd(),
+      });
+      if (eventResult?.result) {
+        // 扩展直接给出执行结果：只记录不执行
+        session.recordBashResult(payload.command, eventResult.result, { excludeFromContext });
+      } else {
+        await session.executeBash(payload.command, undefined, {
+          excludeFromContext,
+          operations: eventResult?.operations,
+        });
+      }
+      // 流式中 pi 把 bash 消息延迟到 agent_end 落盘，此刻推全量会丢流式 partial；
+      // 流式场景的新消息由 run 结束后的状态刷新带出。
+      if (!session.isStreaming) {
+        sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: toError(err) };
     }
   },
 

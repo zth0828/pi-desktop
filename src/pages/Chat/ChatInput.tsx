@@ -132,8 +132,10 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
   const compacting = usePaneChatStore((s) => s.compaction !== null);
   const retrying = usePaneChatStore((s) => s.retry !== null);
+  const bashing = usePaneChatStore((s) => s.bashDraft !== null);
   const started = usePaneChatStore((s) => s.started);
   const prompt = usePaneChatStore((s) => s.prompt);
+  const runBash = usePaneChatStore((s) => s.runBash);
   const abort = usePaneChatStore((s) => s.abort);
   const newSession = usePaneChatStore((s) => s.newSession);
   const setTreeOpen = usePaneChatStore((s) => s.setTreeOpen);
@@ -474,6 +476,13 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     const promptText = formatOrderedAttachmentPrompt(text, outgoingAttachments);
     setValue('');
     setAttachments([]);
+    // `!` bash 命令模式（pi TUI：`!cmd` 执行并入上下文，`!!cmd` 执行但不入上下文）
+    if (text.startsWith('!') && outgoingAttachments.length === 0) {
+      const isExcluded = text.startsWith('!!');
+      const command = (isExcluded ? text.slice(2) : text.slice(1)).trim();
+      if (command) void runBash(command, isExcluded);
+      return;
+    }
     // 壳内置命令直接执行，不发给 pi（其余 /xxx 由 pi 展开：prompt 模板/skill/扩展命令）
     if (text.startsWith('/') && outgoingAttachments.length === 0) {
       const spaceIndex = text.indexOf(' ');
@@ -991,8 +1000,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
               >
                 <ArrowUp size={15} />
               </button>
-              {/* 压缩中/重试等待中 isStreaming=false，但回合仍可中断（pi Escape 语义） */}
-              {(compacting || retrying) && (
+              {/* 压缩中/重试等待中/bash 执行中 isStreaming=false，但回合仍可中断（pi Escape 语义） */}
+              {(compacting || retrying || bashing) && (
                 <button
                   data-testid="chat-stop"
                   className="send-button stop"

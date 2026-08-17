@@ -406,6 +406,32 @@ test('429 重试等待中 → Stop 中断重试并显示错误', async ({ launch
   });
 });
 
+test('! bash 命令：本地执行并渲染输出卡片（!! 不入上下文）', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('chat-input').fill('!echo pi-desktop-bash-e2e');
+  await page.getByTestId('chat-send').click();
+  const card = page.getByTestId('message-bash').last();
+  await expect(card.getByTestId('bash-command')).toContainText('echo pi-desktop-bash-e2e', {
+    timeout: 15_000,
+  });
+  await expect(card.getByTestId('bash-output')).toContainText('pi-desktop-bash-e2e', {
+    timeout: 15_000,
+  });
+  await expect(card.getByTestId('bash-exit-code')).toContainText('0');
+
+  // !! 前缀：执行但标注不入上下文
+  await page.getByTestId('chat-input').fill('!!echo pi-desktop-bash-excluded');
+  await page.getByTestId('chat-send').click();
+  const excluded = page.getByTestId('message-bash').last();
+  await expect(excluded.getByTestId('bash-output')).toContainText('pi-desktop-bash-excluded', {
+    timeout: 15_000,
+  });
+  await expect(excluded).toContainText(/不入上下文|excluded from context/);
+});
+
 test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当前轮插入', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

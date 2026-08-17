@@ -91,6 +91,8 @@ export type ChatState = {
   queue: QueueState;
   /** pi branchSummary.skipPrompt 设置：true 时跳分支不询问摘要（TUI 同款语义） */
   branchSummarySkipPrompt: boolean;
+  /** `!` bash 执行草稿（进行中的命令 + 已流式到达的输出）；正式消息落盘后清空 */
+  bashDraft: { command: string; output: string; excludeFromContext: boolean } | null;
   /** 分支树面板（/tree）开关 */
   treeOpen: boolean;
   /** Review 面板（会话改动评审）开关 */
@@ -111,6 +113,8 @@ export type ChatState = {
   switchSession: (path: string, cwd?: string) => Promise<HostSuccess>;
   /** behavior：流式中提交的排队方式（默认 followUp 排队；'steer' 当前轮插入） */
   prompt: (text: string, images?: unknown[], behavior?: 'steer' | 'followUp') => Promise<void>;
+  /** `!cmd` bash 执行（pi executeBash；excludeFromContext 对应 `!!` 前缀） */
+  runBash: (command: string, excludeFromContext: boolean) => Promise<void>;
   abort: () => Promise<void>;
   /** 移除一条排队消息（queue_update 事件负责刷新列表） */
   queueRemove: (kind: 'steering' | 'followUp', index: number) => Promise<void>;
@@ -244,6 +248,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       retry: null,
       queue: { steering: [], followUp: [] },
       branchSummarySkipPrompt: false,
+      bashDraft: null,
       treeOpen: false,
       reviewOpen: false,
       workspaceOpen: false,
@@ -319,6 +324,14 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
 
       abort: async () => {
         await api().piRuntime.abort();
+      },
+
+      runBash: async (command, excludeFromContext) => {
+        set({ bashDraft: { command, output: '', excludeFromContext } });
+        const result = await api().piRuntime.executeBash({ command, excludeFromContext });
+        if (!result.success) set({ bashDraft: null, startError: result.error });
+        // 成功后草稿清理由两条路覆盖：非流式 main 推 sessionReplaced（applyState 清），
+        // 流式中 pi 延迟落消息，run.ended 时 refreshMessages 并清。
       },
 
       queueRemove: async (kind, index) => {
@@ -414,6 +427,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           compaction: null,
           retry: null,
           queue: { steering: [], followUp: [] },
+          bashDraft: null,
           branchSummarySkipPrompt: state.branchSummarySkipPrompt ?? false,
           uiRequests: state.pendingUiRequests ?? [],
           extensionUi: state.extensionUi,
@@ -485,6 +499,11 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
               ),
             );
             set({ isStreaming: false, runStartedAt: null, toolExecutions, retry: null });
+            // 流式中执行的 bash 消息由 pi 延迟到 run 结束才落盘，此刻同步进列表
+            if (get().bashDraft) {
+              set({ bashDraft: null });
+              void get().refreshMessages();
+            }
             void api().piRuntime.getUsage().then((usage) => {
               if (usage?.latestTurn && get().generation === envelope.generation && get().runStartedAt === null && get().turnStats === null) {
                 set({ turnStats: { ...usage.latestTurn, durationMs } });
@@ -585,6 +604,11 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           case 'retry.ended':
             set({ retry: null });
             break;
+          case 'bash.execution.update': {
+            const draft = s.bashDraft;
+            if (draft) set({ bashDraft: { ...draft, output: draft.output + event.delta } });
+            break;
+          }
           case 'compaction.started':
             set({ compaction: { reason: event.reason } });
             break;

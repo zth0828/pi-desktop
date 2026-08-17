@@ -37,7 +37,12 @@ export type PiChatEvent =
       delayMs?: number;
       message?: string;
     }
-  | { type: 'retry.ended'; success?: boolean };
+  | {
+      type: 'retry.ended';
+      success?: boolean;
+    }
+  /** `!` bash 执行的流式输出（executeBash onChunk → bash_execution_update） */
+  | { type: 'bash.execution.update'; delta: string };
 
 /** Main 侧桥接时套的信封：渲染层按 generation 丢弃过期会话的事件。 */
 export type PiRuntimeEventEnvelope = {
@@ -111,6 +116,8 @@ export function mapPiSessionEvent(event: AgentSessionEvent): PiChatEvent | null 
       };
     case 'auto_retry_end':
       return { type: 'retry.ended', success: event.success };
+    case 'bash_execution_update':
+      return { type: 'bash.execution.update', delta: event.delta };
     default:
       return null;
   }

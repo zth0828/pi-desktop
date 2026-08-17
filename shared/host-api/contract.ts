@@ -199,6 +199,8 @@ export type PiRuntimeNavigateResult = HostSuccess & {
 
 /** /compact <instructions>：pi handleCompactCommand 的自定义压缩指令 */
 export type PiRuntimeCompactPayload = { customInstructions?: string };
+/** `!cmd` bash 执行（pi executeBash；`!!` 前缀 = excludeFromContext 不入上下文）。 */
+export type PiRuntimeBashPayload = { command: string; excludeFromContext?: boolean };
 /** /export [path]：pi handleExportCommand（缺省导到会话同目录 HTML） */
 export type PiRuntimeExportPayload = { outputPath?: string };
 
@@ -806,6 +808,8 @@ export type HostApiContract = {
     exportHtml: (payload?: PiRuntimeExportPayload) => PiSessionExportResult;
     /** / 补全：内置命令 + prompt 模板 + 扩展命令 + skills */
     getCommands: () => PiCommandListResult;
+    /** `!cmd` bash 执行（session.executeBash；TUI `!`/`!!` 语义）。 */
+    executeBash: (payload: PiRuntimeBashPayload) => HostSuccess;
     /** 扩展 UI 对话框的用户响应（按 requestId 配对挂起的 confirm/select/input）。 */
     uiResponse: (payload: PiUiResponsePayload) => HostSuccess;
   };

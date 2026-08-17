@@ -309,6 +309,11 @@
     "modelMenu": {
       "model": "模型",
       "empty": "暂无可用模型"
+    },
+    "bash": {
+      "excluded": "不入上下文",
+      "cancelled": "已取消",
+      "exitCode": "退出码 {{code}}"
     }
   },
   "models": {

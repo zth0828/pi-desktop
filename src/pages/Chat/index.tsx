@@ -141,6 +141,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const starting = usePaneChatStore((s) => s.starting);
   const startError = usePaneChatStore((s) => s.startError);
   const messages = usePaneChatStore((s) => s.messages);
+  const bashDraft = usePaneChatStore((s) => s.bashDraft);
   const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
   const turnStats = usePaneChatStore((s) => s.turnStats);
@@ -582,6 +583,20 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               />
             ))}
             {logicalTurns.map(renderTurn)}
+            {bashDraft && (
+              <MessageItem
+                message={{
+                  role: 'bashExecution',
+                  content: [],
+                  streaming: true,
+                  raw: {
+                    command: bashDraft.command,
+                    output: bashDraft.output,
+                    excludeFromContext: bashDraft.excludeFromContext,
+                  },
+                }}
+              />
+            )}
           </div>
           <MessageNavRail anchors={railAnchors} listRef={listRef} />
           {showScrollToBottom && (

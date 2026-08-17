@@ -309,6 +309,11 @@
     "modelMenu": {
       "model": "Model",
       "empty": "No models available"
+    },
+    "bash": {
+      "excluded": "excluded from context",
+      "cancelled": "cancelled",
+      "exitCode": "exit {{code}}"
     }
   },
   "models": {

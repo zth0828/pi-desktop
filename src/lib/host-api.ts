@@ -69,6 +69,8 @@ function createHostApi(sessionPath?: string) {
     exportHtml: (outputPath?: string) =>
       invoke('piRuntime', 'exportHtml', outputPath ? { outputPath } : undefined),
     getCommands: () => invoke('piRuntime', 'getCommands'),
+    executeBash: (payload: { command: string; excludeFromContext?: boolean }) =>
+      invoke('piRuntime', 'executeBash', payload),
     uiResponse: (payload: { requestId: string; value?: string | boolean; cancelled?: boolean }) =>
       invoke('piRuntime', 'uiResponse', payload),
   },
