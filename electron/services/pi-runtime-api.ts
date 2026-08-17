@@ -91,6 +91,8 @@ export type ActiveRuntime = {
   mcpStatus: Record<string, unknown> | null;
   /** 项目信任随 factory 重跑更新；autoTrustCwd 供 reload 后隐式信任落盘（pi TUI 同款语义）。 */
   trust: { autoTrustCwd?: string };
+  /** 分支摘要进行中（navigateTree/fork 带 summarize 的等待窗口；pi 无事件，壳按调用区间跟踪）。 */
+  summarizingBranch: boolean;
   unsubscribe: () => void;
 };
 
@@ -586,6 +588,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
     running: false,
     mcpStatus: null,
     trust,
+    summarizingBranch: false,
     unsubscribe: () => {},
   };
   // pi-mcp-adapter 状态快照：缓存 + 转发渲染层（增强项；未装 adapter 时永远不发）
@@ -971,10 +974,15 @@ export const piRuntimeApi = {
     }
   },
 
+  /** stop 按钮按当前状态分发（pi TUI 的 Escape 语义）：压缩中/分支摘要中/重试等待中分别接对应 abort。 */
   abort: async (_payload?: unknown, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    await active.runtime.session.abort();
+    const session = active.runtime.session;
+    if (session.isCompacting) session.abortCompaction();
+    else if (active.summarizingBranch) session.abortBranchSummary();
+    else if (session.isRetrying) session.abortRetry();
+    else await session.abort();
     return { success: true };
   },
 

@@ -384,6 +384,28 @@ test('429 → 状态条重试倒计时，重试成功后拿到回复', async ({ 
   await expect(page.getByTestId('status-bar')).toHaveCount(0, { timeout: 30_000 });
 });
 
+test('429 重试等待中 → Stop 中断重试并显示错误', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('chat-input').fill('FLAKE_429_ALWAYS please');
+  await page.getByTestId('chat-send').click();
+
+  const retry = page.getByTestId('status-retry');
+  await expect(retry).toBeVisible({ timeout: 30_000 });
+  // 重试等待不是流式状态，但 stop 必须可用（pi Escape → abortRetry）
+  const stop = page.getByTestId('chat-stop');
+  await expect(stop).toBeVisible();
+  await stop.click();
+
+  await expect(page.getByTestId('status-retry')).toHaveCount(0, { timeout: 15_000 });
+  // 中断后回合以错误收尾，错误提示渲染在消息流里
+  await expect(page.getByTestId('message-error').last()).toContainText(/429|rate limit/i, {
+    timeout: 15_000,
+  });
+});
+
 test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当前轮插入', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

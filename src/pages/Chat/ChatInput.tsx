@@ -130,6 +130,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const chatStore = usePaneChatStoreApi();
   const paneApi = usePaneHostApi();
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
+  const compacting = usePaneChatStore((s) => s.compaction !== null);
+  const retrying = usePaneChatStore((s) => s.retry !== null);
   const started = usePaneChatStore((s) => s.started);
   const prompt = usePaneChatStore((s) => s.prompt);
   const abort = usePaneChatStore((s) => s.abort);
@@ -979,15 +981,28 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
               </button>
             </>
           ) : (
-            <button
-              data-testid="chat-send"
-              className="send-button"
-              onClick={() => send()}
-              disabled={!value.trim() && attachments.length === 0}
-              title={sendWith === 'cmdEnter' ? t('chat.sendTipCmdEnter') : t('chat.sendTip')}
-            >
-              <ArrowUp size={15} />
-            </button>
+            <>
+              <button
+                data-testid="chat-send"
+                className="send-button"
+                onClick={() => send()}
+                disabled={!value.trim() && attachments.length === 0}
+                title={sendWith === 'cmdEnter' ? t('chat.sendTipCmdEnter') : t('chat.sendTip')}
+              >
+                <ArrowUp size={15} />
+              </button>
+              {/* 压缩中/重试等待中 isStreaming=false，但回合仍可中断（pi Escape 语义） */}
+              {(compacting || retrying) && (
+                <button
+                  data-testid="chat-stop"
+                  className="send-button stop"
+                  onClick={() => void abort()}
+                  title={t('chat.stopTip')}
+                >
+                  <Square size={13} />
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

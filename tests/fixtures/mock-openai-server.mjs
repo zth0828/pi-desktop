@@ -86,6 +86,14 @@ const server = http.createServer((req, res) => {
       lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
     );
 
+    // FLAKE_429_ALWAYS 恒 429：驱动 pi 持续自动重试，供「重试等待中可中断」场景
+    if (lastUser.includes("FLAKE_429_ALWAYS")) {
+      res.writeHead(429, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        error: { message: "429 Too Many Requests: rate limit reached", type: "rate_limit_error" },
+      }));
+      return;
+    }
     // 首次 FLAKE_429 返回 429，驱动 pi 的 auto_retry_start（重试后走正常 PONG）
     if (lastUser.includes("FLAKE_429") && !flaked429) {
       flaked429 = true;
