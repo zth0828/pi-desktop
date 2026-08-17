@@ -248,11 +248,18 @@ function MessageItemView({
   }
   if (message.role === 'compactionSummary') {
     // compaction 后刷新消息列表时 pi 带回的摘要消息（createCompactionSummaryMessage）
-    const raw = message.raw as { summary?: string } | undefined;
+    const raw = message.raw as { summary?: string; content?: string } | undefined;
+    const summary = raw?.summary
+      ?? raw?.content
+      ?? message.content
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text ?? '')
+        .join('\n')
+        .trim();
     return (
       <details className="compaction-summary" data-testid="message-compaction">
         <summary>{t('chat.compactionSummary')}</summary>
-        <Markdown text={raw?.summary ?? ''} />
+        {summary && <Markdown text={summary} />}
       </details>
     );
   }

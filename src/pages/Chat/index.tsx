@@ -379,7 +379,11 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     const completed = !turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running')
       && (turnIndex < logicalTurns.length - 1 || !isStreaming);
     // 异常/中断轮可能没有最终答复，这时全量展示，避免隐藏唯一的错误信息。
-    const canFold = completed && finalIndex !== undefined;
+    // 压缩摘要是会话历史的重要内容，不能随着它恰好落入某一轮而被折叠隐藏。
+    const hasCompactionSummary = messages
+      .slice(turn.startIndex, turn.endIndex + 1)
+      .some((message) => message.role === 'compactionSummary');
+    const canFold = completed && finalIndex !== undefined && !hasCompactionSummary;
     const expanded = expandedTurns[turn.startIndex] ?? false;
     const hasEdits = completed && turn.toolCallIds.some((id) => {
       const name = toolExecutions[id]?.toolName;
