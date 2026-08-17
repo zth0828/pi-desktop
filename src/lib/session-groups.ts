@@ -18,7 +18,8 @@ export function groupByProject(sessions: PiSessionRow[]): ProjectGroup[] {
   return [...map.entries()]
     .map(([cwd, rows]) => ({
       cwd,
-      name: cwd.split('/').filter(Boolean).pop() ?? cwd,
+      // Windows 路径用 `\` 分隔，两种分隔符都要切
+      name: cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd,
       sessions: rows,
       latest: rows[0]?.modified ?? '',
     }))

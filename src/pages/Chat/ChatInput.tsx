@@ -819,7 +819,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
             onClick={() => void onChooseWorkspace()}
           >
             <Folder size={15} />
-            <span>{cwd.split('/').filter(Boolean).pop() ?? cwd}</span>
+            <span>{cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd}</span>
             <ChevronDown size={13} />
           </button>
           <span className="spacer" />
