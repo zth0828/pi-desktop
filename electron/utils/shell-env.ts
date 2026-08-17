@@ -8,9 +8,10 @@ let cached: string | null = null;
 
 export function resolveUserPath(): string {
   if (cached) return cached;
-  // 测试钩子：E2E 用隔离 PATH 模拟各场景，不走 login shell
+  // 测试钩子：E2E 用隔离 PATH 模拟各场景，不走 login shell。
+  // 空串也是合法覆盖值（模拟「无任何可用 PATH」），用 undefined 判定而非真值判定。
   const override = process.env.PI_DESKTOP_USER_PATH;
-  if (override) {
+  if (override !== undefined) {
     cached = override;
     return cached;
   }
