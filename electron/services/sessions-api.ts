@@ -26,6 +26,7 @@ import {
   consumePrewarmedSessionRuntime,
   createSessionRuntime,
   createSessionRuntimeForWindow,
+  detachRuntimesFromSessionFile,
   getActiveRuntime,
   getLiveSessionRows,
   getRuntimeForSession,
@@ -359,12 +360,8 @@ export const sessionsApi = {
   remove: async (payload: PiSessionPathPayload): Promise<HostSuccess> => {
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     try {
-      const active = getActiveRuntime();
-      if (active && samePath(payload.path, active.runtime.session.sessionFile)) {
-        // 删当前会话文件前先切到全新会话，避免 runtime 继续往已删文件追加
-        await active.runtime.newSession();
-        await afterSessionReplaced(active);
-      }
+      // 任一窗口/面板打开着该会话都先切到全新会话，避免 runtime 往已删文件追加
+      await detachRuntimesFromSessionFile(payload.path);
       // 对齐 pi `/resume` 的删除语义：真实应用优先移到系统废纸篓；
       // E2E 隔离目录直接删除，避免把测试会话灌进用户废纸篓。
       if (process.env.PI_DESKTOP_USER_DATA_DIR) {

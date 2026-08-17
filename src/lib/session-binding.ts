@@ -12,12 +12,17 @@ export function matchesBoundSession(boundSessionId: string | null, sessionId: st
 /**
  * sessionReplaced 是否应用：匹配当前绑定会话，或本窗口刚发起会话替换
  * （newSession/fork 后 sessionId 会变，由 expectingReplacement 放行一次）。
+ * replacesSessionId：删除会话驱动的替换（main 删文件前把 runtime 切到新会话），
+ * 正在查看被删会话的面板凭它认领到新会话。
  */
 export function shouldApplySessionReplaced(
   boundSessionId: string | null,
   stateSessionId: string,
   expectingReplacement: boolean,
+  replacesSessionId?: string,
 ): boolean {
   if (!boundSessionId) return true;
-  return stateSessionId === boundSessionId || expectingReplacement;
+  return stateSessionId === boundSessionId
+    || expectingReplacement
+    || (replacesSessionId !== undefined && replacesSessionId === boundSessionId);
 }

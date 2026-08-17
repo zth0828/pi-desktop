@@ -29,4 +29,9 @@ describe('shouldApplySessionReplaced（sessionReplaced 过滤）', () => {
   it('本窗口发起的会话替换（newSession/fork 后 sessionId 变）放行一次', () => {
     expect(shouldApplySessionReplaced('s1', 's2', true)).toBe(true);
   });
+
+  it('删除驱动的替换凭 replacesSessionId 认领（仅被删会话的面板）', () => {
+    expect(shouldApplySessionReplaced('s1', 's2', false, 's1')).toBe(true);
+    expect(shouldApplySessionReplaced('s3', 's2', false, 's1')).toBe(false);
+  });
 });

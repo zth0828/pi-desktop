@@ -191,7 +191,7 @@ function bindInstanceEvents(
       // （newSession/fork 后 sessionId 会变）由 expectingReplacement 放行并改绑；
       // switch 链路在 switchSession 里已用 getState 直接应用并改绑，晚到的
       // 广播事件 sessionId 与 bound 一致，重复应用幂等。
-      if (!shouldApplySessionReplaced(s.boundSessionId, state.sessionId, s.expectingReplacement)) return;
+      if (!shouldApplySessionReplaced(s.boundSessionId, state.sessionId, s.expectingReplacement, state.replacesSessionId)) return;
       s.applyState(state);
       store.setState({ boundSessionId: state.sessionId, expectingReplacement: false });
     }),

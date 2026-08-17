@@ -404,6 +404,28 @@ test('删除（二次确认）→ 列表减少', async ({ launchElectronApp }) =
   await expect(sessionRows(page).filter({ hasText: 'keep me ECHO' })).toHaveCount(1);
 });
 
+test('删除当前打开的会话 → 面板切到新会话并可继续发送', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'delete current JADE');
+  const row = page.locator('.sidebar-session-row').filter({ hasText: 'delete current JADE' });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.locator('.sidebar-session-menu-trigger').click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+
+  // 侧栏行消失；正在查看被删会话的面板认领到新空会话（问候语回来）
+  await expect(row).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId('message-user')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId('chat-greeting')).toBeVisible();
+
+  // 新会话可正常发送（此前面板绑在已删文件上，发送报 session not started）
+  await sendAndWaitReply(page, 'after delete KITE');
+  await expect(page.getByTestId('message-user').last()).toContainText('after delete KITE');
+});
+
 test('侧栏会话菜单 → 归档后移入已归档，可恢复；删除后消失', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

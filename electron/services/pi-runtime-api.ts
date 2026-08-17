@@ -702,10 +702,25 @@ export function clearPrewarmMark(sessionPath: string): void {
   completedPrewarms.delete(sessionPath);
 }
 
+/**
+ * 删除会话文件前，把持有它的所有保活 runtime（任一窗口/面板）切到全新会话，
+ * 避免 runtime 继续往已删文件追加导致会话"复活"；replacesSessionId 让正在
+ * 查看被删会话的面板认领到新会话（否则面板留在死会话上，发送报 session not started）。
+ */
+export async function detachRuntimesFromSessionFile(sessionPath: string): Promise<void> {
+  for (const runtime of [...runtimes]) {
+    if (!samePath(runtime.runtime.session.sessionFile, sessionPath)) continue;
+    const previousSessionId = runtime.sessionId;
+    await runtime.runtime.newSession();
+    await afterSessionReplaced(runtime, undefined, { replacesSessionId: previousSessionId });
+  }
+}
+
 /** 会话替换（new/switch/fork）后的统一收尾：重绑 + 重订阅 + 通知渲染层清空。 */
 export async function afterSessionReplaced(
   runtime: ActiveRuntime,
   target?: HostActionContext,
+  options?: { replacesSessionId?: string },
 ): Promise<PiRuntimeStateResult> {
   const previousActive = active;
   runtime.unsubscribe();
@@ -738,6 +753,7 @@ export async function afterSessionReplaced(
     sendHostEvent('piMcp', 'statusChanged', { snapshot: latestMcpStatus });
   }
   const state = snapshotState(runtime);
+  if (options?.replacesSessionId) state.replacesSessionId = options.replacesSessionId;
   if (target) sendHostEventToWebContents(target.sender, 'piRuntime', 'sessionReplaced', state);
   else sendHostEvent('piRuntime', 'sessionReplaced', state);
 

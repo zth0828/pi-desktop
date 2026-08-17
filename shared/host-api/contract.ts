@@ -159,6 +159,8 @@ export type PiRuntimeStateResult = {
   extensionUi?: PiExtensionUiState;
   /** 后台 runtime 等待中的扩展确认；切回会话时恢复对话框。 */
   pendingUiRequests?: PiUiRequestPayload[];
+  /** 删除会话驱动的替换：被删会话的原 sessionId，供正在查看它的面板认领新会话。 */
+  replacesSessionId?: string;
 };
 
 // —— piRuntime 消息级 fork / 分支导航（/tree）——
