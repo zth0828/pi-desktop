@@ -2838,6 +2838,20 @@ button.danger-outline {
   background: var(--bg);
 }
 
+.mcp-reload-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 460px;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 .skill-row,
 .package-row,
 .session-row,

@@ -512,7 +512,10 @@
       "disabled": "Disabled",
       "save": "Save",
       "cancel": "Cancel"
-    }
+    },
+    "pendingReload": "Configuration changed; it takes effect in the next session.",
+    "reloadNow": "Reload now",
+    "reloading": "Reloading…"
   },
   "sidebar": {
     "newChat": "New chat",

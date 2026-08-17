@@ -93,6 +93,9 @@ export default function McpPage() {
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string>();
+  // 配置改动只写 JSON，下个会话才生效；提示用户可立即重载（piRuntime.reload）
+  const [pendingReload, setPendingReload] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const chatStarted = useActiveChatStore((s) => s.started);
 
   const refresh = useCallback(() => {
@@ -118,11 +121,31 @@ export default function McpPage() {
     try {
       const r = await action();
       if (!r.success) setError(r.error ?? 'unknown');
+      else setPendingReload(true);
       refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const reloadNow = async () => {
+    setReloading(true);
+    setError(undefined);
+    try {
+      // 重载活动 runtime（pi /reload 语义：流式中/压缩中会被 main 拒绝，错误走错误条）
+      const r = await hostApi.piRuntime.reload();
+      if (!r.success) {
+        setError(r.error ?? 'unknown');
+        return;
+      }
+      setPendingReload(false);
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReloading(false);
     }
   };
 
@@ -186,6 +209,20 @@ export default function McpPage() {
       )}
 
       {error && <p className="error-text" data-testid="mcp-error">{error}</p>}
+
+      {pendingReload && (
+        <div className="mcp-reload-banner" data-testid="mcp-reload-banner">
+          <span>{t('mcp.pendingReload')}</span>
+          <button
+            className="primary"
+            data-testid="mcp-reload-now"
+            disabled={reloading}
+            onClick={() => void reloadNow()}
+          >
+            {reloading ? t('mcp.reloading') : t('mcp.reloadNow')}
+          </button>
+        </div>
+      )}
 
       {!form && (
         <div>

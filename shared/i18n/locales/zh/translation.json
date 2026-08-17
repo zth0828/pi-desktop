@@ -512,7 +512,10 @@
       "disabled": "禁用",
       "save": "保存",
       "cancel": "取消"
-    }
+    },
+    "pendingReload": "配置已修改，将在下个会话生效。",
+    "reloadNow": "立即重载",
+    "reloading": "重载中…"
   },
   "sidebar": {
     "newChat": "新会话",
