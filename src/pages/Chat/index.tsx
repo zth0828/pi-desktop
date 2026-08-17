@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDown, Check, ChevronRight, PanelRight, X } from 'lucide-react';
+import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { hostApi } from '../../lib/host-api';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
@@ -26,7 +27,9 @@ function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
   const setWorkspaceOpen = usePaneChatStore((s) => s.setWorkspaceOpen);
   const started = usePaneChatStore((s) => s.started);
   const sessionId = usePaneChatStore((s) => s.sessionId);
-  const firstUserMessage = usePaneChatStore((s) => s.messages.find((entry) => entry.role === 'user'));
+  const firstUserMessage = usePaneChatStore((s) =>
+    (s.historyMessages.length > 0 ? s.historyMessages : s.messages).find((entry) => entry.role === 'user'),
+  );
   const firstUserQuestion = firstUserMessage?.content
     .filter((block) => block.type === 'text')
     .map((block) => block.text ?? '')
@@ -141,9 +144,12 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const starting = usePaneChatStore((s) => s.starting);
   const startError = usePaneChatStore((s) => s.startError);
   const messages = usePaneChatStore((s) => s.messages);
+  const historyMessages = usePaneChatStore((s) => s.historyMessages);
   const bashDraft = usePaneChatStore((s) => s.bashDraft);
   const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
+  // 压缩后优先使用完整分支历史；流式期间仍用事件增量列表，避免等待快照时丢掉最新回复。
+  const displayMessages = isStreaming || historyMessages.length === 0 ? messages : historyMessages;
   const turnStats = usePaneChatStore((s) => s.turnStats);
   const sessionId = usePaneChatStore((s) => s.sessionId);
   const workspaceVisible = usePaneChatStore((s) => s.workspaceOpen || s.reviewOpen);
@@ -199,51 +205,69 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   // user 消息稳定锚点（消息列表在会话内只追加，index 锚点稳定）
   const railAnchors = useMemo<RailAnchor[]>(() => {
     let n = 0;
-    return messages.flatMap((m, i) =>
+    return displayMessages.flatMap((m, i) =>
       m.role === 'user' ? [{
         id: `chat-msg-${i}`,
         n: (n += 1),
-        question: m.content
-          .filter((block) => block.type === 'text')
-          .map((block) => block.text ?? '')
-          .join(' ')
+        // 附件信封（<attachments>…）不属于问题文字，rail 悬浮预览里同样不展示
+        question: stripAttachmentEnvelope(
+          m.content
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text ?? '')
+            .join(' '),
+        )
           .replace(/\s+/g, ' ')
           .trim(),
       }] : [],
     );
-  }, [messages]);
+  }, [displayMessages]);
+
+  const compactionAnchors = useMemo(() => {
+    let n = 0;
+    return displayMessages.flatMap((message, index) => {
+      if (message.role !== 'compactionSummary') return [];
+      const raw = message.raw as { summary?: string; content?: string } | undefined;
+      const summary = raw?.summary ?? raw?.content ?? message.content
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text ?? '')
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return [{ id: `chat-msg-${index}`, n: (n += 1), summary }];
+    });
+  }, [displayMessages]);
 
   // 缓存失效检测（pi cache-stats 口径）：按下标分发给 assistant 消息尾部警告
-  const cacheMisses = useMemo(() => collectCacheMisses(messages), [messages]);
+  const cacheMisses = useMemo(() => collectCacheMisses(displayMessages), [displayMessages]);
 
   const latestFinalResponseIndex = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const message = messages[i];
+    for (let i = displayMessages.length - 1; i >= 0; i -= 1) {
+      const message = displayMessages[i];
       if (message.role === 'assistant' && message.content.some((block) => block.type === 'text' && block.text?.trim())) return i;
     }
     return -1;
-  }, [messages]);
+  }, [displayMessages]);
 
-  const logicalTurns = useMemo(() => groupLogicalTurns(messages), [messages]);
+  const logicalTurns = useMemo(() => groupLogicalTurns(displayMessages), [displayMessages]);
 
   useEffect(() => {
-    if (!searchTarget || searchTarget.sessionId !== sessionId || !messages[searchTarget.messageIndex]) return;
+    if (!searchTarget || searchTarget.sessionId !== sessionId || !displayMessages[searchTarget.messageIndex]) return;
     const targetIndex = searchTarget.messageIndex;
     const targetTurn = logicalTurns.find((turn) => targetIndex >= turn.startIndex && targetIndex <= turn.endIndex);
     if (targetTurn) {
       setExpandedTurns((current) => ({ ...current, [targetTurn.startIndex]: true }));
-      const finalIndex = turnFinalResponseIndex(messages, targetTurn);
+      const finalIndex = turnFinalResponseIndex(displayMessages, targetTurn);
       const stageIndices = Array.from(
         { length: targetTurn.endIndex - targetTurn.startIndex },
         (_, offset) => targetTurn.startIndex + 1 + offset,
       ).filter((index) => index !== finalIndex);
-      const stages = groupTurnStages(messages, stageIndices, String(targetTurn.startIndex));
+      const stages = groupTurnStages(displayMessages, stageIndices, String(targetTurn.startIndex));
       const targetStage = stages.find((stage) => stage.indices.includes(targetIndex));
       if (targetStage) setExpandedStages((current) => ({ ...current, [targetStage.key]: true }));
     }
     stickToBottomRef.current = false;
     setSearchHighlightIndex(targetIndex);
-  }, [logicalTurns, messages, searchTarget, sessionId]);
+  }, [logicalTurns, displayMessages, searchTarget, sessionId]);
 
   useEffect(() => {
     if (searchHighlightIndex === undefined) return;
@@ -342,7 +366,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
       list.scrollTo({ top: list.scrollHeight });
     }
     updateScrollAffordance();
-  }, [messages, updateScrollAffordance]);
+  }, [displayMessages, updateScrollAffordance]);
 
   const scrollToBottom = () => {
     const list = listRef.current;
@@ -376,12 +400,12 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   };
 
   const renderTurn = (turn: (typeof logicalTurns)[number], turnIndex: number) => {
-    const finalIndex = turnFinalResponseIndex(messages, turn);
+    const finalIndex = turnFinalResponseIndex(displayMessages, turn);
     const completed = !turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running')
       && (turnIndex < logicalTurns.length - 1 || !isStreaming);
     // 异常/中断轮可能没有最终答复，这时全量展示，避免隐藏唯一的错误信息。
     // 压缩摘要是会话历史的重要内容，不能随着它恰好落入某一轮而被折叠隐藏。
-    const hasCompactionSummary = messages
+    const hasCompactionSummary = displayMessages
       .slice(turn.startIndex, turn.endIndex + 1)
       .some((message) => message.role === 'compactionSummary');
     const canFold = completed && finalIndex !== undefined && !hasCompactionSummary;
@@ -397,7 +421,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
           {Array.from({ length: turn.endIndex - turn.startIndex + 1 }, (_, offset) => turn.startIndex + offset).map((i) => (
             <MessageItem
               key={i}
-              message={messages[i]}
+              message={displayMessages[i]}
               anchorId={`chat-msg-${i}`}
               highlighted={searchHighlightIndex === i}
               cacheMiss={cacheMisses.get(i)}
@@ -410,7 +434,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
       );
     }
 
-    const finalMessage = messages[finalIndex];
+    const finalMessage = displayMessages[finalIndex];
     const finalText = finalMessage.content.filter((block) => block.type === 'text');
     const finalProcess = finalMessage.content.filter((block) => block.type !== 'text');
     const processIndices = Array.from(
@@ -418,10 +442,10 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
       (_, offset) => turn.startIndex + 1 + offset,
     ).filter((i) => i !== finalIndex);
     const stageIndices = [...processIndices, ...(finalProcess.length > 0 ? [finalIndex] : [])];
-    const stages = groupTurnStages(messages, stageIndices, String(turn.startIndex));
+    const stages = groupTurnStages(displayMessages, stageIndices, String(turn.startIndex));
     const hasProcess = stages.length > 0;
     const duration = formatTurnDuration(turnDurationMs(
-      messages,
+      displayMessages,
       turn,
       toolExecutions,
       finalIndex === latestFinalResponseIndex ? turnStats?.durationMs : undefined,
@@ -430,7 +454,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     return (
       <Fragment key={turn.startIndex}>
         <MessageItem
-          message={messages[turn.startIndex]}
+          message={displayMessages[turn.startIndex]}
           anchorId={`chat-msg-${turn.startIndex}`}
           highlighted={searchHighlightIndex === turn.startIndex}
         />
@@ -473,7 +497,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
                           {stage.indices.map((i) => (
                             <MessageItem
                               key={i}
-                              message={messages[i]}
+                              message={displayMessages[i]}
                               anchorId={i === finalIndex ? undefined : `chat-msg-${i}`}
                               highlighted={searchHighlightIndex === i}
                               contentOverride={i === finalIndex ? finalProcess : undefined}
@@ -568,12 +592,12 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
             {!started && starting && (
               <div className="chat-starting" data-testid="chat-starting">{t('chat.starting')}</div>
             )}
-            {started && messages.length === 0 && (
+            {started && displayMessages.length === 0 && (
               <div className="chat-greeting" data-testid="chat-greeting">
                 <h1>{t('chat.greeting')}</h1>
               </div>
             )}
-            {messages.slice(0, logicalTurns[0]?.startIndex ?? messages.length).map((message, i) => (
+            {displayMessages.slice(0, logicalTurns[0]?.startIndex ?? displayMessages.length).map((message, i) => (
               <MessageItem
                 key={i}
                 message={message}
@@ -598,7 +622,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               />
             )}
           </div>
-          <MessageNavRail anchors={railAnchors} listRef={listRef} />
+          <MessageNavRail anchors={railAnchors} compactionAnchors={compactionAnchors} listRef={listRef} />
           {showScrollToBottom && (
             <button
               className="scroll-to-bottom"

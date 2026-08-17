@@ -100,6 +100,22 @@ function searchableMessageText(message: unknown): string {
   return typeof candidate.summary === 'string' ? candidate.summary : '';
 }
 
+/**
+ * 与渲染层展示同序的完整分支消息（含压缩摘要）。搜索 messageIndex 用它对齐，
+ * 否则压缩后 messageIndex 相对 buildSessionContext（摘要+尾部）计算，跳转会错位。
+ */
+function branchSearchableMessages(sdk: PiSdk, sessionPath: string): string[] {
+  const texts: string[] = [];
+  const manager = sdk.SessionManager.open(sessionPath);
+  for (const entry of manager.getBranch()) {
+    for (const message of sdk.sessionEntryToContextMessages(entry)) {
+      // 附件信封/文件块不属于可搜索正文，命中展示时也不能带出
+      texts.push(stripAttachmentEnvelope(searchableMessageText(message)));
+    }
+  }
+  return texts;
+}
+
 /** runtime 未启动（用户还没开过 Chat 页）时回退 settings.workspaceCwd。 */
 async function resolveCwd(): Promise<string | null> {
   const active = getActiveRuntime();
@@ -175,14 +191,17 @@ export const sessionsApi = {
     const infos = await sdk.SessionManager.listAll();
     const current = ctx?.sessionPath ?? currentSessionFile();
     const limit = Math.max(1, Math.min(payload.limit ?? 50, 100));
-    const candidates = searchSessions(infos, query, limit);
+    // 搜索结果 snippet 直接展示原文，先剥离附件信封再进索引/命中
+    const strippedInfos = infos.map((info) => ({
+      ...info,
+      name: info.name ? stripAttachmentEnvelope(info.name) || undefined : undefined,
+      firstMessage: stripAttachmentEnvelope(info.firstMessage),
+      allMessagesText: stripAttachmentEnvelope(info.allMessagesText),
+    }));
+    const candidates = searchSessions(strippedInfos, query, limit);
     const preciseCandidates = candidates.map((candidate) => {
       if (candidate.match === 'name') return candidate;
-      const messageTexts = sdk.SessionManager
-        .open(candidate.session.path)
-        .buildSessionContext()
-        .messages
-        .map(searchableMessageText);
+      const messageTexts = branchSearchableMessages(sdk, candidate.session.path);
       return searchSessions([{ ...candidate.session, messageTexts }], query, 1)[0] ?? candidate;
     });
     const sessions = preciseCandidates

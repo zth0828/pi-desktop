@@ -257,7 +257,7 @@ function MessageItemView({
         .join('\n')
         .trim();
     return (
-      <details className="compaction-summary" data-testid="message-compaction">
+      <details className="compaction-summary" data-testid="message-compaction" id={anchorId}>
         <summary>{t('chat.compactionSummary')}</summary>
         {summary && <Markdown text={summary} />}
       </details>

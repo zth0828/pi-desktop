@@ -5,6 +5,20 @@ import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 
 export type CompactionReason = 'manual' | 'threshold' | 'overflow';
 
+export type PiCompactionUsage = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  cost: number;
+};
+
+export type PiCompactionResult = {
+  tokensBefore: number;
+  estimatedTokensAfter?: number;
+  usage?: PiCompactionUsage;
+};
+
 export type PiChatEvent =
   | { type: 'run.started' }
   | { type: 'run.ended'; willRetry?: boolean }
@@ -29,6 +43,7 @@ export type PiChatEvent =
       aborted?: boolean;
       willRetry?: boolean;
       message?: string;
+      result?: PiCompactionResult;
     }
   | {
       type: 'retry.started';
@@ -98,14 +113,29 @@ export function mapPiSessionEvent(event: AgentSessionEvent): PiChatEvent | null 
       };
     case 'compaction_start':
       return { type: 'compaction.started', reason: event.reason };
-    case 'compaction_end':
+    case 'compaction_end': {
+      const result = event.result;
       return {
         type: 'compaction.ended',
         reason: event.reason,
         aborted: event.aborted,
         willRetry: event.willRetry,
         message: event.errorMessage,
+        ...(result ? {
+          result: {
+            tokensBefore: result.tokensBefore,
+            estimatedTokensAfter: result.estimatedTokensAfter,
+            usage: result.usage ? {
+              input: result.usage.input,
+              output: result.usage.output,
+              cacheRead: result.usage.cacheRead,
+              cacheWrite: result.usage.cacheWrite,
+              cost: result.usage.cost?.total ?? 0,
+            } : undefined,
+          },
+        } : {}),
       };
+    }
     case 'auto_retry_start':
       return {
         type: 'retry.started',

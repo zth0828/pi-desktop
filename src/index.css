@@ -1009,6 +1009,37 @@ button.danger-outline {
   opacity: 1;
 }
 
+/* 上下文压缩检查点使用独立 rail，避免与普通 user 消息混在同一组定位语义中。 */
+.compaction-rail {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 5;
+}
+
+.compaction-rail-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: var(--warning, #d99a3d);
+  opacity: 0.65;
+  cursor: pointer;
+}
+
+.compaction-rail-dot:hover,
+.compaction-rail-dot:focus-visible,
+.compaction-rail-dot.active {
+  opacity: 1;
+  background: var(--accent);
+}
+
 .chat-greeting {
   flex: 1;
   display: flex;
@@ -1854,6 +1885,16 @@ button.danger-outline {
   max-width: calc(50% - 36px);
 }
 
+.status-bar-compaction-result {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(100%, 900px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+}
+
 .status-bar-indicator {
   display: inline-flex;
   align-items: center;
@@ -2049,6 +2090,15 @@ button.danger-outline {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-menu-trigger-thinking {
+  flex-shrink: 0;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-tertiary);
   white-space: nowrap;
 }
 
@@ -2398,6 +2448,11 @@ button.danger-outline {
 .settings-number { width: 140px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-raised); color: var(--text); text-align: right; }
 .probe-results { display: flex; flex-direction: column; gap: 4px; padding: 7px 0; }
 .probe-result-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; }
+.probe-models { display: flex; flex-direction: column; gap: 4px; margin-top: 3px; }
+.probe-models-title { padding: 3px 2px 1px; color: var(--text-secondary); font-size: 11.5px; font-weight: 600; }
+.probe-model-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; cursor: pointer; }
+.probe-model-row input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
+.probe-model-id { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
 .probe-ok { color: var(--success); }
 .probe-fail { color: var(--danger); }
 .model-context-status { margin-top: -2px; color: var(--warning); font-size: 11.5px; line-height: 1.45; }

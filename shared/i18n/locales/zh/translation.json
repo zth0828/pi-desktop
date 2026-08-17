@@ -74,7 +74,8 @@
       "retryingNow": "重试中（{{attempt}}/{{maxAttempts}}）…",
       "retryingGeneric": "重试中…",
       "compacting": "正在压缩上下文…",
-      "compactingOverflow": "检测到上下文溢出，自动压缩中…"
+      "compactingOverflow": "检测到上下文溢出，自动压缩中…",
+      "compactionDone": "上下文已压缩：{{before}} → {{after}} Token · 摘要请求输入 {{input}} / 输出 {{output}} Token"
     },
     "queue": {
       "steering": "引导 ×{{count}}：{{preview}}",
@@ -218,6 +219,7 @@
     "sessionTotals": "整个会话累计",
     "contextUsed": "当前上下文",
     "contextWindow": "上下文上限",
+    "contextEstimated": "pi 报告下一次回复用量前，当前上下文为估算值。",
     "maxOutputTokens": "最大输出 Token",
     "inputTokens": "输入 Token",
     "outputTokens": "输出 Token",
@@ -351,12 +353,15 @@
     "probeCache": "支持缓存统计",
     "probeNoCache": "无缓存统计",
     "probeContext": "检测到上下文：{{count}}",
+    "probeContextDefault": "默认上下文：{{count}}",
+    "probeModels": "检测到模型（{{count}}）",
     "customContextWindow": "上下文窗口",
     "customMaxTokens": "最大输出 Token",
     "contextDetected": "已从供应商检测到 {{count}} Token 上下文",
-    "contextRequired": "供应商未返回上下文长度，请填写真实值或明确使用 Pi 默认值。",
-    "contextUsingDefault": "将使用 Pi 的 128K 上下文默认值。",
-    "usePiContextDefault": "使用 Pi 默认上下文（128K）",
+    "contextManual": "将使用 {{count}} Token 上下文",
+    "contextRequired": "供应商未返回上下文长度，将使用 256K 默认值。",
+    "contextUsingDefault": "供应商未返回上下文，将使用 256K 默认值。",
+    "usePiContextDefault": "使用默认上下文（256K）",
     "cancel": "取消",
     "configured": "已配置",
     "notConfigured": "未配置",
@@ -598,6 +603,8 @@
     "compaction": {
       "title": "上下文压缩",
       "desc": "这些原生设置会写入 ~/.pi/agent/settings.json。",
+      "enabled": "自动压缩上下文",
+      "enabledDesc": "允许 pi 在接近上下文上限时自动压缩当前上下文。",
       "reserveTokens": "预留 Token",
       "reserveDesc": "接近上下文窗口上限时触发压缩。",
       "keepRecentTokens": "保留最近 Token",
@@ -668,7 +675,11 @@
     "retry": "重试"
   },
   "rail": {
+    "messages": "消息导航",
+    "compactions": "上下文压缩导航",
     "jumpTo": "跳转到你的第 {{index}} 条消息",
+    "jumpToCompaction": "跳转到第 {{index}} 个上下文压缩点",
+    "compaction": "上下文压缩",
     "attachmentQuestion": "附件问题"
   },
   "list": {

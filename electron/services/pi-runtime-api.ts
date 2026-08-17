@@ -5,6 +5,7 @@ import {
   mapPiSessionEvent,
   type PiRuntimeEventEnvelope,
 } from '@shared/pi-event-map';
+import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
   PiRuntimePromptPayload,
   PiRuntimeStartPayload,
@@ -110,6 +111,13 @@ let latestMcpStatus: Record<string, unknown> | null = null;
 /** 当前活动运行时（供 piSessions 等兄弟服务复用；只读使用，替换会话须走 afterSessionReplaced）。 */
 export function getActiveRuntime(): ActiveRuntime | null {
   return active;
+}
+
+/** settings.json 由壳写入后，刷新所有保活 runtime 的 SettingsManager 缓存。 */
+export async function reloadRuntimeSettings(): Promise<void> {
+  await Promise.all([...runtimes].map((runtime) =>
+    runtime.runtime.services.settingsManager.reload().catch(() => undefined),
+  ));
 }
 
 export function getRuntimeForSession(sessionPath: string): ActiveRuntime | null {
@@ -259,6 +267,25 @@ function messageEntryIds(session: AgentSession): (string | null)[] {
   return ids;
 }
 
+/**
+ * The runtime deliberately exposes only the active context in `messages` after
+ * compaction. The transcript still needs the complete current branch so the UI
+ * can render and navigate entries that were summarized away.
+ */
+function historyMessages(sdk: PiSdk, session: AgentSession): { messages: unknown[]; entryIds: (string | null)[] } {
+  const messages: unknown[] = [];
+  const entryIds: (string | null)[] = [];
+  for (const entry of session.sessionManager.getBranch()) {
+    // 必须走动态加载的用户环境 pi（包是 ESM-only，main 进程 CJS 包里 require 会直接崩）
+    const converted = sdk.sessionEntryToContextMessages(entry);
+    for (const message of converted) {
+      messages.push(message);
+      entryIds.push(entry.type === 'message' && entry.message.role === 'user' ? entry.id : null);
+    }
+  }
+  return { messages, entryIds };
+}
+
 function modelInfo(session: AgentSession): PiRuntimeModelInfo | undefined {
   const model = session.model;
   return model
@@ -267,7 +294,7 @@ function modelInfo(session: AgentSession): PiRuntimeModelInfo | undefined {
         id: model.id,
         name: model.name,
         reasoning: model.reasoning,
-        contextWindow: model.contextWindow,
+        contextWindow: model.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
         maxTokens: model.maxTokens,
       }
     : undefined;
@@ -283,11 +310,62 @@ function availableThinkingLevels(session: AgentSession): string[] {
   }
 }
 
-function contextUsage(session: AgentSession): PiRuntimeContextUsage | undefined {
+function estimateContextTokens(runtime: ActiveRuntime, session: AgentSession): number {
+  const messages = session.messages as unknown as Array<{
+    role?: string;
+    content?: unknown;
+    summary?: string;
+    stopReason?: string;
+    usage?: Record<string, unknown>;
+  }>;
+  const latestCompaction = messages.reduce((index, message, current) =>
+    message.role === 'compactionSummary' ? current : index, -1);
+  // compaction 前的 assistant usage 不再代表当前上下文；从最近检查点开始按 pi
+  // 同款字符/token estimator 计算，避免把旧上下文误算进当前百分比。
+  const start = latestCompaction >= 0 ? latestCompaction : 0;
+  let latestUsageIndex = -1;
+  let latestUsageTokens = 0;
+  if (latestCompaction < 0) {
+    for (let index = 0; index < messages.length; index += 1) {
+      const message = messages[index];
+      if (message.role !== 'assistant' || !message.usage) continue;
+      if (message.stopReason === 'aborted' || message.stopReason === 'error') continue;
+      const tokens = runtime.sdk.calculateContextTokens(message.usage as never);
+      if (tokens > 0) {
+        latestUsageIndex = index;
+        latestUsageTokens = tokens;
+      }
+    }
+  }
+  let estimated = latestUsageIndex >= 0 ? latestUsageTokens : 0;
+  const estimateFrom = latestUsageIndex >= 0 ? latestUsageIndex + 1 : start;
+  for (let index = estimateFrom; index < messages.length; index += 1) {
+    estimated += runtime.sdk.estimateTokens(messages[index] as never);
+  }
+  return Math.max(0, Math.round(estimated));
+}
+
+function contextUsage(runtime: ActiveRuntime): PiRuntimeContextUsage | undefined {
+  const session = runtime.runtime.session;
   const usage = session.getContextUsage();
-  return usage
-    ? { tokens: usage.tokens, contextWindow: usage.contextWindow, percent: usage.percent }
-    : undefined;
+  const modelContextWindow = session.model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+  const contextWindow = usage?.contextWindow && usage.contextWindow > 0
+    ? usage.contextWindow
+    : modelContextWindow;
+  if (usage?.tokens != null) {
+    return {
+      tokens: usage.tokens,
+      contextWindow,
+      percent: usage.percent ?? (usage.tokens / contextWindow) * 100,
+    };
+  }
+  const tokens = estimateContextTokens(runtime, session);
+  return {
+    tokens,
+    contextWindow,
+    percent: contextWindow > 0 ? (tokens / contextWindow) * 100 : null,
+    estimated: true,
+  };
 }
 
 function latestAssistantUsage(session: AgentSession): PiRuntimeUsageTurn | null {
@@ -313,18 +391,19 @@ function latestAssistantUsage(session: AgentSession): PiRuntimeUsageTurn | null 
   return null;
 }
 
-function modelUpdate(session: AgentSession): PiRuntimeModelUpdateResult {
+function modelUpdate(session: AgentSession, runtime: ActiveRuntime): PiRuntimeModelUpdateResult {
   return {
     success: true,
     model: modelInfo(session),
     thinkingLevel: session.thinkingLevel,
     availableThinkingLevels: availableThinkingLevels(session),
-    contextUsage: contextUsage(session),
+    contextUsage: contextUsage(runtime),
   };
 }
 
 function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
   const session = runtime.runtime.session;
+  const history = historyMessages(runtime.sdk, session);
   return {
     sessionId: session.sessionId,
     cwd: runtime.cwd,
@@ -334,9 +413,11 @@ function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
     availableThinkingLevels: availableThinkingLevels(session),
     isStreaming: session.isStreaming,
     messages: session.messages as unknown[],
+    historyMessages: history.messages,
     messageEntryIds: messageEntryIds(session),
+    historyMessageEntryIds: history.entryIds,
     sessionFile: session.sessionFile,
-    contextUsage: contextUsage(session),
+    contextUsage: contextUsage(runtime),
     branchSummarySkipPrompt: runtime.runtime.services.settingsManager.getBranchSummarySkipPrompt(),
     extensionUi: getExtensionUiStateSnapshot({
       sessionId: runtime.sessionId,
@@ -923,10 +1004,8 @@ export const piRuntimeApi = {
   },
 
   getContextUsage: (_payload?: unknown, ctx?: HostActionContext): PiRuntimeContextUsage | null => {
-    const usage = resolveRuntimeForContext(ctx)?.runtime.session.getContextUsage();
-    return usage
-      ? { tokens: usage.tokens, contextWindow: usage.contextWindow, percent: usage.percent }
-      : null;
+    const active = resolveRuntimeForContext(ctx);
+    return active ? contextUsage(active) ?? null : null;
   },
 
   getUsage: (_payload?: unknown, ctx?: HostActionContext): PiRuntimeUsageResult | null => {
@@ -935,7 +1014,7 @@ export const piRuntimeApi = {
     const session = active.runtime.session;
     const stats = session.getSessionStats();
     return {
-      context: contextUsage(session) ?? null,
+      context: contextUsage(active) ?? null,
       model: modelInfo(session),
       session: {
         input: stats.tokens.input,
@@ -1259,7 +1338,7 @@ export const piRuntimeApi = {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
     active.runtime.session.setThinkingLevel(payload.level as never);
-    return modelUpdate(active.runtime.session);
+    return modelUpdate(active.runtime.session, active);
   },
 
   setModel: async (payload: { provider: string; id: string }, ctx?: HostActionContext) => {
@@ -1268,7 +1347,7 @@ export const piRuntimeApi = {
     const model = active.runtime.services.modelRuntime.getModel(payload.provider, payload.id);
     if (!model) return { success: false, error: `model not found: ${payload.provider}/${payload.id}` };
     await active.runtime.session.setModel(model);
-    return modelUpdate(active.runtime.session);
+    return modelUpdate(active.runtime.session, active);
   },
 
   /**

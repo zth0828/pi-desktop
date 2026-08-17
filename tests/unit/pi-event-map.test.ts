@@ -98,4 +98,38 @@ describe('pi-event-map（录制 fixture 回放，pi 0.83.0）', () => {
       message: 'Compaction failed: boom',
     });
   });
+
+  it('compaction_end 映射压缩前后与摘要请求 usage', () => {
+    const mapped = mapPiSessionEvent({
+      type: 'compaction_end',
+      reason: 'threshold',
+      result: {
+        summary: 'summary',
+        firstKeptEntryId: 'entry-1',
+        tokensBefore: 820_431,
+        estimatedTokensAfter: 41_220,
+        usage: {
+          input: 18_400,
+          output: 2_100,
+          cacheRead: 300,
+          cacheWrite: 40,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.01 },
+        },
+      },
+      aborted: false,
+      willRetry: false,
+    } as AgentSessionEvent);
+    expect(mapped).toEqual({
+      type: 'compaction.ended',
+      reason: 'threshold',
+      aborted: false,
+      willRetry: false,
+      message: undefined,
+      result: {
+        tokensBefore: 820_431,
+        estimatedTokensAfter: 41_220,
+        usage: { input: 18_400, output: 2_100, cacheRead: 300, cacheWrite: 40, cost: 0.01 },
+      },
+    });
+  });
 });

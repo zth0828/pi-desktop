@@ -25,6 +25,7 @@ export function StatusBar() {
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
   const retry = usePaneChatStore((s) => s.retry);
   const compaction = usePaneChatStore((s) => s.compaction);
+  const lastCompaction = usePaneChatStore((s) => s.lastCompaction);
   const queue = usePaneChatStore((s) => s.queue);
   const extensionUi = usePaneChatStore((s) => s.extensionUi);
   const runningServerCommand = usePaneChatStore((s) => Object.values(s.toolExecutions).find((execution) => {
@@ -87,7 +88,8 @@ export function StatusBar() {
 
   const hasQueue = queue.steering.length > 0 || queue.followUp.length > 0;
   const extensionStatuses = extensionUi?.statuses ?? [];
-  if (!status && !hasQueue && extensionStatuses.length === 0) return null;
+  const formatTokens = (value: number | undefined) => value == null ? '—' : value.toLocaleString();
+  if (!status && !lastCompaction && !hasQueue && extensionStatuses.length === 0) return null;
 
   return (
     <div className="status-bar" data-testid="status-bar">
@@ -96,6 +98,16 @@ export function StatusBar() {
           <span className="status-bar-indicator" data-testid={status.testid} title={status.title}>
             <span className="status-bar-spinner" aria-hidden="true" />
             {status.text}
+          </span>
+        )}
+        {lastCompaction && (
+          <span className="status-bar-compaction-result" data-testid="compaction-result">
+            {t('chat.status.compactionDone', {
+              before: formatTokens(lastCompaction.tokensBefore),
+              after: formatTokens(lastCompaction.estimatedTokensAfter),
+              input: formatTokens(lastCompaction.usage?.input),
+              output: formatTokens(lastCompaction.usage?.output),
+            })}
           </span>
         )}
       </div>

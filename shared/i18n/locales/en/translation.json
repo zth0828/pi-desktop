@@ -74,7 +74,8 @@
       "retryingNow": "Retrying ({{attempt}}/{{maxAttempts}})…",
       "retryingGeneric": "Retrying…",
       "compacting": "Compacting context…",
-      "compactingOverflow": "Context overflow detected, auto-compacting…"
+      "compactingOverflow": "Context overflow detected, auto-compacting…",
+      "compactionDone": "Context compacted: {{before}} → {{after}} tokens · summary request {{input}} in / {{output}} out"
     },
     "queue": {
       "steering": "Steer ×{{count}}: {{preview}}",
@@ -218,6 +219,7 @@
     "sessionTotals": "Whole session",
     "contextUsed": "Current context",
     "contextWindow": "Context window",
+    "contextEstimated": "Current context is estimated until pi reports the next response usage.",
     "maxOutputTokens": "Max output tokens",
     "inputTokens": "Input tokens",
     "outputTokens": "Output tokens",
@@ -351,12 +353,15 @@
     "probeCache": "Reports cache",
     "probeNoCache": "No cache stats",
     "probeContext": "Detected context: {{count}}",
+    "probeContextDefault": "Default context: {{count}}",
+    "probeModels": "Detected models ({{count}})",
     "customContextWindow": "Context window",
     "customMaxTokens": "Max output tokens",
     "contextDetected": "Detected a {{count}} token context from the provider",
-    "contextRequired": "The provider did not report a context length. Enter the real value or explicitly use Pi's default.",
-    "contextUsingDefault": "Pi's 128K context default will be used.",
-    "usePiContextDefault": "Use Pi context default (128K)",
+    "contextManual": "Using a {{count}} token context",
+    "contextRequired": "The provider did not report a context length; the 256K default will be used.",
+    "contextUsingDefault": "No context was reported; the 256K context default will be used.",
+    "usePiContextDefault": "Use default context (256K)",
     "cancel": "Cancel",
     "configured": "Configured",
     "notConfigured": "Not configured",
@@ -598,6 +603,8 @@
     "compaction": {
       "title": "Context compaction",
       "desc": "Pi writes these native settings to ~/.pi/agent/settings.json.",
+      "enabled": "Automatic compaction",
+      "enabledDesc": "Allow pi to compact the active context when it approaches the limit.",
       "reserveTokens": "Reserve tokens",
       "reserveDesc": "Trigger compaction when the context approaches its window limit.",
       "keepRecentTokens": "Keep recent tokens",
@@ -668,7 +675,11 @@
     "retry": "Retry"
   },
   "rail": {
+    "messages": "Message navigation",
+    "compactions": "Context compaction navigation",
     "jumpTo": "Jump to your message {{index}}",
+    "jumpToCompaction": "Jump to context compaction {{index}}",
+    "compaction": "Context compaction",
     "attachmentQuestion": "Attachment question"
   },
   "list": {
