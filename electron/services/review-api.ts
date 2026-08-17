@@ -4,7 +4,8 @@
 // 同一份 tree diff，又不会触碰真实 index/工作区。真实 index 只用于补充 unmerged 状态；
 // 临时 index 会把冲突文件展平成普通工作区内容，不能单独承担冲突识别。
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -23,10 +24,32 @@ type GitResult = { code: number; stdout: string; stderr: string };
 
 const GIT_TIMEOUT_MS = 30_000;
 
+// Review 的 diff/apply 必须按字节保真：用户全局 git 可能配了 core.autocrlf=true
+// （Windows 常见），回写时会将 LF 转成 CRLF，导致还原结果与预期不符。
+// 环境变量配置优先级最高，只影响壳内部的 git 管道，不改用户仓库配置。
+const GIT_STABLE_ENV: NodeJS.ProcessEnv = {
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_CONFIG_COUNT: '1',
+  GIT_CONFIG_KEY_0: 'core.autocrlf',
+  GIT_CONFIG_VALUE_0: 'false',
+};
+
+/**
+ * git 对象文件是只读的，Windows 上句柄释放/防病毒扫描还会短暂锁文件，
+ * 同步 rm 易抛 EPERM 并打断退出流程；异步重试 + 容忍失败（tmpdir 最终由系统回收）。
+ */
+async function removeDirBestEffort(dir: string): Promise<void> {
+  try {
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch {
+    // ignore
+  }
+}
+
 function runGit(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; input?: string } = {}): Promise<GitResult> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn('git', ['-C', cwd, ...args], {
-      env: { ...process.env, ...opts.env },
+      env: { ...process.env, ...GIT_STABLE_ENV, ...opts.env },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -96,7 +119,7 @@ async function snapshotTree(
     if (writeTree.code !== 0) throw new Error(writeTree.stderr.trim() || 'git write-tree failed');
     return writeTree.stdout.trim();
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    await removeDirBestEffort(dir);
   }
 }
 
@@ -114,7 +137,7 @@ let baselineFailure: string | null = null;
 
 function disposeBaseline(): void {
   for (const entry of baselines.values()) {
-    if (entry.ownedDir) rmSync(entry.ownedDir, { recursive: true, force: true });
+    if (entry.ownedDir) void removeDirBestEffort(entry.ownedDir);
   }
   baselines.clear();
 }
@@ -157,7 +180,7 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
     if (commit.code !== 0) throw new Error(commit.stderr.trim() || 'git commit-tree failed');
     baselines.set(cwd, { cwd, ref: commit.stdout.trim(), kind: gitEnv ? 'session-snapshot' : 'git-head', gitEnv, ownedDir });
   } catch (err) {
-    if (ownedDir) rmSync(ownedDir, { recursive: true, force: true });
+    if (ownedDir) await removeDirBestEffort(ownedDir);
     baselineFailure = `git-error:${err instanceof Error ? err.message : String(err)}`;
   }
 }
