@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowDown, Check, ChevronRight, PanelRight, X } from 'lucide-react';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { collectCacheMisses } from '../../lib/cache-stats';
+import { cacheHitRate, summarizeUsage } from '../../lib/usage-stats';
 import { hostApi } from '../../lib/host-api';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
 import { timingMark } from '../../lib/timing';
@@ -239,6 +240,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
 
   // 缓存失效检测（pi cache-stats 口径）：按下标分发给 assistant 消息尾部警告
   const cacheMisses = useMemo(() => collectCacheMisses(displayMessages), [displayMessages]);
+  const sessionCacheHitRate = useMemo(() => cacheHitRate(summarizeUsage(displayMessages)), [displayMessages]);
 
   const latestFinalResponseIndex = useMemo(() => {
     for (let i = displayMessages.length - 1; i >= 0; i -= 1) {
@@ -426,6 +428,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               highlighted={searchHighlightIndex === i}
               cacheMiss={cacheMisses.get(i)}
               turnStats={i === latestFinalResponseIndex ? turnStats : null}
+              sessionCacheHitRate={i === latestFinalResponseIndex ? sessionCacheHitRate : null}
               expandThinking
             />
           ))}
@@ -524,6 +527,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
           contentOverride={finalText}
           cacheMiss={cacheMisses.get(finalIndex)}
           turnStats={finalIndex === latestFinalResponseIndex ? turnStats : null}
+          sessionCacheHitRate={finalIndex === latestFinalResponseIndex ? sessionCacheHitRate : null}
         />
         {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
       </Fragment>

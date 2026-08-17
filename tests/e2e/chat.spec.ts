@@ -338,6 +338,24 @@ test('首问自动命名，本轮统计与 pi usage 口径一致', async ({ laun
   )).toBe(turnInput);
 });
 
+test('回合统计使用整个会话的缓存命中率', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('chat-input').fill('CACHE_SESSION first');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+  await page.getByTestId('chat-input').fill('CACHE_SESSION second');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+
+  // 本轮 token/耗时仍属于第二轮，但缓存命中率应按两轮 usage 累计计算：900 / (100 + 900 + 1000) = 45%。
+  await expect(page.getByTestId('turn-stats')).toContainText(/Session cache hit 45%|会话缓存命中 45%/);
+  await page.getByTestId('token-usage').click();
+  await expect(page.getByTestId('usage-session-cache-hit-rate')).toContainText('45%');
+});
+
 test('富文本答复渲染任务卡、表格、代码块和外链', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

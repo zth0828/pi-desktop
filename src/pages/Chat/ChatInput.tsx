@@ -985,7 +985,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                   </>
                 )}
                 {cacheStatsAvailable && totalHitRate != null && (
-                  <div className="usage-row"><span>{t('chat.cacheHitRate')}</span><strong>{formatHitRate(totalHitRate)}</strong></div>
+                  <div className="usage-row" data-testid="usage-session-cache-hit-rate"><span>{t('chat.cacheHitRate')}</span><strong>{formatHitRate(totalHitRate)}</strong></div>
                 )}
                 {cacheStatsAvailable && lastTurnHitRate != null && (
                   <div className="usage-row"><span>{t('chat.cacheHitRateLast')}</span><strong>{formatHitRate(lastTurnHitRate)}</strong></div>

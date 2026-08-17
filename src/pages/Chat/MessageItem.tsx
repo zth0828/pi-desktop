@@ -92,6 +92,8 @@ type MessageItemProps = {
   cacheMiss?: CacheMiss;
   /** 仅当前实时完成回合的收尾统计；恢复会话时为空。 */
   turnStats?: TurnStats | null;
+  /** 整个会话累计缓存命中率（0-1）；token 与耗时仍使用 turnStats 的本轮口径。 */
+  sessionCacheHitRate?: number | null;
   /** 回合折叠将最终答复与其他 block 分开渲染时使用。 */
   contentOverride?: ContentBlock[];
   /** 回合展开后 thinking 内容也同步展开。 */
@@ -129,6 +131,7 @@ function messageItemPropsEqual(prev: MessageItemProps, next: MessageItemProps): 
     && prev.highlighted === next.highlighted
     && cacheMissEqual(prev.cacheMiss, next.cacheMiss)
     && prev.turnStats === next.turnStats
+    && prev.sessionCacheHitRate === next.sessionCacheHitRate
     && contentBlocksEqual(prev.contentOverride, next.contentOverride)
     && prev.expandThinking === next.expandThinking
     && prev.expandTools === next.expandTools
@@ -142,6 +145,7 @@ function MessageItemView({
   highlighted,
   cacheMiss,
   turnStats,
+  sessionCacheHitRate,
   contentOverride,
   expandThinking,
   expandTools,
@@ -371,7 +375,9 @@ function MessageItemView({
           </button>
         </div>
       )}
-      {showTail && plainText && turnStats && <TurnStatsCard stats={turnStats} />}
+      {showTail && plainText && turnStats && (
+        <TurnStatsCard stats={turnStats} sessionCacheHitRate={sessionCacheHitRate} />
+      )}
     </div>
   );
 }
@@ -380,11 +386,16 @@ function MessageItemView({
 // 不再整表重渲染。props 引用稳定性由父组件（index.tsx map 处）与上面的自定义比较保证。
 export const MessageItem = memo(MessageItemView, messageItemPropsEqual);
 
-function TurnStatsCard({ stats }: { stats: TurnStats }) {
+function TurnStatsCard({
+  stats,
+  sessionCacheHitRate,
+}: {
+  stats: TurnStats;
+  sessionCacheHitRate?: number | null;
+}) {
   const { t } = useTranslation();
   const totalTokens = stats.input + stats.output;
-  const denominator = stats.input + stats.cacheRead + stats.cacheWrite;
-  const hitRate = denominator > 0 ? Math.round((stats.cacheRead / denominator) * 100) : null;
+  const hitRate = sessionCacheHitRate == null ? null : Math.round(sessionCacheHitRate * 100);
   const totalSeconds = Math.max(0, Math.round(stats.durationMs / 1000));
   const duration = totalSeconds >= 60
     ? t('chat.turnStats.durationMinutes', { minutes: Math.floor(totalSeconds / 60), seconds: totalSeconds % 60 })

@@ -354,6 +354,13 @@ const server = http.createServer((req, res) => {
             prompt_tokens_details: { cached_tokens: 0, cache_write_tokens: 6000 } }
         : { prompt_tokens: 6100, completion_tokens: 4, total_tokens: 6104,
             prompt_tokens_details: { cached_tokens: 0 } };
+    } else if (lastUser.includes("CACHE_SESSION")) {
+      const userTurns = msgs.filter((m) => m.role === "user").length;
+      usage = userTurns <= 1
+        ? { prompt_tokens: 1000, completion_tokens: 4, total_tokens: 1004,
+            prompt_tokens_details: { cached_tokens: 900 } }
+        : { prompt_tokens: 1000, completion_tokens: 4, total_tokens: 1004,
+            prompt_tokens_details: { cached_tokens: 0 } };
     }
     send({ role: "assistant", content: "" });
     for (const ch of text) send({ content: ch });
