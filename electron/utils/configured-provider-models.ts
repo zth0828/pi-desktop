@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -115,7 +116,17 @@ export function mergeDiscoveredProviderModels(existing: unknown[], detected: Det
   const template = existingModels[0] ?? {};
   const merged = detected.map((model) => {
     const current = byId.get(model.id);
-    if (current) return current;
+    if (current) {
+      if (!positiveNumber(current.contextWindow)) {
+        return {
+          ...current,
+          contextWindow: model.contextWindow
+            ?? positiveNumber(template.contextWindow)
+            ?? DEFAULT_CONTEXT_WINDOW,
+        };
+      }
+      return current;
+    }
     return {
       id: model.id,
       name: model.name ?? model.id,
@@ -124,9 +135,9 @@ export function mergeDiscoveredProviderModels(existing: unknown[], detected: Det
       reasoning: model.reasoning ?? (typeof template.reasoning === 'boolean' ? template.reasoning : true),
       input: model.input ?? (Array.isArray(template.input) ? template.input : ['text']),
       cost: record(template.cost) ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      ...(model.contextWindow
-        ? { contextWindow: model.contextWindow }
-        : positiveNumber(template.contextWindow) ? { contextWindow: positiveNumber(template.contextWindow) } : {}),
+      contextWindow: model.contextWindow
+        ?? positiveNumber(template.contextWindow)
+        ?? DEFAULT_CONTEXT_WINDOW,
       ...(model.maxTokens
         ? { maxTokens: model.maxTokens }
         : positiveNumber(template.maxTokens) ? { maxTokens: positiveNumber(template.maxTokens) } : {}),

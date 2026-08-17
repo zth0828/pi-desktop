@@ -219,9 +219,10 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
   await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}/v1`);
   await form.getByPlaceholder('API key').fill('added-secret');
   await form.getByPlaceholder('Model ids, comma separated').fill('added-model');
-  await expect(form.getByRole('button', { name: 'Save provider' })).toBeDisabled();
+  // 未探测到上下文时直接使用 256K 默认值，供应商可立即保存。
+  await expect(form.getByRole('button', { name: 'Save provider' })).toBeEnabled();
   await form.getByTestId('custom-use-pi-context-default').check();
-  await expect(form.getByTestId('custom-context-status')).toContainText('128K');
+  await expect(form.getByTestId('custom-context-status')).toContainText('256K');
   await form.getByRole('button', { name: 'Save provider' }).click();
 
   const added = page.getByTestId('provider-added-provider');
@@ -241,7 +242,7 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
       // 第三方模型缺省按支持推理处理，思考深度菜单可用
       reasoning: models.providers['added-provider'].models?.[0]?.reasoning,
     };
-  }).toEqual({ inlineKey: undefined, storedKey: 'added-secret', contextWindow: undefined, reasoning: true });
+  }).toEqual({ inlineKey: undefined, storedKey: 'added-secret', contextWindow: 262144, reasoning: true });
 
   await added.locator('.provider-row-header').click();
   page.once('dialog', (dialog) => dialog.accept());
@@ -275,8 +276,11 @@ test('Models 页：协议探测拒绝 200 HTML，发现 /v1 并选择真实 Open
   await expect(results.locator('.probe-result-row').filter({ hasText: 'anthropic-messages' })).toContainText('Unavailable');
   await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-completions');
   await expect(form.getByPlaceholder('baseURL')).toHaveValue(`http://127.0.0.1:${mockPort}/v1`);
-  await expect(form.getByTestId('custom-context-window')).toHaveValue('');
-  await expect(form.getByTestId('custom-context-status')).toContainText('did not report a context length');
+  await expect(form.getByTestId('custom-context-window')).toHaveValue('262144');
+  await expect(form.getByTestId('custom-context-status')).toContainText('256K');
+  await expect(form.getByTestId('probe-models')).toBeVisible();
+  await expect(form.getByTestId('probe-model-mock-2')).toContainText('mock-2');
+  await expect(form.getByTestId('probe-model-mock-discovered')).toContainText('mock-discovered');
   await form.getByTestId('custom-context-status').scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'output/playwright/models-context-unresolved.png', fullPage: false });
 });
@@ -389,6 +393,7 @@ test('Models 页：推理开关恢复自定义模型的思考深度', async ({ l
 
   await selector.click();
   await expect(page.getByTestId('model-menu-thinking')).toContainText('High', { timeout: 15_000 });
+  await expect(page.getByTestId('model-trigger-thinking')).toContainText('High');
 });
 
 /** Codex 风格模型菜单：触发器 → 「模型」行 → 子菜单里按 data-value 点选 */
@@ -538,7 +543,10 @@ test('Token 上限随当前模型切换，不使用固定 128K', async ({ launch
   const selector = page.getByTestId('model-select');
   await expect(selector).toBeVisible({ timeout: 30_000 });
 
-  await page.getByTestId('token-usage').click();
+  const usageButton = page.getByTestId('token-usage');
+  await expect(usageButton).not.toContainText('—');
+  await expect(usageButton).toContainText('0%');
+  await usageButton.click();
   const popover = page.getByTestId('token-usage-popover');
   await expect(popover).toContainText('128,000');
   await expect(popover).toContainText('4,096');

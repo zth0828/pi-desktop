@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
   HostSuccess,
   PiDefaultModel,
@@ -209,7 +210,7 @@ export const providersApi = {
         api: m.api,
         reasoning: m.reasoning,
         input: m.input,
-        contextWindow: m.contextWindow,
+        contextWindow: m.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
         maxTokens: m.maxTokens,
         cost: { ...m.cost },
       })),
@@ -344,8 +345,8 @@ export const providersApi = {
           reasoning: m.reasoning ?? true,
           input: ['text'],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
-          ...(m.maxTokens !== undefined ? { maxTokens: m.maxTokens } : {}),
+          contextWindow: m.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+          maxTokens: m.maxTokens,
         })),
       };
       mkdirSync(agentDir, { recursive: true });

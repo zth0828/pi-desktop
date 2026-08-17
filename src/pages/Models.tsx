@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RefreshCw } from 'lucide-react';
+import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type { PiDefaultModel, PiModelRow, PiProviderProbeResult, PiProviderRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
@@ -282,10 +283,10 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
   const [api, setApi] = useState<string>(CUSTOM_API_TYPES[0]);
   const [apiKey, setApiKey] = useState('');
   const [modelIds, setModelIds] = useState('');
-  const [contextWindow, setContextWindow] = useState('');
+  const [contextWindow, setContextWindow] = useState(String(DEFAULT_CONTEXT_WINDOW));
   const [maxTokens, setMaxTokens] = useState('16384');
-  const [contextDetected, setContextDetected] = useState(false);
-  const [usePiContextDefault, setUsePiContextDefault] = useState(false);
+  const [contextSource, setContextSource] = useState<'detected' | 'default' | 'manual'>('default');
+  const [useDefaultContext, setUseDefaultContext] = useState(true);
   const [message, setMessage] = useState<string>();
   const [probing, setProbing] = useState(false);
   const [probeResult, setProbeResult] = useState<PiProviderProbeResult>();
@@ -301,10 +302,12 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       const detectedContext = result.modelDetails?.find((model) => model.id === requestedModel)?.contextWindow;
       if (detectedContext) {
         setContextWindow(String(detectedContext));
-        setContextDetected(true);
-        setUsePiContextDefault(false);
+        setContextSource('detected');
+        setUseDefaultContext(false);
       } else {
-        setContextDetected(false);
+        setContextWindow(String(DEFAULT_CONTEXT_WINDOW));
+        setContextSource('default');
+        setUseDefaultContext(true);
       }
       if (result.recommendedApi) setApi(result.recommendedApi);
       if (result.recommendedBaseUrl) setBaseUrl(result.recommendedBaseUrl);
@@ -316,13 +319,23 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
   };
 
   const submit = async () => {
+    const detectedContexts = new Map(
+      (probeResult?.modelDetails ?? [])
+        .filter((model) => model.contextWindow && model.contextWindow > 0)
+        .map((model) => [model.id, model.contextWindow as number]),
+    );
+    // 探测对首个模型返回了上下文时，其余未返回的模型仍应回落到 256K 默认，
+    // 而不是继承首个模型的值；仅当用户手动填写时才以手填值作为兜底。
+    const fallbackContext = contextSource === 'manual' && Number(contextWindow) > 0
+      ? Number(contextWindow)
+      : DEFAULT_CONTEXT_WINDOW;
     const models = modelIds
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
       .map((mid) => ({
         id: mid,
-        ...(!usePiContextDefault && Number(contextWindow) > 0 ? { contextWindow: Number(contextWindow) } : {}),
+        contextWindow: useDefaultContext ? DEFAULT_CONTEXT_WINDOW : detectedContexts.get(mid) ?? fallbackContext,
         ...(Number(maxTokens) > 0 ? { maxTokens: Number(maxTokens) } : {}),
       }));
     const result = await hostApi.providers.addCustom({
@@ -386,7 +399,37 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
               {protocol.available && <span className={protocol.cacheStats ? 'probe-ok' : 'hint'}>{protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')}</span>}
             </div>
           ))}
-          {probeResult.modelDetails?.filter((model) => model.contextWindow).map((model) => (
+          {probeResult.models.length > 0 && (
+            <div className="probe-models" data-testid="probe-models">
+              <div className="probe-models-title">{t('models.probeModels', { count: probeResult.models.length })}</div>
+              {probeResult.models.map((modelId) => {
+                const detail = probeResult.modelDetails?.find((model) => model.id === modelId);
+                const selected = modelIds.split(',').map((id) => id.trim()).includes(modelId);
+                return (
+                  <label className="probe-model-row" data-testid={`probe-model-${modelId}`} key={modelId}>
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={(event) => {
+                        const ids = modelIds.split(',').map((id) => id.trim()).filter(Boolean);
+                        const next = event.target.checked
+                          ? [...new Set([...ids, modelId])]
+                          : ids.filter((id) => id !== modelId);
+                        setModelIds(next.join(', '));
+                      }}
+                    />
+                    <span className="probe-model-id">{modelId}</span>
+                    <span className={detail?.contextWindow ? 'probe-ok' : 'hint'}>
+                      {detail?.contextWindow
+                        ? t('models.probeContext', { count: detail.contextWindow.toLocaleString() })
+                        : t('models.probeContextDefault', { count: DEFAULT_CONTEXT_WINDOW.toLocaleString() })}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {probeResult.modelDetails?.filter((model) => model.contextWindow && !probeResult.models.includes(model.id)).map((model) => (
             <div className="probe-result-row" data-testid="probe-model-context" key={`context-${model.id}`}>
               <span>{model.id}</span>
               <span className="probe-ok">{t('models.probeContext', { count: model.contextWindow?.toLocaleString() })}</span>
@@ -394,40 +437,50 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
           ))}
         </div>
       )}
-      <input
-        placeholder={t('models.customModels')}
-        value={modelIds}
-        onChange={(e) => setModelIds(e.target.value)}
-      />
+      {(!probeResult || probeResult.models.length === 0) && (
+        <input
+          data-testid="custom-models"
+          placeholder={t('models.customModels')}
+          value={modelIds}
+          onChange={(e) => setModelIds(e.target.value)}
+        />
+      )}
       <div className="form-row">
         <input
           data-testid="custom-context-window"
-          disabled={usePiContextDefault}
           inputMode="numeric"
           placeholder={t('models.customContextWindow')}
           value={contextWindow}
-          onChange={(e) => { setContextWindow(e.target.value.replace(/\D/g, '')); setContextDetected(false); }}
+          onChange={(e) => { setContextWindow(e.target.value.replace(/\D/g, '')); setContextSource('manual'); setUseDefaultContext(false); }}
         />
         <input data-testid="custom-max-tokens" inputMode="numeric" placeholder={t('models.customMaxTokens')} value={maxTokens} onChange={(e) => setMaxTokens(e.target.value.replace(/\D/g, ''))} />
       </div>
-      <div className={`model-context-status${contextDetected ? ' detected' : ''}`} data-testid="custom-context-status">
-        {contextDetected
+      <div className={`model-context-status${contextSource === 'detected' ? ' detected' : ''}`} data-testid="custom-context-status">
+        {contextSource === 'detected'
           ? t('models.contextDetected', { count: Number(contextWindow).toLocaleString() })
-          : usePiContextDefault
-            ? t('models.contextUsingDefault')
-            : t('models.contextRequired')}
+          : contextSource === 'manual'
+            ? t('models.contextManual', { count: Number(contextWindow || DEFAULT_CONTEXT_WINDOW).toLocaleString() })
+            : t('models.contextUsingDefault')}
       </div>
       <label className="model-context-default">
         <input
           type="checkbox"
           data-testid="custom-use-pi-context-default"
-          checked={usePiContextDefault}
-          onChange={(event) => { setUsePiContextDefault(event.target.checked); if (event.target.checked) setContextDetected(false); }}
+          checked={useDefaultContext}
+          onChange={(event) => {
+            setUseDefaultContext(event.target.checked);
+            if (event.target.checked) {
+              setContextWindow(String(DEFAULT_CONTEXT_WINDOW));
+              setContextSource('default');
+            } else {
+              setContextSource('manual');
+            }
+          }}
         />
         <span>{t('models.usePiContextDefault')}</span>
       </label>
       <div className="actions">
-        <button className="primary" disabled={!id.trim() || !baseUrl.trim() || !modelIds.trim() || (!usePiContextDefault && !(Number(contextWindow) > 0))} onClick={() => void submit()}>
+        <button className="primary" disabled={!id.trim() || !baseUrl.trim() || !modelIds.trim() || !(useDefaultContext || Number(contextWindow) > 0)} onClick={() => void submit()}>
           {t('models.saveCustom')}
         </button>
         <button onClick={() => setOpen(false)}>{t('models.cancel')}</button>

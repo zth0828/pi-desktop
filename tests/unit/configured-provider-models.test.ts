@@ -52,6 +52,14 @@ describe('configured provider model discovery', () => {
       ]);
   });
 
+  it('fills a missing existing context window from provider discovery', () => {
+    expect(mergeDiscoveredProviderModels(
+      [{ id: 'existing-without-context', reasoning: false }],
+      [{ id: 'existing-without-context', contextWindow: 128000 }],
+    )).toEqual([{ id: 'existing-without-context', reasoning: false, contextWindow: 128000 }]);
+  });
+
+
   it('defaults new third-party models to reasoning-capable when neither directory nor template says', () => {
     // 第三方目录普遍不上报推理能力：缺省按支持处理，让思考深度菜单可用
     expect(mergeDiscoveredProviderModels([], [{ id: 'gateway-model' }]))
