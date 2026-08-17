@@ -1,6 +1,6 @@
 // 布局改版 / Settings / 图片输入 的 E2E。
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
@@ -120,6 +120,35 @@ test('Settings：语言切换为中文即时生效并持久化', async ({ launch
   await expect(page.getByTestId('settings-pi-status')).toContainText(/pi v0\.83/);
   await expect(page.locator('.sidebar-footer')).toHaveCount(0);
   await expect(page.getByTestId('settings-session-exports')).toBeVisible();
+  await rm(agentDir, { recursive: true, force: true });
+});
+
+test('Settings：默认思考深度与自动重试写回 pi settings.json', async ({ launchElectronApp }) => {
+  const agentDir = await makeAgentDir();
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-settings').click();
+  const section = page.getByTestId('settings-agent-defaults');
+  await expect(section).toBeVisible();
+
+  await page.getByTestId('default-thinking-high').click();
+  await page.getByTestId('retry-enabled-off').click();
+  await page.getByTestId('retry-max-retries').fill('5');
+  await page.getByTestId('retry-max-retries').blur();
+
+  await expect(async () => {
+    const settings = JSON.parse(
+      await readFile(path.join(agentDir, 'settings.json'), 'utf8'),
+    ) as { defaultThinkingLevel?: string; retry?: { enabled?: boolean; maxRetries?: number } };
+    expect(settings.defaultThinkingLevel).toBe('high');
+    expect(settings.retry?.enabled).toBe(false);
+    expect(settings.retry?.maxRetries).toBe(5);
+  }).toPass({ timeout: 10_000 });
   await rm(agentDir, { recursive: true, force: true });
 });
 

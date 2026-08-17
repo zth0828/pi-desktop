@@ -99,6 +99,11 @@ function createHostApi(sessionPath?: string) {
     getCompaction: () => invoke('providers', 'getCompaction'),
     setCompaction: (payload: { reserveTokens?: number; keepRecentTokens?: number; enabled?: boolean }) =>
       invoke('providers', 'setCompaction', payload),
+    getRetry: () => invoke('providers', 'getRetry'),
+    setRetry: (payload: { enabled?: boolean; maxRetries?: number; baseDelayMs?: number }) =>
+      invoke('providers', 'setRetry', payload),
+    getDefaultThinking: () => invoke('providers', 'getDefaultThinking'),
+    setDefaultThinking: (level: string) => invoke('providers', 'setDefaultThinking', { level }),
     getDefaultModel: () => invoke('providers', 'getDefaultModel'),
     setDefaultModel: (provider: string, id: string) =>
       invoke('providers', 'setDefaultModel', { provider, id }),

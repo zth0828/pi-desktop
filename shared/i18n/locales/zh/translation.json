@@ -633,6 +633,22 @@
       "markTrusted": "标记信任",
       "markUntrusted": "标记不信任",
       "revoke": "撤销记录"
+    },
+    "agentDefaults": {
+      "title": "Agent 默认值",
+      "desc": "这些原生设置会写入 ~/.pi/agent/settings.json，作用于新会话。"
+    },
+    "defaultThinking": {
+      "title": "默认思考深度",
+      "desc": "新会话的初始思考深度。"
+    },
+    "retry": {
+      "title": "自动重试",
+      "desc": "请求失败（限流/服务端错误）时 pi 自动重试。",
+      "maxRetries": "最大重试次数",
+      "maxRetriesDesc": "达到次数后回合以错误收尾。",
+      "baseDelay": "基础退避（毫秒）",
+      "baseDelayDesc": "重试等待的基础时长，随次数退避增长。"
     }
   },
   "notify": {

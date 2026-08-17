@@ -633,6 +633,22 @@
       "markTrusted": "Mark trusted",
       "markUntrusted": "Mark untrusted",
       "revoke": "Revoke"
+    },
+    "agentDefaults": {
+      "title": "Agent Defaults",
+      "desc": "These native settings are written to ~/.pi/agent/settings.json and apply to new sessions."
+    },
+    "defaultThinking": {
+      "title": "Default thinking level",
+      "desc": "Initial thinking level for new sessions."
+    },
+    "retry": {
+      "title": "Auto retry",
+      "desc": "pi automatically retries failed requests (rate limits / server errors).",
+      "maxRetries": "Max retries",
+      "maxRetriesDesc": "The turn ends with an error once exhausted.",
+      "baseDelay": "Base delay (ms)",
+      "baseDelayDesc": "Base wait between retries, growing with backoff."
     }
   },
   "notify": {

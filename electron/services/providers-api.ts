@@ -16,6 +16,9 @@ import type {
   PiProviderSetModelReasoningPayload,
   PiProviderSetKeyResult,
   PiCompactionSettings,
+  PiRetrySettingsPayload,
+  PiRetrySettingsResult,
+  PiDefaultThinkingResult,
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
@@ -627,6 +630,60 @@ export const providersApi = {
         sdk.getAgentDir(),
       );
       settingsManager.setDefaultModelAndProvider(payload.provider, payload.id);
+      await settingsManager.flush();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /** 自动重试设置（pi settings.retry：开关/次数/基础退避）。 */
+  getRetry: async (): Promise<PiRetrySettingsResult> => {
+    const sdk = await loadPiSdk();
+    const settingsManager = sdk.SettingsManager.create(await resolveStandaloneCwd(), sdk.getAgentDir());
+    return settingsManager.getRetrySettings();
+  },
+
+  setRetry: async (payload: PiRetrySettingsPayload): Promise<HostSuccess> => {
+    try {
+      const sdk = await loadPiSdk();
+      const agentDir = sdk.getAgentDir();
+      // 与 setCompaction 同通道：SettingsManager 只有开关 setter，次数/退避直写 settings.json
+      const settingsPath = path.join(agentDir, 'settings.json');
+      let doc: Record<string, unknown> = {};
+      if (existsSync(settingsPath)) {
+        try { doc = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>; } catch { doc = {}; }
+      }
+      const current = (doc.retry && typeof doc.retry === 'object' ? doc.retry : {}) as Record<string, unknown>;
+      doc.retry = {
+        ...current,
+        ...(payload.enabled === undefined ? {} : { enabled: payload.enabled }),
+        ...(payload.maxRetries === undefined ? {} : { maxRetries: payload.maxRetries }),
+        ...(payload.baseDelayMs === undefined ? {} : { baseDelayMs: payload.baseDelayMs }),
+      };
+      mkdirSync(agentDir, { recursive: true });
+      writeFileSync(settingsPath, JSON.stringify(doc, null, 2));
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /** 新会话的默认思考深度（pi settings.defaultThinkingLevel）。 */
+  getDefaultThinking: async (): Promise<PiDefaultThinkingResult> => {
+    const sdk = await loadPiSdk();
+    const settingsManager = sdk.SettingsManager.create(await resolveStandaloneCwd(), sdk.getAgentDir());
+    return { level: settingsManager.getDefaultThinkingLevel() ?? null };
+  },
+
+  setDefaultThinking: async (payload: { level: string }): Promise<HostSuccess> => {
+    try {
+      const sdk = await loadPiSdk();
+      const settingsManager = sdk.SettingsManager.create(
+        await resolveStandaloneCwd(),
+        sdk.getAgentDir(),
+      );
+      settingsManager.setDefaultThinkingLevel(payload.level as never);
       await settingsManager.flush();
       return { success: true };
     } catch (err) {

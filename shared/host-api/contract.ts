@@ -496,6 +496,12 @@ export type PiOAuthProgressEvent = {
 export type PiDefaultModel = { provider: string; id: string };
 export type PiDefaultModelResult = { model: PiDefaultModel | null };
 
+/** 自动重试设置（pi settings.retry）。 */
+export type PiRetrySettingsResult = { enabled: boolean; maxRetries: number; baseDelayMs: number };
+export type PiRetrySettingsPayload = Partial<PiRetrySettingsResult>;
+/** 新会话默认思考深度（pi settings.defaultThinkingLevel；null = 未设置）。 */
+export type PiDefaultThinkingResult = { level: string | null };
+
 // —— piRuntime 命令补全 ——
 
 export type PiCommandRow = { name: string; description?: string; source: string };
@@ -839,6 +845,12 @@ export type HostApiContract = {
     probe: (payload: PiProviderProbePayload) => PiProviderProbeResult;
     getCompaction: () => PiCompactionSettings;
     setCompaction: (payload: Partial<PiCompactionSettings>) => HostSuccess;
+    /** 自动重试设置（pi settings.retry：开关/次数/基础退避）。 */
+    getRetry: () => PiRetrySettingsResult;
+    setRetry: (payload: PiRetrySettingsPayload) => HostSuccess;
+    /** 新会话默认思考深度（pi settings.defaultThinkingLevel）。 */
+    getDefaultThinking: () => PiDefaultThinkingResult;
+    setDefaultThinking: (payload: { level: string }) => HostSuccess;
   };
   piSessions: {
     /** 当前 workspace cwd 的会话列表（modified 倒序）。runtime 未启动时回退 settings.workspaceCwd。 */

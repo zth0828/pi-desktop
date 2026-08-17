@@ -23,6 +23,8 @@ type FollowupBehavior = (typeof FOLLOWUP_BEHAVIORS)[number];
 const SEND_WITH_MODES = ['enter', 'cmdEnter'] as const;
 type SendWith = (typeof SEND_WITH_MODES)[number];
 
+const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const;
+
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const [appVersion, setAppVersion] = useState('');
@@ -37,6 +39,8 @@ export default function SettingsPage() {
   const [modelWindow, setModelWindow] = useState<number>();
   const [exportInfo, setExportInfo] = useState<PiSessionExportInfo>();
   const [trustEntries, setTrustEntries] = useState<PiTrustEntry[]>([]);
+  const [defaultThinking, setDefaultThinking] = useState<string | null>(null);
+  const [retry, setRetry] = useState({ enabled: true, maxRetries: 3, baseDelayMs: 2000 });
   const env = usePiSystemStore((s) => s.env);
   const latestVersion = usePiSystemStore((s) => s.latestVersion);
   const detect = usePiSystemStore((s) => s.detect);
@@ -55,6 +59,8 @@ export default function SettingsPage() {
     void hostApi.providers.getCompaction().then(setCompaction).catch(() => {});
     void hostApi.piSessions.getExportInfo().then(setExportInfo).catch(() => {});
     void hostApi.piTrust.list().then((r) => setTrustEntries(r.entries)).catch(() => {});
+    void hostApi.providers.getDefaultThinking().then((r) => setDefaultThinking(r.level)).catch(() => {});
+    void hostApi.providers.getRetry().then(setRetry).catch(() => {});
     const offTrustChanged = onHostEvent('piTrust', 'changed', (r) => setTrustEntries(r.entries));
     void Promise.all([hostApi.providers.listModels(), hostApi.providers.getDefaultModel()]).then(([available, current]) => {
       const model = current.model ? available.models.find((candidate) => candidate.provider === current.model?.provider && candidate.id === current.model?.id) : undefined;
@@ -293,6 +299,85 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="settings-section" data-testid="settings-agent-defaults">
+        <h2>{t('settings.agentDefaults.title')}</h2>
+        <p className="settings-section-hint">{t('settings.agentDefaults.desc')}</p>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('settings.defaultThinking.title')}</div>
+            <div className="settings-row-desc">{t('settings.defaultThinking.desc')}</div>
+          </div>
+          <div className="pill-group" data-testid="settings-default-thinking">
+            {THINKING_LEVELS.map((level) => (
+              <button
+                key={level}
+                data-testid={`default-thinking-${level}`}
+                className={defaultThinking === level ? 'pill active' : 'pill'}
+                onClick={() => {
+                  setDefaultThinking(level);
+                  void hostApi.providers.setDefaultThinking(level);
+                }}
+              >
+                {t(`chat.thinkingLevels.${level}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('settings.retry.title')}</div>
+            <div className="settings-row-desc">{t('settings.retry.desc')}</div>
+          </div>
+          <div className="pill-group" data-testid="settings-retry-enabled">
+            {[true, false].map((on) => (
+              <button
+                key={String(on)}
+                data-testid={`retry-enabled-${on ? 'on' : 'off'}`}
+                className={retry.enabled === on ? 'pill active' : 'pill'}
+                onClick={() => {
+                  setRetry((v) => ({ ...v, enabled: on }));
+                  void hostApi.providers.setRetry({ enabled: on });
+                }}
+              >
+                {t(on ? 'settings.toggle.on' : 'settings.toggle.off')}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('settings.retry.maxRetries')}</div>
+            <div className="settings-row-desc">{t('settings.retry.maxRetriesDesc')}</div>
+          </div>
+          <input
+            className="settings-number"
+            data-testid="retry-max-retries"
+            type="number"
+            min="0"
+            step="1"
+            value={retry.maxRetries}
+            onChange={(e) => setRetry((v) => ({ ...v, maxRetries: Number(e.target.value) || 0 }))}
+            onBlur={() => void hostApi.providers.setRetry({ maxRetries: retry.maxRetries })}
+          />
+        </div>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('settings.retry.baseDelay')}</div>
+            <div className="settings-row-desc">{t('settings.retry.baseDelayDesc')}</div>
+          </div>
+          <input
+            className="settings-number"
+            data-testid="retry-base-delay"
+            type="number"
+            min="0"
+            step="100"
+            value={retry.baseDelayMs}
+            onChange={(e) => setRetry((v) => ({ ...v, baseDelayMs: Number(e.target.value) || 0 }))}
+            onBlur={() => void hostApi.providers.setRetry({ baseDelayMs: retry.baseDelayMs })}
+          />
         </div>
       </section>
 
