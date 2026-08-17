@@ -57,6 +57,9 @@ export default function SettingsPage() {
     void hostApi.settings.get('preventSleep').then((v) => setPreventSleep(v === true));
     void hostApi.settings.get('notifyUiRequest').then((v) => setNotifyUiRequest(v !== false));
     void hostApi.providers.getCompaction().then(setCompaction).catch(() => {});
+    void hostApi.piRuntime.getUsage().then((usage) => {
+      if (usage?.model?.contextWindow) setModelWindow(usage.model.contextWindow);
+    }).catch(() => {});
     void hostApi.piSessions.getExportInfo().then(setExportInfo).catch(() => {});
     void hostApi.piTrust.list().then((r) => setTrustEntries(r.entries)).catch(() => {});
     void hostApi.providers.getDefaultThinking().then((r) => setDefaultThinking(r.level)).catch(() => {});
@@ -64,7 +67,7 @@ export default function SettingsPage() {
     const offTrustChanged = onHostEvent('piTrust', 'changed', (r) => setTrustEntries(r.entries));
     void Promise.all([hostApi.providers.listModels(), hostApi.providers.getDefaultModel()]).then(([available, current]) => {
       const model = current.model ? available.models.find((candidate) => candidate.provider === current.model?.provider && candidate.id === current.model?.id) : undefined;
-      if (model?.contextWindow) setModelWindow(model.contextWindow);
+      if (model?.contextWindow) setModelWindow((previous) => previous ?? model.contextWindow);
     }).catch(() => {});
     return offTrustChanged;
   }, []);
@@ -215,6 +218,27 @@ export default function SettingsPage() {
       <section className="settings-section" data-testid="settings-compaction">
         <h2>{t('settings.compaction.title')}</h2>
         <p className="settings-section-hint">{t('settings.compaction.desc')}</p>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('settings.compaction.enabled')}</div>
+            <div className="settings-row-desc">{t('settings.compaction.enabledDesc')}</div>
+          </div>
+          <div className="pill-group" data-testid="settings-compaction-enabled">
+            {[true, false].map((enabled) => (
+              <button
+                key={String(enabled)}
+                data-testid={`compaction-enabled-${enabled ? 'on' : 'off'}`}
+                className={compaction.enabled === enabled ? 'pill active' : 'pill'}
+                onClick={() => {
+                  setCompaction((current) => ({ ...current, enabled }));
+                  void hostApi.providers.setCompaction({ enabled });
+                }}
+              >
+                {t(enabled ? 'settings.toggle.on' : 'settings.toggle.off')}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="settings-row">
           <div className="settings-row-label">
             <div>{t('settings.compaction.reserveTokens')}</div>

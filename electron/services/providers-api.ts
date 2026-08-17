@@ -27,6 +27,7 @@ import { isLmStudioProvider, syncLmStudioModels } from '../utils/lmstudio-models
 import { syncConfiguredProviderModels } from '../utils/configured-provider-models';
 import {
   piRuntimeApi,
+  reloadRuntimeSettings,
   resolveRuntimeForContext,
   resolveRuntimeForContextReady,
 } from './pi-runtime-api';
@@ -565,7 +566,9 @@ export const providersApi = {
     };
   },
 
-  getCompaction: async (): Promise<PiCompactionSettings> => {
+  getCompaction: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiCompactionSettings> => {
+    const active = resolveRuntimeForContext(ctx);
+    if (active) return active.runtime.services.settingsManager.getCompactionSettings();
     const sdk = await loadPiSdk();
     const settingsManager = sdk.SettingsManager.create(await resolveStandaloneCwd(), sdk.getAgentDir());
     return settingsManager.getCompactionSettings();
@@ -589,6 +592,7 @@ export const providersApi = {
       };
       mkdirSync(agentDir, { recursive: true });
       writeFileSync(settingsPath, JSON.stringify(doc, null, 2));
+      await reloadRuntimeSettings();
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };

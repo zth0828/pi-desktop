@@ -95,6 +95,8 @@ test('设置页：四个新设置项渲染 + 切换后落盘 config.json', async
   await expect(page.getByTestId('settings-notify-ui-request')).toBeVisible();
   await expect(page.getByTestId('notify-ui-request-on')).toHaveClass(/active/);
   await expect(page.getByTestId('settings-compaction')).toBeVisible();
+  await expect(page.getByTestId('settings-compaction-enabled')).toBeVisible();
+  await expect(page.getByTestId('compaction-enabled-on')).toHaveClass(/active/);
   await expect(page.getByTestId('compaction-reserve')).toHaveValue('16384');
   await expect(page.getByTestId('compaction-keep-recent')).toHaveValue('20000');
   const sectionBorders = await page.locator('.settings-section').evaluateAll((sections) =>
@@ -117,6 +119,8 @@ test('设置页：四个新设置项渲染 + 切换后落盘 config.json', async
   await page.getByTestId('send-with-cmdEnter').click();
   await page.getByTestId('prevent-sleep-on').click();
   await page.getByTestId('notify-ui-request-off').click();
+  await page.getByTestId('compaction-enabled-off').click();
+  await expect(page.getByTestId('compaction-enabled-off')).toHaveClass(/active/);
 
   await expect
     .poll(async () => (await readConfig(homeDir)).followupBehavior, { timeout: 10_000 })
