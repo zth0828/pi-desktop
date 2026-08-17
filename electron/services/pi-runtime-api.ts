@@ -67,6 +67,7 @@ import {
 } from './extension-ui';
 import { captureReviewBaseline, clearReviewBaseline } from './review-api';
 import { noteRunEnded, noteRunStarted } from './power-save';
+import { createShellTrustContext, resolveProjectTrusted } from './project-trust';
 import { settingsApi } from './settings-api';
 import { timingMark } from '../utils/timing';
 
@@ -88,6 +89,8 @@ export type ActiveRuntime = {
   previewableExternalFiles: Set<string>;
   running: boolean;
   mcpStatus: Record<string, unknown> | null;
+  /** 项目信任随 factory 重跑更新；autoTrustCwd 供 reload 后隐式信任落盘（pi TUI 同款语义）。 */
+  trust: { autoTrustCwd?: string };
   unsubscribe: () => void;
 };
 
@@ -475,6 +478,10 @@ async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
   });
 }
 
+// per-cwd 信任决定缓存：对齐 pi CLI main.js 的 projectTrustByCwd，
+// 同一进程内同一 cwd 只询问一次（含 switchSession 触发的 factory 重跑）。
+const projectTrustByCwd = new Map<string, boolean>();
+
 async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveRuntime> {
   timingMark('runtime:create:start');
   const sdk = await loadPiSdk();
@@ -489,6 +496,8 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
   const piBin = detectPiEnvironment().pi.binPath;
   if (piBin) process.env.PI_CLI_PATH = piBin;
   const eventBus = sdk.createEventBus();
+  // 信任状态随 factory 重跑（switchSession 换 cwd）更新；reload 的隐式信任落盘依赖它。
+  const trust: { autoTrustCwd?: string } = {};
   const createFactory = async ({
     cwd: effectiveCwd,
     sessionManager,
@@ -498,9 +507,44 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
     sessionManager: unknown;
     sessionStartEvent?: unknown;
   }) => {
+    // 项目信任判定与 pi CLI（main.js createRuntime）逐项对齐：
+    // 有需要门控的项目级资源且无缓存决定时，先以未信任创建 SettingsManager，
+    // 再在资源加载期经 resolveProjectTrust 询问用户（pi 原生判定 + 写 ProjectTrustStore）。
+    const hasTrustRequiring = sdk.hasTrustRequiringProjectResources(effectiveCwd);
+    const cachedTrust = projectTrustByCwd.get(effectiveCwd);
+    const shouldResolveTrust = cachedTrust === undefined && hasTrustRequiring;
+    const trustStore = new sdk.ProjectTrustStore(agentDir);
+    const projectTrusted = shouldResolveTrust
+      ? false
+      : (cachedTrust ?? (!hasTrustRequiring || trustStore.get(effectiveCwd) === true));
+    // pi CLI：启动时无门控资源（默认信任）的 cwd 记下来，之后 reload 出新的门控资源时
+    // 隐式落 trust=true（maybeSaveImplicitProjectTrustAfterReload），避免下次启动才突然询问。
+    trust.autoTrustCwd = hasTrustRequiring ? undefined : effectiveCwd;
+    const settingsManager = sdk.SettingsManager.create(effectiveCwd, agentDir, { projectTrusted });
+    const trustDiagnostics: Array<{ type: 'warning'; message: string }> = [];
     const services = await sdk.createAgentSessionServices({
       cwd: effectiveCwd,
       agentDir,
+      settingsManager,
+      resourceLoaderReloadOptions: shouldResolveTrust
+        ? {
+            resolveProjectTrust: async ({ extensionsResult }) => {
+              const trusted = await resolveProjectTrusted({
+                cwd: effectiveCwd,
+                trustStore,
+                // defaultProjectTrust 读取用未降权的 SettingsManager（与 pi CLI 的
+                // startupSettingsManager 对应；项目设置只在信任后才加载）。
+                defaultProjectTrust: sdk.SettingsManager.create(effectiveCwd, agentDir)
+                  .getDefaultProjectTrust(),
+                extensionsResult,
+                projectTrustContext: createShellTrustContext(effectiveCwd),
+                onExtensionError: (message) => trustDiagnostics.push({ type: 'warning', message }),
+              });
+              projectTrustByCwd.set(effectiveCwd, trusted);
+              return trusted;
+            },
+          }
+        : undefined,
       resourceLoaderOptions: {
         eventBus,
         // 使用 pi 官方 ResourceLoader 的追加提示能力；默认系统提示和项目 AGENTS.md
@@ -520,7 +564,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
         sessionStartEvent: sessionStartEvent as never,
       })),
       services,
-      diagnostics: services.diagnostics,
+      diagnostics: [...trustDiagnostics, ...services.diagnostics],
     };
   };
   const runtime = await sdk.createAgentSessionRuntime(createFactory as never, {
@@ -541,6 +585,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
     previewableExternalFiles: new Set(),
     running: false,
     mcpStatus: null,
+    trust,
     unsubscribe: () => {},
   };
   // pi-mcp-adapter 状态快照：缓存 + 转发渲染层（增强项；未装 adapter 时永远不发）
@@ -1098,6 +1143,21 @@ export const piRuntimeApi = {
     try {
       resetExtensionUiState({ sessionId: active.sessionId, generation: active.generation });
       await session.reload();
+      // pi TUI maybeSaveImplicitProjectTrustAfterReload 语义：启动时无门控资源而默认信任的
+      // cwd，reload 后若出现门控资源且仍处于信任态，隐式落 trust=true（下次启动不再询问）。
+      if (
+        active.trust.autoTrustCwd === active.cwd
+        && active.runtime.services.settingsManager.isProjectTrusted()
+        && active.sdk.hasTrustRequiringProjectResources(active.cwd)
+      ) {
+        active.trust.autoTrustCwd = undefined;
+        try {
+          const trustStore = new active.sdk.ProjectTrustStore(active.sdk.getAgentDir());
+          if (trustStore.get(active.cwd) === null) trustStore.set(active.cwd, true);
+        } catch {
+          // 落盘失败不阻塞 reload（pi TUI 仅告警）
+        }
+      }
       restorePreviewableExternalFiles(active);
       // TUI /reload 后 rebuildChatFromMessages + 重建补全源；壳推全量状态（渲染层重取命令列表）
       sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));

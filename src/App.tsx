@@ -21,6 +21,7 @@ import { initTheme } from './lib/theme';
 import { SessionList } from './components/SessionList';
 import { SessionSearchDialog } from './components/SessionSearchDialog';
 import { ExtensionUiNotifications } from './components/ExtensionUiDialog';
+import { TrustDialog } from './components/TrustDialog';
 import Onboarding from './pages/Onboarding';
 import ChatPage from './pages/Chat';
 import ModelsPage from './pages/Models';
@@ -209,6 +210,7 @@ export default function App() {
         ) : null}
       </main>
       <ExtensionUiNotifications />
+      <TrustDialog />
       <SessionSearchDialog
         open={sessionSearchOpen}
         onClose={() => setSessionSearchOpen(false)}

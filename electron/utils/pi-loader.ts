@@ -55,4 +55,51 @@ export async function loadPiSdk(): Promise<PiSdk> {
 export function invalidatePiSdkCache(): void {
   cached = null;
   cachedPackageRoot = null;
+  cachedProjectTrust = null;
+  cachedProjectTrustRoot = null;
+}
+
+// resolveProjectTrusted 未从包根导出（package exports 只放行 "."），
+// 与 loadPiSdk 一样按文件 URL 直取包内文件；piCompat 锁定版本，布局变动会被测试暴露。
+export type PiProjectTrustModule = {
+  resolveProjectTrusted: (options: {
+    cwd: string;
+    trustStore: InstanceType<PiSdk['ProjectTrustStore']>;
+    trustOverride?: boolean;
+    defaultProjectTrust?: import('@earendil-works/pi-coding-agent').DefaultProjectTrust;
+    extensionsResult?: unknown;
+    projectTrustContext: {
+      cwd: string;
+      mode: 'tui' | 'rpc' | 'json' | 'print';
+      hasUI: boolean;
+      ui: {
+        select: (title: string, options: string[]) => Promise<string | undefined>;
+        confirm: (title: string, message?: string) => Promise<boolean>;
+        input: (title: string, placeholder?: string) => Promise<string | undefined>;
+        notify: (message: string, type?: 'info' | 'warning' | 'error') => void;
+      };
+    };
+    onExtensionError?: (message: string) => void;
+  }) => Promise<boolean>;
+};
+
+let cachedProjectTrust: Promise<PiProjectTrustModule> | null = null;
+let cachedProjectTrustRoot: string | null = null;
+
+export async function loadPiProjectTrust(): Promise<PiProjectTrustModule> {
+  const env = detectPiEnvironment();
+  if (!env.pi.found || !env.pi.packageRoot) throw new PiNotReadyError('not-installed');
+  if (cachedProjectTrust && cachedProjectTrustRoot === env.pi.packageRoot) return cachedProjectTrust;
+  cachedProjectTrustRoot = env.pi.packageRoot;
+  cachedProjectTrust = import(
+    pathToFileURL(path.join(env.pi.packageRoot, 'dist/core/project-trust.js')).href
+  ) as Promise<PiProjectTrustModule>;
+  try {
+    await cachedProjectTrust;
+  } catch (err) {
+    cachedProjectTrust = null;
+    cachedProjectTrustRoot = null;
+    throw err;
+  }
+  return cachedProjectTrust;
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderOpen, Monitor, Moon, Sun } from 'lucide-react';
-import type { PiSessionExportInfo } from '@shared/host-api/contract';
+import type { PiSessionExportInfo, PiTrustEntry } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
+import { onHostEvent } from '../lib/host-events';
 import { setTheme, type Theme } from '../lib/theme';
 import { usePiSystemStore } from '../stores/pi-system';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '../lib/i18n';
@@ -35,6 +36,7 @@ export default function SettingsPage() {
   const [compaction, setCompaction] = useState({ reserveTokens: 16384, keepRecentTokens: 20000, enabled: true });
   const [modelWindow, setModelWindow] = useState<number>();
   const [exportInfo, setExportInfo] = useState<PiSessionExportInfo>();
+  const [trustEntries, setTrustEntries] = useState<PiTrustEntry[]>([]);
   const env = usePiSystemStore((s) => s.env);
   const latestVersion = usePiSystemStore((s) => s.latestVersion);
   const detect = usePiSystemStore((s) => s.detect);
@@ -52,15 +54,23 @@ export default function SettingsPage() {
     void hostApi.settings.get('notifyUiRequest').then((v) => setNotifyUiRequest(v !== false));
     void hostApi.providers.getCompaction().then(setCompaction).catch(() => {});
     void hostApi.piSessions.getExportInfo().then(setExportInfo).catch(() => {});
+    void hostApi.piTrust.list().then((r) => setTrustEntries(r.entries)).catch(() => {});
+    const offTrustChanged = onHostEvent('piTrust', 'changed', (r) => setTrustEntries(r.entries));
     void Promise.all([hostApi.providers.listModels(), hostApi.providers.getDefaultModel()]).then(([available, current]) => {
       const model = current.model ? available.models.find((candidate) => candidate.provider === current.model?.provider && candidate.id === current.model?.id) : undefined;
       if (model?.contextWindow) setModelWindow(model.contextWindow);
     }).catch(() => {});
+    return offTrustChanged;
   }, []);
 
   const changeLanguage = async (lng: SupportedLanguage) => {
     await i18n.changeLanguage(lng);
     await hostApi.settings.set('language', lng);
+  };
+
+  const changeTrust = async (path: string, decision: boolean | null) => {
+    // main 侧写完 ProjectTrustStore 会广播 piTrust.changed 刷新列表
+    await hostApi.piTrust.set(path, decision).catch(() => {});
   };
 
   const changeWorkspace = async () => {
@@ -284,6 +294,41 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="settings-section" data-testid="settings-trust">
+        <h2>{t('settings.trust.title')}</h2>
+        <p className="settings-section-hint">{t('settings.trust.desc')}</p>
+        {trustEntries.length === 0 ? (
+          <p className="settings-section-hint" data-testid="trust-empty">{t('settings.trust.empty')}</p>
+        ) : (
+          trustEntries.map((entry) => (
+            <div className="settings-row" key={entry.path} data-testid="trust-entry">
+              <div className="settings-row-label">
+                <div className="settings-trust-path" title={entry.path}>{entry.path}</div>
+                <div className="settings-row-desc">
+                  {t(entry.decision ? 'settings.trust.trusted' : 'settings.trust.untrusted')}
+                </div>
+              </div>
+              <div className="pill-group">
+                <button
+                  className="pill"
+                  data-testid="trust-toggle"
+                  onClick={() => void changeTrust(entry.path, !entry.decision)}
+                >
+                  {t(entry.decision ? 'settings.trust.markUntrusted' : 'settings.trust.markTrusted')}
+                </button>
+                <button
+                  className="pill"
+                  data-testid="trust-revoke"
+                  onClick={() => void changeTrust(entry.path, null)}
+                >
+                  {t('settings.trust.revoke')}
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </section>
 
       <section className="settings-section" data-testid="settings-about">

@@ -8,6 +8,8 @@ import type {
   PiOAuthProgressEvent,
   PiPackageProgressEvent,
   PiRuntimeStateResult,
+  PiTrustListResult,
+  PiTrustRequestPayload,
   PiUiRequestPayload,
 } from '../host-api/contract';
 
@@ -54,6 +56,14 @@ export type HostEventContract = {
     /** pi-mcp-adapter 状态快照（eventBus 通道 pi-mcp-adapter/status/v1 转发） */
     statusChanged: (payload: { snapshot: Record<string, unknown> | null }) => void;
   };
+  piTrust: {
+    /** 项目信任确认请求（启动/切换 cwd 时按需弹出；任一窗口响应即生效） */
+    request: (payload: PiTrustRequestPayload) => void;
+    /** 信任请求已定案（任一窗口响应后广播，其他窗口据此撤下对话框） */
+    settled: (payload: { requestId: string }) => void;
+    /** trust.json 记录被修改（Settings 页外部改动同步） */
+    changed: (payload: PiTrustListResult) => void;
+  };
 };
 
 export type HostEventModule = keyof HostEventContract;
@@ -92,6 +102,11 @@ export const HOST_EVENT_CHANNELS = {
   },
   piMcp: {
     statusChanged: 'pi-mcp:status-changed',
+  },
+  piTrust: {
+    request: 'pi-trust:request',
+    settled: 'pi-trust:settled',
+    changed: 'pi-trust:changed',
   },
 } as const satisfies {
   [M in HostEventModule]: { [E in HostEventName<M>]: string };

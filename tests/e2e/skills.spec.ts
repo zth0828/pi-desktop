@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
+import { seedTrustedWorkspace } from '../helpers/trust';
 
 let mock: ChildProcess;
 let agentDir: string;
@@ -33,6 +34,7 @@ test.beforeAll(async () => {
 
 test.beforeEach(async () => {
   agentDir = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-agent-'));
+  await seedTrustedWorkspace(agentDir, workspace);
   await writeFile(
     path.join(agentDir, 'models.json'),
     JSON.stringify({

@@ -609,6 +609,16 @@
     "toggle": {
       "on": "On",
       "off": "Off"
+    },
+    "trust": {
+      "title": "Project Trust",
+      "desc": "pi requires explicit trust for workspaces containing project-level .pi resources; changes take effect on the next session.",
+      "empty": "No trust records yet.",
+      "trusted": "Trusted",
+      "untrusted": "Marked untrusted",
+      "markTrusted": "Mark trusted",
+      "markUntrusted": "Mark untrusted",
+      "revoke": "Revoke"
     }
   },
   "notify": {
@@ -705,5 +715,16 @@
     "dropSplitBottom": "Release to split below",
     "dropReplace": "Release to replace this pane's session",
     "dragHint": "Drop on a pane edge to split, center to replace; drag outside the window to open a detached window; Esc to cancel"
+  },
+  "trust": {
+    "title": "Trust this project folder?",
+    "description": "Trusting allows pi to load the project's .pi settings and resources, install missing project packages, and execute project extensions.",
+    "options": {
+      "trust": "Trust",
+      "trustParent": "Trust parent folder ({{path}})",
+      "trustSession": "Trust (this session only)",
+      "distrust": "Do not trust",
+      "distrustSession": "Do not trust (this session only)"
+    }
   }
 }

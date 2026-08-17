@@ -609,6 +609,16 @@
     "toggle": {
       "on": "开启",
       "off": "关闭"
+    },
+    "trust": {
+      "title": "项目信任",
+      "desc": "pi 对含有项目级 .pi 资源的工作区要求显式信任；改动在下一个会话生效。",
+      "empty": "暂无信任记录。",
+      "trusted": "已信任",
+      "untrusted": "已标记不信任",
+      "markTrusted": "标记信任",
+      "markUntrusted": "标记不信任",
+      "revoke": "撤销记录"
     }
   },
   "notify": {
@@ -705,5 +715,16 @@
     "dropSplitBottom": "松手在下方分栏",
     "dropReplace": "松手替换当前面板会话",
     "dragHint": "拖到面板边缘分栏 / 中心替换；拖出窗口打开独立窗口；Esc 取消"
+  },
+  "trust": {
+    "title": "信任此项目文件夹？",
+    "description": "信任后 pi 会加载该项目的 .pi 设置与资源、安装缺失的项目扩展包，并执行项目级扩展。",
+    "options": {
+      "trust": "信任",
+      "trustParent": "信任上级文件夹（{{path}}）",
+      "trustSession": "信任（仅本次会话）",
+      "distrust": "不信任",
+      "distrustSession": "不信任（仅本次会话）"
+    }
   }
 }

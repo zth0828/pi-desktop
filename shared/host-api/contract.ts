@@ -341,6 +341,21 @@ export type SettingsSnapshot = {
 export type SettingsGetPayload = { key: keyof SettingsSnapshot };
 export type SettingsSetPayload = { key: keyof SettingsSnapshot; value: string | boolean | undefined };
 
+// —— piTrust：项目信任（pi ProjectTrustStore；判定逻辑全在 pi 侧）——
+
+/** 信任确认请求：title/options 来自 pi 原生文案（英文），渲染层按模板本地化展示。 */
+export type PiTrustRequestPayload = {
+  requestId: string;
+  cwd: string;
+  title: string;
+  options: string[];
+};
+export type PiTrustRespondPayload = { requestId: string; label?: string };
+export type PiTrustEntry = { path: string; decision: boolean };
+export type PiTrustListResult = { entries: PiTrustEntry[] };
+/** decision=null 撤销记录（下次启动该 cwd 重新询问）。 */
+export type PiTrustSetPayload = { path: string; decision: boolean | null };
+
 // —— dialog：系统对话框 ——
 
 export type DialogOpenPayload = {
@@ -880,6 +895,16 @@ export type HostApiContract = {
     setDisabled: (payload: PiMcpSetDisabledPayload) => HostSuccess;
     /** 引导按钮：spawn 用户环境的 pi bin 执行 `pi install npm:pi-mcp-adapter`。 */
     installAdapter: () => HostSuccess;
+  };
+  piTrust: {
+    /** 挂起中的项目信任确认（渲染层 mount 时拉取，防止事件早到丢失）。 */
+    listPending: () => PiTrustRequestPayload[];
+    /** 渲染层回传用户选择（label 缺省 = 取消，按不信任处理且不写记录）。 */
+    respond: (payload: PiTrustRespondPayload) => HostSuccess;
+    /** trust.json 全量记录（Settings 页展示/管理）。 */
+    list: () => PiTrustListResult;
+    /** 修改/撤销某条信任记录（写 ProjectTrustStore，下个会话生效）。 */
+    set: (payload: PiTrustSetPayload) => HostSuccess;
   };
   dialog: {
     open: (payload: DialogOpenPayload) => DialogOpenResult;

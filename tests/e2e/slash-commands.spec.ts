@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
+import { seedTrustedWorkspace } from '../helpers/trust';
 
 let mock: ChildProcess;
 let agentDir: string;
@@ -55,9 +56,10 @@ test.beforeAll(async () => {
       `---\ndescription: Overflow command ${index}\n---\nOverflow command ${index}.`,
     );
   }
+  // 工作区含 .pi/prompts（门控资源）：预信任，本 spec 不覆盖信任交互
+  await seedTrustedWorkspace(agentDir, workspace);
   // 扩展 registerCommand 进补全的验证扩展（<agentDir>/extensions 自动发现）
-  await mkdir(path.join(agentDir, 'extensions'), { recursive: true });
-  await writeFile(
+  await mkdir(path.join(agentDir, 'extensions'), { recursive: true });  await writeFile(
     path.join(agentDir, 'extensions', 'e2e-command.ts'),
     [
       'export default function (pi: { registerCommand: (name: string, options: object) => void }) {',

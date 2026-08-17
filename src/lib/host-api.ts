@@ -164,6 +164,12 @@ function createHostApi(sessionPath?: string) {
       invoke('piMcp', 'setDisabled', { scope, name, disabled }),
     installAdapter: () => invoke('piMcp', 'installAdapter'),
   },
+  piTrust: {
+    listPending: () => invoke('piTrust', 'listPending'),
+    respond: (requestId: string, label?: string) => invoke('piTrust', 'respond', { requestId, label }),
+    list: () => invoke('piTrust', 'list'),
+    set: (path: string, decision: boolean | null) => invoke('piTrust', 'set', { path, decision }),
+  },
   settings: {
     getAll: () => invoke('settings', 'getAll'),
     get: <K extends keyof SettingsSnapshot>(key: K) =>
