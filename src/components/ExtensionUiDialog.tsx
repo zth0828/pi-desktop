@@ -128,9 +128,12 @@ export function ExtensionUiNotifications() {
     window.setTimeout(() => setNotification((current) => current === next ? null : current), 5000);
   }), []);
   if (!notification) return null;
+  const text = notification.kind === 'unsupportedTui'
+    ? t('extui.unsupportedTui', { feature: notification.message })
+    : notification.message;
   return (
     <div className={`extui-toast ${notification.level}`} data-testid="extui-notification">
-      <span>{notification.message}</span>
+      <span data-testid="extui-notification-text">{text}</span>
       <button title={t('extui.dismiss')} aria-label={t('extui.dismiss')} onClick={() => setNotification(null)}>
         <X size={14} />
       </button>

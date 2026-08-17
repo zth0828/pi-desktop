@@ -110,6 +110,27 @@ export function getPendingUiRequests(context: UiRequestContext): PiUiRequestPayl
 
 const states = new Map<string, PiExtensionUiState>();
 
+/**
+ * TUI 专属能力的 no-op 不再静默：每个能力首次被扩展调用时打 main 日志 +
+ * 渲染层 toast 提示一次（kind=unsupportedTui，文案在渲染层本地化）。
+ */
+const warnedUnsupported = new Set<string>();
+
+function makeUnsupported(feature: string, getCtx: () => UiRequestContext) {
+  return () => {
+    if (!warnedUnsupported.has(feature)) {
+      warnedUnsupported.add(feature);
+      console.warn(`[extension-ui] TUI-only capability no-op in desktop: ${feature}`);
+      sendHostEvent('piRuntime', 'uiNotification', {
+        ...getCtx(),
+        message: feature,
+        level: 'warning',
+        kind: 'unsupportedTui',
+      });
+    }
+  };
+}
+
 function stateKey(ctx: UiRequestContext): string {
   return `${ctx.sessionId}:${ctx.generation}`;
 }
@@ -170,7 +191,7 @@ export function createExtensionUIContext(getCtx: () => UiRequestContext): Extens
     },
     setWorkingMessage: (workingMessage?: string) => update({ workingMessage }),
     setWorkingVisible: (workingVisible: boolean) => update({ workingVisible }),
-    setWorkingIndicator: () => {},
+    setWorkingIndicator: makeUnsupported('setWorkingIndicator', getCtx),
     setHiddenThinkingLabel: (hiddenThinkingLabel?: string) => update({ hiddenThinkingLabel }),
     setWidget: (key: string, content: unknown, options?: { placement?: 'aboveEditor' | 'belowEditor' }) => {
       const widgets = new Map(state.widgets.map((widget) => [widget.key, widget]));
@@ -178,15 +199,18 @@ export function createExtensionUIContext(getCtx: () => UiRequestContext): Extens
       else widgets.set(key, { key, lines: content, placement: options?.placement ?? 'aboveEditor' });
       update({ widgets: [...widgets.values()] });
     },
-    setFooter: () => {},
-    setHeader: () => {},
-    setTitle: () => {},
-    custom: async () => undefined,
-    pasteToEditor: () => {},
-    setEditorText: () => {},
+    setFooter: makeUnsupported('setFooter', getCtx),
+    setHeader: makeUnsupported('setHeader', getCtx),
+    setTitle: makeUnsupported('setTitle', getCtx),
+    custom: async () => {
+      makeUnsupported('custom', getCtx)();
+      return undefined;
+    },
+    pasteToEditor: makeUnsupported('pasteToEditor', getCtx),
+    setEditorText: makeUnsupported('setEditorText', getCtx),
     getEditorText: () => '',
-    addAutocompleteProvider: () => {},
-    setEditorComponent: () => {},
+    addAutocompleteProvider: makeUnsupported('addAutocompleteProvider', getCtx),
+    setEditorComponent: makeUnsupported('setEditorComponent', getCtx),
     getEditorComponent: () => undefined,
     getAllThemes: () => [],
     getTheme: () => undefined,

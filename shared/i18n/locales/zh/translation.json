@@ -546,7 +546,8 @@
     "confirm": "确认",
     "cancel": "取消",
     "ok": "确定",
-    "countdown": "{{seconds}} 秒后自动取消"
+    "countdown": "{{seconds}} 秒后自动取消",
+    "unsupportedTui": "扩展使用了桌面端不支持的 TUI 能力：{{feature}}（已忽略）"
   },
   "skills": {
     "title": "Skills",

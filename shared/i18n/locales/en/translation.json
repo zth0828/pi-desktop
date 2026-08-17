@@ -546,7 +546,8 @@
     "confirm": "Confirm",
     "cancel": "Cancel",
     "ok": "OK",
-    "countdown": "Auto-cancel in {{seconds}}s"
+    "countdown": "Auto-cancel in {{seconds}}s",
+    "unsupportedTui": "An extension used a TUI-only capability that the desktop app does not support: {{feature}} (ignored)"
   },
   "skills": {
     "title": "Skills",

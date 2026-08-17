@@ -244,6 +244,8 @@ export type PiExtensionUiNotification = {
   generation: number;
   message: string;
   level: 'info' | 'warning' | 'error';
+  /** unsupportedTui：message 是 TUI 专属能力名，渲染层按 i18n 模板本地化 */
+  kind?: 'unsupportedTui';
 };
 
 export type PiUiRequestPayload = {
