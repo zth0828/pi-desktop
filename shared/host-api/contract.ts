@@ -39,9 +39,43 @@ export type NodeDetectResult = {
 
 export type NpmDetectResult = {
   found: boolean;
+  path?: string;
   version?: string;
   /** realpath 后的 npm 全局 root（…/lib/node_modules） */
   globalRoot?: string;
+};
+
+export type PiCapabilities = {
+  createAgentSessionServices: boolean;
+  createAgentSessionFromServices: boolean;
+  createAgentSessionRuntime: boolean;
+  sessionManager: boolean;
+  settingsManager: boolean;
+  eventBus: boolean;
+  prompt: boolean;
+  subscribe: boolean;
+  abort: boolean;
+};
+
+export type PiCompatibilityStatus = 'tested' | 'compatible-untested' | 'incompatible';
+
+export type PiCompatibilityReport = {
+  status: PiCompatibilityStatus;
+  version: string;
+  packageRoot: string;
+  cliPath?: string;
+  cliVersion?: string;
+  nodePath?: string;
+  nodeVersion?: string;
+  npmPath?: string;
+  npmVersion?: string;
+  npmRoot?: string;
+  missingRequiredCapabilities: string[];
+  optionalCapabilities: Record<string, boolean>;
+  capabilities: PiCapabilities;
+  testedRange: boolean;
+  recommendedVersion: string;
+  warnings: string[];
 };
 
 export type PiDetectResult = {
@@ -50,6 +84,7 @@ export type PiDetectResult = {
   realBinPath?: string;
   packageRoot?: string;
   version?: string;
+  cliVersion?: string;
   installKind?: PiInstallKind;
   meetsMin: boolean;
   /** 仅开发启动脚本可设置：显式使用用户指定的本地 pi 包。 */
@@ -66,6 +101,8 @@ export type PiEnvironment = {
   pi: PiDetectResult;
   minNodeVersion: string;
   minPiVersion: string;
+  /** Filled by Main after loading the SDK; absent when pi is not installed. */
+  compatibility?: PiCompatibilityReport;
 };
 
 export type PiLatestVersionResult = {
@@ -785,12 +822,12 @@ export type HostApiContract = {
     showInFolder: (payload: { path: string }) => HostSuccess;
   };
   piSystem: {
-    /** 完整环境检测（Node/npm/pi + 版本判定）。带短 TTL 缓存；force 绕过。 */
+    /** 完整环境检测（Node/npm/pi + SDK 能力兼容报告）。带短 TTL 缓存；force 绕过。 */
     detect: (payload?: { force?: boolean }) => PiEnvironment;
     /** 查询 npm registry 上 pi 最新版本；失败静默（latest 缺省）。 */
     checkLatest: () => PiLatestVersionResult;
     /**
-     * 安装/升级到 npm 版 pi。执行的命令有且仅有
+     * 安装/升级到 npm latest 版 pi。执行的命令有且仅有
      * `npm i -g @earendil-works/pi-coding-agent`。
      * 进度经 piSystem.installProgress 事件流式推送。
      */

@@ -1,68 +1,34 @@
-// pi SDK 加载器：从用户环境的 npm 全局安装动态 import。
-// 只支持 npm 安装；检测不到/版本不够/非 npm 安装都在这里变成「未就绪」。
+// pi SDK 加载器：兼容历史调用方，真正的运行时加载和能力检查由 Pi Adapter 负责。
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { loadPiAdapter, PiAdapterNotReadyError, invalidatePiAdapterCache } from '../services/pi-adapter';
 import { detectPiEnvironment } from './pi-detector';
 
-// 类型仅来自 devDependency（编译期）；运行时是用户环境里的那份 pi。
 export type PiSdk = typeof import('@earendil-works/pi-coding-agent');
+export const PiNotReadyError = PiAdapterNotReadyError;
 
-export class PiNotReadyError extends Error {
-  constructor(public readonly reason: string) {
-    super(`pi is not ready: ${reason}`);
-    this.name = 'PiNotReadyError';
-  }
-}
-
-let cached: Promise<PiSdk> | null = null;
-let cachedPackageRoot: string | null = null;
+let cachedProjectTrust: Promise<PiProjectTrustModule> | null = null;
+let cachedProjectTrustRoot: string | null = null;
+let cachedToolsManager: Promise<PiToolsManagerModule> | null = null;
+let cachedToolsManagerRoot: string | null = null;
 
 export async function loadPiSdk(): Promise<PiSdk> {
-  const env = detectPiEnvironment();
-  if (!env.pi.found || !env.pi.packageRoot) {
-    throw new PiNotReadyError('not-installed');
-  }
-  if (env.pi.installKind !== 'npm' && !env.pi.devOverride) {
-    throw new PiNotReadyError('non-npm-install');
-  }
-  if (!env.pi.meetsMin && !(env.pi.devOverride && env.pi.devAllowsOutdated)) {
-    throw new PiNotReadyError(`version-too-low:${env.pi.version ?? 'unknown'}`);
-  }
-  if (cached && cachedPackageRoot === env.pi.packageRoot) return cached;
-
-  const manifest = JSON.parse(
-    readFileSync(path.join(env.pi.packageRoot, 'package.json'), 'utf8'),
-  ) as { exports?: Record<string, { import?: string }>; main?: string };
-  const entryRel = manifest.exports?.['.']?.import ?? manifest.main;
-  if (!entryRel) throw new PiNotReadyError('entry-not-found');
-  const entry = path.join(env.pi.packageRoot, entryRel);
-
-  // createRequire 只用于定位；ESM 包一律走 dynamic import(fileURL)
-  cachedPackageRoot = env.pi.packageRoot;
-  cached = import(pathToFileURL(entry).href) as Promise<PiSdk>;
-  try {
-    await cached;
-  } catch (err) {
-    cached = null;
-    cachedPackageRoot = null;
-    throw err;
-  }
-  return cached;
+  return (await loadPiAdapter()).sdk;
 }
 
 /** pi 被安装/升级后调用：下次 loadPiSdk 重新解析。 */
 export function invalidatePiSdkCache(): void {
-  cached = null;
-  cachedPackageRoot = null;
+  invalidatePiAdapterCache();
   cachedProjectTrust = null;
   cachedProjectTrustRoot = null;
   cachedToolsManager = null;
   cachedToolsManagerRoot = null;
 }
 
+
 // resolveProjectTrusted 未从包根导出（package exports 只放行 "."），
-// 与 loadPiSdk 一样按文件 URL 直取包内文件；piCompat 锁定版本，布局变动会被测试暴露。
+// 与 loadPiSdk 一样按文件 URL 直取包内文件；布局变化由能力/契约测试暴露。
 export type PiProjectTrustModule = {
   resolveProjectTrusted: (options: {
     cwd: string;
@@ -84,11 +50,6 @@ export type PiProjectTrustModule = {
     onExtensionError?: (message: string) => void;
   }) => Promise<boolean>;
 };
-
-let cachedProjectTrust: Promise<PiProjectTrustModule> | null = null;
-let cachedProjectTrustRoot: string | null = null;
-let cachedToolsManager: Promise<PiToolsManagerModule> | null = null;
-let cachedToolsManagerRoot: string | null = null;
 
 export type PiToolsManagerModule = {
   /** pi TUI 的 fd/rg 解析：优先系统已装，缺失时下载到 pi bin 目录。 */

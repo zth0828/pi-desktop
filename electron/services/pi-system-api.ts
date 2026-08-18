@@ -1,7 +1,10 @@
 // piSystem 服务：环境检测（带缓存）、最新版本查询、安装引导。
-// 安装命令有且仅有 npm i -g @earendil-works/pi-coding-agent。
+// 初次安装跟随 npm latest；fallback 只用于兼容失败后的恢复，不限制运行时最高版本。
 import { spawn } from 'node:child_process';
-import { PI_NPM_REGISTRY_URL, PI_PACKAGE_NAME } from '@shared/pi-compat';
+import {
+  PI_NPM_REGISTRY_URL,
+  PI_PACKAGE_NAME,
+} from '@shared/pi-compat';
 import type {
   PiEnvironment,
   PiInstallResult,
@@ -10,6 +13,7 @@ import type {
 import { sendHostEvent } from '../main/ipc/host-events';
 import { detectPiEnvironment } from '../utils/pi-detector';
 import { invalidatePiSdkCache } from '../utils/pi-loader';
+import { inspectPiCompatibility } from './pi-adapter';
 import { envWithUserPath } from '../utils/shell-env';
 
 const DETECT_TTL_MS = 5 * 60 * 1000;
@@ -23,11 +27,14 @@ export function invalidateDetectCache(): void {
 let installInFlight: Promise<PiInstallResult> | null = null;
 
 export const piSystemApi = {
-  detect: (payload?: { force?: boolean }): PiEnvironment => {
+  detect: async (payload?: { force?: boolean }): Promise<PiEnvironment> => {
     if (!payload?.force && detectCache && Date.now() - detectCache.at < DETECT_TTL_MS) {
       return detectCache.env;
     }
     const env = detectPiEnvironment();
+    if (env.pi.found && env.pi.packageRoot) {
+      env.compatibility = await inspectPiCompatibility();
+    }
     detectCache = { at: Date.now(), env };
     return env;
   },
@@ -51,7 +58,7 @@ export const piSystemApi = {
   install: (): Promise<PiInstallResult> => {
     if (installInFlight) return installInFlight;
     installInFlight = new Promise<PiInstallResult>((resolvePromise) => {
-      // 命令固定，参数固定——不接受任何外部输入拼接
+      // 命令固定，参数固定——不接受任何外部输入拼接；无版本号明确安装 npm latest。
       const child = spawn('npm', ['i', '-g', PI_PACKAGE_NAME], {
         env: envWithUserPath(),
         shell: process.platform === 'win32',
@@ -69,10 +76,12 @@ export const piSystemApi = {
         sendHostEvent('piSystem', 'installProgress', { stream: 'status', text: `error: ${err.message}` });
         resolvePromise({ success: false, error: err.message });
       });
-      child.on('close', (code) => {
+      child.on('close', async (code) => {
         invalidateDetectCache();
         if (code === 0) {
           const env = detectPiEnvironment();
+          const compatibility = env.pi.found ? await inspectPiCompatibility() : undefined;
+          detectCache = { at: Date.now(), env: { ...env, compatibility } };
           sendHostEvent('piSystem', 'installProgress', {
             stream: 'status',
             text: `done: pi ${env.pi.version ?? 'unknown'}`,

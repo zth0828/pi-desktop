@@ -88,7 +88,12 @@ export function detectNpm(): NpmDetectResult {
     // macOS: /tmp → /private/tmp 等 symlink，比较前必须 realpath
     globalRoot = realpathSync(rootOut);
   }
-  return { found: true, version, globalRoot };
+  return { found: true, path: binPath, version, globalRoot };
+}
+
+function readCliVersion(binPath: string | undefined): string | undefined {
+  const output = binPath ? run(binPath, ['--version']) : null;
+  return output?.match(/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/)?.[0];
 }
 
 /** 从 bin 真实路径向上找 pi 包的 package.json。 */
@@ -148,6 +153,7 @@ function readPiPackageRoot(
       realBinPath,
       packageRoot: realPackageRoot,
       version: manifest.version,
+      cliVersion: readCliVersion(realBinPath),
       installKind,
       meetsMin,
     };
@@ -248,6 +254,7 @@ export function detectPi(
       base.realBinPath = realBinPath;
       base.packageRoot = located.packageRoot;
       base.version = located.version;
+      base.cliVersion = readCliVersion(binPath);
       base.installKind = installKind;
       base.meetsMin = meetsMin;
     } else {
