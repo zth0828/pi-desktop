@@ -34,4 +34,7 @@ if [[ -d "$target_app" ]]; then
 fi
 
 remove_user_data "$HOME"
+if [[ "$0" == "/Applications/Uninstall Pi Desktop.command" ]]; then
+  /bin/rm -f "$0" 2>/dev/null || /usr/bin/sudo /bin/rm -f "$0"
+fi
 printf 'Pi Desktop and its app data were removed.\n'
