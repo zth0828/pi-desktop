@@ -52,6 +52,10 @@ dmg:
       y: 285
       type: file
       path: resources/macos/Install Pi Desktop.command
+    - x: 270
+      y: 360
+      type: file
+      path: resources/macos/Uninstall Pi Desktop.command
 
 win:
   icon: resources/icon.ico
@@ -66,6 +70,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: true
   license: LICENSE
   artifactName: ${productName}-Setup-${version}-${arch}.${ext}
 
@@ -88,4 +93,5 @@ appImage:
   artifactName: ${productName}-${version}-${arch}.${ext}
 
 deb:
+  afterRemove: resources/linux/after-remove.sh
   artifactName: ${productName}-${version}-${arch}.${ext}
