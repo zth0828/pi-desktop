@@ -6,6 +6,7 @@ function env(overrides: {
   node?: Partial<PiEnvironment['node']>;
   npm?: Partial<PiEnvironment['npm']>;
   pi?: Partial<PiEnvironment['pi']>;
+  compatibility?: PiEnvironment['compatibility'];
 }): PiEnvironment {
   return {
     node: { found: true, version: '24.14.0', meetsMin: true, ...overrides.node },
@@ -13,6 +14,7 @@ function env(overrides: {
     pi: { found: true, version: '0.83.0', installKind: 'npm', meetsMin: true, ...overrides.pi },
     minNodeVersion: '22.19.0',
     minPiVersion: '0.83.0',
+    compatibility: overrides.compatibility,
   };
 }
 
@@ -43,6 +45,38 @@ describe('computeOnboardingState — onboarding 五场景', () => {
 
   it('npm 安装且版本达标 → ready', () => {
     expect(computeOnboardingState(env({}))).toBe('ready');
+  });
+
+  it('未来版本能力完整时不阻断，缺少必要能力时才进入 incompatible', () => {
+    const base: Omit<NonNullable<PiEnvironment['compatibility']>, 'status'> = {
+      version: '0.85.0',
+      packageRoot: '/tmp/pi',
+      cliPath: '/tmp/pi/bin/pi',
+      missingRequiredCapabilities: [],
+      optionalCapabilities: {},
+      capabilities: {
+        createAgentSessionServices: true,
+        createAgentSessionFromServices: true,
+        createAgentSessionRuntime: true,
+        sessionManager: true,
+        settingsManager: true,
+        eventBus: true,
+        prompt: true,
+        subscribe: true,
+        abort: true,
+      },
+      testedRange: false,
+      recommendedVersion: '0.84.2',
+      warnings: [],
+    };
+    expect(computeOnboardingState(env({ compatibility: { ...base, status: 'compatible-untested' } }))).toBe('ready');
+    expect(computeOnboardingState(env({
+      compatibility: {
+        ...base,
+        status: 'incompatible',
+        missingRequiredCapabilities: ['createAgentSessionRuntime'],
+      },
+    }))).toBe('pi-incompatible');
   });
 
   it('dev override 允许使用达标的非 npm pi', () => {

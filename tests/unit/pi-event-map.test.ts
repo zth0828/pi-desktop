@@ -5,7 +5,7 @@ import recorded from '../fixtures/pi-events/text-and-toolcall.json';
 
 const events = recorded as unknown as AgentSessionEvent[];
 
-describe('pi-event-map（录制 fixture 回放，pi 0.83.0）', () => {
+describe('pi-event-map（录制 fixture 回放，pi 0.83.x / 0.84.x）', () => {
   it('关键事件一个不漏地映射', () => {
     const mapped = events.map(mapPiSessionEvent);
     const types = mapped.filter(Boolean).map((e) => e!.type);
@@ -39,6 +39,15 @@ describe('pi-event-map（录制 fixture 回放，pi 0.83.0）', () => {
     for (const p of partials) {
       expect(p).toHaveProperty('message');
     }
+  });
+
+  it('缺失 partial 的 message_update 不会打断事件映射', () => {
+    expect(mapPiSessionEvent({ type: 'message_update' } as AgentSessionEvent)).toBeNull();
+  });
+
+  it('未知或非对象事件返回 null，不会抛出', () => {
+    expect(mapPiSessionEvent(null)).toBeNull();
+    expect(mapPiSessionEvent({ type: 'future_pi_event', payload: {} })).toBeNull();
   });
 
   it('turn_start/turn_end/agent_settled 等不映射（返回 null）', () => {

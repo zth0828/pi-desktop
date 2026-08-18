@@ -33,10 +33,17 @@ async function makeFakeNpmPrefix(version: string): Promise<{ prefix: string; npm
   if (isWin) {
     const pkgDir = path.join(prefix, 'node_modules', ...pkgSubPath.split('/'));
     await mkdir(path.join(pkgDir, 'dist'), { recursive: true });
+    const installedPiRoot = await realpath(path.resolve('node_modules/@earendil-works/pi-coding-agent'));
     await writeFile(
       path.join(pkgDir, 'package.json'),
-      JSON.stringify({ name: '@earendil-works/pi-coding-agent', version }),
+      JSON.stringify({
+        name: '@earendil-works/pi-coding-agent',
+        version,
+        main: 'dist/index.js',
+        exports: { '.': { import: 'dist/index.js' } },
+      }),
     );
+    await symlink(path.join(installedPiRoot, 'dist/index.js'), path.join(pkgDir, 'dist/index.js'));
     await writeFile(path.join(pkgDir, 'dist/cli.js'), '#!/usr/bin/env node\n');
     await writeFile(path.join(prefix, 'pi.cmd'), '@echo off\r\necho pi (fake)\r\n');
     const npmRoot = await realpath(path.join(prefix, 'node_modules'));
@@ -45,10 +52,19 @@ async function makeFakeNpmPrefix(version: string): Promise<{ prefix: string; npm
   const pkgDir = path.join(prefix, 'lib/node_modules', ...pkgSubPath.split('/'));
   await mkdir(path.join(pkgDir, 'dist'), { recursive: true });
   await mkdir(path.join(prefix, 'bin'), { recursive: true });
+  const installedPiRoot = await realpath(path.resolve('node_modules/@earendil-works/pi-coding-agent'));
   await writeFile(
     path.join(pkgDir, 'package.json'),
-    JSON.stringify({ name: '@earendil-works/pi-coding-agent', version }),
+    JSON.stringify({
+      name: '@earendil-works/pi-coding-agent',
+      version,
+      main: 'dist/index.js',
+      exports: { '.': { import: 'dist/index.js' } },
+    }),
   );
+  // Keep the detector's fake version/layout while using the real SDK entry for
+  // the compatibility probe; the onboarding test must not silently skip SDK checks.
+  await symlink(path.join(installedPiRoot, 'dist/index.js'), path.join(pkgDir, 'dist/index.js'));
   await writeFile(path.join(pkgDir, 'dist/cli.js'), '#!/usr/bin/env node\n');
   await symlink(path.join(pkgDir, 'dist/cli.js'), path.join(prefix, 'bin/pi'));
   const npmRoot = await realpath(path.join(prefix, 'lib/node_modules'));

@@ -92,7 +92,7 @@ async function createRuntimeUnderTest() {
   });
 }
 
-describe('pi SDK 契约（pi 0.83.x + mock provider）', () => {
+describe(`pi SDK 契约（${process.env.PI_TEST_VERSION ?? '0.84.2'} + mock provider）`, () => {
   it('runtime 创建 + bindExtensions（无头 print 模式）+ 事件映射全链路', async () => {
     const runtime = await createRuntimeUnderTest();
     const session = runtime.session;
