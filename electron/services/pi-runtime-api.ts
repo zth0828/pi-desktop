@@ -51,7 +51,7 @@ import {
 } from '../main/window-manager';
 import { expandFileReferences } from '../utils/file-expand';
 import { detectPiEnvironment } from '../utils/pi-detector';
-import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
+import { type PiSdk } from '../utils/pi-loader';
 import { samePath } from '../utils/same-path';
 import {
   normalizePreviewablePath,
@@ -72,9 +72,18 @@ import { noteRunEnded, noteRunStarted } from './power-save';
 import { createShellTrustContext, resolveProjectTrusted } from './project-trust';
 import { settingsApi } from './settings-api';
 import { timingMark } from '../utils/timing';
+import { safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
+import {
+  compatibilityFailure,
+  loadPiAdapter,
+  PiAdapterNotReadyError,
+  type PiRuntimeAdapter,
+} from './pi-adapter';
 
 export type ActiveRuntime = {
   instanceId: string;
+  adapter: PiRuntimeAdapter;
+  adapterRuntime: Awaited<ReturnType<PiRuntimeAdapter['createSessionRuntime']>>;
   sdk: PiSdk;
   runtime: AgentSessionRuntime;
   cwd: string;
@@ -226,7 +235,7 @@ function disposeRuntime(runtime: ActiveRuntime): void {
     noteRunEnded(runtime.instanceId);
     runtime.running = false;
   }
-  runtime.runtime.dispose();
+  runtime.adapter.dispose(runtime.adapterRuntime);
   runtimes.delete(runtime);
   if (active === runtime) active = null;
 }
@@ -481,39 +490,53 @@ function workspaceBoundaryExtension(pi: ExtensionAPI): void {
 
 function bridgeSessionEvents(runtime: ActiveRuntime): void {
   const session = runtime.runtime.session;
-  runtime.unsubscribe = session.subscribe((piEvent) => {
-    const mapped = mapPiSessionEvent(piEvent);
-    if (!mapped) return;
-    if (mapped.type === 'tool.execution.started') {
-      rememberPreviewableFile(runtime, mapped.toolName, mapped.args);
-    }
-    // 防休眠挂钩（main 侧自治）：run 期间顶住休眠，重试等待保持，结束/替换解除
-    if (mapped.type === 'run.started') {
-      runtime.running = true;
-      noteRunStarted(runtime.instanceId);
-      setImmediate(() => sendHostEvent('piRuntime', 'runtimeStateChanged', {
-        sessionId: runtime.sessionId,
-        sessionPath: runtime.runtime.session.sessionFile,
-        running: runtime.running,
-      }));
-    } else if (mapped.type === 'run.ended') {
-      noteRunEnded(runtime.instanceId, mapped.willRetry);
-      if (!mapped.willRetry) {
-        runtime.running = false;
+  runtime.unsubscribe = runtime.adapter.subscribe(runtime.adapterRuntime.session, (piEvent) => {
+    try {
+      const mapped = mapPiSessionEvent(piEvent);
+      if (!mapped) return;
+      if (mapped.type === 'tool.execution.started') {
+        rememberPreviewableFile(runtime, mapped.toolName, mapped.args);
+      }
+      // 防休眠挂钩（main 侧自治）：run 期间顶住休眠，重试等待保持，结束/替换解除
+      if (mapped.type === 'run.started') {
+        runtime.running = true;
+        noteRunStarted(runtime.instanceId);
         setImmediate(() => sendHostEvent('piRuntime', 'runtimeStateChanged', {
           sessionId: runtime.sessionId,
           sessionPath: runtime.runtime.session.sessionFile,
-          running: false,
+          running: runtime.running,
         }));
+      } else if (mapped.type === 'run.ended') {
+        noteRunEnded(runtime.instanceId, mapped.willRetry);
+        if (!mapped.willRetry) {
+          runtime.running = false;
+          setImmediate(() => sendHostEvent('piRuntime', 'runtimeStateChanged', {
+            sessionId: runtime.sessionId,
+            sessionPath: runtime.runtime.session.sessionFile,
+            running: false,
+          }));
+        }
       }
+      const envelope: PiRuntimeEventEnvelope = {
+        sessionId: runtime.sessionId,
+        generation: runtime.generation,
+        at: Date.now(),
+        event: mapped,
+      };
+      sendHostEvent('piRuntime', 'event', envelope);
+    } catch (error) {
+      // A provider or newer pi release can add an event shape before the shell
+      // adapter knows it. One malformed event must not reject pi's event loop.
+      writePiDiagnostic({
+        level: 'warning',
+        event: 'pi.event.mapping.failure',
+        sessionId: runtime.sessionId,
+        generation: runtime.generation,
+        piVersion: runtime.adapter.packageVersion,
+        eventType: (piEvent as { type?: unknown })?.type as string | undefined,
+        ...safeErrorFields(error),
+      });
     }
-    const envelope: PiRuntimeEventEnvelope = {
-      sessionId: runtime.sessionId,
-      generation: runtime.generation,
-      at: Date.now(),
-      event: mapped,
-    };
-    sendHostEvent('piRuntime', 'event', envelope);
   });
 }
 
@@ -569,7 +592,11 @@ const projectTrustByCwd = new Map<string, boolean>();
 
 async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveRuntime> {
   timingMark('runtime:create:start');
-  const sdk = await loadPiSdk();
+  const adapter = await loadPiAdapter();
+  if (adapter.compatibility.status === 'incompatible') {
+    throw new PiAdapterNotReadyError(compatibilityFailure(adapter.compatibility));
+  }
+  const sdk = adapter.sdk;
   timingMark('runtime:sdk-loaded');
   const agentDir = sdk.getAgentDir();
   // LM Studio 的原生目录包含视觉能力和真实上下文；先同步到 pi 的公开模型配置，
@@ -580,7 +607,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
   // 扩展按 CLI 假设会误 spawn 壳自身；如官方 subagent 示例）。检测到 pi 即写入。
   const piBin = detectPiEnvironment().pi.binPath;
   if (piBin) process.env.PI_CLI_PATH = piBin;
-  const eventBus = sdk.createEventBus();
+  const eventBus = adapter.createEventBus();
   // 信任状态随 factory 重跑（switchSession 换 cwd）更新；reload 的隐式信任落盘依赖它。
   const trust: { autoTrustCwd?: string } = {};
   const createFactory = async ({
@@ -607,7 +634,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
     trust.autoTrustCwd = hasTrustRequiring ? undefined : effectiveCwd;
     const settingsManager = sdk.SettingsManager.create(effectiveCwd, agentDir, { projectTrusted });
     const trustDiagnostics: Array<{ type: 'warning'; message: string }> = [];
-    const services = await sdk.createAgentSessionServices({
+    const services = await adapter.createSessionServices({
       cwd: effectiveCwd,
       agentDir,
       settingsManager,
@@ -619,7 +646,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
                 trustStore,
                 // defaultProjectTrust 读取用未降权的 SettingsManager（与 pi CLI 的
                 // startupSettingsManager 对应；项目设置只在信任后才加载）。
-                defaultProjectTrust: sdk.SettingsManager.create(effectiveCwd, agentDir)
+                defaultProjectTrust: adapter.sdk.SettingsManager.create(effectiveCwd, agentDir)
                   .getDefaultProjectTrust(),
                 extensionsResult,
                 projectTrustContext: createShellTrustContext(effectiveCwd),
@@ -643,7 +670,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
       },
     });
     return {
-      ...(await sdk.createAgentSessionFromServices({
+      ...(await adapter.createSessionFromServices({
         services,
         sessionManager: sessionManager as never,
         sessionStartEvent: sessionStartEvent as never,
@@ -652,14 +679,17 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
       diagnostics: [...trustDiagnostics, ...services.diagnostics],
     };
   };
-  const runtime = await sdk.createAgentSessionRuntime(createFactory as never, {
+  const adapterRuntime = await adapter.createSessionRuntime(createFactory as never, {
     cwd,
     agentDir,
     sessionManager: sessionPath ? sdk.SessionManager.open(sessionPath) : sdk.SessionManager.create(cwd),
   });
+  const runtime = adapterRuntime.raw;
   timingMark('runtime:session-runtime-created');
   const active_: ActiveRuntime = {
     instanceId: `runtime-${++runtimeSequence}`,
+    adapter,
+    adapterRuntime,
     sdk,
     runtime,
     cwd,
@@ -805,6 +835,11 @@ export async function afterSessionReplaced(
 ): Promise<PiRuntimeStateResult> {
   const previousActive = active;
   runtime.unsubscribe();
+  // 会话替换后 AgentSession 对象变化，更新 adapter 对象边界。
+  runtime.adapterRuntime = {
+    ...runtime.adapterRuntime,
+    session: { raw: runtime.runtime.session },
+  };
   // 旧会话挂起的扩展 UI 请求全部取消（渲染层同步移除对话框）
   cancelPendingUiForContext({ sessionId: runtime.sessionId, generation: runtime.generation });
   // 旧会话若在运行中被替换，其 run.ended 不会再到：兜底解除防休眠
@@ -1035,8 +1070,9 @@ export const piRuntimeApi = {
       // @path 就地展开为 <file> 块（pi file-processor 语义；图片转 images 通道）
       const expanded = await expandFileReferences(payload.text, active.cwd);
       const staged = (payload.images ?? []) as unknown[];
-      await session.prompt(expanded.text, {
-        images: [...expanded.images, ...staged] as never,
+      await active.adapter.prompt(active.adapterRuntime.session, {
+        text: expanded.text,
+        images: [...expanded.images, ...staged],
         // 流式中提交：默认 followUp（排队等当前 run 完成），behavior='steer' 时当前轮插入
         ...(session.isStreaming
           ? { streamingBehavior: payload.behavior ?? ('followUp' as const) }
@@ -1044,6 +1080,15 @@ export const piRuntimeApi = {
       });
       return { success: true };
     } catch (err) {
+      writePiDiagnostic({
+        level: 'error',
+        event: 'prompt.failed',
+        requestId: ctx?.requestId,
+        sessionId: active.sessionId,
+        generation: active.generation,
+        piVersion: active.adapter.packageVersion,
+        ...safeErrorFields(err),
+      });
       return { success: false, error: err instanceof Error ? err.message : String(err) };
     }
   },
@@ -1064,7 +1109,7 @@ export const piRuntimeApi = {
     try {
       // 立即发送：流式中 = steer（当前轮工具间隙插入），空闲 = 直接开新轮
       if (session.isStreaming) await session.steer(text);
-      else await session.prompt(text);
+      else await active.adapter.prompt(active.adapterRuntime.session, { text });
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -1080,7 +1125,7 @@ export const piRuntimeApi = {
     else if (session.isCompacting) session.abortCompaction();
     else if (active.summarizingBranch) session.abortBranchSummary();
     else if (session.isRetrying) session.abortRetry();
-    else await session.abort();
+    else await active.adapter.abort(active.adapterRuntime.session);
     return { success: true };
   },
 

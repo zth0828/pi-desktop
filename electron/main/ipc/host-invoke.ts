@@ -8,6 +8,7 @@ import {
   isHostRequest,
 } from './host-contract';
 import { resolveWindowSession } from '../window-manager';
+import { safeErrorFields, writePiDiagnostic } from '../../utils/pi-diagnostic-log';
 
 export class HostApiRegistry {
   private modules = new Map<string, Map<string, RuntimeHostAction>>();
@@ -79,6 +80,14 @@ export function createHostInvokeDispatcher(registryOrServices: HostApiRegistry |
       const data = await action(request.payload, ctx);
       return { id: request.id, ok: true, data };
     } catch (error) {
+      writePiDiagnostic({
+        level: 'error',
+        event: 'ipc.action.failure',
+        requestId: request.id,
+        module: request.module,
+        action: request.action,
+        ...safeErrorFields(error),
+      });
       return {
         id: request.id,
         ok: false,
@@ -102,6 +111,9 @@ export function registerHostInvokeHandler(registry: HostApiRegistry): void {
     return dispatch(request, {
       sender: event.sender,
       sessionPath: typeof explicit === 'string' ? explicit : resolveWindowSession(event.sender.id),
+      requestId: request && typeof request === 'object'
+        ? (typeof (request as { id?: unknown }).id === 'string' ? (request as { id: string }).id : undefined)
+        : undefined,
     });
   });
 }

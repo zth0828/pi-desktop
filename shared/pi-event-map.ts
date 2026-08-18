@@ -68,7 +68,11 @@ export type PiRuntimeEventEnvelope = {
 };
 
 /** pi AgentSessionEvent → 壳契约。不关心的生命周期事件（turn_* 等）返回 null。 */
-export function mapPiSessionEvent(event: AgentSessionEvent): PiChatEvent | null {
+export function mapPiSessionEvent(value: unknown): PiChatEvent | null {
+  if (!value || typeof value !== 'object' || typeof (value as { type?: unknown }).type !== 'string') {
+    return null;
+  }
+  const event = value as AgentSessionEvent;
   switch (event.type) {
     case 'agent_start':
       return { type: 'run.started' };
@@ -76,11 +80,13 @@ export function mapPiSessionEvent(event: AgentSessionEvent): PiChatEvent | null 
       return { type: 'run.ended', willRetry: event.willRetry };
     case 'message_start':
       return { type: 'message.started', role: event.message.role };
-    case 'message_update':
-      return {
-        type: 'assistant.partial',
-        message: (event.assistantMessageEvent as { partial?: unknown }).partial,
-      };
+    case 'message_update': {
+      // pi keeps the canonical partial assistant message on assistantMessageEvent.partial.
+      // Older/custom providers may emit an update without that payload; ignore the malformed
+      // update and wait for the next complete event instead of breaking the session event bridge.
+      const partial = (event.assistantMessageEvent as { partial?: unknown } | undefined)?.partial;
+      return partial === undefined ? null : { type: 'assistant.partial', message: partial };
+    }
     case 'message_end':
       return { type: 'message.ended', message: event.message };
     case 'tool_execution_start':
@@ -108,8 +114,8 @@ export function mapPiSessionEvent(event: AgentSessionEvent): PiChatEvent | null 
     case 'queue_update':
       return {
         type: 'queue.updated',
-        steering: [...event.steering],
-        followUp: [...event.followUp],
+        steering: Array.isArray(event.steering) ? [...event.steering] : [],
+        followUp: Array.isArray(event.followUp) ? [...event.followUp] : [],
       };
     case 'compaction_start':
       return { type: 'compaction.started', reason: event.reason };

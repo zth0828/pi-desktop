@@ -25,6 +25,8 @@ export type HostResponse<T = unknown> =
 export type HostActionContext = {
   sender: WebContents;
   sessionPath: string | null;
+  /** Renderer-generated request id for diagnostics and prompt lifecycle correlation. */
+  requestId?: string;
 };
 
 export type RuntimeHostAction = (
