@@ -452,10 +452,15 @@ export default function SettingsPage() {
           <div className="settings-row-label">
             <div>pi</div>
             <div className="settings-row-desc">
-              {t('status.ready', { version: env?.pi.version ?? '?' })}
-              {latestVersion && latestVersion !== env?.pi.version
-                ? ` · ${t('status.latestAvailable', { version: latestVersion })}`
-                : ''}
+              <div>
+                {t('status.ready', { version: env?.pi.version ?? '?' })}
+                {latestVersion && latestVersion !== env?.pi.version
+                  ? ` · ${t('status.latestAvailable', { version: latestVersion })}`
+                  : ''}
+              </div>
+              {env?.compatibility?.status === 'compatible-untested' && (
+                <div className="warning">{t('status.compatibleUntested')}</div>
+              )}
             </div>
           </div>
           <div className="pill-group">

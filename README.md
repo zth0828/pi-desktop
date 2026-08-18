@@ -134,7 +134,7 @@ models · sessions · tools · skills · packages · extensions
 - Node.js 22.19.0 or newer
 - npm
 - pnpm 10.32.1 (Corepack recommended)
-- pi 0.83.0 or newer, globally installed through npm
+- pi 0.83.0 or newer, globally installed through npm (the installer uses npm latest; 0.84.2 is the tested fallback)
 
 Install pi:
 

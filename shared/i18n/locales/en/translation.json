@@ -35,6 +35,11 @@
       "body": "Found pi v{{current}}, but Pi Desktop requires ≥ v{{min}}.",
       "upgrade": "Upgrade pi"
     },
+    "incompatible": {
+      "title": "This pi installation is not compatible",
+      "body": "Pi Desktop found pi, but its public SDK is missing a required capability. You can keep your installation untouched or install the latest npm release to retry.",
+      "install": "Install latest pi"
+    },
     "failed": {
       "title": "Installation failed",
       "detail": "The installer exited with an error. You can also run the command above in your terminal, then re-check."
@@ -42,7 +47,8 @@
   },
   "status": {
     "ready": "pi v{{version}} detected",
-    "latestAvailable": "Latest: v{{version}}"
+    "latestAvailable": "Latest: v{{version}}",
+    "compatibleUntested": "This pi version has the required SDK capabilities but is outside the tested range. Pi Desktop will use it and report any runtime issue."
   },
   "nav": {
     "chat": "Chat",

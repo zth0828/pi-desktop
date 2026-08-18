@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { hostApi } from '../lib/host-api';
 import { usePiSystemStore } from '../stores/pi-system';
+import { PI_PACKAGE_NAME } from '@shared/pi-compat';
 
-const PI_INSTALL_COMMAND = 'npm i -g @earendil-works/pi-coding-agent';
+const PI_INSTALL_COMMAND = `npm i -g ${PI_PACKAGE_NAME}`;
 
 function InstallLog() {
   const { t } = useTranslation();
@@ -131,6 +132,23 @@ export default function Onboarding() {
           <code className="command">{PI_INSTALL_COMMAND}</code>
           <div className="actions">
             <InstallButton labelKey="onboarding.outdated.upgrade" />
+            <button disabled={checking} onClick={() => void detect(true)}>
+              {t('onboarding.recheck')}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {state === 'pi-incompatible' && (
+        <section className="error">
+          <h2>{t('onboarding.incompatible.title')}</h2>
+          <p>{t('onboarding.incompatible.body')}</p>
+          {env.compatibility?.missingRequiredCapabilities.length ? (
+            <pre className="error-detail">{env.compatibility.missingRequiredCapabilities.join(', ')}</pre>
+          ) : null}
+          <code className="command">{PI_INSTALL_COMMAND}</code>
+          <div className="actions">
+            <InstallButton labelKey="onboarding.incompatible.install" />
             <button disabled={checking} onClick={() => void detect(true)}>
               {t('onboarding.recheck')}
             </button>

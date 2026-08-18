@@ -35,6 +35,11 @@
       "body": "检测到 pi v{{current}}，Pi Desktop 需要 ≥ v{{min}}。",
       "upgrade": "升级 pi"
     },
+    "incompatible": {
+      "title": "当前 pi 安装不兼容",
+      "body": "Pi Desktop 检测到 pi，但其公共 SDK 缺少必需能力。你可以保留当前安装，或安装 npm 最新版本后重新检测。",
+      "install": "安装最新 pi"
+    },
     "failed": {
       "title": "安装失败",
       "detail": "安装命令出错退出。你也可以在终端手动执行上面的命令，然后重新检测。"
@@ -42,7 +47,8 @@
   },
   "status": {
     "ready": "已检测到 pi v{{version}}",
-    "latestAvailable": "最新版本：v{{version}}"
+    "latestAvailable": "最新版本：v{{version}}",
+    "compatibleUntested": "当前 pi 具备必需 SDK 能力，但不在已测试范围内。Pi Desktop 会继续使用，并在运行时出现问题时报告。"
   },
   "nav": {
     "chat": "对话",
