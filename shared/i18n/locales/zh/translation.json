@@ -330,6 +330,7 @@
     "refresh": "刷新 pi 模型目录",
     "refreshComplete": "模型目录已刷新。",
     "refreshCompleteWithDiscovery": "模型目录已刷新，共发现 {{count}} 个自定义模型，其中新增 {{added}} 个。",
+    "refreshMigratedProviders": "已将 {{count}} 个供应商升级为 Responses 协议。",
     "source": {
       "builtin": "内置",
       "config": "models.json",
@@ -349,13 +350,18 @@
     "addCustom": "添加自定义供应商",
     "customId": "供应商 id（如 my-llm）",
     "customBaseUrl": "baseURL",
-    "customApi": "API 类型",
+    "customApi": "请求协议",
+    "detectedApi": "探测到的请求协议",
+    "unverifiedApi": "无法验证协议，请选择服务商实际兼容的协议",
+    "switchApiConfirm": "切换为 {{api}}？保存后供应商将使用该协议及其探测到的请求地址。",
     "customModels": "模型 id，逗号分隔",
     "saveCustom": "保存供应商",
     "probe": "测试连接并探测",
     "probing": "探测中…",
     "probeAvailable": "可用",
     "probeUnavailable": "不可用",
+    "probeRejectedHint": "探测被服务商拒绝（常见于网关防滥用过滤），不代表不可用；模型已配置时可直接使用，或手动输入模型名保存。",
+    "actualRequest": "实际请求：{{url}}",
     "probeCache": "支持缓存统计",
     "probeNoCache": "无缓存统计",
     "probeContext": "检测到上下文：{{count}}",
@@ -376,7 +382,8 @@
     "setCurrent": "设为当前模型",
     "current": "当前",
     "reasoningSupport": "支持推理",
-    "reasoningHint": "第三方模型默认按支持推理处理，保证思考深度菜单可用；仅当供应商拒绝思考参数时才关闭。"
+    "reasoningHint": "第三方模型默认按支持推理处理，保证思考深度菜单可用；仅当供应商拒绝思考参数时才关闭。",
+    "probeSpec": "上下文 {{contextWindow}} · 最大输出 {{maxOutput}}"
   },
   "sessions": {
     "title": "会话",
@@ -663,6 +670,30 @@
       "maxRetriesDesc": "达到次数后回合以错误收尾。",
       "baseDelay": "基础退避（毫秒）",
       "baseDelayDesc": "重试等待的基础时长，随次数退避增长。"
+    },
+    "proxy": {
+      "title": "网络代理",
+      "desc": "自动跟随系统代理（无需手写配置）：海外供应商自动走代理，国内域名自动直连。修改后立即生效。",
+      "modes": {
+        "auto": "自动",
+        "manual": "手动",
+        "off": "关闭"
+      },
+      "manualUrl": "代理地址",
+      "manualPlaceholder": "http://127.0.0.1:7897",
+      "status": "当前代理",
+      "detected": "已检测到：{url}（{source}）",
+      "none": "未检测到代理，直连",
+      "source": {
+        "system": "系统代理",
+        "probe": "本地端口探测",
+        "manual": "手动",
+        "settings": "pi 配置",
+        "off": "已关闭",
+        "none": "无"
+      },
+      "applied": "已应用代理",
+      "applyFailed": "应用失败"
     }
   },
   "notify": {

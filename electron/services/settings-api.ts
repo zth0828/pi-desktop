@@ -33,6 +33,8 @@ export const settingsApi = {
       preventSleep: store.get('preventSleep') as SettingsSnapshot['preventSleep'],
       sendWith: store.get('sendWith') as SettingsSnapshot['sendWith'],
       lastSessionExportPath: store.get('lastSessionExportPath') as SettingsSnapshot['lastSessionExportPath'],
+      httpProxyMode: store.get('httpProxyMode') as SettingsSnapshot['httpProxyMode'],
+      httpProxyUrl: store.get('httpProxyUrl') as SettingsSnapshot['httpProxyUrl'],
     };
   },
   get: async <K extends keyof SettingsSnapshot>(

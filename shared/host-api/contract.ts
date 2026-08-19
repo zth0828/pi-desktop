@@ -57,7 +57,23 @@ export type PiCapabilities = {
   abort: boolean;
 };
 
-export type PiCompatibilityStatus = 'tested' | 'compatible-untested' | 'incompatible';
+export type PiCapabilityState = 'available' | 'missing' | 'not-checked' | 'failed';
+export type PiCapabilityReport = {
+  module: Record<string, PiCapabilityState>;
+  session: Record<string, PiCapabilityState>;
+  optional: Record<string, PiCapabilityState>;
+};
+export type PiCompatibilityFailureCode =
+  | 'not-installed'
+  | 'non-npm-install'
+  | 'version-too-low'
+  | 'entry-not-found'
+  | 'module-import-failed'
+  | 'missing-public-export'
+  | 'missing-session-capability'
+  | 'optional-feature-unavailable'
+  | 'restart-required';
+export type PiCompatibilityStatus = 'tested' | 'compatible-untested' | 'incompatible' | 'restart-required';
 
 export type PiCompatibilityReport = {
   status: PiCompatibilityStatus;
@@ -73,6 +89,10 @@ export type PiCompatibilityReport = {
   missingRequiredCapabilities: string[];
   optionalCapabilities: Record<string, boolean>;
   capabilities: PiCapabilities;
+  capabilityReport?: PiCapabilityReport;
+  failureCode?: PiCompatibilityFailureCode;
+  failureDetail?: string;
+  generation?: string;
   testedRange: boolean;
   recommendedVersion: string;
   warnings: string[];
@@ -128,6 +148,16 @@ export type PiRuntimePromptPayload = {
   text: string;
   images?: unknown[];
   behavior?: 'steer' | 'followUp';
+};
+export type PiPromptLifecyclePhase = 'submitted' | 'accepted' | 'started' | 'finished' | 'failed';
+export type PiPromptLifecycleEvent = {
+  phase: PiPromptLifecyclePhase;
+  requestId: string;
+  runtimeId: string;
+  sessionId: string;
+  generation: number;
+  adapterGeneration?: string;
+  error?: string;
 };
 
 // —— piRuntime 排队消息操作（steer/followUp 队列；pi 只有 clearQueue 全清，单条移除=快照后重排）——
@@ -385,6 +415,20 @@ export type WorkspaceReadResult = {
 
 // —— settings：壳自身设置（electron-store 持久化）——
 
+/** 网络代理模式：auto=自动跟随系统代理/检测本地代理（默认），manual=手动 URL，off=直连。 */
+export type ProxyMode = 'auto' | 'manual' | 'off';
+
+/** 代理检测结果：当前模式 + 实际生效的代理 URL 与来源。 */
+export type ProxyDetection = {
+  mode: ProxyMode;
+  /** 当前实际生效的代理 URL（manual 或 auto 检测到）；无则 undefined。 */
+  url?: string;
+  /** 来源：system=macOS 系统代理设置，probe=常见端口探测，manual=用户手动，settings=pi settings.json，off=主动关闭，none=未检测到。 */
+  source?: 'system' | 'probe' | 'manual' | 'settings' | 'off' | 'none';
+};
+
+export type ProxyApplyResult = HostSuccess & { detail?: string };
+
 export type SettingsSnapshot = {
   language?: 'zh' | 'en';
   workspaceCwd?: string;
@@ -401,6 +445,10 @@ export type SettingsSnapshot = {
   sendWith?: 'enter' | 'cmdEnter';
   /** 最近一次成功导出的会话 HTML；用于跨页面/重启恢复打开入口。 */
   lastSessionExportPath?: string;
+  /** 网络代理模式（默认 auto：自动跟随系统代理，无需手写配置）。 */
+  httpProxyMode?: ProxyMode;
+  /** manual 模式的手动代理 URL（如 http://127.0.0.1:7897）。 */
+  httpProxyUrl?: string;
 };
 
 export type SettingsGetPayload = { key: keyof SettingsSnapshot };
@@ -466,6 +514,8 @@ export type NotifyDispatchPayload = {
 export type PiProviderRow = {
   id: string;
   name: string;
+  /** 供应商 API 请求地址（内置来自 pi catalog，自定义来自 models.json baseUrl）。 */
+  baseUrl?: string;
   source: 'builtin' | 'config' | 'extension';
   authMethods: string[];
   configured: boolean;
@@ -495,6 +545,7 @@ export type PiProviderRefreshResult = HostSuccess & {
   errors?: string[];
   discoveredModels?: number;
   addedModels?: number;
+  migratedProviders?: number;
 };
 export type PiProviderAddCustomPayload = {
   id: string;
@@ -526,6 +577,8 @@ export type PiProviderProbeProtocol = {
   cacheStats: boolean;
   modelIds?: string[];
   error?: string;
+  /** Base URL that produced a successful request for this protocol. */
+  resolvedBaseUrl?: string;
 };
 export type PiProviderProbeResult = {
   models: string[];
@@ -930,6 +983,12 @@ export type HostApiContract = {
     getAll: () => SettingsSnapshot;
     get: (payload: SettingsGetPayload) => string | boolean | undefined;
     set: (payload: SettingsSetPayload) => HostSuccess;
+  };
+  proxy: {
+    /** 当前代理模式与生效 URL（auto 模式会实时检测系统代理/常见端口）。 */
+    detect: () => ProxyDetection;
+    /** 按当前设置把代理应用到 pi 的全局网络栈（改设置后无需重启即生效）。 */
+    apply: () => ProxyApplyResult;
   };
   piFiles: {
     /** @ 补全候选：cwd 下递归列文件（相对路径，排除 .git/node_modules，上限 200 条）。 */

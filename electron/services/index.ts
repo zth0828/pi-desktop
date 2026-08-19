@@ -11,6 +11,7 @@ import { piRuntimeApi } from './pi-runtime-api';
 import { piSystemApi } from './pi-system-api';
 import { projectTrustApi } from './project-trust';
 import { providersApi } from './providers-api';
+import { proxyApi } from './proxy-api';
 import { reviewApi } from './review-api';
 import { sessionsApi } from './sessions-api';
 import { settingsApi } from './settings-api';
@@ -26,6 +27,7 @@ export function createHostServices(): HostServiceRegistry {
     piSystem: piSystemApi,
     piRuntime: piRuntimeApi,
     providers: providersApi,
+    proxy: proxyApi,
     piSessions: sessionsApi,
     piSkills: skillsApi,
     piPackages: packagesApi,

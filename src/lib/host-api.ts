@@ -185,6 +185,10 @@ function createHostApi(sessionPath?: string) {
     set: (key: keyof SettingsSnapshot, value: string | boolean | undefined) =>
       invoke('settings', 'set', { key, value }),
   },
+  proxy: {
+    detect: () => invoke('proxy', 'detect'),
+    apply: () => invoke('proxy', 'apply'),
+  },
   notify: {
     dispatch: (payload: { kind: 'runCompleted' | 'uiRequest'; title: string; body?: string }) =>
       invoke('notify', 'dispatch', payload),

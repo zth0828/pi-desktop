@@ -23,6 +23,10 @@ type FollowupBehavior = (typeof FOLLOWUP_BEHAVIORS)[number];
 const SEND_WITH_MODES = ['enter', 'cmdEnter'] as const;
 type SendWith = (typeof SEND_WITH_MODES)[number];
 
+const PROXY_MODES = ['auto', 'manual', 'off'] as const;
+type ProxyMode = (typeof PROXY_MODES)[number];
+type ProxyStatus = { url?: string; source?: string };
+
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const;
 
 export default function SettingsPage() {
@@ -41,6 +45,10 @@ export default function SettingsPage() {
   const [trustEntries, setTrustEntries] = useState<PiTrustEntry[]>([]);
   const [defaultThinking, setDefaultThinking] = useState<string | null>(null);
   const [retry, setRetry] = useState({ enabled: true, maxRetries: 3, baseDelayMs: 2000 });
+  const [proxyMode, setProxyMode] = useState<ProxyMode>('auto');
+  const [proxyUrl, setProxyUrl] = useState('');
+  const [proxyStatus, setProxyStatus] = useState<ProxyStatus>();
+  const [proxyMessage, setProxyMessage] = useState<string>();
   const env = usePiSystemStore((s) => s.env);
   const latestVersion = usePiSystemStore((s) => s.latestVersion);
   const detect = usePiSystemStore((s) => s.detect);
@@ -64,6 +72,9 @@ export default function SettingsPage() {
     void hostApi.piTrust.list().then((r) => setTrustEntries(r.entries)).catch(() => {});
     void hostApi.providers.getDefaultThinking().then((r) => setDefaultThinking(r.level)).catch(() => {});
     void hostApi.providers.getRetry().then(setRetry).catch(() => {});
+    void hostApi.settings.get('httpProxyMode').then((v) => setProxyMode((v as ProxyMode) ?? 'auto')).catch(() => {});
+    void hostApi.settings.get('httpProxyUrl').then((v) => setProxyUrl((v as string) ?? '')).catch(() => {});
+    void hostApi.proxy.detect().then(setProxyStatus).catch(() => {});
     const offTrustChanged = onHostEvent('piTrust', 'changed', (r) => setTrustEntries(r.entries));
     void Promise.all([hostApi.providers.listModels(), hostApi.providers.getDefaultModel()]).then(([available, current]) => {
       const model = current.model ? available.models.find((candidate) => candidate.provider === current.model?.provider && candidate.id === current.model?.id) : undefined;
@@ -87,6 +98,25 @@ export default function SettingsPage() {
     if (result.canceled || !result.filePaths[0]) return;
     await hostApi.settings.set('workspaceCwd', result.filePaths[0]);
     setCwd(result.filePaths[0]);
+  };
+
+  const refreshProxy = async (): Promise<void> => {
+    setProxyMessage(undefined);
+    const applied = await hostApi.proxy.apply().catch(() => undefined);
+    if (applied && !applied.success) setProxyMessage(`${t('settings.proxy.applyFailed')}: ${applied.error ?? ''}`);
+    void hostApi.proxy.detect().then(setProxyStatus).catch(() => {});
+  };
+
+  const changeProxyMode = async (mode: ProxyMode): Promise<void> => {
+    setProxyMode(mode);
+    await hostApi.settings.set('httpProxyMode', mode);
+    await refreshProxy();
+  };
+
+  const changeProxyUrl = async (url: string): Promise<void> => {
+    setProxyUrl(url);
+    await hostApi.settings.set('httpProxyUrl', url);
+    await refreshProxy();
   };
 
   return (
@@ -190,6 +220,54 @@ export default function SettingsPage() {
                 {t(on ? 'settings.toggle.on' : 'settings.toggle.off')}
               </button>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section" data-testid="settings-proxy">
+        <h2>{t('settings.proxy.title')}</h2>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('settings.proxy.title')}</div>
+            <div className="settings-row-desc">{t('settings.proxy.desc')}</div>
+          </div>
+          <div className="pill-group" data-testid="settings-proxy-mode">
+            {PROXY_MODES.map((mode) => (
+              <button
+                key={mode}
+                data-testid={`proxy-mode-${mode}`}
+                className={proxyMode === mode ? 'pill active' : 'pill'}
+                onClick={() => void changeProxyMode(mode)}
+              >
+                {t(`settings.proxy.modes.${mode}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+        {proxyMode === 'manual' && (
+          <div className="settings-row">
+            <div className="settings-row-label">
+              <div>{t('settings.proxy.manualUrl')}</div>
+            </div>
+            <input
+              className="settings-number settings-proxy-url"
+              data-testid="settings-proxy-url"
+              type="text"
+              placeholder={t('settings.proxy.manualPlaceholder')}
+              value={proxyUrl}
+              onChange={(e) => void changeProxyUrl(e.target.value)}
+            />
+          </div>
+        )}
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('settings.proxy.status')}</div>
+            <div className="settings-row-desc" data-testid="settings-proxy-status">
+              {proxyStatus?.url
+                ? t('settings.proxy.detected', { url: proxyStatus.url, source: t(`settings.proxy.source.${proxyStatus.source ?? 'none'}`) })
+                : t('settings.proxy.none')}
+              {proxyMessage && <span className="settings-proxy-error">{proxyMessage}</span>}
+            </div>
           </div>
         </div>
       </section>

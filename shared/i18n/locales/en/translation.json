@@ -330,6 +330,7 @@
     "refresh": "Refresh pi model catalogs",
     "refreshComplete": "Model catalogs refreshed.",
     "refreshCompleteWithDiscovery": "Model catalogs refreshed. Found {{count}} custom models, including {{added}} new ones.",
+    "refreshMigratedProviders": "Upgraded {{count}} provider(s) to the Responses protocol.",
     "source": {
       "builtin": "Built in",
       "config": "models.json",
@@ -349,13 +350,18 @@
     "addCustom": "Add custom provider",
     "customId": "Provider id (e.g. my-llm)",
     "customBaseUrl": "baseURL",
-    "customApi": "API type",
+    "customApi": "Request protocol",
+    "detectedApi": "Detected request protocol",
+    "unverifiedApi": "Protocol could not be verified; choose the provider-compatible protocol",
+    "switchApiConfirm": "Switch to {{api}}? The saved provider will use this protocol and its detected request URL.",
     "customModels": "Model ids, comma separated",
     "saveCustom": "Save provider",
     "probe": "Test connection & detect",
     "probing": "Probing…",
     "probeAvailable": "Available",
     "probeUnavailable": "Unavailable",
+    "probeRejectedHint": "The provider rejected probing (common with gateway abuse-prevention filters). This does not mean it is unusable; if you know the model id, you can use it directly or enter it manually and save.",
+    "actualRequest": "Actual request: {{url}}",
     "probeCache": "Reports cache",
     "probeNoCache": "No cache stats",
     "probeContext": "Detected context: {{count}}",
@@ -376,7 +382,8 @@
     "setCurrent": "Set as current",
     "current": "Current",
     "reasoningSupport": "Reasoning",
-    "reasoningHint": "Third-party models are treated as reasoning-capable by default so the thinking-depth menu stays available. Turn off only if the provider rejects thinking parameters."
+    "reasoningHint": "Third-party models are treated as reasoning-capable by default so the thinking-depth menu stays available. Turn off only if the provider rejects thinking parameters.",
+    "probeSpec": "Context {{contextWindow}} · Max output {{maxOutput}}"
   },
   "sessions": {
     "title": "Sessions",
@@ -663,6 +670,30 @@
       "maxRetriesDesc": "The turn ends with an error once exhausted.",
       "baseDelay": "Base delay (ms)",
       "baseDelayDesc": "Base wait between retries, growing with backoff."
+    },
+    "proxy": {
+      "title": "Network proxy",
+      "desc": "Auto-follow system proxy (no manual config needed): overseas providers use the proxy, domestic domains connect directly. Applies immediately.",
+      "modes": {
+        "auto": "Auto",
+        "manual": "Manual",
+        "off": "Off"
+      },
+      "manualUrl": "Proxy URL",
+      "manualPlaceholder": "http://127.0.0.1:7897",
+      "status": "Current proxy",
+      "detected": "Detected: {url} ({source})",
+      "none": "No proxy detected, direct connection",
+      "source": {
+        "system": "System proxy",
+        "probe": "Local port probe",
+        "manual": "Manual",
+        "settings": "pi settings",
+        "off": "Off",
+        "none": "None"
+      },
+      "applied": "Proxy applied",
+      "applyFailed": "Apply failed"
     }
   },
   "notify": {

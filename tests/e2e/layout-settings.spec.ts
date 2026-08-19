@@ -5,6 +5,21 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
 
+/** 测试结束后 app 进程可能尚未释放 agentDir 里的文件，rm 需要重试避免 ENOTEMPTY/EBUSY 污染结果。 */
+async function rmAgentDir(agentDir: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await rm(agentDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 300 });
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 500));
+    }
+  }
+  if (lastError) throw lastError;
+}
+
 // 1x1 透明 PNG
 const TINY_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
@@ -120,7 +135,7 @@ test('Settings：语言切换为中文即时生效并持久化', async ({ launch
   await expect(page.getByTestId('settings-pi-status')).toContainText(/pi v0\.84/);
   await expect(page.locator('.sidebar-footer')).toHaveCount(0);
   await expect(page.getByTestId('settings-session-exports')).toBeVisible();
-  await rm(agentDir, { recursive: true, force: true });
+  await rmAgentDir(agentDir);
 });
 
 test('Settings：默认思考深度与自动重试写回 pi settings.json', async ({ launchElectronApp }) => {
@@ -149,7 +164,7 @@ test('Settings：默认思考深度与自动重试写回 pi settings.json', asyn
     expect(settings.retry?.enabled).toBe(false);
     expect(settings.retry?.maxRetries).toBe(5);
   }).toPass({ timeout: 10_000 });
-  await rm(agentDir, { recursive: true, force: true });
+  await rmAgentDir(agentDir);
 });
 
 test('图片输入：附件入列 → 随消息发送 → 用户消息渲染图片', async ({ launchElectronApp }) => {
@@ -194,7 +209,7 @@ test('图片输入：附件入列 → 随消息发送 → 用户消息渲染图�
   await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
     timeout: 30_000,
   });
-  await rm(agentDir, { recursive: true, force: true });
+  await rmAgentDir(agentDir);
 });
 
 test('混合附件：按上传顺序独立渲染，并向模型声明图片序号', async ({ launchElectronApp }) => {
@@ -247,5 +262,5 @@ test('混合附件：按上传顺序独立渲染，并向模型声明图片序�
   expect(viewport).not.toBeNull();
   expect(messageBox!.x + messageBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
   await page.screenshot({ path: 'output/playwright/ordered-attachments-narrow.png', fullPage: false });
-  await rm(agentDir, { recursive: true, force: true });
+  await rmAgentDir(agentDir);
 });
