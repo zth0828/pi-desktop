@@ -1,10 +1,13 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { _electron as electron, expect, test } from '@playwright/test';
 import { piTestEnv } from '../helpers/pi-prefix';
 
+const require = createRequire(__filename);
+const asarCli = path.join(path.dirname(require.resolve('@electron/asar')), '..', 'bin', 'asar.js');
 const packagedApp = process.env.PI_DESKTOP_PACKAGED_APP;
 const shouldRun = process.platform === 'darwin' && Boolean(packagedApp);
 
@@ -12,6 +15,17 @@ test.skip(!shouldRun, 'Set PI_DESKTOP_PACKAGED_APP to run the packaged macOS smo
 
 test('packaged app.asar starts and sends through pi with the local mock provider', async () => {
   const pi = piTestEnv();
+  const appBundle = packagedApp!;
+  const appExecutable = path.join(appBundle, 'Contents', 'MacOS', 'Pi Desktop');
+  const asarPath = path.join(appBundle, 'Contents', 'Resources', 'app.asar');
+  await access(asarPath);
+  await new Promise<void>((resolveAsar, rejectAsar) => {
+    execFile(process.execPath, [asarCli, 'list', asarPath], (error, stdout) => {
+      if (error || !stdout.split('\n').includes('/dist/index.html')) rejectAsar(error ?? new Error('app.asar is missing /dist/index.html'));
+      else resolveAsar();
+    });
+  });
+  await access(appExecutable);
   const home = await mkdtemp(path.join(tmpdir(), 'pi-desktop-packaged-home-'));
   const userData = path.join(home, 'user-data');
   const agentDir = path.join(home, 'pi-agent');
@@ -48,7 +62,7 @@ test('packaged app.asar starts and sends through pi with the local mock provider
     await writeFile(path.join(userData, 'config.json'), JSON.stringify({ workspaceCwd: workspace }));
 
     app = await electron.launch({
-      executablePath: packagedApp!,
+      executablePath: appExecutable,
       args: ['--lang=en-US', '--no-sandbox'],
       env: {
         ...process.env,

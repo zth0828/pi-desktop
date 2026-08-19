@@ -55,7 +55,11 @@ test.beforeAll(async () => {
   // history eligible for compaction without relying on tokenizer details.
   await writeFile(
     path.join(agentDir, 'settings.json'),
-    JSON.stringify({ compaction: { enabled: true, reserveTokens: 16_384, keepRecentTokens: 100 } }),
+    JSON.stringify({
+      compaction: { enabled: true, reserveTokens: 16_384, keepRecentTokens: 100 },
+      // 拉长重试 backoff，让「重试倒计时状态条」在断言窗口内稳定可见（仅 429 用例触发）
+      retry: { enabled: true, baseDelayMs: 8_000, maxRetries: 3 },
+    }),
   );
 });
 

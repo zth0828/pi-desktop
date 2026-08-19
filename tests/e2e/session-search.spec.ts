@@ -113,6 +113,29 @@ test('top controls stay stable and global search opens active or archived chats'
     initialPage: 'settings',
   });
   const page = await app.firstWindow();
+
+  // 搜索跳转的高亮是瞬态窗口（约 2.4s），而搜索导航/会话挂载可能耗时数秒，事后
+  // 轮询必然错过。提前挂 body 级 MutationObserver，记录 #chat-msg-16 整个生命周期的
+  // class 状态，再基于观察历史断言高亮确实发生过。
+  await page.evaluate(() => {
+    const g = globalThis as unknown as {
+      __classMutations__?: string[];
+      __mo__?: { disconnect: () => void };
+      document: { getElementById: (id: string) => { className: string } | null; body: { } };
+      MutationObserver: new (cb: () => void) => { observe: (target: { }, opts: object) => void; disconnect: () => void };
+    };
+    g.__classMutations__ = [];
+    const record = (el: { className: string } | null) => {
+      if (!el) return;
+      g.__classMutations__!.push(`${Date.now()} ${el.className}`);
+    };
+    const probe = () => record(g.document.getElementById('chat-msg-16'));
+    probe();
+    const mo = new g.MutationObserver(() => probe());
+    mo.observe(g.document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'id'] });
+    g.__mo__ = mo;
+  });
+
   await expect(page.getByTestId('nav-settings')).toHaveClass(/active/, { timeout: 30_000 });
 
   const isMac = process.platform === 'darwin';
@@ -151,7 +174,11 @@ test('top controls stay stable and global search opens active or archived chats'
   await expect(page.getByTestId('session-search-dialog')).toHaveCount(0);
   const matchedAssistant = page.locator('#chat-msg-16');
   await expect(matchedAssistant).toBeInViewport({ timeout: 15_000 });
-  await expect(matchedAssistant).toHaveClass(/search-target/);
+  // 高亮是瞬态：断言观察历史中出现过 search-target（在消息可见时应用）
+  await expect.poll(async () => {
+    const mutations = await page.evaluate(() => (globalThis as unknown as { __classMutations__?: string[] }).__classMutations__ ?? []);
+    return mutations.join(' | ');
+  }, { timeout: 15_000 }).toContain('search-target');
   await expect.poll(() => page.getByTestId('message-list').evaluate((element) => element.scrollTop)).toBeGreaterThan(100);
   await page.screenshot({ path: 'output/playwright/session-search-target.png', fullPage: false });
 
