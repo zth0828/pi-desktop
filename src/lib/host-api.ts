@@ -52,8 +52,8 @@ function createHostApi(sessionPath?: string) {
     abort: () => invoke('piRuntime', 'abort'),
     queueRemove: (kind: 'steering' | 'followUp', index: number) =>
       invoke('piRuntime', 'queueRemove', { kind, index }),
-    queueSteerNow: (kind: 'steering' | 'followUp', index: number) =>
-      invoke('piRuntime', 'queueSteerNow', { kind, index }),
+    queueMove: (kind: 'steering' | 'followUp', index: number, target: 'steering' | 'followUp') =>
+      invoke('piRuntime', 'queueMove', { kind, index, target }),
     newSession: () => invoke('piRuntime', 'newSession'),
     compact: (customInstructions?: string) =>
       invoke('piRuntime', 'compact', customInstructions ? { customInstructions } : undefined),

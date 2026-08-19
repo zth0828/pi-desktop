@@ -131,8 +131,8 @@ export type ChatState = {
   /** 移除一条排队消息（queue_update 事件负责刷新列表） */
   /** 从 pi 队列移除并返回编辑器；保留其他队列项及顺序。 */
   queueRemove: (kind: 'steering' | 'followUp', index: number) => Promise<void>;
-  /** 排队消息「立即发送」：移出队列后 steer（流式中）或直接 prompt（空闲时） */
-  queueSteerNow: (kind: 'steering' | 'followUp', index: number) => Promise<void>;
+  /** 在 pi 原生 steering/followUp 队列之间切换投递方式。 */
+  queueMove: (kind: 'steering' | 'followUp', index: number, target: 'steering' | 'followUp') => Promise<void>;
   newSession: () => Promise<void>;
   compact: () => Promise<void>;
   setTreeOpen: (open: boolean) => void;
@@ -382,8 +382,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         }
       },
 
-      queueSteerNow: async (kind, index) => {
-        const result = await api().piRuntime.queueSteerNow(kind, index);
+      queueMove: async (kind, index, target) => {
+        const result = await api().piRuntime.queueMove(kind, index, target);
         if (!result.success) set({ startError: result.error });
       },
 

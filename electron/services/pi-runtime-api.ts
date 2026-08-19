@@ -1073,17 +1073,17 @@ export const piRuntimeApi = {
     return removed ? { success: true, text: removed } : { success: false, error: 'queue index out of range' };
   },
 
-  queueSteerNow: async (payload: PiRuntimeQueueItemPayload, ctx?: HostActionContext) => {
+  queueMove: async (payload: PiRuntimeQueueItemPayload & { target: 'steering' | 'followUp' }, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
+    if (payload.kind === payload.target) return { success: true };
     const session = active.adapterRuntime.session;
     const text = await removeQueuedItem(session, payload);
     if (text == null) return { success: false, error: 'queue index out of range' };
     try {
-      // 立即发送：流式中 = steer（当前轮工具间隙插入），空闲 = 直接开新轮
-      if (session.isStreaming) await session.steer(text);
-      else await session.prompt({ text });
-      return { success: true };
+      if (payload.target === 'steering') await session.steer(text);
+      else await session.followUp(text);
+      return { success: true, text };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
     }

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, FileText, Folder, ListPlus, Paperclip, Plus, Square, Sparkles, Zap } from 'lucide-react';
+import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, FileText, Folder, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
   PiCommandRow,
@@ -491,6 +491,17 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   }, [atActive, cwd]);
   const fileMatches = atActive ? filterFiles(fileList, atToken.query) : [];
   const filePanelOpen = fileMatches.length > 0;
+
+  useEffect(() => {
+    const stopOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape' || !isStreaming) return;
+      if (panelOpen || filePanelOpen || composerMenuOpen || usageOpen || modelMenuOpen) return;
+      event.preventDefault();
+      void abort();
+    };
+    document.addEventListener('keydown', stopOnEscape);
+    return () => document.removeEventListener('keydown', stopOnEscape);
+  }, [abort, composerMenuOpen, filePanelOpen, isStreaming, modelMenuOpen, panelOpen, usageOpen]);
 
   useEffect(() => {
     setFileSelected(0);
@@ -1009,28 +1020,15 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
           </div>
           {isStreaming ? (
             <>
-              <div className="stream-send-actions" data-testid="stream-send-actions">
-                <button
-                  data-testid="chat-steer-send"
-                  className="send-button stream-steer"
-                  onClick={() => send('steer')}
-                  disabled={!value.trim() && attachments.length === 0}
-                  title={t('chat.queueSendTipSteer')}
-                >
-                  <Zap size={14} />
-                  <span>{t('chat.steerSend')}</span>
-                </button>
-                <button
-                  data-testid="chat-queue-send"
-                  className="send-button stream-followup"
-                  onClick={() => send('followUp')}
-                  disabled={!value.trim() && attachments.length === 0}
-                  title={t('chat.queueSendTip')}
-                >
-                  <ListPlus size={14} />
-                  <span>{t('chat.queueSend')}</span>
-                </button>
-              </div>
+              <button
+                data-testid="chat-queue-send"
+                className="send-button"
+                onClick={() => send('steer')}
+                disabled={!value.trim() && attachments.length === 0}
+                title={t('chat.queueSendTipSteer')}
+              >
+                <ArrowUp size={15} />
+              </button>
               <button
                 data-testid="chat-stop"
                 className="send-button stop"

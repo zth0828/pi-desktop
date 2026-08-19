@@ -1,5 +1,5 @@
 // 排队消息交互 E2E（真 pi + mock provider，不烧 API quota）。
-// 覆盖：流式中显式 followUp/steer、取回编辑、稍后消息改为当前轮引导。
+// 覆盖：流式中默认 steer、横栏切换 followUp、取回编辑、Escape 停止恢复。
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -69,7 +69,7 @@ async function waitSessionReady(page: import('@playwright/test').Page) {
   ).toBeVisible({ timeout: 30_000 });
 }
 
-/** SLOW 流式窗口（30 chunk × 100ms）内入队一条 followUp 消息 */
+/** SLOW 流式窗口（30 chunk × 100ms）内默认发送一条 steer 消息。 */
 async function startSlowAndQueue(page: import('@playwright/test').Page, text: string) {
   await page.getByTestId('chat-input').fill('SLOW stream please');
   await page.getByTestId('chat-send').click();
@@ -79,7 +79,7 @@ async function startSlowAndQueue(page: import('@playwright/test').Page, text: st
 
   await page.getByTestId('chat-input').fill(text);
   await page.getByTestId('chat-queue-send').click();
-  const item = page.getByTestId('queue-item-followUp');
+  const item = page.getByTestId('queue-item-steering');
   await expect(item).toBeVisible({ timeout: 30_000 });
   await expect(item).toContainText(text);
   return item;
@@ -92,13 +92,13 @@ test('稍后消息可取回输入框编辑后重新发送', async ({ launchElect
 
   const item = await startSlowAndQueue(page, 'queued first message');
 
-  await page.getByTestId('queue-remove-followUp-0').click();
+  await page.getByTestId('queue-remove-steering-0').click();
   await expect(item).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByTestId('queue-list')).toHaveCount(0);
   await expect(page.getByTestId('chat-input')).toHaveValue('queued first message');
 
   await page.getByTestId('chat-input').fill('edited queued message');
-  await page.getByTestId('chat-steer-send').click();
+  await page.getByTestId('chat-queue-send').click();
   const steering = page.getByTestId('queue-item-steering');
   await expect(steering).toContainText('edited queued message', { timeout: 30_000 });
 
@@ -110,29 +110,29 @@ test('停止当前运行会清空队列并将内容恢复到编辑器', async ({
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  await startSlowAndQueue(page, 'follow up after stop');
-  await page.getByTestId('chat-input').fill('guide before stop');
-  await page.getByTestId('chat-steer-send').click();
-  await expect(page.getByTestId('queue-item-steering')).toContainText('guide before stop');
+  await startSlowAndQueue(page, 'guide before stop');
+  await page.getByTestId('chat-input').fill('second guide');
+  await page.getByTestId('chat-queue-send').click();
+  await expect(page.getByTestId('queue-item-steering')).toHaveCount(2);
 
-  await page.getByTestId('chat-stop').click();
+  await page.keyboard.press('Escape');
   await expect(page.getByTestId('queue-list')).toHaveCount(0, { timeout: 30_000 });
-  await expect(page.getByTestId('chat-input')).toHaveValue('guide before stop\n\nfollow up after stop');
+  await expect(page.getByTestId('chat-input')).toHaveValue('guide before stop\n\nsecond guide');
 });
 
-test('队列项「立即发送」→ 移出 followUp 并 steer 插入当前轮', async ({ launchElectronApp }) => {
+test('已发送横栏可从引导回复切换为直接发送', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  const item = await startSlowAndQueue(page, 'steer this now');
+  const item = await startSlowAndQueue(page, 'send this after the task');
 
-  // 立即发送：从 followUp 队列移出，转为 steering（当前轮工具间隙插入）
-  await page.getByTestId('queue-steer-now-0').click();
+  // 默认是 steer；在已发送横栏中切换为 followUp。
+  await page.getByTestId('queue-mode-steering-0').click();
   await expect(item).toHaveCount(0, { timeout: 30_000 });
-  const steering = page.getByTestId('queue-item-steering');
-  await expect(steering).toBeVisible({ timeout: 30_000 });
-  await expect(steering).toContainText('steer this now');
+  const followUp = page.getByTestId('queue-item-followUp');
+  await expect(followUp).toBeVisible({ timeout: 30_000 });
+  await expect(followUp).toContainText('send this after the task');
 
   await page.getByTestId('chat-stop').click();
 });

@@ -1973,7 +1973,7 @@ button.danger-outline {
 .queue-item-actions { display: flex; flex: none; align-items: center; gap: 3px; }
 .queue-item-action { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 6px; background: transparent; font-size: 10.5px; color: var(--text-tertiary); cursor: pointer; }
 .queue-item-action:hover { background: var(--bg-hover); color: var(--text); }
-.queue-item-steer { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.queue-item-mode { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
 .queue-item-edit { color: var(--text-secondary); }
 
 /* compaction 摘要消息（compaction 后从 pi session 重读带回） */
@@ -2241,30 +2241,7 @@ button.danger-outline {
   background: var(--danger);
 }
 
-.stream-send-actions { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 
-.send-button[data-testid="chat-queue-send"],
-.send-button[data-testid="chat-steer-send"] {
-  width: auto;
-  min-width: 0;
-  max-width: 128px;
-  padding: 0 8px;
-  gap: 5px;
-  border-radius: 15px;
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.send-button.stream-steer { background: var(--accent); }
-.send-button.stream-followup { background: var(--bg-sunken); color: var(--text); border: 1px solid var(--border-strong); }
-
-.send-button[data-testid="chat-queue-send"] span,
-.send-button[data-testid="chat-steer-send"] span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 .send-button.stop { flex: none; }
 
@@ -2273,8 +2250,6 @@ button.danger-outline {
   .chat-input-toolbar { gap: 4px; }
   .workspace-chip span { max-width: 90px; }
   .model-menu-trigger { max-width: 130px; }
-  .send-button[data-testid="chat-queue-send"],
-  .send-button[data-testid="chat-steer-send"] { padding-inline: 6px; font-size: 10px; }
 }
 
 @container chat-column (max-width: 560px) {
@@ -2284,8 +2259,6 @@ button.danger-outline {
   .workspace-chip span { display: none; }
   .model-menu-trigger { max-width: 104px; padding-inline: 6px; }
   .usage-button { padding-inline: 6px; }
-  .send-button[data-testid="chat-queue-send"],
-  .send-button[data-testid="chat-steer-send"] { padding-inline: 6px; font-size: 10px; }
 }
 
 .turn-fold {
