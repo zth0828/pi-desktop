@@ -48,6 +48,28 @@ describe('pi-event-map（录制 fixture 回放，pi 0.83.x / 0.84.x）', () => {
   it('未知或非对象事件返回 null，不会抛出', () => {
     expect(mapPiSessionEvent(null)).toBeNull();
     expect(mapPiSessionEvent({ type: 'future_pi_event', payload: {} })).toBeNull();
+    expect(mapPiSessionEvent({ type: 42 })).toBeNull();
+  });
+
+  it('assistant error with empty content becomes a stable renderable text block', () => {
+    const mapped = mapPiSessionEvent({
+      type: 'message_end',
+      message: { role: 'assistant', content: [], errorMessage: 'provider failed', stopReason: 'error' },
+    });
+    expect(mapped).toMatchObject({
+      type: 'message.ended',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'provider failed' }], errorMessage: 'provider failed' },
+    });
+  });
+
+  it('malformed known events degrade without leaking raw messages', () => {
+    expect(mapPiSessionEvent({ type: 'message_end', message: { role: 'assistant', content: [{ type: 'unknown', value: 'x' }] } })).toMatchObject({
+      type: 'message.ended',
+      message: { role: 'assistant', content: [] },
+    });
+    expect(mapPiSessionEvent({ type: 'queue_update', steering: [1, 'ok'], followUp: null })).toEqual({
+      type: 'queue.updated', steering: ['ok'], followUp: [],
+    });
   });
 
   it('turn_start/turn_end/agent_settled 等不映射（返回 null）', () => {

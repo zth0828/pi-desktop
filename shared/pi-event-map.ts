@@ -1,8 +1,4 @@
-// pi 事件 → 壳事件契约的唯一映射点。
-// pi 事件结构变化只改这一个文件。字段形状示例见
-// tests/fixtures/pi-events/text-and-toolcall.json。
-import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
-
+// pi raw events are normalized here and nowhere else. Renderer receives only this contract.
 export type CompactionReason = 'manual' | 'threshold' | 'overflow';
 
 export type PiCompactionUsage = {
@@ -19,47 +15,39 @@ export type PiCompactionResult = {
   usage?: PiCompactionUsage;
 };
 
+export type PiDesktopMessageBlock =
+  | { type: 'text'; text: string }
+  | { type: 'thinking'; thinking: string }
+  | { type: 'image'; data?: string; mimeType?: string }
+  | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> };
+
+export type PiDesktopMessage = {
+  role: string;
+  content: PiDesktopMessageBlock[];
+  timestamp?: number;
+  provider?: string;
+  model?: string;
+  stopReason?: string;
+  errorMessage?: string;
+  usage?: unknown;
+};
+
 export type PiChatEvent =
   | { type: 'run.started' }
   | { type: 'run.ended'; willRetry?: boolean }
   | { type: 'message.started'; role: string }
-  /** 流式中的完整 partial AssistantMessage，渲染层替换式渲染（不做 delta 累加，避免漂移） */
-  | { type: 'assistant.partial'; message: unknown }
-  | { type: 'message.ended'; message: unknown }
+  | { type: 'assistant.partial'; message: PiDesktopMessage }
+  | { type: 'message.ended'; message: PiDesktopMessage }
   | { type: 'tool.execution.started'; toolCallId: string; toolName: string; args?: unknown }
   | { type: 'tool.execution.updated'; toolCallId: string; toolName: string; partialResult?: unknown }
-  | {
-      type: 'tool.execution.completed';
-      toolCallId: string;
-      toolName: string;
-      result?: unknown;
-      isError: boolean;
-    }
+  | { type: 'tool.execution.completed'; toolCallId: string; toolName: string; result?: unknown; isError: boolean }
   | { type: 'queue.updated'; steering: string[]; followUp: string[] }
   | { type: 'compaction.started'; reason: CompactionReason }
-  | {
-      type: 'compaction.ended';
-      reason: CompactionReason;
-      aborted?: boolean;
-      willRetry?: boolean;
-      message?: string;
-      result?: PiCompactionResult;
-    }
-  | {
-      type: 'retry.started';
-      attempt?: number;
-      maxAttempts?: number;
-      delayMs?: number;
-      message?: string;
-    }
-  | {
-      type: 'retry.ended';
-      success?: boolean;
-    }
-  /** `!` bash 执行的流式输出（executeBash onChunk → bash_execution_update） */
+  | { type: 'compaction.ended'; reason: CompactionReason; aborted?: boolean; willRetry?: boolean; message?: string; result?: PiCompactionResult }
+  | { type: 'retry.started'; attempt?: number; maxAttempts?: number; delayMs?: number; message?: string }
+  | { type: 'retry.ended'; success?: boolean }
   | { type: 'bash.execution.update'; delta: string };
 
-/** Main 侧桥接时套的信封：渲染层按 generation 丢弃过期会话的事件。 */
 export type PiRuntimeEventEnvelope = {
   sessionId: string;
   generation: number;
@@ -67,94 +55,92 @@ export type PiRuntimeEventEnvelope = {
   event: PiChatEvent;
 };
 
-/** pi AgentSessionEvent → 壳契约。不关心的生命周期事件（turn_* 等）返回 null。 */
-export function mapPiSessionEvent(value: unknown): PiChatEvent | null {
-  if (!value || typeof value !== 'object' || typeof (value as { type?: unknown }).type !== 'string') {
-    return null;
-  }
-  const event = value as AgentSessionEvent;
-  switch (event.type) {
-    case 'agent_start':
-      return { type: 'run.started' };
-    case 'agent_end':
-      return { type: 'run.ended', willRetry: event.willRetry };
-    case 'message_start':
-      return { type: 'message.started', role: event.message.role };
-    case 'message_update': {
-      // pi keeps the canonical partial assistant message on assistantMessageEvent.partial.
-      // Older/custom providers may emit an update without that payload; ignore the malformed
-      // update and wait for the next complete event instead of breaking the session event bridge.
-      const partial = (event.assistantMessageEvent as { partial?: unknown } | undefined)?.partial;
-      return partial === undefined ? null : { type: 'assistant.partial', message: partial };
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function normalizeMessage(value: unknown): PiDesktopMessage | null {
+  const source = record(value);
+  if (!source || typeof source.role !== 'string') return null;
+  const blocks: PiDesktopMessageBlock[] = [];
+  const content = source.content;
+  if (typeof content === 'string') blocks.push({ type: 'text', text: content });
+  if (Array.isArray(content)) {
+    for (const raw of content) {
+      const block = record(raw);
+      if (!block || typeof block.type !== 'string') continue;
+      if (block.type === 'text' && typeof block.text === 'string') blocks.push({ type: 'text', text: block.text });
+      else if (block.type === 'thinking' && typeof block.thinking === 'string') blocks.push({ type: 'thinking', thinking: block.thinking });
+      else if (block.type === 'image') blocks.push({ type: 'image', data: typeof block.data === 'string' ? block.data : undefined, mimeType: typeof block.mimeType === 'string' ? block.mimeType : undefined });
+      else if (block.type === 'toolCall' && typeof block.id === 'string' && typeof block.name === 'string') {
+        blocks.push({ type: 'toolCall', id: block.id, name: block.name, arguments: record(block.arguments) ?? {} });
+      }
     }
-    case 'message_end':
-      return { type: 'message.ended', message: event.message };
+  }
+  const errorMessage = typeof source.errorMessage === 'string' ? source.errorMessage : undefined;
+  if (blocks.length === 0 && errorMessage) blocks.push({ type: 'text', text: errorMessage });
+  return {
+    role: source.role,
+    content: blocks,
+    timestamp: typeof source.timestamp === 'number' ? source.timestamp : undefined,
+    provider: typeof source.provider === 'string' ? source.provider : undefined,
+    model: typeof source.model === 'string' ? source.model : undefined,
+    stopReason: typeof source.stopReason === 'string' ? source.stopReason : undefined,
+    errorMessage,
+    usage: source.usage,
+  };
+}
+
+export function mapPiSessionEvent(value: unknown): PiChatEvent | null {
+  const event = record(value);
+  if (!event || typeof event.type !== 'string') return null;
+  switch (event.type) {
+    case 'agent_start': return { type: 'run.started' };
+    case 'agent_end': return { type: 'run.ended', willRetry: typeof event.willRetry === 'boolean' ? event.willRetry : undefined };
+    case 'message_start': {
+      const message = record(event.message);
+      return typeof message?.role === 'string' ? { type: 'message.started', role: message.role } : null;
+    }
+    case 'message_update': {
+      const update = record(event.assistantMessageEvent);
+      const partial = normalizeMessage(update?.partial);
+      return partial ? { type: 'assistant.partial', message: partial } : null;
+    }
+    case 'message_end': {
+      const message = normalizeMessage(event.message);
+      return message ? { type: 'message.ended', message } : null;
+    }
     case 'tool_execution_start':
-      return {
-        type: 'tool.execution.started',
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        args: event.args,
-      };
+      return typeof event.toolCallId === 'string' && typeof event.toolName === 'string'
+        ? { type: 'tool.execution.started', toolCallId: event.toolCallId, toolName: event.toolName, args: event.args }
+        : null;
     case 'tool_execution_update':
-      return {
-        type: 'tool.execution.updated',
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        partialResult: event.partialResult,
-      };
+      return typeof event.toolCallId === 'string' && typeof event.toolName === 'string'
+        ? { type: 'tool.execution.updated', toolCallId: event.toolCallId, toolName: event.toolName, partialResult: event.partialResult }
+        : null;
     case 'tool_execution_end':
-      return {
-        type: 'tool.execution.completed',
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        result: event.result,
-        isError: event.isError,
-      };
+      return typeof event.toolCallId === 'string' && typeof event.toolName === 'string'
+        ? { type: 'tool.execution.completed', toolCallId: event.toolCallId, toolName: event.toolName, result: event.result, isError: event.isError === true }
+        : null;
     case 'queue_update':
-      return {
-        type: 'queue.updated',
-        steering: Array.isArray(event.steering) ? [...event.steering] : [],
-        followUp: Array.isArray(event.followUp) ? [...event.followUp] : [],
-      };
+      return { type: 'queue.updated', steering: Array.isArray(event.steering) ? event.steering.filter((x): x is string => typeof x === 'string') : [], followUp: Array.isArray(event.followUp) ? event.followUp.filter((x): x is string => typeof x === 'string') : [] };
     case 'compaction_start':
-      return { type: 'compaction.started', reason: event.reason };
+      return event.reason === 'manual' || event.reason === 'threshold' || event.reason === 'overflow' ? { type: 'compaction.started', reason: event.reason } : null;
     case 'compaction_end': {
-      const result = event.result;
+      const result = record(event.result);
+      const usage = record(result?.usage);
       return {
         type: 'compaction.ended',
-        reason: event.reason,
-        aborted: event.aborted,
-        willRetry: event.willRetry,
-        message: event.errorMessage,
-        ...(result ? {
-          result: {
-            tokensBefore: result.tokensBefore,
-            estimatedTokensAfter: result.estimatedTokensAfter,
-            usage: result.usage ? {
-              input: result.usage.input,
-              output: result.usage.output,
-              cacheRead: result.usage.cacheRead,
-              cacheWrite: result.usage.cacheWrite,
-              cost: result.usage.cost?.total ?? 0,
-            } : undefined,
-          },
-        } : {}),
+        reason: event.reason === 'manual' || event.reason === 'threshold' || event.reason === 'overflow' ? event.reason : 'manual',
+        aborted: typeof event.aborted === 'boolean' ? event.aborted : undefined,
+        willRetry: typeof event.willRetry === 'boolean' ? event.willRetry : undefined,
+        message: typeof event.errorMessage === 'string' ? event.errorMessage : undefined,
+        ...(result && typeof result.tokensBefore === 'number' ? { result: { tokensBefore: result.tokensBefore, estimatedTokensAfter: typeof result.estimatedTokensAfter === 'number' ? result.estimatedTokensAfter : undefined, usage: usage && typeof usage.input === 'number' ? { input: usage.input, output: Number(usage.output ?? 0), cacheRead: Number(usage.cacheRead ?? 0), cacheWrite: Number(usage.cacheWrite ?? 0), cost: Number(record(usage.cost)?.total ?? 0) } : undefined } } : {}),
       };
     }
-    case 'auto_retry_start':
-      return {
-        type: 'retry.started',
-        attempt: event.attempt,
-        maxAttempts: event.maxAttempts,
-        delayMs: event.delayMs,
-        message: event.errorMessage,
-      };
-    case 'auto_retry_end':
-      return { type: 'retry.ended', success: event.success };
-    case 'bash_execution_update':
-      return { type: 'bash.execution.update', delta: event.delta };
-    default:
-      return null;
+    case 'auto_retry_start': return { type: 'retry.started', attempt: typeof event.attempt === 'number' ? event.attempt : undefined, maxAttempts: typeof event.maxAttempts === 'number' ? event.maxAttempts : undefined, delayMs: typeof event.delayMs === 'number' ? event.delayMs : undefined, message: typeof event.errorMessage === 'string' ? event.errorMessage : undefined };
+    case 'auto_retry_end': return { type: 'retry.ended', success: typeof event.success === 'boolean' ? event.success : undefined };
+    case 'bash_execution_update': return typeof event.delta === 'string' ? { type: 'bash.execution.update', delta: event.delta } : null;
+    default: return null;
   }
 }
