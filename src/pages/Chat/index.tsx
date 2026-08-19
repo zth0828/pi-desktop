@@ -154,6 +154,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const turnStats = usePaneChatStore((s) => s.turnStats);
   const sessionId = usePaneChatStore((s) => s.sessionId);
   const workspaceVisible = usePaneChatStore((s) => s.workspaceOpen || s.reviewOpen);
+  const transcriptSyncing = usePaneChatStore((s) => s.transcriptSyncing);
   const start = usePaneChatStore((s) => s.start);
   const switchSession = usePaneChatStore((s) => s.switchSession);
   // 独立会话窗口的 attach 目标由 PaneLayout 顶层读取一次后通过 prop 传入（
@@ -626,7 +627,9 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               />
             )}
           </div>
-          <MessageNavRail anchors={railAnchors} compactionAnchors={compactionAnchors} listRef={listRef} />
+          {!transcriptSyncing && (
+            <MessageNavRail anchors={railAnchors} compactionAnchors={compactionAnchors} listRef={listRef} />
+          )}
           {showScrollToBottom && (
             <button
               className="scroll-to-bottom"

@@ -115,6 +115,10 @@ export type ChatState = {
   uiRequests: PiUiRequestPayload[];
   /** pi 扩展可序列化 UI 快照（状态、working 文案、文本 widget）。 */
   extensionUi?: PiExtensionUiState;
+  /** 压缩完成后等待 pi 重建完整分支快照；期间禁止用旧历史驱动导航。 */
+  transcriptSyncing: boolean;
+  /** runtime 最近一次报告的上下文用量，供压缩后的 token UI 立即过渡。 */
+  contextUsage: PiRuntimeStateResult['contextUsage'] | null;
 
   start: (cwd: string) => Promise<void>;
   /** 切换本面板绑定的会话：main 侧同步改绑，成功后按本面板上下文重取全量状态 */
@@ -279,6 +283,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       inputDraft: null,
       uiRequests: [],
       extensionUi: undefined,
+      transcriptSyncing: false,
+      contextUsage: null,
 
       start: async (cwd) => {
         const current = get();
@@ -464,6 +470,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           branchSummarySkipPrompt: state.branchSummarySkipPrompt ?? false,
           uiRequests: state.pendingUiRequests ?? [],
           extensionUi: state.extensionUi,
+          contextUsage: state.contextUsage ?? null,
+          transcriptSyncing: false,
         });
       },
 
@@ -502,7 +510,10 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
 
       refreshMessages: async () => {
         const state = await api().piRuntime.getState().catch(() => null);
-        if (!state || state.generation !== get().generation) return; // 会话已替换，丢弃
+        if (!state || state.generation !== get().generation) {
+          set({ transcriptSyncing: false });
+          return; // 会话已替换，丢弃
+        }
         if (state.sessionFile && state.sessionFile !== get().boundSessionPath) {
           set({ boundSessionPath: state.sessionFile });
         }
@@ -518,6 +529,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           messages,
           historyMessages,
           toolExecutions: rebuildToolExecutionsFromMessages(historyMessages),
+          contextUsage: state.contextUsage ?? null,
+          transcriptSyncing: false,
         });
       },
 
@@ -657,10 +670,17 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             set({ compaction: { reason: event.reason }, lastCompaction: null });
             break;
           case 'compaction.ended': {
-            set({ compaction: null, lastCompaction: event.result ?? null });
-            // compaction 重建了 pi 侧上下文（summary + 保留尾部），本地事件累积的
-            // 消息列表已不一致；非 abort 时从 runtime 重读（对齐 TUI 重建消息列表）。
-            if (!event.aborted) void get().refreshMessages();
+            if (event.aborted) {
+              set({ compaction: null, transcriptSyncing: false, lastCompaction: null });
+              break;
+            }
+            // compaction_end 只表示 pi 完成摘要请求；完整分支和新上下文
+            // 仍需从 runtime 读取。保持 compaction 状态直到快照替换完成，
+            // 防止旧 historyMessages 驱动导航和折叠布局。
+            set({ transcriptSyncing: true, lastCompaction: event.result ?? null });
+            void get().refreshMessages().then(() => {
+              set({ compaction: null, transcriptSyncing: false });
+            });
             break;
           }
           default:

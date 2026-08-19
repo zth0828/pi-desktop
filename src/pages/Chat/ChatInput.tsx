@@ -130,6 +130,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const paneApi = usePaneHostApi();
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
   const compacting = usePaneChatStore((s) => s.compaction !== null);
+  const transcriptSyncing = usePaneChatStore((s) => s.transcriptSyncing);
+  const runtimeContextUsage = usePaneChatStore((s) => s.contextUsage);
   const retrying = usePaneChatStore((s) => s.retry !== null);
   const bashing = usePaneChatStore((s) => s.bashDraft !== null);
   const started = usePaneChatStore((s) => s.started);
@@ -252,12 +254,17 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       void hostApi.providers.listModels().then((r) => { if (!disposed) setModels(r.models); }).catch(() => {});
       void paneApi.piSkills.list().then((r) => { if (!disposed) setSkills(r.skills); }).catch(() => {});
       const refreshUsage = () => {
+        if (chatStore.getState().compaction || chatStore.getState().transcriptSyncing) return;
         void paneApi.piRuntime.getUsage()
-          .then((next) => { if (!disposed) setUsage(next); })
+          .then((next) => {
+            if (!disposed && !chatStore.getState().compaction && !chatStore.getState().transcriptSyncing) setUsage(next);
+          })
           .catch(() => { if (!disposed) setUsage(null); });
       };
-      refreshUsage();
-      const timer = window.setInterval(refreshUsage, isStreaming || compacting ? 400 : 1000);
+      // 压缩或快照重建期间，旧 token/context 数值已经失效，先清空旧快照。
+      if (compacting || transcriptSyncing) setUsage(null);
+      else refreshUsage();
+      const timer = window.setInterval(refreshUsage, isStreaming || compacting || transcriptSyncing ? 400 : 1000);
       return () => {
         disposed = true;
         window.clearInterval(timer);
@@ -265,7 +272,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     }
     setUsage(null);
     return () => { disposed = true; };
-  }, [started, sessionId, generation, paneApi, isStreaming, compacting]);
+  }, [started, sessionId, generation, paneApi, isStreaming, compacting, transcriptSyncing]);
 
   useEffect(() => {
     void hostApi.settings
@@ -286,7 +293,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     textareaRef.current?.focus();
   }, [inputDraft, clearInputDraft]);
 
-  const contextUsage = usage?.context ?? null;
+  const contextUsage = usage?.context ?? runtimeContextUsage ?? null;
   const usageTotals = usage?.session ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
   const totalHitRate = cacheHitRate(usageTotals);
   const lastTurnHitRate = usage?.latestTurn ? cacheHitRate(usage.latestTurn) : null;
