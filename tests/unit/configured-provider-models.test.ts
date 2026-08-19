@@ -76,6 +76,59 @@ describe('configured provider model discovery', () => {
       .toEqual(expect.objectContaining({ id: 'sibling', reasoning: false }));
   });
 
+  it('falls back to /v1/models for openai servers whose baseUrl lacks /v1 (vLLM style)', async () => {
+    const agentDir = await mkdtemp(path.join(tmpdir(), 'pi-provider-discovery-v1-'));
+    tempDirs.push(agentDir);
+    const modelsPath = path.join(agentDir, 'models.json');
+    await writeFile(modelsPath, JSON.stringify({
+      providers: {
+        vllm: {
+          baseUrl: 'http://127.0.0.1:8000',
+          api: 'openai-completions',
+          models: [],
+        },
+      },
+    }));
+    const requested: string[] = [];
+    const result = await syncConfiguredProviderModels({
+      agentDir,
+      providerId: 'vllm',
+      api: 'openai-completions',
+      auth: { apiKey: 'dummy' },
+      fetchImpl: async (input) => {
+        requested.push(String(input));
+        if (String(input) === 'http://127.0.0.1:8000/models') {
+          return new Response(JSON.stringify({ error: { message: 'Not Found' } }), { status: 404 });
+        }
+        return new Response(JSON.stringify({ data: [{ id: 'Qwen/Qwen3-8B' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    });
+    expect(requested).toEqual([
+      'http://127.0.0.1:8000/models',
+      'http://127.0.0.1:8000/v1/models',
+    ]);
+    expect(result).toMatchObject({ discovered: 1, added: 1, changed: true });
+  });
+
+  it('throws the last candidate error when every directory candidate fails', async () => {
+    const agentDir = await mkdtemp(path.join(tmpdir(), 'pi-provider-discovery-err-'));
+    tempDirs.push(agentDir);
+    const modelsPath = path.join(agentDir, 'models.json');
+    await writeFile(modelsPath, JSON.stringify({
+      providers: { down: { baseUrl: 'http://127.0.0.1:8000', api: 'openai-completions', models: [] } },
+    }));
+    await expect(syncConfiguredProviderModels({
+      agentDir,
+      providerId: 'down',
+      api: 'openai-completions',
+      auth: { apiKey: 'dummy' },
+      fetchImpl: async () => new Response('{}', { status: 403 }),
+    })).rejects.toThrow(/HTTP 403/);
+  });
+
   it('requests /models with resolved auth and writes discovered ids to models.json', async () => {
     const agentDir = await mkdtemp(path.join(tmpdir(), 'pi-provider-discovery-'));
     tempDirs.push(agentDir);

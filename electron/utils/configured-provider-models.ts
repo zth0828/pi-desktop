@@ -47,10 +47,18 @@ function setHeader(headers: Record<string, string>, name: string, value: string)
   headers[name] = value;
 }
 
-function directoryUrl(baseUrl: string, api: string): string {
+function directoryUrlCandidates(baseUrl: string, api: string): string[] {
   const base = baseUrl.replace(/\/+$/, '');
-  if (api === 'anthropic-messages' && !/\/v1$/i.test(base)) return `${base}/v1/models`;
-  return `${base}/models`;
+  if (api === 'anthropic-messages') {
+    // Anthropic SDK 自动补 /v1/messages；目录同样要落在 /v1/models。
+    return [/\/v1$/i.test(base) ? `${base}/models` : `${base}/v1/models`];
+  }
+  if (api === 'google-generative-ai') return [`${base}/models`];
+  // openai-completions / openai-responses：客户端把 baseUrl 原样拼接上 /chat/completions
+  //（或 /responses），vLLM 这类服务器只暴露 /v1 前缀下的路由。无 /v1 时先试根路径
+  // 再试 /v1，与 GUI probe 的候选路径一致，避免目录探测漏掉 /v1/models。
+  const roots = /\/v1$/i.test(base) ? [base] : [base, `${base}/v1`];
+  return roots.map((root) => `${root}/models`);
 }
 
 function directoryHeaders(api: string, auth: ProviderDirectoryAuth): Record<string, string> {
@@ -162,11 +170,24 @@ export async function syncConfiguredProviderModels(options: {
   const provider = record(providers?.[options.providerId]);
   if (!provider || typeof provider.baseUrl !== 'string') return null;
   const baseUrl = options.auth.baseUrl ?? provider.baseUrl;
-  const response = await (options.fetchImpl ?? fetch)(directoryUrl(baseUrl, options.api), {
-    headers: directoryHeaders(options.api, options.auth),
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!response.ok) throw new Error(`model directory returned HTTP ${response.status}`);
+  let lastError: Error | undefined;
+  let response: Response | null = null;
+  for (const url of directoryUrlCandidates(baseUrl, options.api)) {
+    try {
+      const candidate = await (options.fetchImpl ?? fetch)(url, {
+        headers: directoryHeaders(options.api, options.auth),
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (candidate.ok) {
+        response = candidate;
+        break;
+      }
+      lastError = new Error(`model directory returned HTTP ${candidate.status} (${url})`);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+  if (!response) throw lastError ?? new Error('model directory unreachable');
   const detected = parseProviderModelDirectory(await response.json(), options.api);
   if (detected.length === 0) {
     return { providerId: options.providerId, discovered: 0, added: 0, changed: false };
