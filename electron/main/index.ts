@@ -7,6 +7,7 @@ import { disposeAllRuntimes, hasStreamingRuntimes } from '../services/pi-runtime
 import { DEV_RESTART_READY, DEV_RESTART_REQUEST } from '@shared/dev-reload';
 import { resolveAppIconPath } from '../utils/app-icon';
 import { safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
+import { scheduleVersionChecks } from '../services/version-check-api';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
@@ -69,6 +70,7 @@ app.whenReady().then(() => {
     }));
   }
   createMainWindow();
+  scheduleVersionChecks();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

@@ -17,3 +17,7 @@ export function isPiVersionTested(version: string): boolean {
 export const MIN_NODE_VERSION = '22.19.0';
 export const PI_NPM_REGISTRY_URL =
   'https://registry.npmjs.org/@earendil-works%2Fpi-coding-agent/latest';
+
+export function getPiRegistryUrl(): string {
+  return process.env.PI_DESKTOP_PI_REGISTRY_URL ?? PI_NPM_REGISTRY_URL;
+}

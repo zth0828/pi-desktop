@@ -1,10 +1,7 @@
 // piSystem 服务：环境检测（带缓存）、最新版本查询、安装引导。
 // 初次安装跟随 npm latest；fallback 只用于兼容失败后的恢复，不限制运行时最高版本。
 import { spawn } from 'node:child_process';
-import {
-  PI_NPM_REGISTRY_URL,
-  PI_PACKAGE_NAME,
-} from '@shared/pi-compat';
+import { PI_PACKAGE_NAME, getPiRegistryUrl } from '@shared/pi-compat';
 import type {
   PiEnvironment,
   PiInstallResult,
@@ -42,7 +39,7 @@ export const piSystemApi = {
   checkLatest: async (): Promise<PiLatestVersionResult> => {
     const checkedAt = Date.now();
     try {
-      const res = await fetch(PI_NPM_REGISTRY_URL, {
+      const res = await fetch(getPiRegistryUrl(), {
         signal: AbortSignal.timeout(5000),
         headers: { accept: 'application/json' },
       });

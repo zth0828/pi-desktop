@@ -130,6 +130,37 @@ export type PiLatestVersionResult = {
   checkedAt: number;
 };
 
+export type VersionCheckStatus = {
+  current?: string;
+  latest?: string;
+  updateAvailable: boolean;
+  lastAttemptAt?: number;
+  lastSuccessAt?: number;
+  error?: string;
+};
+
+export type VersionCheckSnapshot = {
+  pi: VersionCheckStatus;
+  app: VersionCheckStatus & {
+    releaseUrl?: string;
+    assetName?: string;
+    downloadedPath?: string;
+  };
+};
+
+export type AppUpdateDownloadResult = HostSuccess & {
+  path?: string;
+  assetName?: string;
+};
+
+export type AppUpdateProgressEvent = {
+  phase: 'started' | 'progress' | 'completed' | 'failed';
+  downloadedBytes?: number;
+  totalBytes?: number;
+  path?: string;
+  error?: string;
+};
+
 export type PiInstallResult = HostSuccess & {
   version?: string;
 };
@@ -455,10 +486,21 @@ export type SettingsSnapshot = {
   httpProxyMode?: ProxyMode;
   /** Pi Desktop 使用的代理 URL；缺省为 DEFAULT_DESKTOP_PROXY_URL。 */
   httpProxyUrl?: string;
+  piVersionCheckLastAttemptAt?: number;
+  piVersionCheckLastSuccessAt?: number;
+  piVersionCheckLatest?: string;
+  piVersionCheckError?: string;
+  appVersionCheckLastAttemptAt?: number;
+  appVersionCheckLastSuccessAt?: number;
+  appVersionCheckLatest?: string;
+  appVersionCheckError?: string;
+  appVersionCheckReleaseUrl?: string;
+  appVersionCheckAssetName?: string;
+  appVersionCheckDownloadedPath?: string;
 };
 
 export type SettingsGetPayload = { key: keyof SettingsSnapshot };
-export type SettingsSetPayload = { key: keyof SettingsSnapshot; value: string | boolean | undefined };
+export type SettingsSetPayload = { key: keyof SettingsSnapshot; value: string | number | boolean | undefined };
 
 // —— piTrust：项目信任（pi ProjectTrustStore；判定逻辑全在 pi 侧）——
 
@@ -883,7 +925,7 @@ export type HostApiContract = {
   piSystem: {
     /** 完整环境检测（Node/npm/pi + SDK 能力兼容报告）。带短 TTL 缓存；force 绕过。 */
     detect: (payload?: { force?: boolean }) => PiEnvironment;
-    /** 查询 npm registry 上 pi 最新版本；失败静默（latest 缺省）。 */
+    /** 保留为底层无状态查询；版本检查调度由 versionCheck 负责。 */
     checkLatest: () => PiLatestVersionResult;
     /**
      * 安装/升级到 npm latest 版 pi。执行的命令有且仅有
@@ -891,6 +933,15 @@ export type HostApiContract = {
      * 进度经 piSystem.installProgress 事件流式推送。
      */
     install: () => PiInstallResult;
+  };
+  versionCheck: {
+    check: (payload?: { force?: boolean }) => VersionCheckSnapshot;
+    getStatus: () => VersionCheckSnapshot;
+  };
+  appUpdate: {
+    download: () => AppUpdateDownloadResult;
+    openDownloaded: () => HostSuccess;
+    showDownloaded: () => HostSuccess;
   };
   piRuntime: {
     /** 启动（或复用）指定 cwd 的会话运行时；更换 cwd 会重建。 */
@@ -987,7 +1038,7 @@ export type HostApiContract = {
   };
   settings: {
     getAll: () => SettingsSnapshot;
-    get: (payload: SettingsGetPayload) => string | boolean | undefined;
+    get: (payload: SettingsGetPayload) => string | number | boolean | undefined;
     set: (payload: SettingsSetPayload) => HostSuccess;
   };
   proxy: {

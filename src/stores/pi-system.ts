@@ -58,12 +58,6 @@ export const usePiSystemStore = create<PiSystemState>((set, get) => ({
       const env = await hostApi.piSystem.detect(force);
       saveCachedEnvironment(env);
       set({ env, state: computeOnboardingState(env), checking: false });
-      // 不阻断的最新版本提示（失败静默）
-      if (env.pi.found) {
-        void hostApi.piSystem.checkLatest().then(({ latest }) => {
-          if (latest) set({ latestVersion: latest });
-        });
-      }
     } catch {
       set({ checking: false });
     }
