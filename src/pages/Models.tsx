@@ -1,18 +1,38 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RefreshCw } from 'lucide-react';
-import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
+import { Radar, RefreshCw } from 'lucide-react';
+import { matchModelProfile } from '@shared/model-profiles';
 import type { PiDefaultModel, PiModelRow, PiProviderProbeResult, PiProviderRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { getActiveChatStore } from '../stores/chat-registry';
 
 const CUSTOM_API_TYPES = [
-  'openai-completions',
   'openai-responses',
+  'openai-completions',
   'anthropic-messages',
   'google-generative-ai',
 ] as const;
+
+const API_REQUEST_SUFFIX: Record<(typeof CUSTOM_API_TYPES)[number], string> = {
+  'openai-completions': '/chat/completions',
+  'openai-responses': '/responses',
+  'anthropic-messages': '/v1/messages',
+  'google-generative-ai': '/models/{model}:generateContent',
+};
+
+function requestUrlForApi(baseUrl: string, api: string): string | undefined {
+  if (!Object.hasOwn(API_REQUEST_SUFFIX, api)) return undefined;
+  const normalizedBase = api === 'anthropic-messages'
+    ? baseUrl.replace(/\/+$/, '').replace(/\/v1$/i, '')
+    : baseUrl.replace(/\/+$/, '');
+  return `${normalizedBase}${API_REQUEST_SUFFIX[api as keyof typeof API_REQUEST_SUFFIX]}`;
+}
+
+function requestUrlForProvider(baseUrl: string, models: PiModelRow[]): string | undefined {
+  const apiTypes = [...new Set(models.map((model) => model.api))];
+  return apiTypes.length === 1 ? requestUrlForApi(baseUrl, apiTypes[0]) : undefined;
+}
 
 type ProviderRowProps = {
   provider: PiProviderRow;
@@ -160,6 +180,18 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
       </button>
       {expanded && (
         <div className="provider-row-body">
+          {provider.baseUrl && (
+            <div className="provider-endpoints">
+              <div className="provider-base-url" data-testid={`provider-base-url-${provider.id}`}>
+                {provider.baseUrl}
+              </div>
+              {requestUrlForProvider(provider.baseUrl, models) && (
+                <div className="provider-request-url" data-testid={`provider-request-url-${provider.id}`}>
+                  {t('models.actualRequest', { url: requestUrlForProvider(provider.baseUrl, models) })}
+                </div>
+              )}
+            </div>
+          )}
           {provider.authMethods.includes('api_key') && (
             <div className="key-form">
               <input
@@ -280,16 +312,25 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const [id, setId] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
-  const [api, setApi] = useState<string>(CUSTOM_API_TYPES[0]);
+  const [api, setApi] = useState<string>('openai-responses');
   const [apiKey, setApiKey] = useState('');
   const [modelIds, setModelIds] = useState('');
-  const [contextWindow, setContextWindow] = useState(String(DEFAULT_CONTEXT_WINDOW));
-  const [maxTokens, setMaxTokens] = useState('16384');
-  const [contextSource, setContextSource] = useState<'detected' | 'default' | 'manual'>('default');
-  const [useDefaultContext, setUseDefaultContext] = useState(true);
   const [message, setMessage] = useState<string>();
   const [probing, setProbing] = useState(false);
   const [probeResult, setProbeResult] = useState<PiProviderProbeResult>();
+
+  const resetProbe = () => {
+    setProbeResult(undefined);
+    setModelIds('');
+  };
+
+  const selectApi = (nextApi: string) => {
+    if (nextApi === api) return;
+    if (!window.confirm(t('models.switchApiConfirm', { api: nextApi }))) return;
+    setApi(nextApi);
+    const protocol = probeResult?.protocols.find((candidate) => candidate.api === nextApi);
+    if (protocol?.resolvedBaseUrl) setBaseUrl(protocol.resolvedBaseUrl);
+  };
 
   const probe = async () => {
     setProbing(true);
@@ -298,18 +339,7 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       const result = await hostApi.providers.probe({ baseUrl: baseUrl.trim(), apiKey: apiKey.trim() || undefined, model: modelIds.split(',')[0]?.trim() || undefined });
       setProbeResult(result);
       if (result.models.length > 0) setModelIds(result.models.join(', '));
-      const requestedModel = modelIds.split(',')[0]?.trim() || result.models[0];
-      const detectedContext = result.modelDetails?.find((model) => model.id === requestedModel)?.contextWindow;
-      if (detectedContext) {
-        setContextWindow(String(detectedContext));
-        setContextSource('detected');
-        setUseDefaultContext(false);
-      } else {
-        setContextWindow(String(DEFAULT_CONTEXT_WINDOW));
-        setContextSource('default');
-        setUseDefaultContext(true);
-      }
-      if (result.recommendedApi) setApi(result.recommendedApi);
+      setApi(result.recommendedApi ?? 'openai-responses');
       if (result.recommendedBaseUrl) setBaseUrl(result.recommendedBaseUrl);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -324,20 +354,19 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
         .filter((model) => model.contextWindow && model.contextWindow > 0)
         .map((model) => [model.id, model.contextWindow as number]),
     );
-    // 探测对首个模型返回了上下文时，其余未返回的模型仍应回落到 256K 默认，
-    // 而不是继承首个模型的值；仅当用户手动填写时才以手填值作为兜底。
-    const fallbackContext = contextSource === 'manual' && Number(contextWindow) > 0
-      ? Number(contextWindow)
-      : DEFAULT_CONTEXT_WINDOW;
     const models = modelIds
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
-      .map((mid) => ({
-        id: mid,
-        contextWindow: useDefaultContext ? DEFAULT_CONTEXT_WINDOW : detectedContexts.get(mid) ?? fallbackContext,
-        ...(Number(maxTokens) > 0 ? { maxTokens: Number(maxTokens) } : {}),
-      }));
+      .map((mid) => {
+        // 上下文与最大输出自动管理：探测值优先，探测不到用前缀规格表。
+        const profile = matchModelProfile(mid);
+        return {
+          id: mid,
+          contextWindow: detectedContexts.get(mid) ?? profile.contextWindow,
+          ...(profile.maxTokens ? { maxTokens: profile.maxTokens } : {}),
+        };
+      });
     const result = await hostApi.providers.addCustom({
       id: id.trim(),
       baseUrl: baseUrl.trim(),
@@ -367,77 +396,106 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       <input
         placeholder={t('models.customBaseUrl')}
         value={baseUrl}
-        onChange={(e) => setBaseUrl(e.target.value)}
+        onChange={(e) => {
+          setBaseUrl(e.target.value);
+          resetProbe();
+        }}
       />
-      <select
-        aria-label={t('models.customApi')}
-        data-testid="custom-api-select"
-        value={api}
-        onChange={(e) => setApi(e.target.value)}
-      >
-        {CUSTOM_API_TYPES.map((apiType) => (
-          <option key={apiType} value={apiType}>
-            {apiType}
-          </option>
-        ))}
-      </select>
       <input
         placeholder={t('models.keyPlaceholder')}
         type="password"
         value={apiKey}
-        onChange={(e) => setApiKey(e.target.value)}
+        onChange={(e) => {
+          setApiKey(e.target.value);
+          resetProbe();
+        }}
       />
-      <button type="button" data-testid="probe-custom-provider" disabled={probing || !baseUrl.trim()} onClick={() => void probe()}>
+      <button type="button" className="primary probe-button" data-testid="probe-custom-provider" disabled={probing || !baseUrl.trim()} onClick={() => void probe()}>
+        <Radar size={15} />
         {probing ? t('models.probing') : t('models.probe')}
       </button>
       {probeResult && (
         <div className="probe-results" data-testid="probe-results">
+          {probeResult.models.length === 0 && probeResult.protocols.every((protocol) => !protocol.available) && (
+            <p className="probe-rejected-hint" data-testid="probe-rejected-hint">
+              {t('models.probeRejectedHint')}
+            </p>
+          )}
           {probeResult.protocols.map((protocol) => (
             <div className="probe-result-row" key={protocol.api}>
-              <span>{protocol.api}</span>
+              <span className="probe-protocol-name">{protocol.api}</span>
               <span className={protocol.available ? 'probe-ok' : 'probe-fail'}>{protocol.available ? t('models.probeAvailable') : t('models.probeUnavailable')}</span>
-              {protocol.available && <span className={protocol.cacheStats ? 'probe-ok' : 'hint'}>{protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')}</span>}
+              <span className={protocol.available && protocol.cacheStats ? 'probe-ok' : 'hint'}>
+                {protocol.available ? (protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')) : ''}
+              </span>
+              {protocol.error && <span className="probe-error" data-testid={`probe-error-${protocol.api}`}>{protocol.error}</span>}
             </div>
           ))}
+          <div className="probe-api-choice">
+            <label htmlFor="custom-api-select">
+              {probeResult.protocols.some((protocol) => protocol.available)
+                ? t('models.detectedApi')
+                : t('models.unverifiedApi')}
+            </label>
+            <select
+              id="custom-api-select"
+              aria-label={t('models.customApi')}
+              data-testid="custom-api-select"
+              value={api}
+              onChange={(event) => selectApi(event.target.value)}
+            >
+              {CUSTOM_API_TYPES.filter((apiType) =>
+                !probeResult.protocols.some((protocol) => protocol.available)
+                || probeResult.protocols.some((protocol) => protocol.api === apiType && protocol.available),
+              ).map((apiType) => (
+                <option key={apiType} value={apiType}>{apiType}</option>
+              ))}
+            </select>
+            {requestUrlForApi(baseUrl, api) && (
+              <span className="probe-request-url" data-testid="custom-request-url">
+                {t('models.actualRequest', { url: requestUrlForApi(baseUrl, api) })}
+              </span>
+            )}
+          </div>
           {probeResult.models.length > 0 && (
-            <div className="probe-models" data-testid="probe-models">
-              <div className="probe-models-title">{t('models.probeModels', { count: probeResult.models.length })}</div>
-              {probeResult.models.map((modelId) => {
-                const detail = probeResult.modelDetails?.find((model) => model.id === modelId);
-                const selected = modelIds.split(',').map((id) => id.trim()).includes(modelId);
-                return (
-                  <label className="probe-model-row" data-testid={`probe-model-${modelId}`} key={modelId}>
-                    <input
-                      type="checkbox"
-                      checked={selected}
-                      onChange={(event) => {
-                        const ids = modelIds.split(',').map((id) => id.trim()).filter(Boolean);
-                        const next = event.target.checked
-                          ? [...new Set([...ids, modelId])]
-                          : ids.filter((id) => id !== modelId);
-                        setModelIds(next.join(', '));
-                      }}
-                    />
-                    <span className="probe-model-id">{modelId}</span>
-                    <span className={detail?.contextWindow ? 'probe-ok' : 'hint'}>
-                      {detail?.contextWindow
-                        ? t('models.probeContext', { count: detail.contextWindow.toLocaleString() })
-                        : t('models.probeContextDefault', { count: DEFAULT_CONTEXT_WINDOW.toLocaleString() })}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
+            <details className="probe-models-fold" data-testid="probe-models" open>
+              <summary className="probe-models-title">
+                {t('models.probeModels', { count: probeResult.models.length })}
+              </summary>
+              <div className="probe-models">
+                {probeResult.models.map((modelId) => {
+                  const detail = probeResult.modelDetails?.find((model) => model.id === modelId);
+                  const profile = matchModelProfile(modelId);
+                  const selected = modelIds.split(',').map((id) => id.trim()).includes(modelId);
+                  return (
+                    <label className="probe-model-row" data-testid={`probe-model-${modelId}`} key={modelId}>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={(event) => {
+                          const ids = modelIds.split(',').map((id) => id.trim()).filter(Boolean);
+                          const next = event.target.checked
+                            ? [...new Set([...ids, modelId])]
+                            : ids.filter((id) => id !== modelId);
+                          setModelIds(next.join(', '));
+                        }}
+                      />
+                      <span className="probe-model-id">{modelId}</span>
+                      <span className="probe-model-spec" data-testid={`probe-model-spec-${modelId}`}>
+                        {t('models.probeSpec', {
+                          contextWindow: (detail?.contextWindow ?? profile.contextWindow).toLocaleString(),
+                          maxOutput: profile.maxTokens?.toLocaleString() ?? '—',
+                        })}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </details>
           )}
-          {probeResult.modelDetails?.filter((model) => model.contextWindow && !probeResult.models.includes(model.id)).map((model) => (
-            <div className="probe-result-row" data-testid="probe-model-context" key={`context-${model.id}`}>
-              <span>{model.id}</span>
-              <span className="probe-ok">{t('models.probeContext', { count: model.contextWindow?.toLocaleString() })}</span>
-            </div>
-          ))}
         </div>
       )}
-      {(!probeResult || probeResult.models.length === 0) && (
+      {probeResult && probeResult.models.length === 0 && (
         <input
           data-testid="custom-models"
           placeholder={t('models.customModels')}
@@ -445,42 +503,8 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
           onChange={(e) => setModelIds(e.target.value)}
         />
       )}
-      <div className="form-row">
-        <input
-          data-testid="custom-context-window"
-          inputMode="numeric"
-          placeholder={t('models.customContextWindow')}
-          value={contextWindow}
-          onChange={(e) => { setContextWindow(e.target.value.replace(/\D/g, '')); setContextSource('manual'); setUseDefaultContext(false); }}
-        />
-        <input data-testid="custom-max-tokens" inputMode="numeric" placeholder={t('models.customMaxTokens')} value={maxTokens} onChange={(e) => setMaxTokens(e.target.value.replace(/\D/g, ''))} />
-      </div>
-      <div className={`model-context-status${contextSource === 'detected' ? ' detected' : ''}`} data-testid="custom-context-status">
-        {contextSource === 'detected'
-          ? t('models.contextDetected', { count: Number(contextWindow).toLocaleString() })
-          : contextSource === 'manual'
-            ? t('models.contextManual', { count: Number(contextWindow || DEFAULT_CONTEXT_WINDOW).toLocaleString() })
-            : t('models.contextUsingDefault')}
-      </div>
-      <label className="model-context-default">
-        <input
-          type="checkbox"
-          data-testid="custom-use-pi-context-default"
-          checked={useDefaultContext}
-          onChange={(event) => {
-            setUseDefaultContext(event.target.checked);
-            if (event.target.checked) {
-              setContextWindow(String(DEFAULT_CONTEXT_WINDOW));
-              setContextSource('default');
-            } else {
-              setContextSource('manual');
-            }
-          }}
-        />
-        <span>{t('models.usePiContextDefault')}</span>
-      </label>
       <div className="actions">
-        <button className="primary" disabled={!id.trim() || !baseUrl.trim() || !modelIds.trim() || !(useDefaultContext || Number(contextWindow) > 0)} onClick={() => void submit()}>
+        <button className="primary" disabled={!probeResult || !id.trim() || !baseUrl.trim() || !modelIds.trim()} onClick={() => void submit()}>
           {t('models.saveCustom')}
         </button>
         <button onClick={() => setOpen(false)}>{t('models.cancel')}</button>
@@ -530,16 +554,19 @@ export default function ModelsPage() {
     setRefreshMessage(undefined);
     const result = await hostApi.providers.refresh();
     setRefreshingCatalog(false);
-    setRefreshMessage(
-      result.success
-        ? result.discoveredModels
-          ? t('models.refreshCompleteWithDiscovery', {
-            count: result.discoveredModels,
-            added: result.addedModels ?? 0,
-          })
-          : t('models.refreshComplete')
-        : result.error,
-    );
+    if (result.success) {
+      const summary = result.discoveredModels
+        ? t('models.refreshCompleteWithDiscovery', {
+          count: result.discoveredModels,
+          added: result.addedModels ?? 0,
+        })
+        : t('models.refreshComplete');
+      setRefreshMessage(result.migratedProviders
+        ? `${summary} ${t('models.refreshMigratedProviders', { count: result.migratedProviders })}`
+        : summary);
+    } else {
+      setRefreshMessage(result.error);
+    }
     refresh();
   };
 

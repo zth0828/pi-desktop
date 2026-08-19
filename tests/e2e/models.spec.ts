@@ -218,11 +218,13 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
   await form.getByPlaceholder('Provider id (e.g. my-llm)').fill('added-provider');
   await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}/v1`);
   await form.getByPlaceholder('API key').fill('added-secret');
-  await form.getByPlaceholder('Model ids, comma separated').fill('added-model');
-  // 未探测到上下文时直接使用 256K 默认值，供应商可立即保存。
+  await expect(form.getByTestId('custom-api-select')).toHaveCount(0);
+  await expect(form.getByTestId('custom-models')).toHaveCount(0);
+  await expect(form.getByRole('button', { name: 'Save provider' })).toBeDisabled();
+  await form.getByTestId('probe-custom-provider').click();
+  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-responses', { timeout: 30_000 });
+  await expect(form.getByTestId('probe-models')).toBeVisible();
   await expect(form.getByRole('button', { name: 'Save provider' })).toBeEnabled();
-  await form.getByTestId('custom-use-pi-context-default').check();
-  await expect(form.getByTestId('custom-context-status')).toContainText('256K');
   await form.getByRole('button', { name: 'Save provider' }).click();
 
   const added = page.getByTestId('provider-added-provider');
@@ -245,6 +247,9 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
   }).toEqual({ inlineKey: undefined, storedKey: 'added-secret', contextWindow: 262144, reasoning: true });
 
   await added.locator('.provider-row-header').click();
+  await expect(page.getByTestId('provider-request-url-added-provider')).toContainText(
+    `http://127.0.0.1:${mockPort}/v1/responses`,
+  );
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByTestId('delete-provider-added-provider').click();
   await expect(page.getByTestId('provider-added-provider')).toHaveCount(0, { timeout: 15_000 });
@@ -273,16 +278,50 @@ test('Models 页：协议探测拒绝 200 HTML，发现 /v1 并选择真实 Open
   const results = form.getByTestId('probe-results');
   await expect(results).toBeVisible({ timeout: 30_000 });
   await expect(results.locator('.probe-result-row').filter({ hasText: 'openai-completions' })).toContainText('Available');
+  await expect(results.locator('.probe-result-row').filter({ hasText: 'openai-responses' })).toContainText('Available');
   await expect(results.locator('.probe-result-row').filter({ hasText: 'anthropic-messages' })).toContainText('Unavailable');
-  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-completions');
+  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-responses');
+  await expect(form.getByTestId('custom-api-select').locator('option')).toHaveText([
+    'openai-responses',
+    'openai-completions',
+  ]);
   await expect(form.getByPlaceholder('baseURL')).toHaveValue(`http://127.0.0.1:${mockPort}/v1`);
-  await expect(form.getByTestId('custom-context-window')).toHaveValue('262144');
-  await expect(form.getByTestId('custom-context-status')).toContainText('256K');
+  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/responses`);
+  page.once('dialog', (dialog) => dialog.accept());
+  await form.getByTestId('custom-api-select').selectOption('openai-completions');
+  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/chat/completions`);
+  // 上下文与最大输出自动管理：探测到的用探测值，探测不到的用前缀规格表兜底。
+  await expect(form.getByTestId('probe-model-spec-mock-discovered')).toContainText('256,000');
+  await expect(form.getByTestId('probe-model-spec-mock-2')).toContainText('262,144');
   await expect(form.getByTestId('probe-models')).toBeVisible();
   await expect(form.getByTestId('probe-model-mock-2')).toContainText('mock-2');
   await expect(form.getByTestId('probe-model-mock-discovered')).toContainText('mock-discovered');
-  await form.getByTestId('custom-context-status').scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'output/playwright/models-context-unresolved.png', fullPage: false });
+});
+
+test('Models 页：探测全失败时说明不代表供应商不可用并展示错误', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('add-custom-provider').click();
+  const form = page.getByTestId('custom-provider-form');
+  await form.getByPlaceholder('baseURL').fill('http://127.0.0.1:1');
+  await form.getByTestId('probe-custom-provider').click();
+
+  await expect(form.getByTestId('probe-rejected-hint')).toContainText(
+    'This does not mean it is unusable',
+    { timeout: 30_000 },
+  );
+  await expect(form.locator('.probe-result-row')).toHaveCount(4);
+  await expect(form.locator('.probe-result-row')).toContainText([
+    'Unavailable',
+    'Unavailable',
+    'Unavailable',
+    'Unavailable',
+  ]);
+  await expect(form.locator('.probe-error').first()).not.toBeEmpty();
 });
 
 test('Models 页：刷新会发现已配置自定义供应商的新模型', async ({ launchElectronApp }) => {
@@ -295,8 +334,26 @@ test('Models 页：刷新会发现已配置自定义供应商的新模型', asyn
   await expect(page.getByTestId('models-refresh-message')).toContainText('Found 2 custom models', {
     timeout: 30_000,
   });
+  await expect(page.getByTestId('models-refresh-message')).toContainText(
+    'Upgraded 1 provider(s) to the Responses protocol',
+  );
+  await expect.poll(async () => {
+    const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+      providers: Record<string, { api?: string; baseUrl?: string }>;
+    };
+    return {
+      migratedApi: doc.providers.mock.api,
+      migratedBaseUrl: doc.providers.mock.baseUrl,
+      noAuthApi: doc.providers.customnoauth.api,
+    };
+  }).toEqual({
+    migratedApi: 'openai-responses',
+    migratedBaseUrl: `http://127.0.0.1:${mockPort}/v1`,
+    noAuthApi: 'openai-completions',
+  });
   const row = page.getByTestId('provider-mock');
   await row.locator('.provider-row-header').click();
+  await expect(page.getByTestId('provider-request-url-mock')).toContainText('/v1/responses');
   await expect(page.getByTestId('provider-model-mock-mock-discovered')).toBeVisible();
 });
 
@@ -469,25 +526,27 @@ test('LM Studio：自动发现模型并同步视觉能力与真实上下文', as
   });
 });
 
-test('Models 页：自定义供应商表单的 API 类型可选', async ({ launchElectronApp }) => {
+test('Models 页：探测前隐藏协议与模型输入，探测失败后才允许手动配置', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
 
   await page.getByTestId('nav-models').click();
   await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('add-custom-provider').click();
+  const form = page.getByTestId('custom-provider-form');
+  await expect(form.getByTestId('custom-api-select')).toHaveCount(0);
+  await expect(form.getByTestId('custom-models')).toHaveCount(0);
 
-  const apiSelect = page.getByTestId('custom-api-select');
-  await expect(apiSelect).toBeVisible();
-  await expect(apiSelect).toHaveValue('openai-completions');
-  await expect(apiSelect.locator('option')).toHaveText([
-    'openai-completions',
+  await form.getByPlaceholder('baseURL').fill('http://127.0.0.1:1');
+  await form.getByTestId('probe-custom-provider').click();
+  await expect(form.getByTestId('probe-rejected-hint')).toBeVisible({ timeout: 30_000 });
+  await expect(form.getByTestId('custom-models')).toBeVisible();
+  await expect(form.getByTestId('custom-api-select').locator('option')).toHaveText([
     'openai-responses',
+    'openai-completions',
     'anthropic-messages',
     'google-generative-ai',
   ]);
-  await apiSelect.selectOption('openai-responses');
-  await expect(apiSelect).toHaveValue('openai-responses');
 });
 
 test('/ 命令补全：内置命令 + prompt 模板，选中可发送', async ({ launchElectronApp }) => {

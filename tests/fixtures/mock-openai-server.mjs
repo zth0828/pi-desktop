@@ -65,6 +65,17 @@ const server = http.createServer((req, res) => {
     res.end("<!doctype html><html><body>dashboard</body></html>");
     return;
   }
+  if (req.method === "POST" && req.url === "/v1/responses") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({
+      id: "resp_mock",
+      object: "response",
+      status: "completed",
+      output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "PONG" }] }],
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    }));
+    return;
+  }
   if (req.method !== "POST" || !req.url.includes("/chat/completions")) {
     res.writeHead(404).end("not found");
     return;
