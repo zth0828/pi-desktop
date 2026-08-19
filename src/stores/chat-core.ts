@@ -482,6 +482,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           thinkingLevel: result.thinkingLevel ?? state.thinkingLevel,
           availableThinkingLevels:
             result.availableThinkingLevels ?? state.availableThinkingLevels,
+          contextUsage: result.contextUsage ?? state.contextUsage,
         }));
       },
 
