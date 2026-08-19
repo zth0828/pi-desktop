@@ -1,5 +1,5 @@
 // 排队消息交互 E2E（真 pi + mock provider，不烧 API quota）。
-// 覆盖：流式中入队（followUp）→ 队列项出现；删除队列项；「立即发送」（steer 当前轮插入）。
+// 覆盖：流式中显式 followUp/steer、取回编辑、稍后消息改为当前轮引导。
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -85,17 +85,22 @@ async function startSlowAndQueue(page: import('@playwright/test').Page, text: st
   return item;
 }
 
-test('流式中点 Queue 入队 → 队列项出现，可删除', async ({ launchElectronApp }) => {
+test('稍后消息可取回输入框编辑后重新发送', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
   const item = await startSlowAndQueue(page, 'queued first message');
 
-  // 删除队列项 → 列表清空（空队列不渲染）
   await page.getByTestId('queue-remove-followUp-0').click();
   await expect(item).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByTestId('queue-list')).toHaveCount(0);
+  await expect(page.getByTestId('chat-input')).toHaveValue('queued first message');
+
+  await page.getByTestId('chat-input').fill('edited queued message');
+  await page.getByTestId('chat-steer-send').click();
+  const steering = page.getByTestId('queue-item-steering');
+  await expect(steering).toContainText('edited queued message', { timeout: 30_000 });
 
   await page.getByTestId('chat-stop').click();
 });

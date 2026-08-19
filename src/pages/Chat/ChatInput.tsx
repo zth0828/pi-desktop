@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, FileText, Folder, ListPlus, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
+import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, FileText, Folder, ListPlus, Paperclip, Plus, Square, Sparkles, Zap } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
   PiCommandRow,
@@ -1009,18 +1009,28 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
           </div>
           {isStreaming ? (
             <>
-              <button
-                data-testid="chat-queue-send"
-                className="send-button"
-                onClick={(e) => send(resolveStreamBehavior(followupBehavior, e.altKey))}
-                disabled={!value.trim() && attachments.length === 0}
-                title={
-                  followupBehavior === 'steer' ? t('chat.queueSendTipSteer') : t('chat.queueSendTip')
-                }
-              >
-                <ListPlus size={15} />
-                <span>{followupBehavior === 'steer' ? t('chat.steerSend') : t('chat.queueSend')}</span>
-              </button>
+              <div className="stream-send-actions" data-testid="stream-send-actions">
+                <button
+                  data-testid="chat-steer-send"
+                  className="send-button stream-steer"
+                  onClick={() => send('steer')}
+                  disabled={!value.trim() && attachments.length === 0}
+                  title={t('chat.queueSendTipSteer')}
+                >
+                  <Zap size={14} />
+                  <span>{t('chat.steerSend')}</span>
+                </button>
+                <button
+                  data-testid="chat-queue-send"
+                  className="send-button stream-followup"
+                  onClick={() => send('followUp')}
+                  disabled={!value.trim() && attachments.length === 0}
+                  title={t('chat.queueSendTip')}
+                >
+                  <ListPlus size={14} />
+                  <span>{t('chat.queueSend')}</span>
+                </button>
+              </div>
               <button
                 data-testid="chat-stop"
                 className="send-button stop"

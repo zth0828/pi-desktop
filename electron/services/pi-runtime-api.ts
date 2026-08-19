@@ -1070,7 +1070,7 @@ export const piRuntimeApi = {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
     const removed = await removeQueuedItem(active.adapterRuntime.session, payload);
-    return removed ? { success: true } : { success: false, error: 'queue index out of range' };
+    return removed ? { success: true, text: removed } : { success: false, error: 'queue index out of range' };
   },
 
   queueSteerNow: async (payload: PiRuntimeQueueItemPayload, ctx?: HostActionContext) => {
@@ -1094,12 +1094,17 @@ export const piRuntimeApi = {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
     const session = active.adapterRuntime.session;
+    const restoredMessages = [...session.getSteeringMessages(), ...session.getFollowUpMessages()];
+    if (restoredMessages.length > 0) {
+      session.clearQueue();
+      session.clearAgentQueues();
+    }
     if (session.isBashRunning) session.abortBash();
     else if (session.isCompacting) session.abortCompaction();
     else if (active.summarizingBranch) session.abortBranchSummary();
     else if (session.isRetrying) session.abortRetry();
     else await session.abort();
-    return { success: true };
+    return { success: true, restoredMessages };
   },
 
   newSession: async (_payload?: unknown, ctx?: HostActionContext) => {

@@ -164,6 +164,8 @@ export type PiPromptLifecycleEvent = {
 
 export type PiRuntimeQueueKind = 'steering' | 'followUp';
 export type PiRuntimeQueueItemPayload = { kind: PiRuntimeQueueKind; index: number };
+export type PiRuntimeQueueMutationResult = HostSuccess & { text?: string };
+export type PiRuntimeAbortResult = HostSuccess & { restoredMessages?: string[] };
 
 export type PiRuntimeModelInfo = {
   provider: string;
@@ -894,11 +896,11 @@ export type HostApiContract = {
     getUsage: () => PiRuntimeUsageResult | null;
     /** 生成中调用按 payload.behavior 排队：默认 followUp（排队），'steer' = 当前轮插入。 */
     prompt: (payload: PiRuntimePromptPayload) => HostSuccess;
-    abort: () => HostSuccess;
+    abort: () => PiRuntimeAbortResult;
     /** 移除一条排队消息（pi 仅 clearQueue 全清：main 侧快照→全清→按原顺序重排其余项）。 */
-    queueRemove: (payload: PiRuntimeQueueItemPayload) => HostSuccess;
+    queueRemove: (payload: PiRuntimeQueueItemPayload) => PiRuntimeQueueMutationResult;
     /** 排队消息「立即发送」：移出队列后 steer（流式中）或直接 prompt（空闲时）。 */
-    queueSteerNow: (payload: PiRuntimeQueueItemPayload) => HostSuccess;
+    queueSteerNow: (payload: PiRuntimeQueueItemPayload) => PiRuntimeQueueMutationResult;
     newSession: () => HostSuccess;
     /** /compact [instructions]：手动压缩上下文，可带 pi 的自定义压缩指令。 */
     compact: (payload?: PiRuntimeCompactPayload) => HostSuccess;

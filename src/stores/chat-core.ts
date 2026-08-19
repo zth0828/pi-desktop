@@ -129,6 +129,7 @@ export type ChatState = {
   runBash: (command: string, excludeFromContext: boolean) => Promise<void>;
   abort: () => Promise<void>;
   /** 移除一条排队消息（queue_update 事件负责刷新列表） */
+  /** 从 pi 队列移除并返回编辑器；保留其他队列项及顺序。 */
   queueRemove: (kind: 'steering' | 'followUp', index: number) => Promise<void>;
   /** 排队消息「立即发送」：移出队列后 steer（流式中）或直接 prompt（空闲时） */
   queueSteerNow: (kind: 'steering' | 'followUp', index: number) => Promise<void>;
@@ -352,7 +353,14 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       abort: async () => {
-        await api().piRuntime.abort();
+        const result = await api().piRuntime.abort();
+        if (result.success && result.restoredMessages?.length) {
+          set({
+            composerText: result.restoredMessages.join('\n\n'),
+            composerAttachments: [],
+            queue: { steering: [], followUp: [] },
+          });
+        }
       },
 
       runBash: async (command, excludeFromContext) => {
@@ -365,7 +373,13 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
 
       queueRemove: async (kind, index) => {
         const result = await api().piRuntime.queueRemove(kind, index);
-        if (!result.success) set({ startError: result.error });
+        if (!result.success) {
+          set({ startError: result.error });
+          return;
+        }
+        if (result.text) {
+          set({ composerText: result.text, composerAttachments: [] });
+        }
       },
 
       queueSteerNow: async (kind, index) => {
