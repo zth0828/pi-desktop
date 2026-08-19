@@ -226,6 +226,7 @@
     "contextUsed": "Current context",
     "contextWindow": "Context window",
     "contextEstimated": "Current context is estimated until pi reports the next response usage.",
+    "contextSyncing": "Syncing context…",
     "maxOutputTokens": "Max output tokens",
     "inputTokens": "Input tokens",
     "outputTokens": "Output tokens",

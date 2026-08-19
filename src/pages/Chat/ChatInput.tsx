@@ -131,6 +131,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
   const compacting = usePaneChatStore((s) => s.compaction !== null);
   const transcriptSyncing = usePaneChatStore((s) => s.transcriptSyncing);
+  const lastCompaction = usePaneChatStore((s) => s.lastCompaction);
   const runtimeContextUsage = usePaneChatStore((s) => s.contextUsage);
   const retrying = usePaneChatStore((s) => s.retry !== null);
   const bashing = usePaneChatStore((s) => s.bashDraft !== null);
@@ -272,7 +273,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     }
     setUsage(null);
     return () => { disposed = true; };
-  }, [started, sessionId, generation, paneApi, isStreaming, compacting, transcriptSyncing]);
+  }, [started, sessionId, generation, paneApi, isStreaming, compacting, transcriptSyncing, lastCompaction]);
 
   useEffect(() => {
     void hostApi.settings
@@ -318,7 +319,9 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     : contextTokens != null && contextWindow > 0
       ? Math.max(0, Math.min(100, (contextTokens / contextWindow) * 100))
       : null;
-  const contextLabel = contextPercent == null ? t('chat.tokenUnknown') : `${Math.round(contextPercent)}%`;
+  const contextLabel = compacting || transcriptSyncing
+    ? t('chat.contextSyncing')
+    : contextPercent == null ? t('chat.tokenUnknown') : `${Math.round(contextPercent)}%`;
   const formatTokens = (value: number | null | undefined) =>
     value == null ? t('chat.tokenUnknown') : value.toLocaleString();
 

@@ -226,6 +226,7 @@
     "contextUsed": "当前上下文",
     "contextWindow": "上下文上限",
     "contextEstimated": "pi 报告下一次回复用量前，当前上下文为估算值。",
+    "contextSyncing": "上下文同步中…",
     "maxOutputTokens": "最大输出 Token",
     "inputTokens": "输入 Token",
     "outputTokens": "输出 Token",
