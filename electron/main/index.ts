@@ -30,6 +30,7 @@ if (process.env.PI_DESKTOP_USER_DATA_DIR) {
   // Keep system-directory features (session exports, downloads) inside the
   // fixture profile; Electron's documents path does not honor HOME overrides.
   app.setPath('documents', path.join(isolatedUserData, 'Documents'));
+  app.setPath('downloads', path.join(isolatedUserData, 'Downloads'));
 }
 
 // Package catalog/detail cache lives with the isolated Electron profile.

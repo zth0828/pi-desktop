@@ -55,7 +55,7 @@ async function checkApp(previous: VersionCheckStatus & { releaseUrl?: string; as
   const current = appApi.version();
   const url = process.env.PI_DESKTOP_GITHUB_API_URL ?? GITHUB_RELEASE_URL;
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000), headers: { accept: 'application/vnd.github+json' } });
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
     if (!response.ok) throw new Error(`Release request failed (${response.status})`);
     const release = await response.json() as { tag_name?: string; draft?: boolean; prerelease?: boolean; html_url?: string; assets?: Array<{ name?: string }> };
     if (release.draft || release.prerelease || !release.tag_name || !parseSemver(release.tag_name)) throw new Error('No stable release found');

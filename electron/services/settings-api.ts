@@ -40,7 +40,8 @@ export const settingsApi = {
   },
   set: async (payload: SettingsSetPayload) => {
     const store = await getElectronStore();
-    store.set(payload.key, payload.value);
+    if (payload.value === undefined) store.delete(payload.key);
+    else store.set(payload.key, payload.value);
     return { success: true };
   },
 };

@@ -46,7 +46,7 @@ export const appUpdateApi = {
     inFlight = (async () => {
       let tempPath: string | undefined;
       try {
-        const releaseResponse = await fetch(githubUrl(), { signal: AbortSignal.timeout(10000), headers: { accept: 'application/vnd.github+json' } });
+        const releaseResponse = await fetch(githubUrl(), { signal: AbortSignal.timeout(10000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
         const release = await releaseResponse.json() as { assets?: Array<{ name: string; browser_download_url: string }> };
         const asset = selectAsset(release.assets ?? []);
         if (!asset) throw new Error(`No supported ${platformName()} update asset found`);

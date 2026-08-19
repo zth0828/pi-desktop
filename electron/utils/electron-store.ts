@@ -3,6 +3,7 @@ import type { SettingsSnapshot } from '@shared/host-api/contract';
 type ElectronStore = {
   get: (key: string) => unknown;
   set: (key: string, value: unknown) => void;
+  delete: (key: string) => void;
 };
 
 let storePromise: Promise<ElectronStore> | null = null;
