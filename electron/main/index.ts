@@ -10,12 +10,17 @@ import { safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
-process.on('uncaughtException', (error) => {
-  writePiDiagnostic({ level: 'error', event: 'main.uncaughtException', ...safeErrorFields(error) });
-});
-process.on('unhandledRejection', (reason) => {
-  writePiDiagnostic({ level: 'error', event: 'main.unhandledRejection', ...safeErrorFields(reason) });
-});
+let fatalMainFailure = false;
+function handleFatalMainFailure(event: string, error: unknown): void {
+  if (fatalMainFailure) return;
+  fatalMainFailure = true;
+  writePiDiagnostic({ level: 'error', event, ...safeErrorFields(error) });
+  // Continuing after an uncaught main-process failure can leave IPC/runtime state
+  // inconsistent. Electron performs the normal before-quit cleanup path.
+  app.quit();
+}
+process.on('uncaughtException', (error) => handleFatalMainFailure('main.uncaughtException', error));
+process.on('unhandledRejection', (reason) => handleFatalMainFailure('main.unhandledRejection', reason));
 
 // 测试钩子：E2E 用隔离 userData（settings 等壳状态落在这里）
 if (process.env.PI_DESKTOP_USER_DATA_DIR) {
