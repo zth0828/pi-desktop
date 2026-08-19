@@ -614,6 +614,22 @@
     "theme": "主题",
     "about": "关于",
     "sessionExports": "会话导出",
+    "version": {
+      "current": "当前版本：v{{version}}",
+      "upToDate": "最新版本：v{{version}}",
+      "updateAvailable": "发现更新：v{{version}}",
+      "notChecked": "尚未检查",
+      "checkNow": "立即检查",
+      "checking": "检查中…",
+      "checkFailed": "版本检查失败",
+      "lastChecked": "上次成功检查：{{time}}",
+      "download": "下载更新",
+      "downloading": "下载中…",
+      "open": "打开安装包",
+      "showInFolder": "显示文件位置",
+      "upgradePi": "升级 pi"
+    },
+    "sessionExports": "会话导出",
     "exportLocation": "保存位置",
     "themeOptions": {
       "light": "浅色",

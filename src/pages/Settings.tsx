@@ -32,6 +32,10 @@ const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const;
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const [appVersion, setAppVersion] = useState('');
+  const [versionStatus, setVersionStatus] = useState<Awaited<ReturnType<typeof hostApi.versionCheck.getStatus>>>();
+  const [versionChecking, setVersionChecking] = useState(false);
+  const [appDownloading, setAppDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const [cwd, setCwd] = useState<string | undefined>();
   const [theme, setThemeState] = useState<Theme>('system');
   const [notifyMode, setNotifyMode] = useState<NotifyMode>('unfocused');
@@ -50,11 +54,11 @@ export default function SettingsPage() {
   const [proxyStatus, setProxyStatus] = useState<ProxyStatus>();
   const [proxyMessage, setProxyMessage] = useState<string>();
   const env = usePiSystemStore((s) => s.env);
-  const latestVersion = usePiSystemStore((s) => s.latestVersion);
   const detect = usePiSystemStore((s) => s.detect);
 
   useEffect(() => {
     void hostApi.app.version().then(setAppVersion);
+    void hostApi.versionCheck.getStatus().then(setVersionStatus).catch(() => {});
     void hostApi.settings.get('workspaceCwd').then(setCwd);
     void hostApi.settings.get('theme').then((v) => setThemeState((v as Theme) ?? 'system'));
     void hostApi.settings.get('notifyMode').then((v) => setNotifyMode((v as NotifyMode) ?? 'unfocused'));
@@ -84,11 +88,18 @@ export default function SettingsPage() {
     }).catch(() => {});
     void hostApi.proxy.detect().then(setProxyStatus).catch(() => {});
     const offTrustChanged = onHostEvent('piTrust', 'changed', (r) => setTrustEntries(r.entries));
+    const offUpdateProgress = onHostEvent('appUpdate', 'progress', (event) => {
+      if (event.totalBytes) setDownloadProgress(Math.round((event.downloadedBytes ?? 0) / event.totalBytes * 100));
+      if (event.phase === 'completed' || event.phase === 'failed') setAppDownloading(false);
+    });
     void Promise.all([hostApi.providers.listModels(), hostApi.providers.getDefaultModel()]).then(([available, current]) => {
       const model = current.model ? available.models.find((candidate) => candidate.provider === current.model?.provider && candidate.id === current.model?.id) : undefined;
       if (model?.contextWindow) setModelWindow((previous) => previous ?? model.contextWindow);
     }).catch(() => {});
-    return offTrustChanged;
+    return () => {
+      offTrustChanged();
+      offUpdateProgress();
+    };
   }, []);
 
   const changeLanguage = async (lng: SupportedLanguage) => {
@@ -106,6 +117,25 @@ export default function SettingsPage() {
     if (result.canceled || !result.filePaths[0]) return;
     await hostApi.settings.set('workspaceCwd', result.filePaths[0]);
     setCwd(result.filePaths[0]);
+  };
+
+  const checkVersions = async () => {
+    setVersionChecking(true);
+    try {
+      setVersionStatus(await hostApi.versionCheck.check(true));
+    } finally {
+      setVersionChecking(false);
+    }
+  };
+
+  const downloadAppUpdate = async () => {
+    setAppDownloading(true);
+    try {
+      const result = await hostApi.appUpdate.download();
+      if (result.success) setVersionStatus(await hostApi.versionCheck.getStatus());
+    } finally {
+      setAppDownloading(false);
+    }
   };
 
   const refreshProxy = async (): Promise<void> => {
@@ -529,10 +559,17 @@ export default function SettingsPage() {
 
       <section className="settings-section" data-testid="settings-about">
         <h2>{t('settings.about')}</h2>
-        <div className="settings-row">
+        <div className="settings-row" data-testid="settings-app-version-status">
           <div className="settings-row-label">
             <div>Pi Desktop</div>
-            <div className="settings-row-desc">v{appVersion}</div>
+            <div className="settings-row-desc">{t('settings.version.current', { version: appVersion })}</div>
+            <div className="settings-row-desc">{versionStatus?.app.latest ? t(versionStatus.app.updateAvailable ? 'settings.version.updateAvailable' : 'settings.version.upToDate', { version: versionStatus.app.latest }) : t('settings.version.notChecked')}</div>
+            {versionStatus?.app.error && <div className="error-text">{t('settings.version.checkFailed')}</div>}
+          </div>
+          <div className="pill-group">
+            <button className="pill" data-testid="settings-app-check" disabled={versionChecking} onClick={() => void checkVersions()}>{t(versionChecking ? 'settings.version.checking' : 'settings.version.checkNow')}</button>
+            {versionStatus?.app.updateAvailable && <button className="pill" data-testid="settings-app-download" disabled={appDownloading} onClick={() => void downloadAppUpdate()}>{t(appDownloading ? 'settings.version.downloading' : 'settings.version.download')}{appDownloading && ` ${downloadProgress}%`}</button>}
+            {versionStatus?.app.downloadedPath && <><button className="pill" data-testid="settings-app-open" onClick={() => void hostApi.appUpdate.openDownloaded()}>{t('settings.version.open')}</button><button className="pill" data-testid="settings-app-show" onClick={() => void hostApi.appUpdate.showDownloaded()}>{t('settings.version.showInFolder')}</button></>}
           </div>
         </div>
         <div className="settings-row" data-testid="settings-pi-status">
@@ -541,19 +578,20 @@ export default function SettingsPage() {
             <div className="settings-row-desc">
               <div>
                 {t('status.ready', { version: env?.pi.version ?? '?' })}
-                {latestVersion && latestVersion !== env?.pi.version
-                  ? ` · ${t('status.latestAvailable', { version: latestVersion })}`
+                {versionStatus?.pi.latest && versionStatus.pi.updateAvailable
+                  ? ` · ${t('status.latestAvailable', { version: versionStatus.pi.latest })}`
                   : ''}
               </div>
+              <div>{versionStatus?.pi.error ? t('settings.version.checkFailed') : t('settings.version.lastChecked', { time: versionStatus?.pi.lastSuccessAt ? new Date(versionStatus.pi.lastSuccessAt).toLocaleString() : t('settings.version.notChecked') })}</div>
               {env?.compatibility?.status === 'compatible-untested' && (
                 <div className="warning">{t('status.compatibleUntested')}</div>
               )}
             </div>
           </div>
           <div className="pill-group">
-            <button className="pill" data-testid="settings-recheck" onClick={() => void detect(true)}>
-              {t('onboarding.recheck')}
-            </button>
+            <button className="pill" data-testid="settings-recheck" onClick={() => void detect(true)}>{t('onboarding.recheck')}</button>
+            <button className="pill" data-testid="settings-pi-check" disabled={versionChecking} onClick={() => void checkVersions()}>{t(versionChecking ? 'settings.version.checking' : 'settings.version.checkNow')}</button>
+            {versionStatus?.pi.updateAvailable && <button className="pill" data-testid="settings-pi-upgrade" onClick={() => void usePiSystemStore.getState().install()}>{t('settings.version.upgradePi')}</button>}
             <button
               className="pill"
               onClick={() => void hostApi.shell.openExternal('https://github.com/badlogic/pi-mono')}

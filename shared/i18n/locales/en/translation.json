@@ -614,6 +614,21 @@
     "theme": "Theme",
     "about": "About",
     "sessionExports": "Session exports",
+    "version": {
+      "current": "Current version: v{{version}}",
+      "upToDate": "Latest version: v{{version}}",
+      "updateAvailable": "Update available: v{{version}}",
+      "notChecked": "Not checked yet",
+      "checkNow": "Check now",
+      "checking": "Checking…",
+      "checkFailed": "Version check failed",
+      "lastChecked": "Last successful check: {{time}}",
+      "download": "Download update",
+      "downloading": "Downloading…",
+      "open": "Open installer",
+      "showInFolder": "Show in folder",
+      "upgradePi": "Upgrade pi"
+    },
     "exportLocation": "Location",
     "themeOptions": {
       "light": "Light",
