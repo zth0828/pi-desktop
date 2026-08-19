@@ -1,5 +1,5 @@
 // 设置页 E2E（真 pi + mock provider，不烧 API quota）。
-// 覆盖：四个设置项渲染 + 切换落盘 config.json；followupBehavior=steer 时流式中
+// 覆盖：Agent/代理设置渲染 + 切换落盘 config.json；followupBehavior=steer 时流式中
 // Enter 直接 steering 入队；sendWith=cmdEnter 时 Enter 换行、Cmd+Enter 发送；
 // preventSleep 时 run 期间 powerSaveBlocker start/stop（观测钩子 PI_DESKTOP_E2E_POWER_LOG，
 // 同 notify 的 PI_DESKTOP_E2E_NOTIFY_LOG 模式）。
@@ -81,7 +81,7 @@ async function readLog(logPath: string): Promise<string> {
   return readFile(logPath, 'utf8');
 }
 
-test('设置页：四个新设置项渲染 + 切换后落盘 config.json', async ({ launchElectronApp, homeDir }) => {
+test('设置页：Agent 与代理设置渲染 + 切换后落盘 config.json', async ({ launchElectronApp, homeDir }) => {
   const app = await launchElectronApp({ withPi: true, agentDir, initialPage: 'settings' });
   const page = await app.firstWindow();
 
@@ -99,6 +99,10 @@ test('设置页：四个新设置项渲染 + 切换后落盘 config.json', async
   await expect(page.getByTestId('compaction-enabled-on')).toHaveClass(/active/);
   await expect(page.getByTestId('compaction-reserve')).toHaveValue('16384');
   await expect(page.getByTestId('compaction-keep-recent')).toHaveValue('20000');
+  await expect(page.getByTestId('settings-proxy')).toBeVisible();
+  await expect(page.getByTestId('proxy-mode-auto')).toHaveClass(/active/);
+  await expect(page.getByTestId('proxy-mode-manual')).toHaveCount(0);
+  await expect(page.getByTestId('settings-proxy-url')).toHaveValue('http://127.0.0.1:7897');
   const sectionBorders = await page.locator('.settings-section').evaluateAll((sections) =>
     sections.slice(0, 2).map((section) =>
       section.ownerDocument.defaultView?.getComputedStyle(section).borderColor ?? '',
@@ -121,6 +125,11 @@ test('设置页：四个新设置项渲染 + 切换后落盘 config.json', async
   await page.getByTestId('notify-ui-request-off').click();
   await page.getByTestId('compaction-enabled-off').click();
   await expect(page.getByTestId('compaction-enabled-off')).toHaveClass(/active/);
+  await page.getByTestId('proxy-mode-off').click();
+  await expect(page.getByTestId('proxy-mode-off')).toHaveClass(/active/);
+  await expect(page.getByTestId('settings-proxy-url')).toHaveCount(0);
+  await page.getByTestId('proxy-mode-auto').click();
+  await expect(page.getByTestId('settings-proxy-url')).toHaveValue('http://127.0.0.1:7897');
 
   await expect
     .poll(async () => (await readConfig(homeDir)).followupBehavior, { timeout: 10_000 })
@@ -128,6 +137,8 @@ test('设置页：四个新设置项渲染 + 切换后落盘 config.json', async
   await expect.poll(async () => (await readConfig(homeDir)).sendWith).toBe('cmdEnter');
   await expect.poll(async () => (await readConfig(homeDir)).preventSleep).toBe(true);
   await expect.poll(async () => (await readConfig(homeDir)).notifyUiRequest).toBe(false);
+  await expect.poll(async () => (await readConfig(homeDir)).httpProxyMode).toBe('auto');
+  await expect.poll(async () => (await readConfig(homeDir)).httpProxyUrl).toBe('http://127.0.0.1:7897');
 });
 
 test('followupBehavior=steer：流式中 Enter 直接 steering 入队，Alt+Enter 反向排队', async ({

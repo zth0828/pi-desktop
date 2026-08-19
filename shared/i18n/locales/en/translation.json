@@ -681,24 +681,20 @@
     },
     "proxy": {
       "title": "Network proxy",
-      "desc": "Auto-follow system proxy (no manual config needed): overseas providers use the proxy, domestic domains connect directly. Applies immediately.",
+      "desc": "Pi Desktop proxy is enabled by default and uses the address below. Changes apply immediately. Turning it off connects directly and ignores system and pi proxy settings.",
       "modes": {
         "auto": "Auto",
-        "manual": "Manual",
         "off": "Off"
       },
-      "manualUrl": "Proxy URL",
-      "manualPlaceholder": "http://127.0.0.1:7897",
+      "url": "Proxy URL",
+      "urlDesc": "Auto mode uses this address; change it for your network.",
+      "placeholder": "http://127.0.0.1:7897",
       "status": "Current proxy",
-      "detected": "Detected: {url} ({source})",
-      "none": "No proxy detected, direct connection",
+      "detected": "Using: {url} ({source})",
+      "none": "Proxy off, direct connection",
       "source": {
-        "system": "System proxy",
-        "probe": "Local port probe",
-        "manual": "Manual",
-        "settings": "pi settings",
-        "off": "Off",
-        "none": "None"
+        "app": "Pi Desktop settings",
+        "off": "Off"
       },
       "applied": "Proxy applied",
       "applyFailed": "Apply failed"

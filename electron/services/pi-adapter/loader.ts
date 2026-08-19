@@ -71,19 +71,21 @@ function readInstallation(packageRootValue: string): Installation {
 }
 
 /**
- * 全局代理引导：把壳设置解析出的代理（auto 跟随系统代理/manual/off）应用到
- * undici 全局 dispatcher。壳不跑 pi 的 main.js（只有那里才会调用
- * applyHttpProxySettings + configureHttpDispatcher），这里在 SDK 加载后补上，
- * 否则 ModelRuntime 的请求不走用户配置的代理，海外供应商直连会失败。
+ * 全局代理引导：把 Pi Desktop 配置的代理 URL 应用到 undici 全局 dispatcher。
+ * 壳不跑 pi 的 main.js（只有那里才会调用 applyHttpProxySettings +
+ * configureHttpDispatcher），这里在 SDK 加载后补上，否则 ModelRuntime 的请求
+ * 不会使用壳内配置。
  */
 async function applyPiHttpProxy(packageRoot: string): Promise<void> {
   try {
-    const { resolveProxy } = await import('../proxy-api');
+    const { clearProxyEnvironment, resolveProxy } = await import('../proxy-api');
     const resolved = await resolveProxy();
     const mod = await import(pathToFileURL(path.join(packageRoot, 'dist/core/http-dispatcher.js')).href) as {
       applyHttpProxySettings?: (proxy?: string) => void;
       configureHttpDispatcher?: (timeoutMs?: number) => void;
     };
+    // Pi Desktop 的代理设置覆盖启动环境，避免外部空值或其他代理抢占配置。
+    clearProxyEnvironment();
     mod.applyHttpProxySettings?.(resolved.url);
     mod.configureHttpDispatcher?.();
   } catch (error) {

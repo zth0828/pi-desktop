@@ -418,16 +418,19 @@ export type WorkspaceReadResult = {
 
 // —— settings：壳自身设置（electron-store 持久化）——
 
-/** 网络代理模式：auto=自动跟随系统代理/检测本地代理（默认），manual=手动 URL，off=直连。 */
-export type ProxyMode = 'auto' | 'manual' | 'off';
+/** 默认由 Pi Desktop 管理的本地代理地址。 */
+export const DEFAULT_DESKTOP_PROXY_URL = 'http://127.0.0.1:7897';
 
-/** 代理检测结果：当前模式 + 实际生效的代理 URL 与来源。 */
+/** 网络代理模式：auto=启用 Pi Desktop 中配置的代理地址（默认），off=直连。 */
+export type ProxyMode = 'auto' | 'off';
+
+/** 代理状态：当前模式 + Pi Desktop 中实际生效的代理地址。 */
 export type ProxyDetection = {
   mode: ProxyMode;
-  /** 当前实际生效的代理 URL（manual 或 auto 检测到）；无则 undefined。 */
+  /** 当前实际生效的代理 URL；关闭代理时无值。 */
   url?: string;
-  /** 来源：system=macOS 系统代理设置，probe=常见端口探测，manual=用户手动，settings=pi settings.json，off=主动关闭，none=未检测到。 */
-  source?: 'system' | 'probe' | 'manual' | 'settings' | 'off' | 'none';
+  /** 来源：app=Pi Desktop 设置，off=主动关闭。 */
+  source?: 'app' | 'off';
 };
 
 export type ProxyApplyResult = HostSuccess & { detail?: string };
@@ -448,9 +451,9 @@ export type SettingsSnapshot = {
   sendWith?: 'enter' | 'cmdEnter';
   /** 最近一次成功导出的会话 HTML；用于跨页面/重启恢复打开入口。 */
   lastSessionExportPath?: string;
-  /** 网络代理模式（默认 auto：自动跟随系统代理，无需手写配置）。 */
+  /** 网络代理模式（默认 auto：启用 Pi Desktop 配置的代理地址）。 */
   httpProxyMode?: ProxyMode;
-  /** manual 模式的手动代理 URL（如 http://127.0.0.1:7897）。 */
+  /** Pi Desktop 使用的代理 URL；缺省为 DEFAULT_DESKTOP_PROXY_URL。 */
   httpProxyUrl?: string;
 };
 

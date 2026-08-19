@@ -681,24 +681,20 @@
     },
     "proxy": {
       "title": "网络代理",
-      "desc": "自动跟随系统代理（无需手写配置）：海外供应商自动走代理，国内域名自动直连。修改后立即生效。",
+      "desc": "默认启用 Pi Desktop 代理，使用下面填写的地址；修改后立即生效。关闭后直连，不读取系统代理或 Pi 的代理配置。",
       "modes": {
         "auto": "自动",
-        "manual": "手动",
         "off": "关闭"
       },
-      "manualUrl": "代理地址",
-      "manualPlaceholder": "http://127.0.0.1:7897",
+      "url": "代理地址",
+      "urlDesc": "自动模式使用此地址；可按你的网络环境修改。",
+      "placeholder": "http://127.0.0.1:7897",
       "status": "当前代理",
-      "detected": "已检测到：{url}（{source}）",
-      "none": "未检测到代理，直连",
+      "detected": "已使用：{url}（{source}）",
+      "none": "代理已关闭，直连",
       "source": {
-        "system": "系统代理",
-        "probe": "本地端口探测",
-        "manual": "手动",
-        "settings": "pi 配置",
-        "off": "已关闭",
-        "none": "无"
+        "app": "Pi Desktop 设置",
+        "off": "已关闭"
       },
       "applied": "已应用代理",
       "applyFailed": "应用失败"

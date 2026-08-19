@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderOpen, Monitor, Moon, Sun } from 'lucide-react';
-import type { PiSessionExportInfo, PiTrustEntry } from '@shared/host-api/contract';
+import { DEFAULT_DESKTOP_PROXY_URL, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { setTheme, type Theme } from '../lib/theme';
@@ -23,7 +23,7 @@ type FollowupBehavior = (typeof FOLLOWUP_BEHAVIORS)[number];
 const SEND_WITH_MODES = ['enter', 'cmdEnter'] as const;
 type SendWith = (typeof SEND_WITH_MODES)[number];
 
-const PROXY_MODES = ['auto', 'manual', 'off'] as const;
+const PROXY_MODES = ['auto', 'off'] as const;
 type ProxyMode = (typeof PROXY_MODES)[number];
 type ProxyStatus = { url?: string; source?: string };
 
@@ -46,7 +46,7 @@ export default function SettingsPage() {
   const [defaultThinking, setDefaultThinking] = useState<string | null>(null);
   const [retry, setRetry] = useState({ enabled: true, maxRetries: 3, baseDelayMs: 2000 });
   const [proxyMode, setProxyMode] = useState<ProxyMode>('auto');
-  const [proxyUrl, setProxyUrl] = useState('');
+  const [proxyUrl, setProxyUrl] = useState(DEFAULT_DESKTOP_PROXY_URL);
   const [proxyStatus, setProxyStatus] = useState<ProxyStatus>();
   const [proxyMessage, setProxyMessage] = useState<string>();
   const env = usePiSystemStore((s) => s.env);
@@ -72,8 +72,16 @@ export default function SettingsPage() {
     void hostApi.piTrust.list().then((r) => setTrustEntries(r.entries)).catch(() => {});
     void hostApi.providers.getDefaultThinking().then((r) => setDefaultThinking(r.level)).catch(() => {});
     void hostApi.providers.getRetry().then(setRetry).catch(() => {});
-    void hostApi.settings.get('httpProxyMode').then((v) => setProxyMode((v as ProxyMode) ?? 'auto')).catch(() => {});
-    void hostApi.settings.get('httpProxyUrl').then((v) => setProxyUrl((v as string) ?? '')).catch(() => {});
+    void hostApi.settings.get('httpProxyMode').then((v) => {
+      const mode: ProxyMode = v === 'off' ? 'off' : 'auto';
+      setProxyMode(mode);
+      if (v !== mode) void hostApi.settings.set('httpProxyMode', mode);
+    }).catch(() => {});
+    void hostApi.settings.get('httpProxyUrl').then((v) => {
+      const url = typeof v === 'string' && v.trim() ? v.trim() : DEFAULT_DESKTOP_PROXY_URL;
+      setProxyUrl(url);
+      if (v !== url) void hostApi.settings.set('httpProxyUrl', url);
+    }).catch(() => {});
     void hostApi.proxy.detect().then(setProxyStatus).catch(() => {});
     const offTrustChanged = onHostEvent('piTrust', 'changed', (r) => setTrustEntries(r.entries));
     void Promise.all([hostApi.providers.listModels(), hostApi.providers.getDefaultModel()]).then(([available, current]) => {
@@ -244,16 +252,17 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
-        {proxyMode === 'manual' && (
+        {proxyMode === 'auto' && (
           <div className="settings-row">
             <div className="settings-row-label">
-              <div>{t('settings.proxy.manualUrl')}</div>
+              <div>{t('settings.proxy.url')}</div>
+              <div className="settings-row-desc">{t('settings.proxy.urlDesc')}</div>
             </div>
             <input
               className="settings-number settings-proxy-url"
               data-testid="settings-proxy-url"
               type="text"
-              placeholder={t('settings.proxy.manualPlaceholder')}
+              placeholder={t('settings.proxy.placeholder')}
               value={proxyUrl}
               onChange={(e) => void changeProxyUrl(e.target.value)}
             />
