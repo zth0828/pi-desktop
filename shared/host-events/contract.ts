@@ -23,6 +23,9 @@ export type HostEventContract = {
     /** 目标窗口收到后激活包含该会话的面板。 */
     focusSession: (payload: { sessionPath: string }) => void;
   };
+  appUpdate: {
+    progress: (payload: import('../host-api/contract').AppUpdateProgressEvent) => void;
+  };
   piSystem: {
     installProgress: (payload: PiInstallProgressEvent) => void;
   };
@@ -82,6 +85,9 @@ export type HostEventArgs<
 export const HOST_EVENT_CHANNELS = {
   windows: {
     focusSession: 'windows:focus-session',
+  },
+  appUpdate: {
+    progress: 'app-update:progress',
   },
   piSystem: {
     installProgress: 'pi-system:install-progress',

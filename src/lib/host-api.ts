@@ -42,6 +42,15 @@ function createHostApi(sessionPath?: string) {
     checkLatest: () => invoke('piSystem', 'checkLatest'),
     install: () => invoke('piSystem', 'install'),
   },
+  versionCheck: {
+    check: (force?: boolean) => invoke('versionCheck', 'check', force ? { force } : undefined),
+    getStatus: () => invoke('versionCheck', 'getStatus'),
+  },
+  appUpdate: {
+    download: () => invoke('appUpdate', 'download'),
+    openDownloaded: () => invoke('appUpdate', 'openDownloaded'),
+    showDownloaded: () => invoke('appUpdate', 'showDownloaded'),
+  },
   piRuntime: {
     start: (cwd: string) => invoke('piRuntime', 'start', { cwd }),
     getState: () => invoke('piRuntime', 'getState'),
@@ -182,7 +191,7 @@ function createHostApi(sessionPath?: string) {
     getAll: () => invoke('settings', 'getAll'),
     get: <K extends keyof SettingsSnapshot>(key: K) =>
       invoke('settings', 'get', { key }) as Promise<SettingsSnapshot[K]>,
-    set: (key: keyof SettingsSnapshot, value: string | boolean | undefined) =>
+    set: (key: keyof SettingsSnapshot, value: string | number | boolean | undefined) =>
       invoke('settings', 'set', { key, value }),
   },
   proxy: {
