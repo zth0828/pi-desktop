@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCompatibilityReport,
   detectPiCapabilities,
+  validateSessionCapabilities,
 } from '@electron/services/pi-adapter';
-import type { PiSdk } from '@electron/services/pi-adapter';
 import {
   FALLBACK_PI_VERSION,
   MIN_PI_VERSION,
@@ -13,7 +13,7 @@ import {
   isPiVersionTested,
 } from '@shared/pi-compat';
 
-function completeModule(): PiSdk {
+function completeModule(): Record<string, unknown> {
   return {
     createAgentSessionServices: () => {},
     createAgentSessionFromServices: () => {},
@@ -21,7 +21,7 @@ function completeModule(): PiSdk {
     SessionManager: class {},
     SettingsManager: class {},
     createEventBus: () => {},
-  } as unknown as PiSdk;
+  };
 }
 
 describe('Pi Adapter compatibility report', () => {
@@ -40,7 +40,7 @@ describe('Pi Adapter compatibility report', () => {
   });
 
   it('marks missing required public exports as incompatible', () => {
-    const sdk = { createAgentSessionRuntime() {} } as unknown as PiSdk;
+    const sdk = { createAgentSessionRuntime() {} };
     const report = buildCompatibilityReport({
       sdk,
       version: '0.84.2',
@@ -62,10 +62,26 @@ describe('Pi Adapter compatibility report', () => {
       sessionManager: true,
       settingsManager: true,
       eventBus: true,
-      prompt: true,
-      subscribe: true,
-      abort: true,
+      prompt: false,
+      subscribe: false,
+      abort: false,
     });
+  });
+
+  it('checks session capabilities only after creation and reports missing methods', () => {
+    const report = buildCompatibilityReport({
+      sdk: completeModule(),
+      version: '0.84.2',
+      packageRoot: '/tmp/pi',
+      testedRange: true,
+      meetsMinimum: true,
+    });
+    expect(report.capabilityReport?.session).toEqual({ prompt: 'not-checked', subscribe: 'not-checked', abort: 'not-checked' });
+    const missing = validateSessionCapabilities(report, { prompt() {}, subscribe() {} });
+    expect(missing).toEqual(['abort']);
+    expect(report.status).toBe('incompatible');
+    expect(report.failureCode).toBe('missing-session-capability');
+    expect(report.missingRequiredCapabilities).toContain('abort');
   });
 
   it('keeps package.json compatibility metadata aligned with shared constants', () => {

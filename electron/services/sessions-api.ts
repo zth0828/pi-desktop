@@ -40,7 +40,7 @@ import {
 } from '../main/window-manager';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
-import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
+import { loadPiAdapter, type PiSessionCatalogPort, type PiSessionDocumentHandle } from './pi-adapter';
 import { samePath } from '../utils/same-path';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { ensureSessionExportDirectory, sessionExportPath } from '../utils/session-export';
@@ -57,21 +57,21 @@ function bindSenderWindow(ctx: HostActionContext | undefined, sessionPath: strin
 }
 
 function currentSessionFile(): string | undefined {
-  return getActiveRuntime()?.runtime.session.sessionFile;
+  return getActiveRuntime()?.adapterRuntime.session.view.sessionFile;
 }
 
 const ARCHIVE_CUSTOM_TYPE = 'pi-desktop.archive';
 
-function sessionManagerFor(path: string, sdk: PiSdk) {
+function sessionManagerFor(path: string, sessions: PiSessionCatalogPort): PiSessionDocumentHandle {
   const active = getActiveRuntime();
-  if (active && samePath(path, active.runtime.session.sessionFile)) {
-    return active.runtime.session.sessionManager;
+  if (active && samePath(path, active.adapterRuntime.session.view.sessionFile)) {
+    return active.adapterRuntime.session.view.sessionManager;
   }
-  return sdk.SessionManager.open(path);
+  return sessions.open(path);
 }
 
-function isArchived(path: string, sdk: PiSdk): boolean {
-  const entries = sessionManagerFor(path, sdk).getEntries();
+function isArchived(path: string, sessions: PiSessionCatalogPort): boolean {
+  const entries = sessions.getEntries(sessionManagerFor(path, sessions));
   for (let i = entries.length - 1; i >= 0; i -= 1) {
     const entry = entries[i] as { type?: string; customType?: string; data?: { archived?: unknown } };
     if (entry.type === 'custom' && entry.customType === ARCHIVE_CUSTOM_TYPE) {
@@ -81,8 +81,8 @@ function isArchived(path: string, sdk: PiSdk): boolean {
   return false;
 }
 
-function setArchived(path: string, archived: boolean, sdk: PiSdk): void {
-  sessionManagerFor(path, sdk).appendCustomEntry(ARCHIVE_CUSTOM_TYPE, { archived });
+function setArchived(path: string, archived: boolean, sessions: PiSessionCatalogPort): void {
+  sessions.appendCustomEntry(sessionManagerFor(path, sessions), ARCHIVE_CUSTOM_TYPE, { archived });
 }
 
 function searchableMessageText(message: unknown): string {
@@ -104,11 +104,11 @@ function searchableMessageText(message: unknown): string {
  * 与渲染层展示同序的完整分支消息（含压缩摘要）。搜索 messageIndex 用它对齐，
  * 否则压缩后 messageIndex 相对 buildSessionContext（摘要+尾部）计算，跳转会错位。
  */
-function branchSearchableMessages(sdk: PiSdk, sessionPath: string): string[] {
+function branchSearchableMessages(sessions: PiSessionCatalogPort, sessionPath: string): string[] {
   const texts: string[] = [];
-  const manager = sdk.SessionManager.open(sessionPath);
-  for (const entry of manager.getBranch()) {
-    for (const message of sdk.sessionEntryToContextMessages(entry)) {
+  const manager = sessions.open(sessionPath);
+  for (const entry of sessions.getBranch(manager)) {
+    for (const message of sessions.toContextMessages(entry)) {
       // 附件信封/文件块不属于可搜索正文，命中展示时也不能带出
       texts.push(stripAttachmentEnvelope(searchableMessageText(message)));
     }
@@ -132,7 +132,7 @@ function toRow(s: {
   messageCount: number;
   created: Date;
   modified: Date;
-}, current: string | undefined, sdk: PiSdk): PiSessionRow {
+}, current: string | undefined, archived: boolean): PiSessionRow {
   // 附件 XML 信封不属于标题文字：name/firstMessage 都可能带（pi 按首条消息自动命名时），
   // 列表出口统一剥离，历史脏标题在展示层一并清净
   const cleanName = s.name ? stripAttachmentEnvelope(s.name) : '';
@@ -147,7 +147,7 @@ function toRow(s: {
     modified: s.modified.toISOString(),
     isCurrent: samePath(s.path, current),
     isRunning: isSessionRunning(s.path),
-    archived: isArchived(s.path, sdk),
+    archived,
   };
 }
 
@@ -165,21 +165,21 @@ export const sessionsApi = {
   list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiSessionListResult> => {
     const cwd = await resolveCwd();
     if (!cwd) return { sessions: [] };
-    const sdk = await loadPiSdk();
-    const infos = await sdk.SessionManager.list(cwd);
+    const adapter = await loadPiAdapter();
+    const infos = await adapter.sessions.list(cwd);
     const current = ctx?.sessionPath ?? currentSessionFile();
     const sessions = mergeLiveSessions(infos)
-      .map((s) => toRow(s, current, sdk))
+      .map((s) => toRow(s, current, isArchived(s.path, adapter.sessions)))
       .sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
   },
 
   listAll: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiSessionListResult> => {
-    const sdk = await loadPiSdk();
-    const infos = await sdk.SessionManager.listAll();
+    const adapter = await loadPiAdapter();
+    const infos = await adapter.sessions.listAll();
     const current = ctx?.sessionPath ?? currentSessionFile();
     const sessions = mergeLiveSessions(infos)
-      .map((s) => toRow(s, current, sdk))
+      .map((s) => toRow(s, current, isArchived(s.path, adapter.sessions)))
       .sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
   },
@@ -187,8 +187,8 @@ export const sessionsApi = {
   search: async (payload: PiSessionSearchPayload, ctx?: HostActionContext): Promise<PiSessionSearchResult> => {
     const query = payload.query.trim();
     if (!query) return { sessions: [] };
-    const sdk = await loadPiSdk();
-    const infos = await sdk.SessionManager.listAll();
+    const adapter = await loadPiAdapter();
+    const infos = await adapter.sessions.listAll();
     const current = ctx?.sessionPath ?? currentSessionFile();
     const limit = Math.max(1, Math.min(payload.limit ?? 50, 100));
     // 搜索结果 snippet 直接展示原文，先剥离附件信封再进索引/命中
@@ -196,18 +196,19 @@ export const sessionsApi = {
       ...info,
       name: info.name ? stripAttachmentEnvelope(info.name) || undefined : undefined,
       firstMessage: stripAttachmentEnvelope(info.firstMessage),
-      allMessagesText: stripAttachmentEnvelope(info.allMessagesText),
+      allMessagesText: info.allMessagesText ? stripAttachmentEnvelope(info.allMessagesText) : '',
     }));
     const candidates = searchSessions(strippedInfos, query, limit);
     const preciseCandidates = candidates.map((candidate) => {
-      if (candidate.match === 'name') return candidate;
-      const messageTexts = branchSearchableMessages(sdk, candidate.session.path);
+      if (candidate.match === 'name' || !candidate.session.path) return candidate;
+      const candidatePath = candidate.session.path;
+      const messageTexts = branchSearchableMessages(adapter.sessions, candidatePath);
       return searchSessions([{ ...candidate.session, messageTexts }], query, 1)[0] ?? candidate;
     });
     const sessions = preciseCandidates
       .slice(0, limit)
       .map(({ session, match, snippet, messageIndex }) => ({
-        ...toRow(session, current, sdk),
+        ...toRow(session, current, isArchived(session.path, adapter.sessions)),
         match,
         snippet,
         messageIndex,
@@ -220,8 +221,8 @@ export const sessionsApi = {
     const activeForCheck = getActiveRuntime();
     const boundToActive = Boolean(
       ctx?.sessionPath
-      && activeForCheck?.runtime.session.sessionFile
-      && samePath(ctx.sessionPath, activeForCheck.runtime.session.sessionFile),
+      && activeForCheck?.adapterRuntime.session.view.sessionFile
+      && samePath(ctx.sessionPath, activeForCheck.adapterRuntime.session.view.sessionFile),
     );
     // 独立窗口 attach：优先消费 openDetached 的预热产物（在途等完成），
     // 按 attach 语义绑定（activate=false 建出来的，不挤占全局 active）
@@ -261,7 +262,7 @@ export const sessionsApi = {
     // 当前 runtime 还被其他窗口查看时，不能在它上面原地 switch，也不能走
     // 跨工作区 start 释放它。为发起窗口直接创建目标 runtime 并定向推送状态。
     const current = getActiveRuntime();
-    const currentPath = current?.runtime.session.sessionFile;
+    const currentPath = current?.adapterRuntime.session.view.sessionFile;
     if (
       ctx
       && current
@@ -296,12 +297,12 @@ export const sessionsApi = {
       return { success: true };
     }
     try {
-      if (active.runtime.session.isStreaming) {
+      if (active.adapterRuntime.session.view.isStreaming) {
         await createSessionRuntime(payload.cwd ?? active.cwd, payload.path);
         bindSenderWindow(ctx, payload.path);
         return { success: true };
       }
-      const result = await active.runtime.switchSession(payload.path);
+      const result = await active.adapterRuntime.switchSession(payload.path);
       if (result.cancelled) return { success: false, error: 'cancelled' };
       await afterSessionReplaced(active, ctx);
       bindSenderWindow(ctx, payload.path);
@@ -317,12 +318,11 @@ export const sessionsApi = {
     if (!name) return { success: false, error: 'empty name' };
     try {
       const active = getActiveRuntime();
-      if (active && samePath(payload.path, active.runtime.session.sessionFile)) {
-        // 当前会话：走 runtime 自己的 SessionManager，内存态与文件保持一致
-        active.runtime.session.sessionManager.appendSessionInfo(name);
+      const adapter = await loadPiAdapter();
+      if (active && samePath(payload.path, active.adapterRuntime.session.view.sessionFile)) {
+        adapter.sessions.appendSessionInfo(active.adapterRuntime.session.view.sessionManager, name);
       } else {
-        const sdk = await loadPiSdk();
-        sdk.SessionManager.open(payload.path).appendSessionInfo(name);
+        adapter.sessions.appendSessionInfo(adapter.sessions.open(payload.path), name);
       }
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'rename' });
       return { success: true };
@@ -336,10 +336,11 @@ export const sessionsApi = {
     const active = getActiveRuntime();
     if (!active) return { success: false, error: 'session not started' };
     try {
-      const forked = active.sdk.SessionManager.forkFrom(payload.path, active.cwd);
-      const newPath = forked.getSessionFile();
+      const adapter = await loadPiAdapter();
+      const forked = adapter.sessions.forkFrom(payload.path, active.cwd);
+      const newPath = forked.path;
       if (!newPath) return { success: false, error: 'fork produced no session file' };
-      const result = await active.runtime.switchSession(newPath);
+      const result = await active.adapterRuntime.switchSession(newPath);
       if (result.cancelled) return { success: false, error: 'cancelled' };
       await afterSessionReplaced(active);
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'fork' });
@@ -352,8 +353,8 @@ export const sessionsApi = {
   archive: async (payload: PiSessionArchivePayload): Promise<HostSuccess> => {
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     try {
-      const sdk = await loadPiSdk();
-      setArchived(payload.path, payload.archived, sdk);
+      const adapter = await loadPiAdapter();
+      setArchived(payload.path, payload.archived, adapter.sessions);
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'archive' });
       return { success: true };
     } catch (err) {
@@ -363,12 +364,12 @@ export const sessionsApi = {
 
   archiveProject: async (payload: PiSessionProjectArchivePayload): Promise<HostSuccess> => {
     try {
-      const sdk = await loadPiSdk();
-      const projectSessions = await sdk.SessionManager.list(payload.cwd);
+      const adapter = await loadPiAdapter();
+      const projectSessions = await adapter.sessions.list(payload.cwd);
       if (projectSessions.some((session) => isSessionRunning(session.path))) {
         return { success: false, error: 'project has a running session' };
       }
-      for (const session of projectSessions) setArchived(session.path, payload.archived, sdk);
+      for (const session of projectSessions) setArchived(session.path, payload.archived, adapter.sessions);
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'archive' });
       return { success: true };
     } catch (err) {
@@ -404,13 +405,13 @@ export const sessionsApi = {
     if (!active) return { success: false, error: 'session not started' };
     try {
       // exportToHtml 挂在 AgentSession 上，只能导「当前会话」；目标不是当前会话时先切过去。
-      if (!samePath(payload.path, active.runtime.session.sessionFile)) {
-        const result = await active.runtime.switchSession(payload.path);
+      if (!samePath(payload.path, active.adapterRuntime.session.view.sessionFile)) {
+        const result = await active.adapterRuntime.switchSession(payload.path);
         if (result.cancelled) return { success: false, error: 'cancelled' };
         await afterSessionReplaced(active);
       }
       const target = await sessionExportPath(payload.path);
-      const exported = await active.runtime.session.exportToHtml(target);
+      const exported = await active.adapterRuntime.session.exportToHtml(target);
       await settingsApi.set({ key: 'lastSessionExportPath', value: exported });
       return { success: true, path: exported };
     } catch (err) {

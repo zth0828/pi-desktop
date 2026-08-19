@@ -1,9 +1,10 @@
 // providers 模块：pi ModelRuntime 的封装（供应商枚举、认证状态、key 录入、OAuth、
 // 自定义供应商）。key 存取全程经 pi 的 auth-storage（login/logout），壳不写 auth.json。
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
+import { matchModelProfile } from '@shared/model-profiles';
 import type {
   HostSuccess,
   PiDefaultModel,
@@ -22,7 +23,7 @@ import type {
   PiDefaultThinkingResult,
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
-import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
+import { loadPiAdapter, type PiModelRuntimeHandle } from './pi-adapter';
 import { isLmStudioProvider, syncLmStudioModels } from '../utils/lmstudio-models';
 import { syncConfiguredProviderModels } from '../utils/configured-provider-models';
 import {
@@ -34,19 +35,30 @@ import {
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 
-type ModelRuntime = Awaited<ReturnType<PiSdk['ModelRuntime']['create']>>;
+type ModelRuntime = PiModelRuntimeHandle;
 
 let runtimePromise: Promise<ModelRuntime> | null = null;
+let runtimeGeneration = '';
 
-async function getModelRuntime(ctx?: HostActionContext): Promise<{ sdk: PiSdk; runtime: ModelRuntime }> {
+async function getModelRuntime(ctx?: HostActionContext): Promise<{
+  adapter: Awaited<ReturnType<typeof loadPiAdapter>>;
+  runtime: ModelRuntime;
+  agentDir: string;
+}> {
   const active = await resolveRuntimeForContextReady(ctx);
   if (active) {
-    return { sdk: active.sdk, runtime: active.runtime.services.modelRuntime };
+    return { adapter: active.adapter, runtime: active.modelRuntimeHandle, agentDir: active.adapter.paths.getAgentDir() };
   }
-  const sdk = await loadPiSdk();
-  if (await syncLmStudioModels(sdk.getAgentDir())) runtimePromise = null;
-  runtimePromise ??= sdk.ModelRuntime.create();
-  return { sdk, runtime: await runtimePromise };
+  const adapter = await loadPiAdapter();
+  const agentDir = adapter.paths.getAgentDir();
+  const key = `${adapter.metadata.generation}:${agentDir}`;
+  if (runtimeGeneration !== key) {
+    runtimeGeneration = key;
+    runtimePromise = null;
+  }
+  if (await syncLmStudioModels(agentDir)) runtimePromise = null;
+  runtimePromise ??= adapter.providers.createRuntime({ cwd: await resolveStandaloneCwd(), agentDir });
+  return { adapter, runtime: await runtimePromise, agentDir };
 }
 
 type ConfiguredProvider = {
@@ -74,42 +86,85 @@ function normalizeBaseUrlForApi(baseUrl: string, api: string): string {
   return api === 'anthropic-messages' ? base.replace(/\/v1$/i, '') : base;
 }
 
-function updateConfiguredProvider(
+async function updateConfiguredProvider(
   agentDir: string,
   providerId: string,
   update: (provider: Record<string, unknown>, providers: Record<string, unknown>) => void,
-): boolean {
-  const modelsPath = path.join(agentDir, 'models.json');
-  if (!existsSync(modelsPath)) return false;
-  const doc = JSON.parse(readFileSync(modelsPath, 'utf8')) as { providers?: Record<string, unknown> };
-  const provider = doc.providers?.[providerId];
-  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) return false;
-  update(provider as Record<string, unknown>, doc.providers!);
-  writeFileSync(modelsPath, JSON.stringify(doc, null, 2));
-  return true;
+): Promise<boolean> {
+  let found = false;
+  const adapter = await loadPiAdapter();
+  await adapter.settings.updateJson(agentDir, 'models.json', (doc) => {
+    const providers = doc.providers && typeof doc.providers === 'object' && !Array.isArray(doc.providers)
+      ? doc.providers as Record<string, unknown>
+      : {};
+    doc.providers = providers;
+    const provider = providers[providerId];
+    if (!provider || typeof provider !== 'object' || Array.isArray(provider)) return;
+    found = true;
+    update(provider as Record<string, unknown>, providers);
+  });
+  return found;
+}
+
+async function probeResponsesBaseUrl(options: {
+  baseUrl: string;
+  model: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+}): Promise<string | undefined> {
+  const base = options.baseUrl.replace(/\/+$/, '');
+  const candidates = /\/v1$/i.test(base) ? [base] : [base, `${base}/v1`];
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    ...options.headers,
+  };
+  if (options.apiKey) headers.authorization = `Bearer ${options.apiKey}`;
+  for (const candidate of candidates) {
+    try {
+      const response = await fetch(`${candidate}/responses`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ model: options.model, input: 'ping', max_output_tokens: 1 }),
+        signal: AbortSignal.timeout(9000),
+      });
+      if (!response.ok) continue;
+      const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+      if (contentType.includes('text/event-stream')) return candidate;
+      if (!contentType.includes('json')) continue;
+      const text = await response.text();
+      try {
+        const json = JSON.parse(text) as Record<string, unknown>;
+        if (Object.keys(json).length > 0) return candidate;
+      } catch { /* A successful HTML/text page is not a Responses endpoint. */ }
+    } catch { /* Keep the provider's existing working protocol. */ }
+  }
+  return undefined;
 }
 
 async function syncConfiguredCatalogs(
+  adapter: Awaited<ReturnType<typeof loadPiAdapter>>,
   runtime: ModelRuntime,
   agentDir: string,
   onlyProviderIds?: readonly string[],
-): Promise<{ discovered: number; added: number; changed: boolean; errors: string[] }> {
+): Promise<{ discovered: number; added: number; migrated: number; changed: boolean; errors: string[] }> {
   const configured = configuredProviders(agentDir);
   const selected = onlyProviderIds ? new Set(onlyProviderIds) : null;
   let discovered = 0;
   let added = 0;
   let changed = false;
+  let migrated = 0;
   const errors: string[] = [];
   for (const [providerId, provider] of Object.entries(configured)) {
     if (selected && !selected.has(providerId)) continue;
     if (!provider.baseUrl || isLmStudioProvider(providerId, provider as Record<string, unknown>)) continue;
-    const model = runtime.getModels(providerId)[0];
+    const model = adapter.providers.getModels(runtime, providerId)[0];
     const api = provider.api ?? model?.api;
     if (!api) continue;
     try {
-      const resolution = model
-        ? await runtime.getAuth(model)
-        : await runtime.getAuth(providerId);
+      const modelHandle = model ? adapter.providers.getModel(runtime, providerId, model.id) : null;
+      const resolution = modelHandle
+        ? await adapter.providers.getAuth(runtime, modelHandle)
+        : await adapter.providers.getAuth(runtime, providerId);
       if (!resolution) continue;
       const headers = Object.fromEntries(
         Object.entries(resolution.auth.headers ?? {})
@@ -125,15 +180,36 @@ async function syncConfiguredCatalogs(
           headers,
         },
       });
-      if (!result) continue;
-      discovered += result.discovered;
-      added += result.added;
-      changed ||= result.changed;
+      if (result) {
+        discovered += result.discovered;
+        added += result.added;
+        changed ||= result.changed;
+      }
+      if (api !== 'openai-responses' && model) {
+        const responsesBaseUrl = await probeResponsesBaseUrl({
+          baseUrl: provider.baseUrl,
+          model: model.id,
+          apiKey: resolution.auth.apiKey,
+          headers,
+        });
+        if (responsesBaseUrl) {
+          await updateConfiguredProvider(agentDir, providerId, (storedProvider) => {
+            storedProvider.api = 'openai-responses';
+            storedProvider.baseUrl = responsesBaseUrl;
+            storedProvider.compat = {
+              supportsDeveloperRole: false,
+              supportsReasoningEffort: false,
+            };
+          });
+          changed = true;
+          migrated += 1;
+        }
+      }
     } catch (error) {
       errors.push(`${providerId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  return { discovered, added, changed, errors };
+  return { discovered, added, migrated, changed, errors };
 }
 
 function providerLabel(id: string, name: string, baseUrl?: string): string {
@@ -163,14 +239,14 @@ async function resolveStandaloneCwd(): Promise<string> {
 
 export const providersApi = {
   list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiProviderListResult> => {
-    const { sdk, runtime } = await getModelRuntime(ctx);
-    const configuredProvidersById = configuredProviders(sdk.getAgentDir());
-    const extensionProviderIds = new Set(runtime.getRegisteredProviderIds());
+    const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
+    const configuredProvidersById = configuredProviders(agentDir);
+    const extensionProviderIds = new Set(adapter.providers.getRegisteredProviderIds(runtime));
     const rows: PiProviderRow[] = [];
-    for (const provider of runtime.getProviders()) {
+    for (const provider of adapter.providers.listProviders(runtime)) {
       let configured = false;
       try {
-        configured = runtime.hasConfiguredAuth(provider.id);
+        configured = adapter.providers.hasConfiguredAuth(runtime, provider.id);
       } catch {
         configured = false;
       }
@@ -178,6 +254,7 @@ export const providersApi = {
       rows.push({
         id: provider.id,
         name: providerLabel(provider.id, provider.name, configuredProvidersById[provider.id]?.baseUrl),
+        baseUrl: configuredProvidersById[provider.id]?.baseUrl ?? provider.baseUrl,
         source: extensionProviderIds.has(provider.id)
           ? 'extension'
           : configuredProvidersById[provider.id]
@@ -187,17 +264,17 @@ export const providersApi = {
           (m): m is string => m !== null,
         ),
         configured,
-        modelCount: runtime.getModels(provider.id).length,
+        modelCount: adapter.providers.getModels(runtime, provider.id).length,
       });
     }
     return { providers: rows };
   },
 
   listModels: async (_payload?: unknown, ctx?: HostActionContext) => {
-    const { sdk, runtime } = await getModelRuntime(ctx);
-    const configuredProvidersById = configuredProviders(sdk.getAgentDir());
-    const providerNames = new Map(runtime.getProviders().map((provider) => [provider.id, provider.name]));
-    const available = await runtime.getAvailable();
+    const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
+    const configuredProvidersById = configuredProviders(agentDir);
+    const providerNames = new Map(adapter.providers.listProviders(runtime).map((provider) => [provider.id, provider.name]));
+    const available = await adapter.providers.getAvailable(runtime);
     return {
       models: available.map((m) => ({
         provider: m.provider,
@@ -213,17 +290,22 @@ export const providersApi = {
         input: m.input,
         contextWindow: m.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
         maxTokens: m.maxTokens,
-        cost: { ...m.cost },
+        cost: {
+          input: m.cost?.input ?? 0,
+          output: m.cost?.output ?? 0,
+          cacheRead: m.cost?.cacheRead ?? 0,
+          cacheWrite: m.cost?.cacheWrite ?? 0,
+        },
       })),
     };
   },
 
   refresh: async (_payload?: unknown, ctx?: HostActionContext) => {
-    const { sdk, runtime } = await getModelRuntime(ctx);
+    const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
     const signal = AbortSignal.timeout(15_000);
     try {
-      const configured = await syncConfiguredCatalogs(runtime, sdk.getAgentDir());
-      const result = await runtime.refresh({ allowNetwork: true, force: true, signal });
+      const configured = await syncConfiguredCatalogs(adapter, runtime, agentDir);
+      const result = await adapter.providers.refresh(runtime, { allowNetwork: true, force: true, signal });
       const errors = [
         ...configured.errors,
         ...[...result.errors].map(([providerId, error]) => `${providerId}: ${error.message}`),
@@ -232,6 +314,7 @@ export const providersApi = {
         success: errors.length === 0 && !result.aborted,
         discoveredModels: configured.discovered,
         addedModels: configured.added,
+        migratedProviders: configured.migrated,
         ...(result.aborted ? { aborted: true, error: 'model refresh timed out' } : {}),
         ...(errors.length > 0 ? { errors, error: errors.join('\n') } : {}),
       };
@@ -241,21 +324,22 @@ export const providersApi = {
   },
 
   setApiKey: async (payload: PiProviderSetKeyPayload, ctx?: HostActionContext): Promise<PiProviderSetKeyResult> => {
-    const { sdk, runtime } = await getModelRuntime(ctx);
+    const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
     try {
       // login('api_key') 的 interaction.prompt 直接回传 GUI 录入的 key；
       // 持久化由 pi auth-storage 完成
-      await runtime.login(payload.providerId, 'api_key', {
+      await adapter.providers.login(runtime, payload.providerId, 'api_key', {
         prompt: async () => payload.apiKey,
         notify: () => {},
       });
       const configured = await syncConfiguredCatalogs(
+        adapter,
         runtime,
-        sdk.getAgentDir(),
+        agentDir,
         [payload.providerId],
       );
       if (configured.changed) {
-        await runtime.refresh({ allowNetwork: false });
+        await adapter.providers.refresh(runtime, { allowNetwork: false });
       }
       return {
         success: true,
@@ -269,17 +353,15 @@ export const providersApi = {
   },
 
   removeCredential: async (payload: { providerId: string }, ctx?: HostActionContext): Promise<HostSuccess> => {
-    const { sdk, runtime } = await getModelRuntime(ctx);
+    const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
     try {
-      await runtime.logout(payload.providerId);
-      updateConfiguredProvider(sdk.getAgentDir(), payload.providerId, (provider) => {
+      await adapter.providers.logout(runtime, payload.providerId);
+      await updateConfiguredProvider(agentDir, payload.providerId, (provider) => {
         delete provider.apiKey;
-        // Config-defined models are only usable with this credential. Clear the
-        // stale directory now; saving a new key discovers them again.
         if (Array.isArray(provider.models)) provider.models = [];
       });
       invalidateModelRuntime();
-      await runtime.refresh({ allowNetwork: false });
+      await adapter.providers.refresh(runtime, { allowNetwork: false });
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -287,18 +369,18 @@ export const providersApi = {
   },
 
   deleteCustom: async (payload: { providerId: string }, ctx?: HostActionContext): Promise<HostSuccess> => {
-    const { sdk, runtime } = await getModelRuntime(ctx);
+    const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
     try {
-      const configured = configuredProviders(sdk.getAgentDir());
+      const configured = configuredProviders(agentDir);
       if (!configured[payload.providerId]) {
         return { success: false, error: `custom provider not found: ${payload.providerId}` };
       }
-      await runtime.logout(payload.providerId);
-      updateConfiguredProvider(sdk.getAgentDir(), payload.providerId, (_provider, providers) => {
+      await adapter.providers.logout(runtime, payload.providerId);
+      await updateConfiguredProvider(agentDir, payload.providerId, (_provider, providers) => {
         delete providers[payload.providerId];
       });
       invalidateModelRuntime();
-      await runtime.refresh({ allowNetwork: false });
+      await adapter.providers.refresh(runtime, { allowNetwork: false });
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -307,9 +389,9 @@ export const providersApi = {
 
   /** OAuth：pi 的 provider-owned 流程；授权 URL 等经 providers.oauthProgress 事件推给 GUI。 */
   startOAuth: async (payload: { providerId: string }, ctx?: HostActionContext): Promise<HostSuccess> => {
-    const { runtime } = await getModelRuntime(ctx);
+    const { adapter, runtime } = await getModelRuntime(ctx);
     try {
-      await runtime.login(payload.providerId, 'oauth', {
+      await adapter.providers.login(runtime, payload.providerId, 'oauth', {
         prompt: async () => '',
         notify: (event) => {
           sendHostEvent('providers', 'oauthProgress', {
@@ -327,37 +409,45 @@ export const providersApi = {
   /** 自定义供应商：合并写入 <agentDir>/models.json（pi 文档定义的公开配置格式）。 */
   addCustom: async (payload: PiProviderAddCustomPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
-      const sdk = await loadPiSdk();
-      const agentDir = sdk.getAgentDir();
-      const modelsPath = path.join(agentDir, 'models.json');
-      let doc: { providers?: Record<string, unknown> } = {};
-      if (existsSync(modelsPath)) {
-        doc = JSON.parse(readFileSync(modelsPath, 'utf8'));
-      }
-      doc.providers ??= {};
-      doc.providers[payload.id] = {
+      const adapter = await loadPiAdapter();
+      const agentDir = adapter.paths.getAgentDir();
+      await adapter.settings.updateJson(agentDir, 'models.json', (doc) => {
+        const providers = doc.providers && typeof doc.providers === 'object' && !Array.isArray(doc.providers)
+          ? doc.providers as Record<string, unknown>
+          : {};
+        doc.providers = providers;
+        providers[payload.id] = {
         baseUrl: normalizeBaseUrlForApi(payload.baseUrl, payload.api),
         api: payload.api,
+        // 第三方 OpenAI 兼容服务器（vLLM/SGLang/Ollama/LM Studio 等）普遍不接受
+        // developer role 与 reasoning_effort 参数：推理模型（Qwen3 等）直接 400。
+        // 自定义供应商缺省声明关闭，pi 改发 system role；需要 developer role 的
+        // 网关可在 models.json 手动改回 true。
+        ...(payload.api === 'openai-completions' || payload.api === 'openai-responses'
+          ? { compat: { supportsDeveloperRole: false, supportsReasoningEffort: false } }
+          : {}),
         // 第三方模型缺省按支持推理处理：思考深度菜单可用；网关拒绝思考参数时
         // 用户可在 Models 页逐模型关闭。
-        models: payload.models.map((m) => ({
-          id: m.id,
-          name: m.name ?? m.id,
-          reasoning: m.reasoning ?? true,
-          input: ['text'],
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          contextWindow: m.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
-          maxTokens: m.maxTokens,
-        })),
-      };
-      mkdirSync(agentDir, { recursive: true });
-      writeFileSync(modelsPath, JSON.stringify(doc, null, 2));
+        models: payload.models.map((m) => {
+          const profile = matchModelProfile(m.id);
+          return {
+            id: m.id,
+            name: m.name ?? m.id,
+            reasoning: m.reasoning ?? true,
+            input: ['text'],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: m.contextWindow ?? profile.contextWindow,
+            maxTokens: m.maxTokens ?? profile.maxTokens,
+          };
+        }),
+        };
+      });
       invalidateModelRuntime();
       const active = await resolveRuntimeForContextReady(ctx);
-      const runtime = active?.runtime.services.modelRuntime ?? (await getModelRuntime(ctx)).runtime;
-      if (active) await runtime.refresh({ allowNetwork: false });
+      const { runtime } = await getModelRuntime(ctx);
+      if (active) await adapter.providers.refresh(runtime, { allowNetwork: false });
       if (payload.apiKey) {
-        await runtime.login(payload.id, 'api_key', {
+        await adapter.providers.login(runtime, payload.id, 'api_key', {
           prompt: async () => payload.apiKey!,
           notify: () => {},
         });
@@ -375,9 +465,10 @@ export const providersApi = {
    */
   setModelReasoning: async (payload: PiProviderSetModelReasoningPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
-      const sdk = await loadPiSdk();
+      const adapter = await loadPiAdapter();
+      const agentDir = adapter.paths.getAgentDir();
       let found = false;
-      const providerExists = updateConfiguredProvider(sdk.getAgentDir(), payload.providerId, (provider) => {
+      const providerExists = await updateConfiguredProvider(agentDir, payload.providerId, (provider) => {
         const models = Array.isArray(provider.models) ? provider.models : [];
         for (const raw of models) {
           const model = raw && typeof raw === 'object' && !Array.isArray(raw)
@@ -398,8 +489,8 @@ export const providersApi = {
       invalidateModelRuntime();
       const active = await resolveRuntimeForContextReady(ctx);
       if (active) {
-        await active.runtime.services.modelRuntime.refresh({ allowNetwork: false });
-        const current = active.runtime.session.model;
+        await active.adapter.providers.refresh(active.modelRuntimeHandle, { allowNetwork: false });
+        const current = active.adapterRuntime.session.model;
         if (current?.provider === payload.providerId && current?.id === payload.modelId) {
           const result = await piRuntimeApi.setModel({ provider: payload.providerId, id: payload.modelId }, ctx);
           if (!result.success) return { success: false, error: result.error };
@@ -494,6 +585,12 @@ export const providersApi = {
       }
     } catch { /* Native metadata is optional and only available on LM Studio. */ }
     const model = payload.model || models[0] || 'test-model';
+    // 目录未上报上下文的模型补上前缀规格表（探测不出时给用户一个合理的默认展示）。
+    for (const modelId of models) {
+      if (!modelDetails.some((detail) => detail.id === modelId)) {
+        modelDetails.push({ id: modelId, contextWindow: matchModelProfile(modelId).contextWindow });
+      }
+    }
     const protocols: PiProviderProbeResult['protocols'] = [];
     const resolvedBaseUrls = new Map<string, string>();
     const anthropicUrl = /\/v1$/i.test(base) ? `${base}/messages` : `${base}/v1/messages`;
@@ -544,7 +641,13 @@ export const providersApi = {
           error = candidateError instanceof Error ? candidateError.message : String(candidateError);
         }
       }
-      protocols.push({ api: request.api, available, cacheStats, ...(error ? { error } : {}) });
+      protocols.push({
+        api: request.api,
+        available,
+        cacheStats,
+        ...(error ? { error } : {}),
+        ...(available ? { resolvedBaseUrl: resolvedBaseUrls.get(request.api) } : {}),
+      });
     }
     const advertisedProtocols = protocols.filter((protocol) =>
       advertisedEndpointTypes.has(protocol.api)
@@ -555,8 +658,15 @@ export const providersApi = {
     const candidates = advertisedProtocols.some((protocol) => protocol.available)
       ? advertisedProtocols
       : protocols;
-    const recommended = candidates.find((protocol) => protocol.available && protocol.cacheStats)
-      ?? candidates.find((protocol) => protocol.available);
+    const protocolPreference = [
+      'openai-responses',
+      'openai-completions',
+      'anthropic-messages',
+      'google-generative-ai',
+    ];
+    const recommended = protocolPreference
+      .map((api) => candidates.find((protocol) => protocol.api === api && protocol.available))
+      .find(Boolean);
     return {
       models,
       modelDetails,
@@ -568,131 +678,76 @@ export const providersApi = {
 
   getCompaction: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiCompactionSettings> => {
     const active = resolveRuntimeForContext(ctx);
-    if (active) return active.runtime.services.settingsManager.getCompactionSettings();
-    const sdk = await loadPiSdk();
-    const settingsManager = sdk.SettingsManager.create(await resolveStandaloneCwd(), sdk.getAgentDir());
-    return settingsManager.getCompactionSettings();
+    const adapter = await loadPiAdapter();
+    const handle = active?.settingsHandle ?? adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
+    return adapter.settings.getCompaction(handle);
   },
 
   setCompaction: async (payload: { reserveTokens?: number; keepRecentTokens?: number; enabled?: boolean }): Promise<HostSuccess> => {
     try {
-      const sdk = await loadPiSdk();
-      const agentDir = sdk.getAgentDir();
-      const settingsPath = path.join(agentDir, 'settings.json');
-      let doc: Record<string, unknown> = {};
-      if (existsSync(settingsPath)) {
-        try { doc = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>; } catch { doc = {}; }
-      }
-      const current = (doc.compaction && typeof doc.compaction === 'object' ? doc.compaction : {}) as Record<string, unknown>;
-      doc.compaction = {
-        ...current,
-        ...(payload.enabled === undefined ? {} : { enabled: payload.enabled }),
-        ...(payload.reserveTokens === undefined ? {} : { reserveTokens: payload.reserveTokens }),
-        ...(payload.keepRecentTokens === undefined ? {} : { keepRecentTokens: payload.keepRecentTokens }),
-      };
-      mkdirSync(agentDir, { recursive: true });
-      writeFileSync(settingsPath, JSON.stringify(doc, null, 2));
+      const adapter = await loadPiAdapter();
+      const agentDir = adapter.paths.getAgentDir();
+      await adapter.settings.updateJson(agentDir, 'settings.json', (doc) => {
+        const current = doc.compaction && typeof doc.compaction === 'object' ? doc.compaction as Record<string, unknown> : {};
+        doc.compaction = { ...current, ...(payload.enabled === undefined ? {} : { enabled: payload.enabled }), ...(payload.reserveTokens === undefined ? {} : { reserveTokens: payload.reserveTokens }), ...(payload.keepRecentTokens === undefined ? {} : { keepRecentTokens: payload.keepRecentTokens }) };
+      });
       await reloadRuntimeSettings();
       return { success: true };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) };
-    }
+    } catch (err) { return { success: false, error: err instanceof Error ? err.message : String(err) }; }
   },
 
-  /** 首选模型 = pi settings.json 的 defaultProvider/defaultModel（新会话的初始模型来源）。 */
   getDefaultModel: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiDefaultModelResult> => {
     try {
       const active = resolveRuntimeForContext(ctx);
-      const sdk = active ? null : await loadPiSdk();
-      const settingsManager = active
-        ? active.runtime.services.settingsManager
-        : sdk!.SettingsManager.create(await resolveStandaloneCwd(), sdk!.getAgentDir());
-      const provider = settingsManager.getDefaultProvider();
-      const id = settingsManager.getDefaultModel();
-      return { model: provider && id ? { provider, id } : null };
-    } catch {
-      return { model: null };
-    }
+      const adapter = await loadPiAdapter();
+      const handle = active?.settingsHandle ?? adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
+      return { model: adapter.settings.getDefaultModel(handle) };
+    } catch { return { model: null }; }
   },
 
-  /**
-   * 设为首选模型。pi 原生机制：AgentSession.setModel 内部会持久化
-   * defaultProvider/defaultModel（新会话经 findInitialModel 应用），
-   * 所以有活动会话时直接复用 piRuntime.setModel；无会话时用独立
-   * SettingsManager 写同一份 settings.json，语义完全一致。
-   */
   setDefaultModel: async (payload: PiDefaultModel, ctx?: HostActionContext): Promise<HostSuccess> => {
     const active = await resolveRuntimeForContextReady(ctx);
     if (active) return piRuntimeApi.setModel(payload, ctx);
     try {
-      const sdk = await loadPiSdk();
-      const { runtime } = await getModelRuntime(ctx);
-      if (!runtime.getModel(payload.provider, payload.id)) {
-        return { success: false, error: `model not found: ${payload.provider}/${payload.id}` };
-      }
-      const settingsManager = sdk.SettingsManager.create(
-        await resolveStandaloneCwd(),
-        sdk.getAgentDir(),
-      );
-      settingsManager.setDefaultModelAndProvider(payload.provider, payload.id);
-      await settingsManager.flush();
+      const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
+      if (!adapter.providers.getModel(runtime, payload.provider, payload.id)) return { success: false, error: `model not found: ${payload.provider}/${payload.id}` };
+      const handle = adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir });
+      adapter.settings.setDefaultModel(handle, payload);
+      await adapter.settings.flush(handle);
       return { success: true };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) };
-    }
+    } catch (err) { return { success: false, error: err instanceof Error ? err.message : String(err) }; }
   },
 
-  /** 自动重试设置（pi settings.retry：开关/次数/基础退避）。 */
   getRetry: async (): Promise<PiRetrySettingsResult> => {
-    const sdk = await loadPiSdk();
-    const settingsManager = sdk.SettingsManager.create(await resolveStandaloneCwd(), sdk.getAgentDir());
-    return settingsManager.getRetrySettings();
+    const adapter = await loadPiAdapter();
+    const handle = adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
+    return adapter.settings.getRetry(handle);
   },
 
   setRetry: async (payload: PiRetrySettingsPayload): Promise<HostSuccess> => {
     try {
-      const sdk = await loadPiSdk();
-      const agentDir = sdk.getAgentDir();
-      // 与 setCompaction 同通道：SettingsManager 只有开关 setter，次数/退避直写 settings.json
-      const settingsPath = path.join(agentDir, 'settings.json');
-      let doc: Record<string, unknown> = {};
-      if (existsSync(settingsPath)) {
-        try { doc = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>; } catch { doc = {}; }
-      }
-      const current = (doc.retry && typeof doc.retry === 'object' ? doc.retry : {}) as Record<string, unknown>;
-      doc.retry = {
-        ...current,
-        ...(payload.enabled === undefined ? {} : { enabled: payload.enabled }),
-        ...(payload.maxRetries === undefined ? {} : { maxRetries: payload.maxRetries }),
-        ...(payload.baseDelayMs === undefined ? {} : { baseDelayMs: payload.baseDelayMs }),
-      };
-      mkdirSync(agentDir, { recursive: true });
-      writeFileSync(settingsPath, JSON.stringify(doc, null, 2));
+      const adapter = await loadPiAdapter();
+      await adapter.settings.updateJson(adapter.paths.getAgentDir(), 'settings.json', (doc) => {
+        const current = doc.retry && typeof doc.retry === 'object' ? doc.retry as Record<string, unknown> : {};
+        doc.retry = { ...current, ...(payload.enabled === undefined ? {} : { enabled: payload.enabled }), ...(payload.maxRetries === undefined ? {} : { maxRetries: payload.maxRetries }), ...(payload.baseDelayMs === undefined ? {} : { baseDelayMs: payload.baseDelayMs }) };
+      });
       return { success: true };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) };
-    }
+    } catch (err) { return { success: false, error: err instanceof Error ? err.message : String(err) }; }
   },
 
-  /** 新会话的默认思考深度（pi settings.defaultThinkingLevel）。 */
   getDefaultThinking: async (): Promise<PiDefaultThinkingResult> => {
-    const sdk = await loadPiSdk();
-    const settingsManager = sdk.SettingsManager.create(await resolveStandaloneCwd(), sdk.getAgentDir());
-    return { level: settingsManager.getDefaultThinkingLevel() ?? null };
+    const adapter = await loadPiAdapter();
+    const handle = adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
+    return { level: adapter.settings.getDefaultThinking(handle) };
   },
 
   setDefaultThinking: async (payload: { level: string }): Promise<HostSuccess> => {
     try {
-      const sdk = await loadPiSdk();
-      const settingsManager = sdk.SettingsManager.create(
-        await resolveStandaloneCwd(),
-        sdk.getAgentDir(),
-      );
-      settingsManager.setDefaultThinkingLevel(payload.level as never);
-      await settingsManager.flush();
+      const adapter = await loadPiAdapter();
+      const handle = adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
+      adapter.settings.setDefaultThinking(handle, payload.level);
+      await adapter.settings.flush(handle);
       return { success: true };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) };
-    }
+    } catch (err) { return { success: false, error: err instanceof Error ? err.message : String(err) }; }
   },
 };

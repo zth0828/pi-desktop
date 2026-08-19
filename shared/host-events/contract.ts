@@ -27,7 +27,9 @@ export type HostEventContract = {
     installProgress: (payload: PiInstallProgressEvent) => void;
   };
   piRuntime: {
-    /** pi 会话事件（envelope 内含 sessionId/generation，渲染层据此丢弃过期事件） */
+    /** prompt request lifecycle, correlated by requestId and runtime generation */
+    promptLifecycle: (payload: import('../host-api/contract').PiPromptLifecycleEvent) => void;
+
     event: (payload: PiRuntimeEventEnvelope) => void;
     /** new/switch/fork 后推送全量新状态，渲染层清空重载（payload 内含 sessionId，供按窗口绑定过滤） */
     sessionReplaced: (payload: PiRuntimeStateResult) => void;
@@ -85,6 +87,7 @@ export const HOST_EVENT_CHANNELS = {
     installProgress: 'pi-system:install-progress',
   },
   piRuntime: {
+    promptLifecycle: 'pi-runtime:prompt-lifecycle',
     event: 'pi-runtime:event',
     sessionReplaced: 'pi-runtime:session-replaced',
     runtimeStateChanged: 'pi-runtime:runtime-state-changed',

@@ -1,9 +1,5 @@
-// piPackages：扩展包管理。全部经 pi SDK 的 DefaultPackageManager
-// （list/installAndPersist/removeAndPersist/update/checkForAvailableUpdates），
-// 壳不直接改 settings.json 的 packages 字段。进度经 piPackages.progress 事件转发。
-// 官方目录查询在 Main 侧读取 pi.dev 服务端 HTML，安装动作仍完全复用 pi SDK。
+// piPackages：扩展包管理。所有 pi SDK package-manager 操作经 adapter port。
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import path from 'node:path';
 import type {
   HostSuccess,
@@ -18,41 +14,15 @@ import type {
   PiPackageRow,
   PiPackageUpdatePayload,
 } from '@shared/host-api/contract';
-import type { DefaultPackageManager } from '@earendil-works/pi-coding-agent';
 import { sendHostEvent } from '../main/ipc/host-events';
-import { loadPiSdk, type PiSdk } from '../utils/pi-loader';
+import { loadPiAdapter, type PiPackageManagerHandle } from './pi-adapter';
 import { resolveRuntimeForContext } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 import { fetchPackageCatalog, fetchPackageDetail } from './package-catalog';
 
-// 用类而非 PackageManager 接口：checkForAvailableUpdates 只在 DefaultPackageManager 上
-type Pm = InstanceType<typeof DefaultPackageManager>;
-type PmEntry = { key: string; pm: Pm };
-let cached: PmEntry | null = null;
-
-/** runtime 活动则复用其 settingsManager（避免壳另开实例写 settings.json 后被运行时缓存覆盖）。 */
-async function getPackageManager(ctx?: HostActionContext): Promise<{ sdk: PiSdk; pm: Pm; agentDir: string }> {
-  const sdk = await loadPiSdk();
-  const agentDir = sdk.getAgentDir();
-  const active = resolveRuntimeForContext(ctx);
-  const cwd = active?.cwd ?? (await settingsApi.get({ key: 'workspaceCwd' })) ?? homedir();
-  // generation 进 key：会话替换后 services/settingsManager 可能已重建
-  const key = `${cwd}::${agentDir}::${active ? `rt${active.generation}` : 'standalone'}`;
-  if (cached?.key === key) return { sdk, pm: cached.pm, agentDir };
-  const settingsManager =
-    active?.runtime.services.settingsManager ?? sdk.SettingsManager.create(cwd, agentDir);
-  const pm = new sdk.DefaultPackageManager({ cwd, agentDir, settingsManager });
-  pm.setProgressCallback((event) => {
-    sendHostEvent('piPackages', 'progress', event);
-  });
-  cached = { key, pm };
-  return { sdk, pm, agentDir };
-}
-
 function displayName(source: string): string {
   if (source.startsWith('npm:')) {
-    // npm:@scope/name@1.2.3 → @scope/name；npm:name@1.2.3 → name
     const spec = source.slice(4);
     if (spec.startsWith('@')) return `@${spec.split('@')[1] ?? spec}`;
     return spec.split('@')[0] ?? spec;
@@ -67,9 +37,7 @@ function displayName(source: string): string {
 function installedVersion(installedPath?: string): string | undefined {
   if (!installedPath) return undefined;
   try {
-    const manifest = path.join(installedPath, 'package.json');
-    if (!existsSync(manifest)) return undefined;
-    const parsed = JSON.parse(readFileSync(manifest, 'utf8')) as { version?: unknown };
+    const parsed = JSON.parse(readFileSync(path.join(installedPath, 'package.json'), 'utf8')) as { version?: unknown };
     return typeof parsed.version === 'string' ? parsed.version : undefined;
   } catch {
     return undefined;
@@ -80,10 +48,23 @@ function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+async function getPackageManager(ctx?: HostActionContext): Promise<{
+  adapter: Awaited<ReturnType<typeof loadPiAdapter>>;
+  handle: PiPackageManagerHandle;
+  agentDir: string;
+}> {
+  const adapter = await loadPiAdapter();
+  const active = resolveRuntimeForContext(ctx);
+  const cwd = active?.cwd ?? (await settingsApi.get({ key: 'workspaceCwd' })) ?? process.cwd();
+  const agentDir = adapter.paths.getAgentDir();
+  const handle = await adapter.packages.create({ cwd, agentDir, scope: 'user' });
+  return { adapter, handle, agentDir };
+}
+
 export const packagesApi = {
   list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiPackageListResult> => {
-    const { pm } = await getPackageManager(ctx);
-    const packages: PiPackageRow[] = pm.listConfiguredPackages().map((p) => ({
+    const { adapter, handle } = await getPackageManager(ctx);
+    const packages: PiPackageRow[] = adapter.packages.list(handle).map((p) => ({
       source: p.source,
       scope: p.scope,
       filtered: p.filtered,
@@ -98,8 +79,10 @@ export const packagesApi = {
     const source = payload.source.trim();
     if (!source) return { success: false, error: 'empty source' };
     try {
-      const { pm } = await getPackageManager(ctx);
-      await pm.installAndPersist(source);
+      const { adapter, handle } = await getPackageManager(ctx);
+      const off = adapter.packages.onProgress(handle, (event) => sendHostEvent('piPackages', 'progress', event));
+      try { await adapter.packages.install(handle, source); } finally { off(); }
+      adapter.packages.invalidate();
       return { success: true };
     } catch (err) {
       return { success: false, error: toError(err) };
@@ -108,9 +91,16 @@ export const packagesApi = {
 
   remove: async (payload: PiPackageRemovePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
-      const { pm } = await getPackageManager(ctx);
-      await pm.removeAndPersist(payload.source, { local: payload.scope === 'project' });
-      return { success: true };
+      const { adapter, handle } = await getPackageManager(ctx);
+      const off = adapter.packages.onProgress(handle, (event) => sendHostEvent('piPackages', 'progress', event));
+      let removed = false;
+      const local = payload.scope === 'project';
+      try {
+        removed = await adapter.packages.remove(handle, payload.source, local);
+      } finally { off(); }
+      adapter.packages.invalidate();
+
+      return removed ? { success: true } : { success: false, error: 'package source not found' };
     } catch (err) {
       return { success: false, error: toError(err) };
     }
@@ -118,8 +108,10 @@ export const packagesApi = {
 
   update: async (payload: PiPackageUpdatePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
-      const { pm } = await getPackageManager(ctx);
-      await pm.update(payload.source);
+      const { adapter, handle } = await getPackageManager(ctx);
+      const off = adapter.packages.onProgress(handle, (event) => sendHostEvent('piPackages', 'progress', event));
+      try { await adapter.packages.update(handle, payload.source); } finally { off(); }
+      adapter.packages.invalidate();
       return { success: true };
     } catch (err) {
       return { success: false, error: toError(err) };
@@ -127,21 +119,11 @@ export const packagesApi = {
   },
 
   checkUpdates: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiPackageCheckUpdatesResult> => {
-    const { pm } = await getPackageManager(ctx);
-    const updates = await pm.checkForAvailableUpdates();
-    return {
-      updates: updates.map((u) => ({
-        source: u.source,
-        displayName: u.displayName,
-        type: u.type,
-        scope: u.scope,
-      })),
-    };
+    const { adapter, handle } = await getPackageManager(ctx);
+    const updates = await adapter.packages.checkUpdates(handle);
+    return { updates: updates.map((u) => ({ source: u.source, displayName: u.displayName, type: u.type, scope: u.scope })) };
   },
 
-  catalog: async (payload: PiPackageCatalogQuery): Promise<PiPackageCatalogResult> =>
-    fetchPackageCatalog(payload),
-
-  detail: async (payload: PiPackageDetailQuery): Promise<PiPackageDetailResult> =>
-    fetchPackageDetail(payload),
+  catalog: async (payload: PiPackageCatalogQuery): Promise<PiPackageCatalogResult> => fetchPackageCatalog(payload),
+  detail: async (payload: PiPackageDetailQuery): Promise<PiPackageDetailResult> => fetchPackageDetail(payload),
 };

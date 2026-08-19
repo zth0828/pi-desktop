@@ -5,8 +5,6 @@
 // 信任确认不绑定会话（发生在 runtime 创建早期，sessionId 尚未存在），
 // 因此独立于 extension-ui 的 uiRequest 通道：广播事件 + listPending 拉取兜底。
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import type {
   HostSuccess,
   PiTrustEntry,
@@ -16,8 +14,7 @@ import type {
   PiTrustSetPayload,
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
-import { loadPiProjectTrust, loadPiSdk, type PiSdk } from '../utils/pi-loader';
-import { parseTrustEntries } from '../utils/trust-entries';
+import { loadPiAdapter } from './pi-adapter';
 
 type PendingTrustRequest = {
   payload: PiTrustRequestPayload;
@@ -67,17 +64,15 @@ export function createShellTrustContext(cwd: string) {
   };
 }
 
-async function trustStore(): Promise<InstanceType<PiSdk['ProjectTrustStore']>> {
-  const sdk = await loadPiSdk();
-  return new sdk.ProjectTrustStore(sdk.getAgentDir());
+async function trustStore(): Promise<{ set(path: string, decision: boolean | null): void }> {
+  const adapter = await loadPiAdapter();
+  return adapter.trust.getProjectTrustStore() as { set(path: string, decision: boolean | null): void };
 }
 
 /** trust.json 直读：ProjectTrustStore 无全量列举 API（文件格式即 path→decision 的 JSON 对象）。 */
 async function listEntries(): Promise<PiTrustEntry[]> {
-  const sdk = await loadPiSdk();
-  const trustPath = path.join(sdk.getAgentDir(), 'trust.json');
   try {
-    return parseTrustEntries(readFileSync(trustPath, 'utf8'));
+    return (await loadPiAdapter()).trust.listEntries();
   } catch {
     return [];
   }
@@ -94,8 +89,8 @@ export const projectTrustApi = {
   list: async (): Promise<PiTrustListResult> => ({ entries: await listEntries() }),
 
   set: async (payload: PiTrustSetPayload): Promise<HostSuccess> => {
-    const store = await trustStore();
-    store.set(payload.path, payload.decision);
+    const adapter = await loadPiAdapter();
+    await adapter.trust.set(payload.path, payload.decision);
     sendHostEvent('piTrust', 'changed', { entries: await listEntries() });
     return { success: true };
   },
@@ -103,8 +98,7 @@ export const projectTrustApi = {
 
 /** pi resolveProjectTrusted 的壳侧入口（重导出，调用点集中在 pi-runtime-api）。 */
 export async function resolveProjectTrusted(
-  options: Parameters<Awaited<ReturnType<typeof loadPiProjectTrust>>['resolveProjectTrusted']>[0],
+  options: unknown,
 ): Promise<boolean> {
-  const mod = await loadPiProjectTrust();
-  return mod.resolveProjectTrusted(options);
+  return (await loadPiAdapter()).trust.resolveProjectTrusted(options);
 }

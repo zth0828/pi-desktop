@@ -11,10 +11,8 @@
 //     （渲染层倒计时只是展示），防止渲染层异常导致 agent 永久挂起。
 //   - Promise 永远 resolve（取消语义），不 reject：取消是 pi UI 协议的正常结果。
 import { randomUUID } from 'node:crypto';
-import type {
-  ExtensionUIDialogOptions,
-  ExtensionUIContext,
-} from '@earendil-works/pi-coding-agent';
+type ExtensionUIDialogOptions = { timeout?: number; signal?: AbortSignal };
+type ExtensionUIContext = Record<string, unknown>;
 import type {
   HostSuccess,
   PiExtensionUiState,

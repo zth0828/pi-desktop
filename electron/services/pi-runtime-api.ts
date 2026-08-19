@@ -28,17 +28,19 @@ import type {
   PiUiResponsePayload,
   PiRuntimeQueueItemPayload,
   PiRuntimeBashPayload,
+  PiPromptLifecyclePhase,
 } from '@shared/host-api/contract';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import type {
-  AgentSession,
-  AgentSessionRuntime,
-  EventBus,
-  ExtensionAPI,
-  SessionEntry,
-  SessionTreeNode,
-} from '@earendil-works/pi-coding-agent';
+  PiEventBusPort,
+  PiRuntimeHandle,
+  PiSessionEntry,
+  PiSessionPort,
+  PiSessionTreeNode,
+  PiSettingsHandle,
+} from './pi-adapter';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { sendHostEvent, sendHostEventToWebContents } from '../main/ipc/host-events';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import {
@@ -51,7 +53,6 @@ import {
 } from '../main/window-manager';
 import { expandFileReferences } from '../utils/file-expand';
 import { detectPiEnvironment } from '../utils/pi-detector';
-import { type PiSdk } from '../utils/pi-loader';
 import { samePath } from '../utils/same-path';
 import {
   normalizePreviewablePath,
@@ -83,16 +84,16 @@ import {
 export type ActiveRuntime = {
   instanceId: string;
   adapter: PiRuntimeAdapter;
-  adapterRuntime: Awaited<ReturnType<PiRuntimeAdapter['createSessionRuntime']>>;
-  sdk: PiSdk;
-  runtime: AgentSessionRuntime;
+  adapterRuntime: PiRuntimeHandle;
   cwd: string;
   sessionId: string;
   generation: number;
+  settingsHandle: PiSettingsHandle;
+  modelRuntimeHandle: import('./pi-adapter').PiModelRuntimeHandle;
   /** 最近一次会话替换前跟踪的会话文件（sessionId/generation 之外的文件级锚点，供窗口改绑用） */
   sessionFile?: string;
   /** 传给 resourceLoader 的事件总线（pi-mcp-adapter 等扩展的状态通道挂在上面） */
-  eventBus: EventBus;
+  eventBus: PiEventBusPort;
   /**
    * 仅记录本次 pi 工具调用实际声明过的工作区外文件。
    * Renderer 永远不能任意读取绝对路径；此白名单只让工具卡能预览自己刚操作的文件。
@@ -105,10 +106,23 @@ export type ActiveRuntime = {
   /** 分支摘要进行中（navigateTree/fork 带 summarize 的等待窗口；pi 无事件，壳按调用区间跟踪）。 */
   summarizingBranch: boolean;
   unsubscribe: () => void;
+  pendingPrompts: Array<{ requestId: string; phase: 'accepted' | 'started' }>;
 };
 
 /** pi-mcp-adapter 的版本化状态通道。 */
 export const MCP_STATUS_CHANNEL = 'pi-mcp-adapter/status/v1';
+
+function emitPromptLifecycle(runtime: ActiveRuntime, phase: PiPromptLifecyclePhase, requestId: string, error?: string): void {
+  sendHostEvent('piRuntime', 'promptLifecycle', {
+    phase,
+    requestId,
+    runtimeId: runtime.instanceId,
+    sessionId: runtime.sessionId,
+    generation: runtime.generation,
+    adapterGeneration: runtime.adapter.metadata.generation,
+    ...(error ? { error: error.slice(0, 500) } : {}),
+  });
+}
 
 let active: ActiveRuntime | null = null;
 const runtimes = new Set<ActiveRuntime>();
@@ -125,13 +139,13 @@ export function getActiveRuntime(): ActiveRuntime | null {
 /** settings.json 由壳写入后，刷新所有保活 runtime 的 SettingsManager 缓存。 */
 export async function reloadRuntimeSettings(): Promise<void> {
   await Promise.all([...runtimes].map((runtime) =>
-    runtime.runtime.services.settingsManager.reload().catch(() => undefined),
+    runtime.adapter.settings.reload(runtime.settingsHandle).catch(() => undefined),
   ));
 }
 
 export function getRuntimeForSession(sessionPath: string): ActiveRuntime | null {
   for (const runtime of runtimes) {
-    if (samePath(runtime.runtime.session.sessionFile, sessionPath)) return runtime;
+    if (samePath(runtime.adapterRuntime.session.view.sessionFile, sessionPath)) return runtime;
   }
   return null;
 }
@@ -165,17 +179,17 @@ export async function resolveRuntimeForContextReady(
  * 被独立会话窗口 attach 时新建的 runtime 抢走路由（消息串到别的会话）。
  */
 function bindSenderToRuntime(ctx: HostActionContext | undefined, runtime: ActiveRuntime): void {
-  const sessionFile = runtime.runtime.session.sessionFile;
+  const sessionFile = runtime.adapterRuntime.session.view.sessionFile;
   if (ctx && sessionFile) bindWindowSession(ctx.sender.id, sessionFile);
 }
 
 export function isSessionRunning(sessionPath: string): boolean {
-  return getRuntimeForSession(sessionPath)?.runtime.session.isStreaming === true;
+  return getRuntimeForSession(sessionPath)?.adapterRuntime.session.view.isStreaming === true;
 }
 
 /** 开发热更新等待安全重启时使用，覆盖主窗口和独立窗口的保活 runtime。 */
 export function hasStreamingRuntimes(): boolean {
-  return [...runtimes].some((runtime) => runtime.runtime.session.isStreaming);
+  return [...runtimes].some((runtime) => runtime.adapterRuntime.session.view.isStreaming);
 }
 
 /** SDK 列表暂未收录的保活会话（通常是仍在流式输出的首次 run）。 */
@@ -191,7 +205,7 @@ export function getLiveSessionRows(): Array<{
 }> {
   const now = new Date();
   return [...runtimes].flatMap((entry) => {
-    const session = entry.runtime.session;
+    const session = entry.adapterRuntime.session;
     const sessionFile = session.sessionFile;
     if (!sessionFile) return [];
     const messages = session.messages as Array<{ role?: string; content?: unknown; timestamp?: number }>;
@@ -220,9 +234,9 @@ export function activateSessionRuntime(runtime: ActiveRuntime): PiRuntimeStateRe
   sendHostEvent('piRuntime', 'sessionReplaced', state);
   for (const request of state.pendingUiRequests ?? []) sendHostEvent('piRuntime', 'uiRequest', request);
   // 仍有窗口绑定着的 runtime 不回收（其他窗口正在看它）
-  const previousFile = previous?.runtime.session.sessionFile;
+  const previousFile = previous?.adapterRuntime.session.view.sessionFile;
   const previousWatched = previousFile ? findWindowBySession(previousFile) !== null : false;
-  if (previous && previous !== runtime && !previous.runtime.session.isStreaming && !previousWatched) {
+  if (previous && previous !== runtime && !previous.adapterRuntime.session.view.isStreaming && !previousWatched) {
     disposeRuntime(previous);
   }
   return state;
@@ -262,16 +276,16 @@ export function getLatestMcpStatusSnapshot(): Record<string, unknown> | null {
  * buildContextEntries().flatMap(sessionEntryToContextMessages) 一一对应，
  * 按各 entry 产出的消息数重建对齐（流式中的 partial assistant 无 entry，尾部自然缺省）。
  */
-function messageEntryIds(session: AgentSession): (string | null)[] {
+function messageEntryIds(session: PiSessionPort): (string | null)[] {
   const ids: (string | null)[] = [];
-  for (const entry of session.sessionManager.buildContextEntries()) {
+  for (const entry of session.buildContextEntries()) {
     const producesMessage =
       entry.type === 'message' ||
       entry.type === 'custom_message' ||
       (entry.type === 'branch_summary' && Boolean(entry.summary)) ||
       entry.type === 'compaction';
     if (!producesMessage) continue;
-    ids.push(entry.type === 'message' && entry.message.role === 'user' ? entry.id : null);
+    ids.push(entry.type === 'message' && (entry.message as { role?: unknown }).role === 'user' ? (entry.id ?? null) : null);
   }
   return ids;
 }
@@ -281,21 +295,21 @@ function messageEntryIds(session: AgentSession): (string | null)[] {
  * compaction. The transcript still needs the complete current branch so the UI
  * can render and navigate entries that were summarized away.
  */
-function historyMessages(sdk: PiSdk, session: AgentSession): { messages: unknown[]; entryIds: (string | null)[] } {
+function historyMessages(session: PiSessionPort): { messages: unknown[]; entryIds: (string | null)[] } {
   const messages: unknown[] = [];
   const entryIds: (string | null)[] = [];
-  for (const entry of session.sessionManager.getBranch()) {
+  for (const entry of session.getBranch()) {
     // 必须走动态加载的用户环境 pi（包是 ESM-only，main 进程 CJS 包里 require 会直接崩）
-    const converted = sdk.sessionEntryToContextMessages(entry);
+    const converted = session.getModelContextMessages(entry);
     for (const message of converted) {
       messages.push(message);
-      entryIds.push(entry.type === 'message' && entry.message.role === 'user' ? entry.id : null);
+      entryIds.push(entry.type === 'message' && (entry.message as { role?: unknown }).role === 'user' ? (entry.id ?? null) : null);
     }
   }
   return { messages, entryIds };
 }
 
-function modelInfo(session: AgentSession): PiRuntimeModelInfo | undefined {
+function modelInfo(session: PiSessionPort): PiRuntimeModelInfo | undefined {
   const model = session.model;
   return model
     ? {
@@ -309,17 +323,15 @@ function modelInfo(session: AgentSession): PiRuntimeModelInfo | undefined {
     : undefined;
 }
 
-function availableThinkingLevels(session: AgentSession): string[] {
+function availableThinkingLevels(session: PiSessionPort): string[] {
   try {
-    const getter = (session as unknown as { getAvailableThinkingLevels?: () => string[] })
-      .getAvailableThinkingLevels;
-    return typeof getter === 'function' ? getter.call(session) : [];
+    return session.getAvailableThinkingLevels();
   } catch {
     return [];
   }
 }
 
-function estimateContextTokens(runtime: ActiveRuntime, session: AgentSession): number {
+function estimateContextTokens(runtime: ActiveRuntime, session: PiSessionPort): number {
   const messages = session.messages as unknown as Array<{
     role?: string;
     content?: unknown;
@@ -339,7 +351,7 @@ function estimateContextTokens(runtime: ActiveRuntime, session: AgentSession): n
       const message = messages[index];
       if (message.role !== 'assistant' || !message.usage) continue;
       if (message.stopReason === 'aborted' || message.stopReason === 'error') continue;
-      const tokens = runtime.sdk.calculateContextTokens(message.usage as never);
+      const tokens = runtime.adapter.runtime.calculateContextTokens(message.usage);
       if (tokens > 0) {
         latestUsageIndex = index;
         latestUsageTokens = tokens;
@@ -349,13 +361,13 @@ function estimateContextTokens(runtime: ActiveRuntime, session: AgentSession): n
   let estimated = latestUsageIndex >= 0 ? latestUsageTokens : 0;
   const estimateFrom = latestUsageIndex >= 0 ? latestUsageIndex + 1 : start;
   for (let index = estimateFrom; index < messages.length; index += 1) {
-    estimated += runtime.sdk.estimateTokens(messages[index] as never);
+    estimated += runtime.adapter.runtime.estimateTokens(messages[index]);
   }
   return Math.max(0, Math.round(estimated));
 }
 
 function contextUsage(runtime: ActiveRuntime): PiRuntimeContextUsage | undefined {
-  const session = runtime.runtime.session;
+  const session = runtime.adapterRuntime.session;
   const usage = session.getContextUsage();
   const modelContextWindow = session.model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
   const contextWindow = usage?.contextWindow && usage.contextWindow > 0
@@ -377,7 +389,7 @@ function contextUsage(runtime: ActiveRuntime): PiRuntimeContextUsage | undefined
   };
 }
 
-function latestAssistantUsage(session: AgentSession): PiRuntimeUsageTurn | null {
+function latestAssistantUsage(session: PiSessionPort): PiRuntimeUsageTurn | null {
   for (let index = session.messages.length - 1; index >= 0; index -= 1) {
     const message = session.messages[index] as unknown as {
       role?: string;
@@ -400,7 +412,7 @@ function latestAssistantUsage(session: AgentSession): PiRuntimeUsageTurn | null 
   return null;
 }
 
-function modelUpdate(session: AgentSession, runtime: ActiveRuntime): PiRuntimeModelUpdateResult {
+function modelUpdate(session: PiSessionPort, runtime: ActiveRuntime): PiRuntimeModelUpdateResult {
   return {
     success: true,
     model: modelInfo(session),
@@ -411,8 +423,8 @@ function modelUpdate(session: AgentSession, runtime: ActiveRuntime): PiRuntimeMo
 }
 
 function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
-  const session = runtime.runtime.session;
-  const history = historyMessages(runtime.sdk, session);
+  const session = runtime.adapterRuntime.session;
+  const history = historyMessages(session);
   return {
     sessionId: session.sessionId,
     cwd: runtime.cwd,
@@ -427,7 +439,7 @@ function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
     historyMessageEntryIds: history.entryIds,
     sessionFile: session.sessionFile,
     contextUsage: contextUsage(runtime),
-    branchSummarySkipPrompt: runtime.runtime.services.settingsManager.getBranchSummarySkipPrompt(),
+    branchSummarySkipPrompt: runtime.adapter.settings.getBranchSummarySkipPrompt(runtime.settingsHandle),
     extensionUi: getExtensionUiStateSnapshot({
       sessionId: runtime.sessionId,
       generation: runtime.generation,
@@ -449,7 +461,7 @@ function rememberPreviewableFile(runtime: ActiveRuntime, toolName: string, args:
 
 function restorePreviewableExternalFiles(runtime: ActiveRuntime): void {
   runtime.previewableExternalFiles = previewableExternalFilesFromMessages(
-    runtime.runtime.session.messages as unknown[],
+    runtime.adapterRuntime.session.messages as unknown[],
     runtime.cwd,
   );
 }
@@ -473,7 +485,7 @@ function isInsideWorkspace(root: string, candidate: string): boolean {
  * pi 的官方扩展拦截点：只限制直接文件写工具，模型若需另一个项目必须让用户先在 GUI
  * 切换工作区。这样仍完全复用 pi 的工具执行与权限模型，不在壳里重做 agent/tool。
  */
-function workspaceBoundaryExtension(pi: ExtensionAPI): void {
+function workspaceBoundaryExtension(pi: { on: (event: string, handler: (event: any, context: any) => unknown) => void }): void {
   pi.on('tool_call', (event, context) => {
     if (event.toolName !== 'write' && event.toolName !== 'edit') return;
     const input = event.input as { path?: unknown; file_path?: unknown };
@@ -489,8 +501,8 @@ function workspaceBoundaryExtension(pi: ExtensionAPI): void {
 }
 
 function bridgeSessionEvents(runtime: ActiveRuntime): void {
-  const session = runtime.runtime.session;
-  runtime.unsubscribe = runtime.adapter.subscribe(runtime.adapterRuntime.session, (piEvent) => {
+  const session = runtime.adapterRuntime.session;
+  runtime.unsubscribe = session.subscribe((piEvent) => {
     try {
       const mapped = mapPiSessionEvent(piEvent);
       if (!mapped) return;
@@ -500,19 +512,31 @@ function bridgeSessionEvents(runtime: ActiveRuntime): void {
       // 防休眠挂钩（main 侧自治）：run 期间顶住休眠，重试等待保持，结束/替换解除
       if (mapped.type === 'run.started') {
         runtime.running = true;
+        const pending = runtime.pendingPrompts.find((item) => item.phase === 'accepted');
+        if (pending) {
+          pending.phase = 'started';
+          emitPromptLifecycle(runtime, 'started', pending.requestId);
+        }
         noteRunStarted(runtime.instanceId);
         setImmediate(() => sendHostEvent('piRuntime', 'runtimeStateChanged', {
           sessionId: runtime.sessionId,
-          sessionPath: runtime.runtime.session.sessionFile,
+          sessionPath: runtime.adapterRuntime.session.sessionFile,
           running: runtime.running,
         }));
       } else if (mapped.type === 'run.ended') {
+        if (!mapped.willRetry) {
+          const pending = runtime.pendingPrompts.find((item) => item.phase === 'started');
+          if (pending) {
+            emitPromptLifecycle(runtime, 'finished', pending.requestId);
+            runtime.pendingPrompts = runtime.pendingPrompts.filter((item) => item !== pending);
+          }
+        }
         noteRunEnded(runtime.instanceId, mapped.willRetry);
         if (!mapped.willRetry) {
           runtime.running = false;
           setImmediate(() => sendHostEvent('piRuntime', 'runtimeStateChanged', {
             sessionId: runtime.sessionId,
-            sessionPath: runtime.runtime.session.sessionFile,
+            sessionPath: runtime.adapterRuntime.session.sessionFile,
             running: false,
           }));
         }
@@ -541,7 +565,7 @@ function bridgeSessionEvents(runtime: ActiveRuntime): void {
 }
 
 async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
-  const session = runtime.runtime.session;
+  const session = runtime.adapterRuntime.session;
   // 不调 bindExtensions 扩展收不到 session_start（MCP 等全部失效）。
   // 沿用 pi 的 print 宿主模式；桌面交互能力由显式 uiContext 提供。
   // uiContext 桥接 confirm/select/input 到渲染层对话框（electron/services/extension-ui.ts），
@@ -555,19 +579,19 @@ async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
     commandContextActions: {
       waitForIdle: () => session.waitForIdle(),
       newSession: async (options) => {
-        const result = await runtime.runtime.newSession(options);
+        const result = await runtime.adapterRuntime.newSession(options);
         return { cancelled: result.cancelled };
       },
       fork: async (entryId, options) => {
-        const result = await runtime.runtime.fork(entryId, options);
+        const result = await runtime.adapterRuntime.fork(entryId, options);
         return { cancelled: result.cancelled };
       },
       navigateTree: async (targetId, options) => {
-        const result = await session.navigateTree(targetId, options);
+        const result = await session.navigateTree(targetId, options as { summarize?: boolean; customInstructions?: string });
         return { cancelled: result.cancelled, editorText: result.editorText };
       },
       switchSession: async (sessionPath, options) =>
-        runtime.runtime.switchSession(sessionPath, options),
+        runtime.adapterRuntime.switchSession(sessionPath, options),
       reload: async () => {
         await session.reload();
       },
@@ -593,119 +617,60 @@ const projectTrustByCwd = new Map<string, boolean>();
 async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveRuntime> {
   timingMark('runtime:create:start');
   const adapter = await loadPiAdapter();
-  if (adapter.compatibility.status === 'incompatible') {
+  if (adapter.compatibility.status === 'incompatible' || adapter.compatibility.status === 'restart-required') {
     throw new PiAdapterNotReadyError(compatibilityFailure(adapter.compatibility));
   }
-  const sdk = adapter.sdk;
-  timingMark('runtime:sdk-loaded');
-  const agentDir = sdk.getAgentDir();
-  // LM Studio 的原生目录包含视觉能力和真实上下文；先同步到 pi 的公开模型配置，
-  // 再让 pi 创建会话服务，模型选择与图片能力判定仍完全由 pi 负责。
+  const agentDir = adapter.paths.getAgentDir();
   await syncLmStudioModels(agentDir);
   timingMark('runtime:lmstudio-synced');
-  // 扩展 spawn pi 子进程时的入口约定（Electron 里 process.argv[1] 是壳的 main.js，
-  // 扩展按 CLI 假设会误 spawn 壳自身；如官方 subagent 示例）。检测到 pi 即写入。
   const piBin = detectPiEnvironment().pi.binPath;
   if (piBin) process.env.PI_CLI_PATH = piBin;
-  const eventBus = adapter.createEventBus();
-  // 信任状态随 factory 重跑（switchSession 换 cwd）更新；reload 的隐式信任落盘依赖它。
-  const trust: { autoTrustCwd?: string } = {};
-  const createFactory = async ({
-    cwd: effectiveCwd,
-    sessionManager,
-    sessionStartEvent,
-  }: {
-    cwd: string;
-    sessionManager: unknown;
-    sessionStartEvent?: unknown;
-  }) => {
-    // 项目信任判定与 pi CLI（main.js createRuntime）逐项对齐：
-    // 有需要门控的项目级资源且无缓存决定时，先以未信任创建 SettingsManager，
-    // 再在资源加载期经 resolveProjectTrust 询问用户（pi 原生判定 + 写 ProjectTrustStore）。
-    const hasTrustRequiring = sdk.hasTrustRequiringProjectResources(effectiveCwd);
-    const cachedTrust = projectTrustByCwd.get(effectiveCwd);
-    const shouldResolveTrust = cachedTrust === undefined && hasTrustRequiring;
-    const trustStore = new sdk.ProjectTrustStore(agentDir);
-    const projectTrusted = shouldResolveTrust
-      ? false
-      : (cachedTrust ?? (!hasTrustRequiring || trustStore.get(effectiveCwd) === true));
-    // pi CLI：启动时无门控资源（默认信任）的 cwd 记下来，之后 reload 出新的门控资源时
-    // 隐式落 trust=true（maybeSaveImplicitProjectTrustAfterReload），避免下次启动才突然询问。
-    trust.autoTrustCwd = hasTrustRequiring ? undefined : effectiveCwd;
-    const settingsManager = sdk.SettingsManager.create(effectiveCwd, agentDir, { projectTrusted });
-    const trustDiagnostics: Array<{ type: 'warning'; message: string }> = [];
-    const services = await adapter.createSessionServices({
-      cwd: effectiveCwd,
-      agentDir,
-      settingsManager,
-      resourceLoaderReloadOptions: shouldResolveTrust
-        ? {
-            resolveProjectTrust: async ({ extensionsResult }) => {
-              const trusted = await resolveProjectTrusted({
-                cwd: effectiveCwd,
-                trustStore,
-                // defaultProjectTrust 读取用未降权的 SettingsManager（与 pi CLI 的
-                // startupSettingsManager 对应；项目设置只在信任后才加载）。
-                defaultProjectTrust: adapter.sdk.SettingsManager.create(effectiveCwd, agentDir)
-                  .getDefaultProjectTrust(),
-                extensionsResult,
-                projectTrustContext: createShellTrustContext(effectiveCwd),
-                onExtensionError: (message) => trustDiagnostics.push({ type: 'warning', message }),
-              });
-              projectTrustByCwd.set(effectiveCwd, trusted);
-              return trusted;
-            },
-          }
-        : undefined,
-      resourceLoaderOptions: {
-        eventBus,
-        // 使用 pi 官方 ResourceLoader 的追加提示能力；默认系统提示和项目 AGENTS.md
-        // 仍由 pi 完整保留，壳只补充当前已选择的工作区边界与服务启动约定。
-        appendSystemPromptOverride: (base) => [...base, desktopWorkspaceInstructions(effectiveCwd)],
-        extensionFactories: [{
-          name: 'pi-desktop-workspace-boundary',
-          hidden: true,
-          factory: workspaceBoundaryExtension,
-        }],
-      },
-    });
-    return {
-      ...(await adapter.createSessionFromServices({
-        services,
-        sessionManager: sessionManager as never,
-        sessionStartEvent: sessionStartEvent as never,
-      })),
-      services,
-      diagnostics: [...trustDiagnostics, ...services.diagnostics],
-    };
+  const eventBusHandle = adapter.createEventBus();
+  const hasTrustRequiring = adapter.trust.hasTrustRequiringProjectResources(cwd);
+  const trust: { autoTrustCwd?: string } = {
+    autoTrustCwd: hasTrustRequiring ? undefined : cwd,
   };
-  const adapterRuntime = await adapter.createSessionRuntime(createFactory as never, {
+  const adapterRuntime = await adapter.createRuntime({
     cwd,
-    agentDir,
-    sessionManager: sessionPath ? sdk.SessionManager.open(sessionPath) : sdk.SessionManager.create(cwd),
+    sessionPath,
+    eventBus: eventBusHandle,
+    workspaceBoundary: true,
+    appendSystemPrompt: (base) => [...base, desktopWorkspaceInstructions(cwd)],
+    getProjectTrust: (effectiveCwd) => projectTrustByCwd.get(effectiveCwd),
+    setProjectTrust: (effectiveCwd, trusted) => projectTrustByCwd.set(effectiveCwd, trusted),
+    resolveTrust: async ({ cwd: effectiveCwd, trustStore, defaultProjectTrust, extensionsResult, onExtensionError }) =>
+      resolveProjectTrusted({
+        cwd: effectiveCwd,
+        trustStore,
+        defaultProjectTrust,
+        extensionsResult,
+        projectTrustContext: createShellTrustContext(effectiveCwd),
+        onExtensionError,
+      }),
   });
-  const runtime = adapterRuntime.raw;
   timingMark('runtime:session-runtime-created');
+  const settingsHandle = adapterRuntime.settings;
+  const modelRuntimeHandle = adapterRuntime.modelRuntime;
   const active_: ActiveRuntime = {
     instanceId: `runtime-${++runtimeSequence}`,
     adapter,
     adapterRuntime,
-    sdk,
-    runtime,
     cwd,
-    sessionId: runtime.session.sessionId,
+    sessionId: adapterRuntime.session.sessionId,
     generation: ++generationSequence,
-    sessionFile: runtime.session.sessionFile,
-    eventBus,
+    settingsHandle,
+    modelRuntimeHandle,
+    sessionFile: adapterRuntime.session.sessionFile,
+    eventBus: adapterRuntime.eventBus,
     previewableExternalFiles: new Set(),
     running: false,
     mcpStatus: null,
     trust,
     summarizingBranch: false,
     unsubscribe: () => {},
+    pendingPrompts: [],
   };
-  // pi-mcp-adapter 状态快照：缓存 + 转发渲染层（增强项；未装 adapter 时永远不发）
-  eventBus.on(MCP_STATUS_CHANNEL, (data) => {
+  active_.eventBus.on(MCP_STATUS_CHANNEL, (data) => {
     active_.mcpStatus = (data ?? null) as Record<string, unknown> | null;
     if (active === active_) {
       latestMcpStatus = active_.mcpStatus;
@@ -716,8 +681,6 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
   timingMark('runtime:extensions-bound');
   restorePreviewableExternalFiles(active_);
   bridgeSessionEvents(active_);
-  // Review baseline 必须在首次 run 前固定：Git 仓库固定 HEAD，非 Git 目录固定
-  // 会话启动快照。失败不阻塞会话启动（面板按不可用降级）。
   await captureReviewBaseline(cwd);
   timingMark('runtime:baseline-captured');
   runtimes.add(active_);
@@ -748,7 +711,7 @@ export async function createSessionRuntimeForWindow(
 ): Promise<PiRuntimeStateResult> {
   const previousActive = active;
   const runtime = await createRuntime(cwd, sessionPath);
-  const nextFile = runtime.runtime.session.sessionFile;
+  const nextFile = runtime.adapterRuntime.session.sessionFile;
   if (target.sessionPath && nextFile && !samePath(target.sessionPath, nextFile)) {
     rebindWindowSessionForWindow(target.sender.id, target.sessionPath, nextFile);
   } else if (nextFile) {
@@ -761,12 +724,12 @@ export async function createSessionRuntimeForWindow(
   }
   sendRuntimeStateToWindow(runtime, target);
 
-  const previousFile = previousActive?.runtime.session.sessionFile;
+  const previousFile = previousActive?.adapterRuntime.session.sessionFile;
   const previousWatched = previousFile ? findWindowBySession(previousFile) !== null : false;
   if (
     previousActive
     && previousActive !== runtime
-    && !previousActive.runtime.session.isStreaming
+    && !previousActive.adapterRuntime.session.isStreaming
     && !previousWatched
   ) {
     disposeRuntime(previousActive);
@@ -820,9 +783,9 @@ export function clearPrewarmMark(sessionPath: string): void {
  */
 export async function detachRuntimesFromSessionFile(sessionPath: string): Promise<void> {
   for (const runtime of [...runtimes]) {
-    if (!samePath(runtime.runtime.session.sessionFile, sessionPath)) continue;
+    if (!samePath(runtime.adapterRuntime.session.sessionFile, sessionPath)) continue;
     const previousSessionId = runtime.sessionId;
-    await runtime.runtime.newSession();
+    await runtime.adapterRuntime.newSession();
     await afterSessionReplaced(runtime, undefined, { replacesSessionId: previousSessionId });
   }
 }
@@ -835,11 +798,6 @@ export async function afterSessionReplaced(
 ): Promise<PiRuntimeStateResult> {
   const previousActive = active;
   runtime.unsubscribe();
-  // 会话替换后 AgentSession 对象变化，更新 adapter 对象边界。
-  runtime.adapterRuntime = {
-    ...runtime.adapterRuntime,
-    session: { raw: runtime.runtime.session },
-  };
   // 旧会话挂起的扩展 UI 请求全部取消（渲染层同步移除对话框）
   cancelPendingUiForContext({ sessionId: runtime.sessionId, generation: runtime.generation });
   // 旧会话若在运行中被替换，其 run.ended 不会再到：兜底解除防休眠
@@ -848,14 +806,14 @@ export async function afterSessionReplaced(
     runtime.running = false;
   }
   runtime.generation = ++generationSequence;
-  runtime.sessionId = runtime.runtime.session.sessionId;
+  runtime.sessionId = runtime.adapterRuntime.session.sessionId;
   await bindCurrentSession(runtime);
   restorePreviewableExternalFiles(runtime);
   bridgeSessionEvents(runtime);
   // fork/newSession 会换新会话文件，绑定旧文件的窗口改绑到新文件，
   // 否则后续 hostInvoke 按旧路径寻址 runtime 会失败（必须在推事件前完成）
   const previousFile = runtime.sessionFile;
-  const nextFile = runtime.runtime.session.sessionFile;
+  const nextFile = runtime.adapterRuntime.session.sessionFile;
   runtime.sessionFile = nextFile;
   if (previousFile && nextFile && !samePath(previousFile, nextFile)) {
     if (target) rebindWindowSessionForWindow(target.sender.id, previousFile, nextFile);
@@ -873,14 +831,14 @@ export async function afterSessionReplaced(
   if (target) sendHostEventToWebContents(target.sender, 'piRuntime', 'sessionReplaced', state);
   else sendHostEvent('piRuntime', 'sessionReplaced', state);
 
-  const previousActiveFile = previousActive?.runtime.session.sessionFile;
+  const previousActiveFile = previousActive?.adapterRuntime.session.sessionFile;
   const previousActiveWatched = previousActiveFile
     ? findWindowBySession(previousActiveFile) !== null
     : false;
   if (
     previousActive &&
     previousActive !== runtime &&
-    !previousActive.runtime.session.isStreaming &&
+    !previousActive.adapterRuntime.session.isStreaming &&
     !previousActiveWatched
   ) {
     disposeRuntime(previousActive);
@@ -889,7 +847,7 @@ export async function afterSessionReplaced(
 }
 
 function shouldIsolateSessionReplacement(runtime: ActiveRuntime, ctx?: HostActionContext): boolean {
-  const sessionPath = runtime.runtime.session.sessionFile;
+  const sessionPath = runtime.adapterRuntime.session.sessionFile;
   return Boolean(sessionPath && ctx && hasSessionInOtherWindow(sessionPath, ctx.sender.id));
 }
 
@@ -928,9 +886,9 @@ function contentSummaryText(content: unknown): string {
 }
 
 /** 树节点的展示摘要；结构噪音 entry（model/thinking 变更、label 等）返回 null 跳过。 */
-function treeEntrySummary(entry: SessionEntry): { kind: PiRuntimeTreeNode['kind']; text: string } | null {
+function treeEntrySummary(entry: PiSessionEntry): { kind: PiRuntimeTreeNode['kind']; text: string } | null {
   if (entry.type === 'message') {
-    const role = entry.message.role;
+    const role = (entry.message as { role?: unknown }).role;
     return {
       kind: role === 'user' ? 'user' : role === 'assistant' ? 'assistant' : 'other',
       text: contentSummaryText((entry.message as { content?: unknown }).content),
@@ -970,7 +928,7 @@ const SHELL_BUILTIN_COMMANDS: Array<{ name: string; description: string }> = [
  * steeringQueue/followUpQueue 要一并 clearAllQueues，否则重放会重复入队。
  */
 async function removeQueuedItem(
-  session: AgentSession,
+  session: PiSessionPort,
   payload: PiRuntimeQueueItemPayload,
 ): Promise<string | null> {
   const steering = [...session.getSteeringMessages()];
@@ -979,10 +937,10 @@ async function removeQueuedItem(
   if (payload.index < 0 || payload.index >= list.length) return null;
   const [removed] = list.splice(payload.index, 1);
   session.clearQueue();
-  session.agent.clearAllQueues();
+  session.clearAgentQueues();
   for (const text of steering) await session.steer(text);
   for (const text of followUp) await session.followUp(text);
-  return removed;
+  return removed ?? null;
 }
 
 /**
@@ -1004,7 +962,7 @@ export const piRuntimeApi = {
       bindSenderToRuntime(ctx, active);
       return snapshotState(active);
     }
-    if (active && !samePath(active.cwd, payload.cwd) && !active.runtime.session.isStreaming) {
+    if (active && !samePath(active.cwd, payload.cwd) && !active.adapterRuntime.session.isStreaming) {
       disposeRuntime(active);
     }
     const flight = (async () => {
@@ -1046,7 +1004,7 @@ export const piRuntimeApi = {
   getUsage: (_payload?: unknown, ctx?: HostActionContext): PiRuntimeUsageResult | null => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return null;
-    const session = active.runtime.session;
+    const session = active.adapterRuntime.session;
     const stats = session.getSessionStats();
     return {
       context: contextUsage(active) ?? null,
@@ -1065,19 +1023,34 @@ export const piRuntimeApi = {
   prompt: async (payload: PiRuntimePromptPayload, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    const session = active.runtime.session;
+    const session = active.adapterRuntime.session;
+    const requestId = ctx?.requestId ?? randomUUID();
+    emitPromptLifecycle(active, 'submitted', requestId);
+    const pendingPrompt = { requestId, phase: 'accepted' as const };
+    active.pendingPrompts.push(pendingPrompt);
     try {
       // @path 就地展开为 <file> 块（pi file-processor 语义；图片转 images 通道）
       const expanded = await expandFileReferences(payload.text, active.cwd);
       const staged = (payload.images ?? []) as unknown[];
-      await active.adapter.prompt(active.adapterRuntime.session, {
+      await session.prompt({
         text: expanded.text,
         images: [...expanded.images, ...staged],
         // 流式中提交：默认 followUp（排队等当前 run 完成），behavior='steer' 时当前轮插入
         ...(session.isStreaming
           ? { streamingBehavior: payload.behavior ?? ('followUp' as const) }
           : {}),
+        preflightResult: (accepted: boolean) => {
+          if (accepted) emitPromptLifecycle(active, 'accepted', requestId);
+          else {
+            emitPromptLifecycle(active, 'failed', requestId, 'prompt preflight rejected');
+            active.pendingPrompts = active.pendingPrompts.filter((item) => item !== pendingPrompt);
+          }
+        },
       });
+      if (pendingPrompt.phase === 'accepted' && !session.isStreaming && !active.running) {
+        emitPromptLifecycle(active, 'finished', requestId);
+        active.pendingPrompts = active.pendingPrompts.filter((item) => item !== pendingPrompt);
+      }
       return { success: true };
     } catch (err) {
       writePiDiagnostic({
@@ -1096,20 +1069,20 @@ export const piRuntimeApi = {
   queueRemove: async (payload: PiRuntimeQueueItemPayload, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    const removed = await removeQueuedItem(active.runtime.session, payload);
+    const removed = await removeQueuedItem(active.adapterRuntime.session, payload);
     return removed ? { success: true } : { success: false, error: 'queue index out of range' };
   },
 
   queueSteerNow: async (payload: PiRuntimeQueueItemPayload, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    const session = active.runtime.session;
+    const session = active.adapterRuntime.session;
     const text = await removeQueuedItem(session, payload);
     if (text == null) return { success: false, error: 'queue index out of range' };
     try {
       // 立即发送：流式中 = steer（当前轮工具间隙插入），空闲 = 直接开新轮
       if (session.isStreaming) await session.steer(text);
-      else await active.adapter.prompt(active.adapterRuntime.session, { text });
+      else await session.prompt({ text });
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -1120,12 +1093,12 @@ export const piRuntimeApi = {
   abort: async (_payload?: unknown, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    const session = active.runtime.session;
+    const session = active.adapterRuntime.session;
     if (session.isBashRunning) session.abortBash();
     else if (session.isCompacting) session.abortCompaction();
     else if (active.summarizingBranch) session.abortBranchSummary();
     else if (session.isRetrying) session.abortRetry();
-    else await active.adapter.abort(active.adapterRuntime.session);
+    else await session.abort();
     return { success: true };
   },
 
@@ -1134,7 +1107,7 @@ export const piRuntimeApi = {
     if (!active) return { success: false, error: 'session not started' };
     // 同一会话可同时显示在多个窗口。此时不能在共享 runtime 上原地
     // newSession，否则所有窗口都会收到 sessionReplaced；只为发起窗口创建新 runtime。
-    if (active.runtime.session.isStreaming || shouldIsolateSessionReplacement(active, ctx)) {
+    if (active.adapterRuntime.session.isStreaming || shouldIsolateSessionReplacement(active, ctx)) {
       try {
         await createReplacementRuntime(active, ctx);
         return { success: true };
@@ -1142,7 +1115,7 @@ export const piRuntimeApi = {
         return { success: false, error: toError(err) };
       }
     }
-    await active.runtime.newSession();
+    await active.adapterRuntime.newSession();
     await afterSessionReplaced(active, ctx);
     bindSenderToRuntime(ctx, active);
     return { success: true };
@@ -1152,19 +1125,19 @@ export const piRuntimeApi = {
   fork: async (payload: PiRuntimeForkPayload, ctx?: HostActionContext): Promise<PiRuntimeForkResult> => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    if (active.runtime.session.isStreaming) return { success: false, error: 'session is streaming' };
+    if (active.adapterRuntime.session.isStreaming) return { success: false, error: 'session is streaming' };
     let forkRuntime = active;
     let isolated = false;
     try {
       // fork 也会改变 runtime 的 session file。共享会话时先从原文件创建独立
       // runtime，避免另一个窗口收到 fork 后被错误改绑。
       if (shouldIsolateSessionReplacement(active, ctx)) {
-        const sessionPath = active.runtime.session.sessionFile;
+        const sessionPath = active.adapterRuntime.session.sessionFile;
         if (!sessionPath) return { success: false, error: 'session has no file' };
         forkRuntime = await createRuntime(active.cwd, sessionPath);
         isolated = true;
       }
-      const result = await forkRuntime.runtime.fork(payload.entryId);
+      const result = await forkRuntime.adapterRuntime.fork(payload.entryId);
       if (result.cancelled) {
         if (isolated) disposeRuntime(forkRuntime);
         return { success: false, error: 'cancelled' };
@@ -1182,7 +1155,8 @@ export const piRuntimeApi = {
   getTree: (_payload?: unknown, ctx?: HostActionContext): PiRuntimeTreeResult => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { nodes: [] };
-    const sm = active.runtime.session.sessionManager;
+    const session = active.adapterRuntime.session;
+    const sm = session.sessionManager;
     const leafId = sm.getLeafId();
     // 当前分支路径（leaf 及其祖先链），面板里高亮用
     const onPath = new Set<string>();
@@ -1192,25 +1166,25 @@ export const piRuntimeApi = {
       cursor = sm.getEntry(cursor)?.parentId ?? null;
     }
     const nodes: PiRuntimeTreeNode[] = [];
-    const walk = (list: SessionTreeNode[], depth: number) => {
-      for (const node of list) {
+    const walk = (list: PiSessionTreeNode[], depth: number) => {
+    for (const node of list) {
         const summary = treeEntrySummary(node.entry);
         if (summary) {
           nodes.push({
-            id: node.entry.id,
+            id: node.entry.id ?? '',
             depth,
             kind: summary.kind,
             text: summary.text,
             label: node.label,
             isLeaf: node.entry.id === leafId,
-            onCurrentPath: onPath.has(node.entry.id),
+            onCurrentPath: node.entry.id ? onPath.has(node.entry.id) : false,
           });
         }
         // 被跳过的节点不占用缩进深度
         walk(node.children, summary ? depth + 1 : depth);
       }
     };
-    walk(sm.getTree(), 0);
+    walk(session.getTree(), 0);
     return { nodes };
   },
 
@@ -1222,7 +1196,7 @@ export const piRuntimeApi = {
     try {
       // 摘要进行中标记：stop 按钮据此分发 abortBranchSummary（pi 无对应事件）
       if (summarize) active.summarizingBranch = true;
-      const result = await active.runtime.session.navigateTree(payload.targetId, {
+      const result = await active.adapterRuntime.session.navigateTree(payload.targetId, {
         summarize: payload.summarize,
         customInstructions: payload.customInstructions,
       });
@@ -1241,7 +1215,7 @@ export const piRuntimeApi = {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
     try {
-      await active.runtime.session.compact(payload?.customInstructions);
+      await active.adapterRuntime.session.compact(payload?.customInstructions);
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -1252,7 +1226,7 @@ export const piRuntimeApi = {
   executeBash: async (payload: PiRuntimeBashPayload, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    const session = active.runtime.session;
+    const session = active.adapterRuntime.session;
     // TUI：已有 bash 在跑时拒绝并发（先 Esc 取消）
     if (session.isBashRunning) return { success: false, error: 'bash already running' };
     try {
@@ -1267,7 +1241,7 @@ export const piRuntimeApi = {
         // 扩展直接给出执行结果：只记录不执行
         session.recordBashResult(payload.command, eventResult.result, { excludeFromContext });
       } else {
-        await session.executeBash(payload.command, undefined, {
+        await session.executeBash(payload.command, {
           excludeFromContext,
           operations: eventResult?.operations,
         });
@@ -1290,13 +1264,13 @@ export const piRuntimeApi = {
     const name = payload.name.trim();
     if (!name) return { success: false, error: 'empty name' };
     try {
-      active.runtime.session.setSessionName(name);
+      active.adapterRuntime.session.setSessionName(name);
       // 侧栏会话列表靠 sessionReplaced / isStreaming 翻转刷新；
       // streaming 中推全量会丢 partial 消息，跳过（流结束时列表自会刷新）。
-      if (payload.notify !== false && !active.runtime.session.isStreaming) {
+      if (payload.notify !== false && !active.adapterRuntime.session.isStreaming) {
         sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));
       }
-      return { success: true, name: active.runtime.session.sessionManager.getSessionName() };
+      return { success: true, name: active.adapterRuntime.session.sessionManager.getSessionName() };
     } catch (err) {
       return { success: false, error: toError(err) };
     }
@@ -1306,7 +1280,7 @@ export const piRuntimeApi = {
   getSessionInfo: (_payload?: unknown, ctx?: HostActionContext): PiRuntimeSessionInfo | null => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return null;
-    const session = active.runtime.session;
+    const session = active.adapterRuntime.session;
     const stats = session.getSessionStats();
     // pi 自动命名可能把附件信封带进会话名，标题栏展示前剥离（与列表出口 toRow 一致）
     const name = session.sessionManager.getSessionName();
@@ -1331,7 +1305,7 @@ export const piRuntimeApi = {
   reload: async (_payload?: unknown, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    const session = active.runtime.session;
+    const session = active.adapterRuntime.session;
     // pi /reload：生成中/压缩中禁止
     if (session.isStreaming) return { success: false, error: 'session is streaming' };
     if (session.isCompacting) return { success: false, error: 'session is compacting' };
@@ -1342,13 +1316,12 @@ export const piRuntimeApi = {
       // cwd，reload 后若出现门控资源且仍处于信任态，隐式落 trust=true（下次启动不再询问）。
       if (
         active.trust.autoTrustCwd === active.cwd
-        && active.runtime.services.settingsManager.isProjectTrusted()
-        && active.sdk.hasTrustRequiringProjectResources(active.cwd)
+        && active.adapter.settings.isProjectTrusted(active.settingsHandle)
+        && active.adapter.trust.hasTrustRequiringProjectResources(active.cwd)
       ) {
         active.trust.autoTrustCwd = undefined;
         try {
-          const trustStore = new active.sdk.ProjectTrustStore(active.sdk.getAgentDir());
-          if (trustStore.get(active.cwd) === null) trustStore.set(active.cwd, true);
+          await active.adapter.trust.set(active.cwd, true);
         } catch {
           // 落盘失败不阻塞 reload（pi TUI 仅告警）
         }
@@ -1368,10 +1341,10 @@ export const piRuntimeApi = {
     if (!active) return { success: false, error: 'session not started' };
     try {
       const outputPath = payload?.outputPath
-        ?? (active.runtime.session.sessionFile
-          ? await sessionExportPath(active.runtime.session.sessionFile)
+        ?? (active.adapterRuntime.session.sessionFile
+          ? await sessionExportPath(active.adapterRuntime.session.sessionFile)
           : undefined);
-      const exported = await active.runtime.session.exportToHtml(outputPath);
+      const exported = await active.adapterRuntime.session.exportToHtml(outputPath);
       await settingsApi.set({ key: 'lastSessionExportPath', value: exported });
       return { success: true, path: exported };
     } catch (err) {
@@ -1382,17 +1355,17 @@ export const piRuntimeApi = {
   setThinkingLevel: async (payload: { level: string }, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    active.runtime.session.setThinkingLevel(payload.level as never);
-    return modelUpdate(active.runtime.session, active);
+    active.adapterRuntime.session.setThinkingLevel(payload.level);
+    return modelUpdate(active.adapterRuntime.session, active);
   },
 
   setModel: async (payload: { provider: string; id: string }, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    const model = active.runtime.services.modelRuntime.getModel(payload.provider, payload.id);
+    const model = active.adapter.providers.getModel(active.modelRuntimeHandle, payload.provider, payload.id);
     if (!model) return { success: false, error: `model not found: ${payload.provider}/${payload.id}` };
-    await active.runtime.session.setModel(model);
-    return modelUpdate(active.runtime.session, active);
+    await active.adapterRuntime.session.setModel(model);
+    return modelUpdate(active.adapterRuntime.session, active);
   },
 
   /**
@@ -1403,19 +1376,24 @@ export const piRuntimeApi = {
   getCommands: (_payload?: unknown, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { commands: [] };
-    const loader = active.runtime.services.resourceLoader;
-    const prompts = loader.getPrompts().prompts.map((p) => ({
-      name: p.name,
-      description: p.description,
-      source: `prompt:${(p.sourceInfo as { label?: string } | undefined)?.label ?? ''}`,
-    }));
-    const skills = loader.getSkills().skills.map((s) => ({
-      name: `skill:${s.name}`,
-      description: s.description,
-      source: `skill:${(s.sourceInfo as { label?: string } | undefined)?.label ?? ''}`,
-    }));
+    const prompts = active.adapter.resources.getPrompts(active.adapterRuntime).map((raw) => {
+      const p = raw as { name?: unknown; description?: unknown; sourceInfo?: unknown };
+      return {
+        name: String(p.name ?? ''),
+        description: typeof p.description === 'string' ? p.description : undefined,
+        source: `prompt:${(p.sourceInfo as { label?: string } | undefined)?.label ?? ''}`,
+      };
+    });
+    const skills = active.adapter.resources.getSkills(active.adapterRuntime).map((raw) => {
+      const s = raw as { name?: unknown; description?: unknown; sourceInfo?: unknown };
+      return {
+        name: `skill:${String(s.name ?? '')}`,
+        description: typeof s.description === 'string' ? s.description : undefined,
+        source: `skill:${(s.sourceInfo as { label?: string } | undefined)?.label ?? ''}`,
+      };
+    });
     const builtinNames = new Set(SHELL_BUILTIN_COMMANDS.map((c) => c.name));
-    const extensionCommands = active.runtime.session.extensionRunner
+    const extensionCommands = active.adapterRuntime.session.extensionRunner
       .getRegisteredCommands()
       .filter((c) => !builtinNames.has(c.name))
       .map((c) => ({

@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { PiFileListPayload, PiFileListResult } from '@shared/host-api/contract';
-import { loadPiToolsManager } from '../utils/pi-loader';
+import { loadPiAdapter } from './pi-adapter';
 
 const MAX_FILES = 200;
 const EXCLUDED_DIRS = new Set(['.git', 'node_modules']);
@@ -14,8 +14,8 @@ let fdPathPromise: Promise<string | null> | null = null;
 
 /** fd 路径解析只试一次（含下载）；失败缓存 null，不每次 @ 都重试。 */
 function resolveFd(): Promise<string | null> {
-  fdPathPromise ??= loadPiToolsManager()
-    .then((manager) => manager.ensureTool('fd', true))
+  fdPathPromise ??= loadPiAdapter()
+    .then((adapter) => adapter.paths.ensureTool('fd', true))
     .catch(() => null);
   return fdPathPromise;
 }

@@ -3,7 +3,7 @@
 // per-skill 启停 API（只有路径增减），启停交给 pi 自己的配置，壳不乱造 settings.json 格式。
 // 导入 = 复制目录到 agentDir/skills（不建软链），目标目录与 pi 的用户级 skills 目录一致。
 import { cp, mkdir, readdir, readFile, rm } from 'node:fs/promises';
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type {
@@ -51,7 +51,7 @@ function classifySource(
 /** 导入目标根：优先活动 runtime 的 agentDir；未启动时回退与 pi 默认一致的用户目录。 */
 function resolveAgentDir(ctx?: HostActionContext): string {
   const active = resolveRuntimeForContext(ctx);
-  if (active) return active.sdk.getAgentDir();
+  if (active) return active.adapter.paths.getAgentDir();
   return process.env.PI_CODING_AGENT_DIR ?? path.join(homedir(), '.pi', 'agent');
 }
 
@@ -66,9 +66,15 @@ async function scanSkillDir(dir: string, targetDir: string): Promise<PiExternalS
   const skills: PiExternalSkill[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const skillDir = path.join(dir, entry.name);
+      const skillDir = path.join(dir, entry.name);
     const skillFile = path.join(skillDir, 'SKILL.md');
     if (!existsSync(skillFile)) continue;
+    try {
+      if (lstatSync(skillDir).isSymbolicLink() || lstatSync(skillFile).isSymbolicLink()) continue;
+      if (!isUnderDir(skillDir, dir)) continue;
+    } catch {
+      continue;
+    }
     let status: PiExternalSkill['status'] = 'new';
     const targetFile = path.join(targetDir, entry.name, 'SKILL.md');
     if (existsSync(targetFile)) {
@@ -95,8 +101,14 @@ export const skillsApi = {
   list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiSkillListResult> => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { skills: [], runtimeActive: false };
-    const agentDir = active.sdk.getAgentDir();
-    const { skills } = active.runtime.services.resourceLoader.getSkills();
+    const agentDir = active.adapter.paths.getAgentDir();
+    const skills = active.adapter.resources.getSkills(active.adapterRuntime).map((skill) => skill as {
+      name: string;
+      description: string;
+      filePath: string;
+      sourceInfo?: { origin?: string; scope?: string; source?: string };
+      disableModelInvocation?: boolean;
+    });
     const rows: PiSkillRow[] = skills.map((s) => ({
       name: s.name,
       description: s.description,
@@ -105,7 +117,7 @@ export const skillsApi = {
       sourceDetail: s.sourceInfo
         ? `${s.sourceInfo.source} · ${s.sourceInfo.scope}`
         : undefined,
-      disableModelInvocation: s.disableModelInvocation,
+      disableModelInvocation: s.disableModelInvocation === true,
     }));
     rows.sort((a, b) => a.name.localeCompare(b.name));
     return { skills: rows, runtimeActive: true };
@@ -122,7 +134,14 @@ export const skillsApi = {
     const candidates: Array<{ id: string; dir: string }> = [
       { id: 'claude', dir: path.join(homedir(), '.claude', 'skills') },
       { id: 'codex', dir: path.join(homedir(), '.codex', 'skills') },
-      ...(payload?.extraDirs ?? []).map((dir) => ({ id: 'manual', dir })),
+      ...(payload?.extraDirs ?? []).flatMap((dir) => {
+        try {
+          const resolved = safeRealpath(dir);
+          return existsSync(resolved) ? [{ id: 'manual', dir: resolved }] : [];
+        } catch {
+          return [];
+        }
+      }),
     ];
     const sources = [];
     for (const candidate of candidates) {
@@ -146,8 +165,10 @@ export const skillsApi = {
           results.push({ name: item.name, ok: false, action: 'error', error: 'invalid name' });
           continue;
         }
-        if (!existsSync(path.join(item.dir, 'SKILL.md'))) {
-          results.push({ name: item.name, ok: false, action: 'error', error: 'SKILL.md missing' });
+        const sourceDir = safeRealpath(item.dir);
+        const sourceFile = path.join(sourceDir, 'SKILL.md');
+        if (!existsSync(sourceFile) || !isUnderDir(sourceFile, sourceDir) || lstatSync(sourceDir).isSymbolicLink() || lstatSync(sourceFile).isSymbolicLink()) {
+          results.push({ name: item.name, ok: false, action: 'error', error: 'skill source is unavailable or unsafe' });
           continue;
         }
         const dest = path.join(targetDir, item.name);
@@ -165,14 +186,14 @@ export const skillsApi = {
         if (exists && item.strategy === 'overwrite') await rm(dest, { recursive: true, force: true });
         await mkdir(path.dirname(finalDest), { recursive: true });
         // 复制而非软链：导入后与原工具目录解耦，各自演进互不影响
-        await cp(item.dir, finalDest, { recursive: true });
+        await cp(sourceDir, finalDest, { recursive: true, dereference: true });
         results.push({
           name: item.name,
           ok: true,
           action: finalName !== item.name ? `renamed:${finalName}` : exists ? 'overwritten' : 'imported',
         });
       } catch (err) {
-        results.push({ name: item.name, ok: false, action: 'error', error: err instanceof Error ? err.message : String(err) });
+        results.push({ name: item.name, ok: false, action: 'error', error: 'skill import failed' });
       }
     }
     return { results };

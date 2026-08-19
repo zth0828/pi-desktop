@@ -15,7 +15,7 @@ import type {
   PiMcpSetDisabledPayload,
   PiMcpUpsertPayload,
 } from '@shared/host-api/contract';
-import { loadPiSdk } from '../utils/pi-loader';
+import { loadPiAdapter } from './pi-adapter';
 import { detectPiEnvironment } from '../utils/pi-detector';
 import { envWithUserPath } from '../utils/shell-env';
 import {
@@ -38,8 +38,8 @@ function toError(err: unknown): string {
 }
 
 async function resolvePaths(ctx?: HostActionContext): Promise<{ agentDir: string; cwd?: string }> {
-  const sdk = await loadPiSdk();
-  const agentDir = sdk.getAgentDir();
+  const adapter = await loadPiAdapter();
+  const agentDir = adapter.paths.getAgentDir();
   const active = resolveRuntimeForContext(ctx);
   const cwd = active?.cwd ?? (await settingsApi.get({ key: 'workspaceCwd' })) ?? undefined;
   return { agentDir, cwd };
