@@ -20,9 +20,34 @@ type PiSystemState = {
   appendInstallLog: (text: string) => void;
 };
 
+const ENV_CACHE_KEY = 'pi-desktop.pi-environment';
+
+type CachedEnvironment = { savedAt: number; env: PiEnvironment };
+
+function readCachedEnvironment(): PiEnvironment | null {
+  try {
+    const raw = window.localStorage.getItem(ENV_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as CachedEnvironment;
+    return cached.env?.pi && cached.env?.node ? cached.env : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedEnvironment(env: PiEnvironment): void {
+  try {
+    window.localStorage.setItem(ENV_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), env } satisfies CachedEnvironment));
+  } catch {
+    // 缓存不可用时不影响启动。
+  }
+}
+
+const cachedEnvironment = readCachedEnvironment();
+
 export const usePiSystemStore = create<PiSystemState>((set, get) => ({
-  env: null,
-  state: null,
+  env: cachedEnvironment,
+  state: cachedEnvironment ? computeOnboardingState(cachedEnvironment) : null,
   checking: false,
   installPhase: 'idle',
   installLog: [],
@@ -31,6 +56,7 @@ export const usePiSystemStore = create<PiSystemState>((set, get) => ({
     set({ checking: true });
     try {
       const env = await hostApi.piSystem.detect(force);
+      saveCachedEnvironment(env);
       set({ env, state: computeOnboardingState(env), checking: false });
       // 不阻断的最新版本提示（失败静默）
       if (env.pi.found) {

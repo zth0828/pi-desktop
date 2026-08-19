@@ -52,17 +52,25 @@ type ChatSearchTarget = { sessionId: string; messageIndex: number; nonce: number
 export default function App() {
   const { t } = useTranslation();
   const [page, setPage] = useState<AppPageId>(() => initialAppPage(window.location.search));
+  const [visitedPages, setVisitedPages] = useState<Set<AppPageId>>(() => new Set(['chat', initialAppPage(window.location.search)]));
   const [platform, setPlatform] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('pi-desktop.sidebar-collapsed') === 'true');
   const [sessionSearchOpen, setSessionSearchOpen] = useState(false);
   const [chatSearchTarget, setChatSearchTarget] = useState<ChatSearchTarget>();
   const state = usePiSystemStore((s) => s.state);
+  const environment = usePiSystemStore((s) => s.env);
   const detect = usePiSystemStore((s) => s.detect);
+
+  const navigate = (nextPage: AppPageId) => {
+    setPage(nextPage);
+    setVisitedPages((current) => current.has(nextPage) ? current : new Set(current).add(nextPage));
+  };
 
   useEffect(() => {
     const unbind = bindPiSystemEvents();
-    const unbindNavigate = onNavigateToPage(setPage);
-    void detect();
+    const unbindNavigate = onNavigateToPage(navigate);
+    // 已有缓存时直接进入主界面；环境检测只在首次启动或用户手动刷新时执行。
+    if (!environment) void detect();
     void initTheme();
     void hostApi.app.platform().then(setPlatform);
     // 恢复保存的语言
@@ -100,7 +108,7 @@ export default function App() {
   }
 
   const newChat = () => {
-    setPage('chat');
+    navigate('chat');
     // 走活跃面板 store 的 newSession：置位 expectingReplacement，sessionReplaced 事件据此改绑
     const store = getActiveChatStore();
     if (store?.getState().started) void store.getState().newSession();
@@ -173,7 +181,7 @@ export default function App() {
           <Plus size={15} />
           <span>{t('sidebar.newChat')}</span>
         </button>
-        <SessionList onOpenChat={() => setPage('chat')} />
+        <SessionList onOpenChat={() => navigate('chat')} />
         <div className="sidebar-nav">
           {PAGES.map(({ id, icon: Icon }) => (
             <button
@@ -181,7 +189,7 @@ export default function App() {
               data-testid={`nav-${id}`}
               className={page === id ? 'nav-item active' : 'nav-item'}
               title={sidebarCollapsed ? t(`nav.${id}`) : undefined}
-              onClick={() => setPage(id)}
+              onClick={() => navigate(id)}
             >
               <Icon size={15} />
               <span>{t(`nav.${id}`)}</span>
@@ -190,24 +198,13 @@ export default function App() {
         </div>
       </nav>
       <main className="content">
-        {page === 'chat' ? (
-          <ChatPage
-            searchTarget={chatSearchTarget}
-            onSearchTargetHandled={clearChatSearchTarget}
-          />
-        ) : page === 'models' ? (
-          <ModelsPage />
-        ) : page === 'sessions' ? (
-          <SessionsPage onOpenChat={() => setPage('chat')} />
-        ) : page === 'skills' ? (
-          <SkillsPage />
-        ) : page === 'extensions' ? (
-          <ExtensionsPage />
-        ) : page === 'mcp' ? (
-          <McpPage />
-        ) : page === 'settings' ? (
-          <SettingsPage />
-        ) : null}
+        {visitedPages.has('chat') && <div className={`page-view${page === 'chat' ? ' active' : ''}`}><ChatPage searchTarget={chatSearchTarget} onSearchTargetHandled={clearChatSearchTarget} /></div>}
+        {visitedPages.has('models') && <div className={`page-view${page === 'models' ? ' active' : ''}`}><ModelsPage /></div>}
+        {visitedPages.has('sessions') && <div className={`page-view${page === 'sessions' ? ' active' : ''}`}><SessionsPage onOpenChat={() => navigate('chat')} /></div>}
+        {visitedPages.has('skills') && <div className={`page-view${page === 'skills' ? ' active' : ''}`}><SkillsPage /></div>}
+        {visitedPages.has('extensions') && <div className={`page-view${page === 'extensions' ? ' active' : ''}`}><ExtensionsPage /></div>}
+        {visitedPages.has('mcp') && <div className={`page-view${page === 'mcp' ? ' active' : ''}`}><McpPage /></div>}
+        {visitedPages.has('settings') && <div className={`page-view${page === 'settings' ? ' active' : ''}`}><SettingsPage /></div>}
       </main>
       <ExtensionUiNotifications />
       <TrustDialog />
@@ -215,7 +212,7 @@ export default function App() {
         open={sessionSearchOpen}
         onClose={() => setSessionSearchOpen(false)}
         onOpenChat={(target) => {
-          setPage('chat');
+          navigate('chat');
           setChatSearchTarget(target ? { ...target, nonce: Date.now() } : undefined);
         }}
       />

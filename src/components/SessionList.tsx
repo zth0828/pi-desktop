@@ -79,6 +79,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   // 拖拽期间挂的 Esc keydown 监听（dragend 摘除）；Esc 取消坐标启发式接不住 mac，见 session-drag.ts
   const dragEscCleanup = useRef<(() => void) | undefined>(undefined);
   const refreshSequence = useRef(0);
+  const refreshTimer = useRef<number | undefined>(undefined);
   const started = useActiveChatStore((s) => s.started);
   const isStreaming = useActiveChatStore((s) => s.isStreaming);
   const activeCwd = useActiveChatStore((s) => s.cwd);
@@ -105,9 +106,13 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   }, []);
 
   const refreshAfterSessionChange = useCallback(() => {
-    refresh();
-    window.setTimeout(refresh, 150);
-    window.setTimeout(refresh, 500);
+    // 运行状态和 sessionReplaced 可能成组到达；合并为一次延迟读取，
+    // 避免每个事件触发三次全量 session 文件扫描。
+    if (refreshTimer.current != null) window.clearTimeout(refreshTimer.current);
+    refreshTimer.current = window.setTimeout(() => {
+      refreshTimer.current = undefined;
+      refresh();
+    }, 180);
   }, [refresh]);
 
   useEffect(() => {
@@ -120,6 +125,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
       unbindSession();
       unbindRuntime();
       unbindChanged();
+      if (refreshTimer.current != null) window.clearTimeout(refreshTimer.current);
     };
   }, [refreshAfterSessionChange, started]);
 

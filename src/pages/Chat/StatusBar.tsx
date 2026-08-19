@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { retryRemainingSeconds } from '../../lib/retry-countdown';
+import { toolSummary } from '../../lib/tool-display';
 import { usePaneChatStore } from './chat-store-context';
 
 function QueueChip({ kind, items }: { kind: 'steering' | 'followUp'; items: string[] }) {
@@ -28,6 +29,7 @@ export function StatusBar() {
   const lastCompaction = usePaneChatStore((s) => s.lastCompaction);
   const queue = usePaneChatStore((s) => s.queue);
   const extensionUi = usePaneChatStore((s) => s.extensionUi);
+  const runningTool = usePaneChatStore((s) => Object.values(s.toolExecutions).find((execution) => execution.status === 'running'));
   const runningServerCommand = usePaneChatStore((s) => Object.values(s.toolExecutions).find((execution) => {
     if (execution.status !== 'running' || execution.toolName !== 'bash') return false;
     const command = (execution.args as { command?: unknown } | undefined)?.command;
@@ -81,6 +83,16 @@ export function StatusBar() {
       testid: 'status-server-running',
       text: t('chat.status.serverRunning'),
       title: (runningServerCommand.args as { command?: string } | undefined)?.command,
+    };
+  } else if (isStreaming && runningTool) {
+    const toolName = ['bash', 'edit', 'write', 'read', 'grep'].includes(runningTool.toolName) ? runningTool.toolName : 'default';
+    status = {
+      testid: 'status-tool-running',
+      text: t(`chat.tool.line.${toolName}.running`, {
+        tool: runningTool.toolName,
+        summary: toolSummary(runningTool.toolName, runningTool.args) ?? runningTool.toolName,
+      }),
+      title: toolSummary(runningTool.toolName, runningTool.args) ?? undefined,
     };
   } else if (isStreaming && extensionUi?.workingVisible !== false) {
     status = { testid: 'status-working', text: extensionUi?.workingMessage ?? t('chat.status.working') };

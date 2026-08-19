@@ -446,6 +446,19 @@ button.danger-outline {
   overflow: hidden;
 }
 
+.page-view {
+  display: none;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.page-view.active {
+  display: flex;
+  flex-direction: column;
+}
+
 /* ---------- 页面通用 ---------- */
 
 .page {
