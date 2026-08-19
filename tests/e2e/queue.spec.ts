@@ -105,6 +105,21 @@ test('稍后消息可取回输入框编辑后重新发送', async ({ launchElect
   await page.getByTestId('chat-stop').click();
 });
 
+test('停止当前运行会清空队列并将内容恢复到编辑器', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await startSlowAndQueue(page, 'follow up after stop');
+  await page.getByTestId('chat-input').fill('guide before stop');
+  await page.getByTestId('chat-steer-send').click();
+  await expect(page.getByTestId('queue-item-steering')).toContainText('guide before stop');
+
+  await page.getByTestId('chat-stop').click();
+  await expect(page.getByTestId('queue-list')).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId('chat-input')).toHaveValue('guide before stop\n\nfollow up after stop');
+});
+
 test('队列项「立即发送」→ 移出 followUp 并 steer 插入当前轮', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
