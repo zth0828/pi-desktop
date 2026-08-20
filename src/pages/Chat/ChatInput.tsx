@@ -1035,7 +1035,6 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 title={t('chat.queueSendTipSteer')}
               >
                 <ArrowUp size={15} />
-                <span>{t(followupBehavior === 'steer' ? 'chat.steerSend' : 'chat.queueSend')}</span>
               </button>
               <button
                 data-testid="chat-stop"

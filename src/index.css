@@ -2243,8 +2243,6 @@ button.danger-outline {
 
 
 
-.send-button span { white-space: nowrap; }
-
 .send-button.stop { flex: none; }
 
 @media (max-width: 620px) {
