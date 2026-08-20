@@ -2,6 +2,7 @@ import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Copy, FileText, GitFork } from 'lucide-react';
 import { parseUserMessage } from '@shared/message-attachments';
+import { parseProviderError } from '../../lib/provider-error';
 import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
 import { formatDuration } from '../../lib/tool-display';
@@ -41,6 +42,26 @@ function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: stri
       </summary>
       <pre>{thinking}</pre>
     </details>
+  );
+}
+
+/** 供应商错误提示：保留 pi 原文，按状态码/关键词附一条归属提示（谁的问题）。
+ *  归属提示只在能识别时显示；识别不了的错误保持原样，避免误导。 */
+function ErrorNotice({ message }: { message: string }) {
+  const { t } = useTranslation();
+  const parsed = parseProviderError(message);
+  return (
+    <div className="message-notice error" data-testid="message-error">
+      <div className="error-message-raw">{message}</div>
+      {parsed.category !== 'unknown' && (
+        <div className="error-hint" data-testid={`error-hint-${parsed.category}`}>
+          {t(`chat.errors.${parsed.category}`)}
+          {parsed.requestId && (
+            <span className="error-request-id"> {t('chat.errors.requestId', { id: parsed.requestId })}</span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -303,6 +324,7 @@ function MessageItemView({
   }
   const content = contentOverride ?? message.content;
   const raw = message.raw as { stopReason?: string; errorMessage?: string } | undefined;
+  const errorMessage = raw?.errorMessage;
   const showTail = !message.streaming && !suppressTail;
   const plainText = content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
   // 失败的回合（stopReason=error）content 为空，错误信息仍要渲染，否则用户看到"发了没反应"。
@@ -315,9 +337,7 @@ function MessageItemView({
         id={anchorId}
         tabIndex={highlighted ? -1 : undefined}
       >
-        <div className="message-notice error" data-testid="message-error">
-          {raw!.errorMessage}
-        </div>
+        <ErrorNotice message={errorMessage!} />
       </div>
     );
   }
@@ -363,11 +383,7 @@ function MessageItemView({
           {t('chat.stopLength')}
         </div>
       )}
-      {showTail && raw?.errorMessage && (
-        <div className="message-notice error" data-testid="message-error">
-          {raw.errorMessage}
-        </div>
-      )}
+      {showTail && errorMessage && <ErrorNotice message={errorMessage} />}
       {showTail && plainText && (
         <div className="message-actions" data-testid="message-actions">
           <button data-testid="copy-message" title={t('chat.copy')} onClick={() => void copy()}>

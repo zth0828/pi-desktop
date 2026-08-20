@@ -1294,6 +1294,20 @@ button.danger-outline {
   color: var(--danger);
 }
 
+.message-notice.error .error-message-raw {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.message-notice.error .error-hint {
+  margin-top: 6px;
+  color: var(--warning);
+}
+
+.message-notice.error .error-request-id {
+  opacity: 0.8;
+}
+
 /* `!` bash 执行卡片 */
 
 .message-bash {

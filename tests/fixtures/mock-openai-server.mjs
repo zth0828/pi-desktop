@@ -115,6 +115,36 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // 供应商错误模拟：返回 New API 风格错误 JSON，驱动 UI 错误归属提示。
+    // 分类按 body 内容定：503 service-unavailable / auth_unavailable → upstream，
+    // 503 model_not_found → wrong-model，401 invalid token → invalid-key，
+    // 429 usage_limit_reached → quota。
+    if (lastUser.includes("ERR_UPSTREAM_503")) {
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "Service temporarily unavailable", type: "api_error", param: "", code: null } }));
+      return;
+    }
+    if (lastUser.includes("ERR_AUTH_UNAVAILABLE")) {
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "auth_unavailable: no auth available (providers=codex, model=mock-1)", type: "server_error", param: "", code: "internal_server_error" } }));
+      return;
+    }
+    if (lastUser.includes("ERR_INVALID_KEY")) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { code: "", message: "Invalid token (request id: 202608200646490268733188268d9d6FgctFa43)", type: "new_api_error" } }));
+      return;
+    }
+    if (lastUser.includes("ERR_MODEL_NOT_FOUND")) {
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { code: "model_not_found", message: "No available channel for model mock-1 under group 特惠分组 (distributor)", type: "new_api_error" } }));
+      return;
+    }
+    if (lastUser.includes("ERR_QUOTA")) {
+      res.writeHead(429, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "The usage limit has been reached", type: "usage_limit_reached", param: "", code: null } }));
+      return;
+    }
+
     res.writeHead(200, {
       "content-type": "text/event-stream",
       "cache-control": "no-cache",

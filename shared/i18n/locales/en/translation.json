@@ -330,6 +330,14 @@
       "excluded": "excluded from context",
       "cancelled": "cancelled",
       "exitCode": "exit {{code}}"
+    },
+    "errors": {
+      "invalidKey": "API key issue: the key may be invalid, expired or revoked — update it in provider settings.",
+      "wrongModel": "Model issue: the selected model is not available for this account — pick another model.",
+      "upstream": "Upstream issue: the request reached the server, but the provider's own upstream is failing. Retry later, or contact the provider with the request ID below.",
+      "rateLimit": "Rate limited: too many requests — wait a moment and retry.",
+      "quota": "Account quota or usage limit reached: contact the provider to top up or renew.",
+      "requestId": "Request ID: {{id}}"
     }
   },
   "models": {
