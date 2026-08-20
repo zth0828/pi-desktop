@@ -51,7 +51,7 @@ function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
   }, [started, sessionId, paneApi]);
   const displayName = name || (firstUserMessage
     ? sessionTitleFromQuestion(firstUserQuestion, t('chat.imageSessionTitle'))
-    : t('chat.untitled'));
+    : '');
   const beginRename = () => { setDraft(name || (firstUserMessage ? displayName : '')); setEditing(true); };
   const saveRename = async () => {
     const next = draft.trim();
@@ -69,10 +69,13 @@ function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
             <button className="icon-button" title={t('chat.saveRename')} onClick={() => void saveRename()}><Check size={15} /></button>
             <button className="icon-button" title={t('chat.cancelRename')} onClick={() => setEditing(false)}><X size={15} /></button>
           </>
-        ) : (
+        ) : displayName ? (
           <button className="session-title-button" data-testid="session-title-button" onClick={beginRename} title={t('chat.renameSession')}>
             <span>{displayName}</span>
           </button>
+        ) : (
+          // 尚未发送任何内容：不展示「未命名会话」，标题区留空（会话名只在真正创建会话后出现）
+          <span className="session-title-empty" data-testid="session-title-empty" aria-hidden="true" />
         )}
       </div>
       <div className="session-title-actions">

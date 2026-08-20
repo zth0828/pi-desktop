@@ -206,7 +206,11 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   };
 
   const renderGroup = (group: ProjectGroup, archivedOnly: boolean) => {
-    const visibleSessions = group.sessions.filter((session) => session.archived === archivedOnly);
+    // 只有真正发送过内容（有消息）的会话才出现在列表里：
+    // 未发送任何内容的新会话不占位，也不显示「未命名会话」。
+    const visibleSessions = group.sessions.filter(
+      (session) => session.archived === archivedOnly && session.messageCount > 0,
+    );
     if (visibleSessions.length === 0) return null;
     const groupKey = `${archivedOnly ? 'archived' : 'active'}:${group.cwd}`;
     const isCollapsed = collapsed[groupKey] ?? (archivedOnly || group.cwd !== activeCwd);
@@ -364,7 +368,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                   />
                 )}
                 <span className="sidebar-session-title">
-                  {session.name || session.firstMessage || t('sessions.untitled')}
+                  {session.name || session.firstMessage || ''}
                 </span>
               </button>
               <button

@@ -435,6 +435,9 @@ export type WorkspaceEntry = {
 };
 export type WorkspaceListPayload = { path?: string };
 export type WorkspaceListResult = { path: string; entries: WorkspaceEntry[] };
+
+/** 当前工作区 git 分支（pi TUI footer 同口径；非仓库返回 branch: null）。 */
+export type GitBranchResult = { branch: string | null };
 export type WorkspaceReadPayload = { path: string };
 export type WorkspaceReadResult = {
   path: string;
@@ -1065,6 +1068,10 @@ export type HostApiContract = {
   workspace: {
     listChildren: (payload: WorkspaceListPayload) => WorkspaceListResult;
     readFile: (payload: WorkspaceReadPayload) => WorkspaceReadResult;
+  };
+  git: {
+    /** 当前工作区的 git 分支（非仓库 / git 不可用返回 null；detached HEAD 返回 'detached'）。 */
+    getBranch: (payload: { cwd: string }) => GitBranchResult;
   };
   piSkills: {
     /** 活动 runtime 的 skills（resourceLoader.getSkills()）；runtime 未启动返回空列表。 */

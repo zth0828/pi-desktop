@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, FileText, Folder, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
+import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, FileText, Folder, GitBranch, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
   PiCommandRow,
@@ -163,6 +163,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const [sessionInfo, setSessionInfo] = useState<PiRuntimeSessionInfo | null>(null);
   const [followupBehavior, setFollowupBehavior] = useState<FollowupBehavior>('queue');
   const [sendWith, setSendWith] = useState<SendWith>('enter');
+  const [gitBranch, setGitBranch] = useState<string | null>(null);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelMenuSection, setModelMenuSection] = useState<'models' | 'thinking' | null>(null);
@@ -286,6 +287,23 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   useEffect(() => {
     if (model) setModelKey(`${model.provider}/${model.id}`);
   }, [model]);
+
+  // 当前工作区 git 分支：cwd 切换后立即刷新，并低频轮询跟随 checkout 换分支
+  // （与 pi TUI footer 同口径；非仓库返回 null 时不显示 chip）。
+  useEffect(() => {
+    let disposed = false;
+    const refresh = () => {
+      void hostApi.git.getBranch(cwd)
+        .then((result) => { if (!disposed) setGitBranch(result.branch ?? null); })
+        .catch(() => { if (!disposed) setGitBranch(null); });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [cwd]);
 
   // fork / 跳分支后被选消息的文本回填输入框（TUI /fork、/tree 的 editorText 语义）
   useEffect(() => {
@@ -886,6 +904,16 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
             <span>{cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd}</span>
             <ChevronDown size={13} />
           </button>
+          {gitBranch && (
+            <span
+              className="context-chip git-branch-chip"
+              data-testid="git-branch"
+              title={gitBranch === 'detached' ? t('chat.gitDetachedTitle') : t('chat.gitBranchTitle', { branch: gitBranch })}
+            >
+              <GitBranch size={14} />
+              <span>{gitBranch === 'detached' ? t('chat.gitDetached') : gitBranch}</span>
+            </span>
+          )}
           <span className="spacer" />
           {(models.length > 0 || model) && (
             <div className="model-menu-wrap" ref={modelMenuRef}>

@@ -213,6 +213,9 @@ function createHostApi(sessionPath?: string) {
     listChildren: (path = '') => invoke('workspace', 'listChildren', { path }),
     readFile: (path: string) => invoke('workspace', 'readFile', { path }),
   },
+  git: {
+    getBranch: (cwd: string) => invoke('git', 'getBranch', { cwd }),
+  },
   dialog: {
     openDirectory: (title?: string, defaultPath?: string) =>
       invoke('dialog', 'open', { title, defaultPath, properties: ['openDirectory', 'createDirectory'] }),

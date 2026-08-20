@@ -5,6 +5,7 @@ import { appUpdateApi } from './app-update-api';
 import { appApi } from './app-api';
 import { dialogApi } from './dialog-api';
 import { filesApi } from './files-api';
+import { gitApi } from './git-api';
 import { mcpApi } from './mcp-api';
 import { notifyApi } from './notify-api';
 import { packagesApi } from './packages-api';
@@ -44,5 +45,6 @@ export function createHostServices(): HostServiceRegistry {
     review: reviewApi,
     windows: windowsApi,
     workspace: workspaceApi,
+    git: gitApi,
   };
 }

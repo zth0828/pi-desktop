@@ -249,7 +249,7 @@ button.danger-outline {
   flex-wrap: nowrap;
   align-items: center;
   background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  /* 无底部横线：顶部标题栏与下方内容区之间不加分隔线，保持简洁 */
   user-select: none;
   -webkit-app-region: drag;
 }
@@ -920,11 +920,15 @@ button.danger-outline {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 48px;
-  padding: 6px 18px 4px;
-  border-bottom: 1px solid var(--border);
+  min-height: 44px;
+  padding: 4px 18px 4px;
+  /* 会话名下方无横线；与顶部标题栏的间距由 padding-top 承担，保持视觉连贯 */
   position: relative;
   z-index: 101;
+}
+.session-title-empty {
+  display: block;
+  min-height: 28px;
 }
 
 .session-title-button {
@@ -2221,6 +2225,29 @@ button.danger-outline {
 
 .workspace-chip span {
   max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 当前 git 分支 chip（工作区选择右侧，只读展示，不可点击） */
+.git-branch-chip {
+  color: var(--accent);
+  flex: none;
+  cursor: default;
+}
+
+.git-branch-chip:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+.git-branch-chip svg {
+  flex: none;
+}
+
+.git-branch-chip span {
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

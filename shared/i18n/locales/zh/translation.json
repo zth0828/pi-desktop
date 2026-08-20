@@ -90,6 +90,9 @@
     "sendTipCmdEnter": "发送（Cmd/Ctrl+Enter）",
     "queueSendTip": "稍后继续：当前任务全部完成后再发送",
     "queueSendTipSteer": "引导当前轮：当前工具调用结束后立即交给 pi",
+    "gitBranchTitle": "Git 分支：{{branch}}",
+    "gitDetachedTitle": "HEAD 分离（detached）",
+    "gitDetached": "detached",
     "queueSend": "稍后继续",
     "steerSend": "引导当前轮",
     "stopTip": "停止当前生成",
@@ -584,7 +587,7 @@
     "reloading": "重载中…"
   },
   "sidebar": {
-    "newChat": "新会话",
+    "newChat": "新建会话",
     "collapse": "收起侧边栏",
     "expand": "展开侧边栏"
   },
