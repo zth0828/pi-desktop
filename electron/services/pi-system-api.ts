@@ -8,7 +8,7 @@ import type {
   PiLatestVersionResult,
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
-import { detectPiEnvironment } from '../utils/pi-detector';
+import { detectPiEnvironment, invalidatePiDetectCache } from '../utils/pi-detector';
 import { invalidatePiSdkCache } from '../utils/pi-loader';
 import { inspectPiCompatibility } from './pi-adapter';
 import { envWithUserPath } from '../utils/shell-env';
@@ -18,6 +18,7 @@ let detectCache: { at: number; env: PiEnvironment } | null = null;
 
 export function invalidateDetectCache(): void {
   detectCache = null;
+  invalidatePiDetectCache();
   invalidatePiSdkCache();
 }
 
@@ -76,7 +77,7 @@ export const piSystemApi = {
       child.on('close', async (code) => {
         invalidateDetectCache();
         if (code === 0) {
-          const env = detectPiEnvironment();
+          const env = detectPiEnvironment(true);
           const compatibility = env.pi.found ? await inspectPiCompatibility() : undefined;
           detectCache = { at: Date.now(), env: { ...env, compatibility } };
           sendHostEvent('piSystem', 'installProgress', {

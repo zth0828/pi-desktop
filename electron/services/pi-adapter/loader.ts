@@ -95,6 +95,18 @@ async function applyPiHttpProxy(packageRoot: string): Promise<void> {
 }
 
 export async function loadPiAdapter(): Promise<PiRuntimeAdapter> {
+  // 热路径：adapter 已加载且磁盘 generation 未变 → 直接复用，跳过
+  // detectPiEnvironment（每次最多 4 个 node/npm/pi 子进程 spawn）。
+  // readInstallation 只读 package.json + stat，亚毫秒级，无子进程。
+  if (loadedAdapter && loadedGeneration) {
+    try {
+      if (loadedGeneration === readInstallation(loadedAdapter.packageRoot).generation) {
+        return loadedAdapter;
+      }
+    } catch {
+      // 磁盘不可读：走完整检测路径
+    }
+  }
   const environment = detectPiEnvironment();
   if (!environment.pi.found || !environment.pi.packageRoot) {
     throw new PiAdapterNotReadyError('not-installed');

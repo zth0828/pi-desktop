@@ -91,11 +91,6 @@ export function detectNpm(): NpmDetectResult {
   return { found: true, path: binPath, version, globalRoot };
 }
 
-function readCliVersion(binPath: string | undefined): string | undefined {
-  const output = binPath ? run(binPath, ['--version']) : null;
-  return output?.match(/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/)?.[0];
-}
-
 /** 从 bin 真实路径向上找 pi 包的 package.json。 */
 export function locatePackageRoot(realBinPath: string): { packageRoot: string; version: string } | null {
   let dir = path.dirname(realBinPath);
@@ -153,7 +148,10 @@ function readPiPackageRoot(
       realBinPath,
       packageRoot: realPackageRoot,
       version: manifest.version,
-      cliVersion: readCliVersion(realBinPath),
+      // bin 由 manifest.bin 推导，必然位于包内：CLI 版本即包版本。不 spawn
+      // `pi --version` 核对——Windows cmd shim 冷启动约 2s，且直跑 .js 会失败
+      // 返回 null（之前 Windows 上这里本来就是 null，靠 ?? version 兜底）。
+      cliVersion: manifest.version,
       installKind,
       meetsMin,
     };
@@ -254,7 +252,9 @@ export function detectPi(
       base.realBinPath = realBinPath;
       base.packageRoot = located.packageRoot;
       base.version = located.version;
-      base.cliVersion = readCliVersion(binPath);
+      // located 即 bin 真实路径向上定位到的 pi 包：CLI 版本与包版本一致，
+      // 无需再 spawn `pi --version`（2s 级 cmd shim 冷启动）。
+      base.cliVersion = located.version;
       base.installKind = installKind;
       base.meetsMin = meetsMin;
     } else {
@@ -282,11 +282,50 @@ export function detectPi(
   return base;
 }
 
-export function detectPiEnvironment(): PiEnvironment {
+// 检测结果缓存：detectPiEnvironment 每次会 spawn node/npm/pi 子进程
+// （Windows 上 npm/pi 走 cmd shim，pi --version 冷启动可达 2s），而
+// loadPiAdapter / createRuntime / mcp / proxy 等热路径都会调用它。
+// 按 5 分钟 TTL + 输入指纹缓存（与 piSystemApi 的 detect TTL 一致），
+// 安装 / 强检通过 invalidatePiDetectCache() 或 force 参数失效。
+const DETECT_TTL_MS = 5 * 60 * 1000;
+let detectCache: { at: number; fingerprint: string; env: PiEnvironment } | null = null;
+
+function detectionFingerprint(): string {
+  return [
+    resolveUserPath(),
+    process.env.PI_DESKTOP_NPM_ROOT ?? '',
+    process.env.PI_DESKTOP_DEV_ALLOW_NON_NPM ?? '',
+    process.env.PI_DESKTOP_DEV_PI_PACKAGE_ROOT ?? '',
+    process.env.PI_DESKTOP_DEV_ALLOW_OUTDATED ?? '',
+  ].join('\u0000');
+}
+
+export function invalidatePiDetectCache(): void {
+  detectCache = null;
+}
+
+export function detectPiEnvironment(force = false): PiEnvironment {
+  const fingerprint = detectionFingerprint();
+  if (
+    !force
+    && detectCache
+    && detectCache.fingerprint === fingerprint
+    && Date.now() - detectCache.at < DETECT_TTL_MS
+  ) {
+    return detectCache.env;
+  }
   const node = detectNode();
   const npm = node.found ? detectNpm() : { found: false };
   const pi = npm.found
     ? detectDevPiOverride(npm) ?? detectPi(npm)
     : { found: false, meetsMin: false };
-  return { node, npm, pi, minNodeVersion: MIN_NODE_VERSION, minPiVersion: MIN_PI_VERSION };
+  const env: PiEnvironment = {
+    node,
+    npm,
+    pi,
+    minNodeVersion: MIN_NODE_VERSION,
+    minPiVersion: MIN_PI_VERSION,
+  };
+  detectCache = { at: Date.now(), fingerprint, env };
+  return env;
 }

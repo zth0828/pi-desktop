@@ -52,7 +52,6 @@ import {
   rebindWindowSessionForWindow,
 } from '../main/window-manager';
 import { expandFileReferences } from '../utils/file-expand';
-import { detectPiEnvironment } from '../utils/pi-detector';
 import { samePath } from '../utils/same-path';
 import {
   normalizePreviewablePath,
@@ -625,7 +624,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
   const agentDir = adapter.paths.getAgentDir();
   await syncLmStudioModels(agentDir);
   timingMark('runtime:lmstudio-synced');
-  const piBin = detectPiEnvironment().pi.binPath;
+  const piBin = adapter.cliPath;
   if (piBin) process.env.PI_CLI_PATH = piBin;
   const eventBusHandle = adapter.createEventBus();
   const hasTrustRequiring = adapter.trust.hasTrustRequiringProjectResources(cwd);
