@@ -64,7 +64,7 @@ async function checkApp(previous: VersionCheckStatus & { releaseUrl?: string; as
     await settingsApi.set({ key: 'appVersionCheckReleaseUrl', value: release.html_url });
     await settingsApi.set({ key: 'appVersionCheckAssetName', value: selectAssetName(release.assets ?? []) });
     await settingsApi.set({ key: 'appVersionCheckError', value: undefined });
-    return { ...previous, current, latest: release.tag_name, updateAvailable: compare(current, release.tag_name), lastAttemptAt: now, lastSuccessAt: now, releaseUrl: release.html_url };
+    return { ...previous, current, latest: release.tag_name, updateAvailable: compare(current, release.tag_name), lastAttemptAt: now, lastSuccessAt: now, releaseUrl: release.html_url, error: undefined };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await settingsApi.set({ key: 'appVersionCheckError', value: message });

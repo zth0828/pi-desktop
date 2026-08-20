@@ -563,7 +563,7 @@ export default function SettingsPage() {
           <div className="settings-row-label">
             <div>Pi Desktop</div>
             <div className="settings-row-desc">{t('settings.version.current', { version: appVersion })}</div>
-            <div className="settings-row-desc">{versionStatus?.app.latest ? t(versionStatus.app.updateAvailable ? 'settings.version.updateAvailable' : 'settings.version.upToDate', { version: versionStatus.app.latest }) : t('settings.version.notChecked')}</div>
+            <div className="settings-row-desc">{versionStatus?.app.latest ? t(versionStatus.app.updateAvailable ? 'settings.version.updateAvailable' : 'settings.version.upToDate', { version: versionStatus.app.latest.replace(/^v/, '') }) : t('settings.version.notChecked')}</div>
             {versionStatus?.app.error && <div className="error-text">{t('settings.version.checkFailed')}</div>}
           </div>
           <div className="pill-group">
