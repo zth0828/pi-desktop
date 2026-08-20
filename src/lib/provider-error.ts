@@ -89,15 +89,15 @@ export function parseProviderError(message: string): ProviderErrorInfo {
   const haystack = [message, bodyMessage, bodyType, bodyCode].join('\n').toLowerCase();
 
   let category: ProviderErrorCategory;
-  if (status === 401) {
+  if (status === 401 || /invalid token|invalid api key|api key is invalid|unauthorized/.test(haystack)) {
     category = 'invalid-key';
   } else if (/model_not_found/.test(haystack) || /no available channel/.test(haystack) || /model not found|model does not exist|unknown model/.test(haystack)) {
     category = 'wrong-model';
-  } else if (/usage_limit_reached/.test(haystack) || /usage limit|quota|billing|insufficient_?balance/.test(haystack)) {
+  } else if (status === 402 || /payment required/.test(haystack) || /usage_limit_reached/.test(haystack) || /usage limit|quota|billing|insufficient_?balance/.test(haystack)) {
     category = 'quota';
   } else if (status === 429 || /rate.?limit|too many requests/.test(haystack)) {
     category = 'rate-limit';
-  } else if ((status !== undefined && status >= 500) || /auth_unavailable|no auth available|service temporarily unavailable|bad gateway|internal_server_error|server_error|upstream/.test(haystack)) {
+  } else if ((status !== undefined && status >= 500) || /auth_unavailable|no auth available|service temporarily unavailable|temporarily unavailable|bad gateway|internal_server_error|internal server error|server_error|server_is_overloaded|overloaded|upstream/.test(haystack)) {
     category = 'upstream';
   } else {
     category = 'unknown';

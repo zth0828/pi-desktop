@@ -129,6 +129,11 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ error: { message: "auth_unavailable: no auth available (providers=codex, model=mock-1)", type: "server_error", param: "", code: "internal_server_error" } }));
       return;
     }
+    if (lastUser.includes("ERR_OVERLOADED")) {
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "Error Code server_is_overloaded: Our servers are currently overloaded. Please try again later." } }));
+      return;
+    }
     if (lastUser.includes("ERR_INVALID_KEY")) {
       res.writeHead(401, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: { code: "", message: "Invalid token (request id: 202608200646490268733188268d9d6FgctFa43)", type: "new_api_error" } }));

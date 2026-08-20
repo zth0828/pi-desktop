@@ -11,6 +11,35 @@ describe('parseProviderError', () => {
     expect(info.requestId).toBe('202608200646490268733188268d9d6FgctFa43');
   });
 
+  it('真实 o-ai.me 响应实录（2026-08-20）→ invalid-key + request id', () => {
+    const info = parseProviderError(
+      '{"error":{"code":"","message":"Invalid token (request id: 202608200912448121196998268d9d6z5sjDT7t)","type":"new_api_error"}}',
+    );
+    expect(info.category).toBe('invalid-key');
+    expect(info.status).toBeUndefined(); // 裸 JSON 响应不带状态码前缀
+    expect(info.requestId).toBe('202608200912448121196998268d9d6z5sjDT7t');
+  });
+
+  it('真实 o-ai.me 错误实录：server_is_overloaded（服务器过载）→ upstream', () => {
+    const info = parseProviderError(
+      'Error Code server_is_overloaded: Our servers are currently overloaded. Please try again later.',
+    );
+    expect(info.category).toBe('upstream');
+    expect(info.status).toBeUndefined();
+  });
+
+  it('真实 o-ai.me 错误实录：402 Payment Required → quota', () => {
+    const info = parseProviderError(
+      'OpenAI API error (402): {"message":"Payment Required","type":"invalid_request_error","param":"","code":null}',
+    );
+    expect(info.category).toBe('quota');
+    expect(info.status).toBe(402);
+  });
+
+  it('纯文本 Internal Server Error → upstream', () => {
+    expect(parseProviderError('Internal Server Error').category).toBe('upstream');
+  });
+
   it('503 model_not_found（分组无渠道）→ wrong-model', () => {
     const info = parseProviderError(
       'OpenAI API error (503): {"error":{"code":"model_not_found","message":"No available channel for model gpt-4o-mini under group 特惠分组 (distributor) (request id: 202608200648504431362498268d9d6vETrdtOQ)","type":"new_api_error"}}',
