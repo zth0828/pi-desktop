@@ -2,7 +2,7 @@
 // 恢复与退出入口。macOS 不创建（dock 已承担，activate 事件负责重建主窗口）。
 // 图标解析失败时降级：不创建托盘，不影响主流程（hide 行为不依赖托盘）。
 import { app, Menu, nativeImage, Tray } from 'electron';
-import { resolveAppIconPath } from '../utils/app-icon';
+import { resolveAppIconPath, windowIconFormat } from '../utils/app-icon';
 import { focusOrCreateMainWindow } from './window-manager';
 
 let tray: Tray | null = null;
@@ -11,7 +11,9 @@ export function createTray(): void {
   if (process.platform === 'darwin') return;
   if (tray) return;
   try {
-    const iconPath = resolveAppIconPath('ico', {
+    // 平台化格式：Windows 托盘用 ico（多尺寸），Linux 用 png（nativeImage 对
+    // ico 支持不保证，png 通用）。
+    const iconPath = resolveAppIconPath(windowIconFormat(), {
       isPackaged: app.isPackaged,
       resourcesPath: process.resourcesPath,
       mainDir: __dirname,
