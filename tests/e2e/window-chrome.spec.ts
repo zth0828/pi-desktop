@@ -1,4 +1,5 @@
-// Windows/Linux frameless 自绘顶部（Row 1 菜单栏 + Row 2 工具行）E2E。
+// Windows/Linux frameless 自绘顶部 E2E：Row 1 标题栏（菜单 + 窗口控件）+ 侧边栏顶部
+// （新会话全宽 / 折叠/搜索靠右），会话标题留在内容区顶部。
 // macOS 使用原生菜单栏/标题栏，本套件全部跳过（mac 行为由既有用例覆盖）。
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -75,68 +76,86 @@ test.describe('Windows frameless 标题栏', () => {
     ).toBeVisible({ timeout: 30_000 });
   }
 
-  test('两行结构：Row 1 菜单栏 y 相等，Row 2 工具行 y 相等，两组不同且 Row 1 在上', async ({ launchElectronApp }) => {
+  test('Row 1 菜单栏：菜单项与窗口控件同一行 y 相等', async ({ launchElectronApp }) => {
     const app = await launchElectronApp(launchOptions());
     const page = await app.firstWindow();
     await waitSessionReady(page);
 
-    // Row 1：菜单项与窗口关闭按钮同一行（标题栏行）
     const menuFileBox = await page.getByTestId('menu-file').boundingBox();
     const windowCloseBox = await page.getByTestId('window-close').boundingBox();
     expect(menuFileBox).not.toBeNull();
     expect(windowCloseBox).not.toBeNull();
     expect(menuFileBox!.y).toBe(windowCloseBox!.y);
 
-    // Row 2：新会话按钮与会话标题同一行（工具行）
-    const newChatBox = await page.getByTestId('new-chat').boundingBox();
-    const titlebarBox = await page.getByTestId('session-titlebar').boundingBox();
-    expect(newChatBox).not.toBeNull();
-    expect(titlebarBox).not.toBeNull();
-    expect(newChatBox!.y).toBe(titlebarBox!.y);
-
-    // 两组不同：Row 1 在 Row 2 之上
-    expect(menuFileBox!.y).toBeLessThan(newChatBox!.y);
-
-    // Row 1 是整行菜单栏：八个菜单项纵向对齐
+    // 八个菜单项纵向对齐（整行菜单栏）
     for (const group of ['edit', 'selection', 'view', 'go', 'run', 'terminal', 'help']) {
       const box = await page.getByTestId(`menu-${group}`).boundingBox();
       expect(box).not.toBeNull();
       expect(box!.y).toBe(menuFileBox!.y);
     }
+
+    // 窗口控件固定在 Row 1 最右侧
+    const titlebarBox = await page.getByTestId('titlebar').boundingBox();
+    expect(titlebarBox).not.toBeNull();
+    expect(windowCloseBox!.x + windowCloseBox!.width).toBeGreaterThanOrEqual(titlebarBox!.x + titlebarBox!.width - 2);
     await app.close();
   });
 
-  test('侧栏折叠前后 titlebar/toolbar 位置不变（通栏固定）', async ({ launchElectronApp }) => {
+  test('新会话与折叠/搜索同一行：新会话占满侧边栏宽，折叠/搜索靠右；折叠时新会话隐藏', async ({ launchElectronApp }) => {
     const app = await launchElectronApp(launchOptions());
     const page = await app.firstWindow();
     await waitSessionReady(page);
 
+    const sidebar = page.locator('.sidebar');
+    const sidebarBox = await sidebar.boundingBox();
+    const newChatBox = await page.getByTestId('new-chat').boundingBox();
+    const toggleBox = await page.getByTestId('sidebar-toggle').boundingBox();
+    const searchBox = await page.getByTestId('session-search-trigger').boundingBox();
+    expect(sidebarBox).not.toBeNull();
+    expect(newChatBox).not.toBeNull();
+    expect(toggleBox).not.toBeNull();
+    expect(searchBox).not.toBeNull();
+
+    // 同一行：y 相差在按钮高度差（30px vs 36px 垂直居中）容差内
+    expect(Math.abs(newChatBox!.y - toggleBox!.y)).toBeLessThan(4);
+    expect(searchBox!.y).toBe(toggleBox!.y);
+    // 折叠/搜索在侧边栏右半区（同行靠右）
+    const sidebarCenterX = sidebarBox!.x + sidebarBox!.width / 2;
+    expect(toggleBox!.x).toBeGreaterThan(sidebarCenterX);
+    // 新会话按钮占满侧边栏主要宽度（含 padding/margin 容差）
+    expect(newChatBox!.x - sidebarBox!.x).toBeGreaterThanOrEqual(8);
+    expect(newChatBox!.x - sidebarBox!.x).toBeLessThanOrEqual(20);
+    expect(Math.abs(newChatBox!.width - sidebarBox!.width)).toBeLessThan(110);
+
+    // 标题栏位置在折叠前后不变
     const titlebarBox = await page.getByTestId('titlebar').boundingBox();
-    const toolbarBox = await page.getByTestId('toolbar').boundingBox();
     expect(titlebarBox).not.toBeNull();
-    expect(toolbarBox).not.toBeNull();
 
     await page.getByTestId('sidebar-toggle').click();
     await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
-    await expect.poll(async () => (await page.locator('.sidebar').boundingBox())?.width).toBe(0);
-
+    await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(0);
+    // 新会话在侧边栏内 → 折叠后隐藏
+    await expect(page.getByTestId('new-chat')).toBeHidden();
+    // 展开入口：is-native-frame 悬浮层出现在内容区左上角（标题栏之下）
+    const floating = page.getByTestId('app-window-controls');
+    await expect(floating).toBeVisible();
+    const floatingBox = await floating.boundingBox();
+    expect(floatingBox).not.toBeNull();
+    expect(floatingBox!.x).toBeLessThan(60);
+    expect(floatingBox!.y).toBeGreaterThanOrEqual(30);
+    expect(floatingBox!.y).toBeLessThan(60);
+    // 标题栏位置不变
     const collapsedTitlebarBox = await page.getByTestId('titlebar').boundingBox();
-    const collapsedToolbarBox = await page.getByTestId('toolbar').boundingBox();
     expect(collapsedTitlebarBox).not.toBeNull();
-    expect(collapsedToolbarBox).not.toBeNull();
     expect(collapsedTitlebarBox!.x).toBe(titlebarBox!.x);
     expect(collapsedTitlebarBox!.y).toBe(titlebarBox!.y);
     expect(collapsedTitlebarBox!.width).toBe(titlebarBox!.width);
     expect(collapsedTitlebarBox!.height).toBe(titlebarBox!.height);
-    expect(collapsedToolbarBox!.x).toBe(toolbarBox!.x);
-    expect(collapsedToolbarBox!.y).toBe(toolbarBox!.y);
-    expect(collapsedToolbarBox!.width).toBe(toolbarBox!.width);
-    expect(collapsedToolbarBox!.height).toBe(toolbarBox!.height);
 
-    // 工具行内控件仍在原位
-    const newChatBox = await page.getByTestId('new-chat').boundingBox();
-    expect(newChatBox).not.toBeNull();
-    expect(newChatBox!.x).toBeGreaterThan(0);
+    // 点击悬浮层展开按钮恢复
+    await floating.getByTestId('sidebar-toggle').click();
+    await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByTestId('new-chat')).toBeVisible();
     await app.close();
   });
 
@@ -176,7 +195,6 @@ test.describe('Windows frameless 标题栏', () => {
     const page = await app.firstWindow();
     await waitSessionReady(page);
 
-    // 最大化 → 还原
     await page.getByTestId('window-maximize').click();
     await expect.poll(async () => app.evaluate(
       ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized(),
@@ -186,7 +204,6 @@ test.describe('Windows frameless 标题栏', () => {
       ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized(),
     )).toBe(false);
 
-    // 最小化 → 恢复（恢复后才能正常收尾关闭）
     await page.getByTestId('window-minimize').click();
     await expect.poll(async () => app.evaluate(
       ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMinimized(),
@@ -209,13 +226,11 @@ test.describe('Windows frameless 标题栏', () => {
 
     await page.getByTestId('window-close').click();
 
-    // 应用未退出：主窗口 hide（未销毁、不可见）——复用 close→hide 到托盘语义
     await expect.poll(async () => app.evaluate(({ BrowserWindow }) => {
       const wins = BrowserWindow.getAllWindows();
       return wins.length === 1 && !wins[0].isDestroyed() && !wins[0].isVisible();
     })).toBe(true);
 
-    // 恢复（托盘点击路径）：show + focus 后窗口可见
     await app.evaluate(({ BrowserWindow }) => {
       const win = BrowserWindow.getAllWindows()[0];
       win.show();

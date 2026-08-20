@@ -4,12 +4,12 @@ import {
   Copy,
   History,
   MessageSquare,
+  MessageSquarePlus,
   Minus,
   Monitor,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
-  Plus,
   Puzzle,
   Search,
   Settings as SettingsIcon,
@@ -23,7 +23,6 @@ import { getActiveChatStore } from './stores/chat-registry';
 import { hostApi } from './lib/host-api';
 import { onNavigateToPage } from './lib/app-navigation';
 import { initTheme } from './lib/theme';
-import { windowChrome } from './lib/window-chrome';
 import { SessionList } from './components/SessionList';
 import { SessionSearchDialog } from './components/SessionSearchDialog';
 import { ExtensionUiNotifications } from './components/ExtensionUiDialog';
@@ -174,17 +173,38 @@ export default function App() {
     help: [{ key: 'menu.comingSoon', disabled: true }],
   };
 
-  // Row 2 工具行挂载时注册会话标题 portal 插槽（Chat 页标题栏注入）。
-  const toolbarRef = useCallback((element: HTMLDivElement | null) => {
-    windowChrome.toolbar = element;
-  }, []);
-
   const dragStrip = isMac ? <div className="window-drag-strip" data-testid="window-drag-strip" /> : null;
   const clearChatSearchTarget = useCallback(() => setChatSearchTarget(undefined), []);
 
-  // Windows/Linux frameless 顶部：Row 1 标题栏（logo + 菜单 + 窗口控件）+
-  // Row 2 工具行（新会话/折叠/搜索 + 会话标题 portal 插槽）。Row 1 是拖拽区。
-  // 未就绪（onboarding）时只渲染标题栏行，保证窗口可拖动、可最小化/关闭。
+  // 折叠/搜索按钮（mac 悬浮层与 Windows 标题栏右侧共用同一结构，统一管理）
+  const sidebarActions = (
+    <>
+      <button
+        className="icon-button sidebar-toggle"
+        data-testid="sidebar-toggle"
+        title={t(sidebarCollapsed ? 'sidebar.expand' : 'sidebar.collapse')}
+        aria-label={t(sidebarCollapsed ? 'sidebar.expand' : 'sidebar.collapse')}
+        aria-expanded={!sidebarCollapsed}
+        onClick={toggleSidebar}
+      >
+        {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+      </button>
+      <button
+        className="icon-button session-search-trigger"
+        data-testid="session-search-trigger"
+        title={t('sessionSearch.title')}
+        aria-label={t('sessionSearch.title')}
+        aria-haspopup="dialog"
+        onClick={() => setSessionSearchOpen(true)}
+      >
+        <Search size={17} />
+      </button>
+    </>
+  );
+
+  // Windows/Linux frameless 顶部：Row 1 标题栏（logo + 菜单 + 折叠/搜索 + 窗口控件，
+  // 整行拖拽区，交互子元素显式 no-drag）。未就绪（onboarding）时同样渲染，
+  // 保证窗口可拖动、可最小化/关闭。侧边栏顶部只有全宽新会话按钮。
   const chrome = (
     <div className="window-chrome" data-testid="window-chrome">
       <div className="titlebar" data-testid="titlebar">
@@ -227,7 +247,7 @@ export default function App() {
           </div>
         )}
         <div className="titlebar-spacer" />
-        <div className="window-controls" data-testid="app-window-controls">
+        <div className="window-controls" data-testid="window-controls">
           <button
             className="window-control"
             data-testid="window-minimize"
@@ -257,36 +277,6 @@ export default function App() {
           </button>
         </div>
       </div>
-      {state === 'ready' && (
-        <div className="toolbar" data-testid="toolbar">
-          <button className="toolbar-new-chat" data-testid="new-chat" title={t('sidebar.newChat')} onClick={newChat}>
-            <Plus size={15} />
-            <span>{t('sidebar.newChat')}</span>
-          </button>
-          <button
-            className="icon-button sidebar-toggle"
-            data-testid="sidebar-toggle"
-            title={t(sidebarCollapsed ? 'sidebar.expand' : 'sidebar.collapse')}
-            aria-label={t(sidebarCollapsed ? 'sidebar.expand' : 'sidebar.collapse')}
-            aria-expanded={!sidebarCollapsed}
-            onClick={toggleSidebar}
-          >
-            {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-          </button>
-          <button
-            className="icon-button session-search-trigger"
-            data-testid="session-search-trigger"
-            title={t('sessionSearch.title')}
-            aria-label={t('sessionSearch.title')}
-            aria-haspopup="dialog"
-            onClick={() => setSessionSearchOpen(true)}
-          >
-            <Search size={17} />
-          </button>
-          {/* Chat 页 session-titlebar 的 portal 注入点：标题居中、动作靠右 */}
-          <div className="toolbar-center" ref={toolbarRef} data-testid="toolbar-center" />
-        </div>
-      )}
     </div>
   );
 
@@ -304,37 +294,33 @@ export default function App() {
     <div className={`${isMac ? 'app-layout is-macos' : 'app-layout'}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
       {chrome}
       {dragStrip}
-      {isMac && (
-        <div className="app-window-controls" data-testid="app-window-controls">
-          <button
-            className="icon-button sidebar-toggle"
-            data-testid="sidebar-toggle"
-            title={t(sidebarCollapsed ? 'sidebar.expand' : 'sidebar.collapse')}
-            aria-label={t(sidebarCollapsed ? 'sidebar.expand' : 'sidebar.collapse')}
-            aria-expanded={!sidebarCollapsed}
-            onClick={toggleSidebar}
-          >
-            {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-          </button>
-          <button
-            className="icon-button session-search-trigger"
-            data-testid="session-search-trigger"
-            title={t('sessionSearch.title')}
-            aria-label={t('sessionSearch.title')}
-            aria-haspopup="dialog"
-            onClick={() => setSessionSearchOpen(true)}
-          >
-            <Search size={17} />
-          </button>
+      {/* 折叠/搜索悬浮层：macOS 常驻（红绿灯右侧）；Windows 仅侧栏收起时出现在内容区左上角
+          （提供展开入口）。两平台同一 testid 同一结构。 */}
+      {(isMac || sidebarCollapsed) && (
+        <div
+          className={`app-window-controls${isMac ? '' : ' is-native-frame'}`}
+          data-testid="app-window-controls"
+        >
+          {sidebarActions}
         </div>
       )}
       <nav className="sidebar">
-        {/* macOS：新会话入口保留在侧栏（Windows/Linux 收进 Row 2 工具行） */}
-        {isMac && (
-          <button className="new-chat" data-testid="new-chat" title={sidebarCollapsed ? t('sidebar.newChat') : undefined} onClick={newChat}>
-            <Plus size={15} />
+        {isMac ? (
+          /* macOS：新会话按钮单独一行（折叠/搜索在红绿灯右侧悬浮层常驻） */
+          <button className="new-chat" data-testid="new-chat" onClick={newChat}>
+            <MessageSquarePlus size={16} />
             <span>{t('sidebar.newChat')}</span>
           </button>
+        ) : !sidebarCollapsed && (
+          /* Windows：侧边栏顶部一行 = 新会话按钮（与侧边栏同宽）+ 折叠/搜索（同行靠右）。
+             折叠时整行随侧栏隐藏（DOM 移除），展开入口由 is-native-frame 悬浮层提供 */
+          <div className="sidebar-head">
+            <button className="new-chat" data-testid="new-chat" onClick={newChat}>
+              <MessageSquarePlus size={16} />
+              <span>{t('sidebar.newChat')}</span>
+            </button>
+            {sidebarActions}
+          </div>
         )}
         <SessionList onOpenChat={() => navigate('chat')} />
         <div className="sidebar-nav">

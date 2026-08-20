@@ -224,8 +224,6 @@ button.danger-outline {
 
 :root {
   --chrome-row1: 36px;
-  --chrome-row2: 40px;
-  --chrome-height: calc(var(--chrome-row1) + var(--chrome-row2));
 }
 
 .app-layout {
@@ -293,17 +291,18 @@ button.danger-outline {
 
 .titlebar-spacer { flex: 1; min-width: 0; }
 
-/* 菜单下拉：复用 .composer-menu 的浮层样式模式（absolute + shadow），无新依赖。 */
+/* 菜单下拉：复用 .composer-menu 的浮层样式模式（absolute + 细边框），无新依赖。
+   不加大面积阴影（用户反馈视觉突兀），用边框分层。 */
 .menu-dropdown {
   position: absolute;
   top: calc(100% + 2px);
   left: 0;
   min-width: 220px;
   padding: 5px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
   background: var(--bg-raised);
-  box-shadow: var(--shadow-panel);
+  box-shadow: none;
   z-index: 200;
   -webkit-app-region: no-drag;
 }
@@ -345,68 +344,8 @@ button.danger-outline {
 .window-control:hover { background: var(--bg-hover); color: var(--text); }
 .window-control-close:hover { background: #e81123; color: #fff; }
 
-/* Row 2 工具行：通栏固定，不随侧栏折叠变化 */
-.toolbar {
-  height: var(--chrome-row2);
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 4px;
-  padding: 0 10px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-}
-
-.toolbar-new-chat {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex: none;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  border: 1px solid var(--border);
-  background: var(--bg-raised);
-}
-
-.toolbar-new-chat:hover { background: var(--bg-hover); }
-
-.toolbar-center {
-  flex: 1;
-  min-width: 0;
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-}
-
-/* Chat 页标题栏 portal 进工具行：标题居中、右侧动作靠右 */
-.toolbar .session-titlebar.in-toolbar {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  border: none;
-  position: static;
-  z-index: auto;
-}
-
-.toolbar .session-titlebar.in-toolbar .session-title {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  justify-content: center;
-}
-
-.toolbar .session-titlebar.in-toolbar .session-title-button {
-  width: auto;
-  max-width: min(480px, 40vw);
-}
-
-.toolbar .session-titlebar.in-toolbar .session-title-actions { flex: none; }
+/* Row 2 工具行已移除：新会话/折叠/搜索回到侧边栏顶部（sidebar-topbar），
+   会话标题回内容区顶部。标题栏之下直接是 [侧栏 | 内容区]。 */
 
 .window-drag-strip {
   position: fixed;
@@ -418,7 +357,8 @@ button.danger-outline {
   -webkit-app-region: drag;
 }
 
-/* macOS 悬浮控件层（hiddenInset 红绿灯右侧）；Windows/Linux 已收进 Row 2 工具行 */
+/* macOS 悬浮控件层（hiddenInset 红绿灯右侧）常驻：折叠/搜索。
+   Windows/Linux 仅侧栏收起时以 is-native-frame 形式出现在内容区左上角。 */
 .app-window-controls {
   position: fixed;
   top: 0;
@@ -429,6 +369,15 @@ button.danger-outline {
   align-items: center;
   gap: 2px;
   -webkit-app-region: no-drag;
+}
+
+/* Windows/Linux 侧栏收起时：悬浮层出现在内容区左上角（标题栏之下），提供展开入口。
+   z-index 高于 window-chrome(130) 与 session-titlebar(101)，避免被自绘标题栏盖住。 */
+.app-window-controls.is-native-frame {
+  left: 8px;
+  top: calc(var(--chrome-row1) + 6px);
+  height: 40px;
+  z-index: 132;
 }
 
 /* Electron 的拖拽层覆盖整个标题高度；交互控件必须明确声明可点击。 */
@@ -452,19 +401,51 @@ button.danger-outline {
   padding-top: 66px;
 }
 
-/* Windows/Linux：顶部两行由固定悬浮层承担，内容区整体下移，侧栏不再留标题栏空间 */
+/* Windows/Linux：顶部一行（Row 1 标题栏）由固定悬浮层承担，内容区整体下移；
+   侧边栏顶部是「新会话 + 折叠/搜索」同一行（sidebar-head） */
 .app-layout:not(.is-macos) {
-  padding-top: var(--chrome-height);
+  padding-top: var(--chrome-row1);
 }
 
 .app-layout:not(.is-macos) .sidebar {
-  padding-top: 8px;
+  padding-top: 10px;
 }
 
 .sidebar-title {
   font-weight: 700;
   font-size: 15px;
   padding: 6px 10px 12px;
+}
+
+/* Windows/Linux 侧边栏顶部一行：新会话按钮（与侧边栏同宽，flex:1）+
+   折叠/搜索（同行靠右）。整行轻量透明、hover 高亮，视觉统一。
+   折叠时整行随侧栏隐藏。 */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 6px 10px;
+}
+
+.sidebar-head .new-chat {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 6px 8px;
+  justify-content: flex-start;
+  color: var(--text-secondary);
+}
+
+.sidebar-head .new-chat:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.sidebar-head .icon-button {
+  flex: none;
 }
 
 .sidebar-toggle { flex-shrink: 0; }
@@ -639,12 +620,21 @@ button.danger-outline {
   overflow-y: auto;
 }
 
+/* 功能页大标题统一规格（Settings/Models/Sessions/Skills/Extensions/MCP）：
+   同一套 serif 大标题，避免各页自行覆盖导致字体/字号不一致。 */
 .page-header h1,
-.page > h2 {
+.page > h2,
+.models-header h2,
+.extensions-header h2,
+.skills-page > h2,
+.mcp-page > h2,
+.sessions-page > h2,
+.models-page > h2 {
   font-family: var(--font-serif);
   font-weight: 500;
   font-size: 34px;
   letter-spacing: -0.01em;
+  line-height: 1.25;
 }
 
 .page-subtitle {
@@ -722,11 +712,6 @@ button.danger-outline {
 
 .settings-page .page-header {
   padding: 4px 2px 8px;
-}
-
-.settings-page .page-header h1 {
-  font-size: 28px;
-  letter-spacing: 0;
 }
 
 .settings-page .pill-group {
@@ -2820,27 +2805,11 @@ button.danger-outline {
   gap: 16px;
 }
 
-.models-page > h2,
-.skills-page > h2,
-.extensions-page > h2,
-.mcp-page > h2,
-.sessions-page > h2 {
-  font-family: var(--font-serif);
-  font-weight: 500;
-  font-size: 34px;
-}
-
 .models-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.models-header h2 {
-  font-family: var(--font-serif);
-  font-weight: 500;
-  font-size: 34px;
 }
 
 .models-header .icon-button {
@@ -3377,12 +3346,6 @@ button.danger-outline {
 
 .extensions-header > div {
   min-width: 0;
-}
-
-.extensions-header h2 {
-  font-family: var(--font-serif);
-  font-weight: 500;
-  font-size: 34px;
 }
 
 .extensions-header .hint {

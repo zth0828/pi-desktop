@@ -140,7 +140,8 @@ test('top controls stay stable and global search opens active or archived chats'
 
   const isMac = process.platform === 'darwin';
   const controls = page.getByTestId('app-window-controls');
-  // macOS：悬浮控件层常驻；Windows：按钮在侧栏顶部栏，收起后改由悬浮层提供
+  // macOS：悬浮控件层常驻（红绿灯右侧）；Windows：折叠/搜索与「新会话」同一行
+  // （侧边栏顶部），收起后改由 is-native-frame 悬浮层提供
   if (isMac) {
     await expect(controls).toBeVisible();
     await expect(controls).not.toContainText('Pi');
@@ -157,6 +158,7 @@ test('top controls stay stable and global search opens active or archived chats'
     expect(collapsedBox!.x).toBe(expandedBox!.x);
     expect(collapsedBox!.y).toBe(expandedBox!.y);
   } else {
+    // Windows：收起后 is-native-frame 悬浮层出现（含折叠/搜索按钮）
     await expect(controls).toBeVisible();
   }
 

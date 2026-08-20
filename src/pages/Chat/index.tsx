@@ -1,5 +1,4 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowDown, Check, ChevronRight, PanelRight, X } from 'lucide-react';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
@@ -8,7 +7,6 @@ import { cacheHitRate, summarizeUsage } from '../../lib/usage-stats';
 import { hostApi } from '../../lib/host-api';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
 import { timingMark } from '../../lib/timing';
-import { isWindowsChrome, windowChrome } from '../../lib/window-chrome';
 import { groupLogicalTurns, groupTurnStages, turnDurationMs, turnFinalResponseIndex } from '../../lib/turn-changes';
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
 import { PaneLayout } from '../../components/PaneLayout';
@@ -21,7 +19,7 @@ import { ReviewPanel } from './ReviewPanel';
 import { TreeDialog } from './TreeDialog';
 import { TurnChangesCard } from './TurnChangesCard';
 
-function SessionTitleBar({ onClosePane, primary }: { onClosePane?: () => void; primary?: boolean }) {
+function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
   const { t } = useTranslation();
   const paneApi = usePaneHostApi();
   const setReviewOpen = usePaneChatStore((s) => s.setReviewOpen);
@@ -62,11 +60,8 @@ function SessionTitleBar({ onClosePane, primary }: { onClosePane?: () => void; p
     if (result.success) setName(result.name ?? next);
     setEditing(false);
   };
-  // Windows/Linux：窗口首个面板的标题栏上移进 Row 2 工具行（portal 注入，
-  // 保留 testid 与重命名/右侧面板行为）；其余面板与 macOS 保持原样在面板内渲染。
-  const inToolbar = Boolean(primary) && isWindowsChrome() && windowChrome.toolbar !== null;
-  const bar = (
-    <div className={`session-titlebar${inToolbar ? ' in-toolbar' : ''}`} data-testid="session-titlebar">
+  return (
+    <div className="session-titlebar" data-testid="session-titlebar">
       <div className="session-title">
         {editing ? (
           <>
@@ -112,10 +107,6 @@ function SessionTitleBar({ onClosePane, primary }: { onClosePane?: () => void; p
       </div>
     </div>
   );
-  if (inToolbar && windowChrome.toolbar) {
-    return createPortal(bar, windowChrome.toolbar);
-  }
-  return bar;
 }
 
 function ExtensionWidgets({ placement }: { placement: 'aboveEditor' | 'belowEditor' }) {
@@ -611,7 +602,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
             <X size={16} />
           </button>
         )}
-        {started && <SessionTitleBar onClosePane={onClosePane} primary={primary} />}
+        {started && <SessionTitleBar onClosePane={onClosePane} />}
         <div className="chat-message-region">
           <div className="message-list" ref={listRef} data-testid="message-list">
             {!started && starting && (
