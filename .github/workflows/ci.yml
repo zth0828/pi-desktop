@@ -49,3 +49,18 @@ jobs:
       - run: brew install fd
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:e2e
+
+  electron-e2e-windows:
+    name: Electron E2E (Windows)
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      # 同 macOS：@ 补全走系统 fd，避免 pi 按需下载在隔离环境不稳定。
+      - run: choco install fd -y
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:e2e
