@@ -467,7 +467,7 @@ test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当
   // 流式中：发送按钮变为 Queue（入队 followUp）+ Stop 组合
   await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('chat-queue-send')).toBeVisible();
-  await expect(page.getByTestId('chat-queue-send').locator('span')).toHaveText(/Queue|Steer|排队|插队/);
+  await expect(page.getByTestId('chat-queue-send').locator('span')).toHaveText(/Queue|Steer|Follow up|Guide turn|排队|插队|稍后继续|引导当前轮/);
   await expect(page.getByTestId('chat-queue-send').locator('span')).toHaveCSS('white-space', 'nowrap');
   const stopBox = await page.getByTestId('chat-stop').boundingBox();
   expect(stopBox?.width).toBe(30);

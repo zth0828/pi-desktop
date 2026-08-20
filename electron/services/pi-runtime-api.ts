@@ -184,12 +184,13 @@ function bindSenderToRuntime(ctx: HostActionContext | undefined, runtime: Active
 }
 
 export function isSessionRunning(sessionPath: string): boolean {
-  return getRuntimeForSession(sessionPath)?.adapterRuntime.session.view.isStreaming === true;
+  const runtime = getRuntimeForSession(sessionPath);
+  return runtime?.adapterRuntime.session.view.isStreaming === true || runtime?.running === true;
 }
 
 /** 开发热更新等待安全重启时使用，覆盖主窗口和独立窗口的保活 runtime。 */
 export function hasStreamingRuntimes(): boolean {
-  return [...runtimes].some((runtime) => runtime.adapterRuntime.session.view.isStreaming);
+  return [...runtimes].some((runtime) => runtime.adapterRuntime.session.view.isStreaming || runtime.running);
 }
 
 /** SDK 列表暂未收录的保活会话（通常是仍在流式输出的首次 run）。 */
@@ -236,7 +237,7 @@ export function activateSessionRuntime(runtime: ActiveRuntime): PiRuntimeStateRe
   // 仍有窗口绑定着的 runtime 不回收（其他窗口正在看它）
   const previousFile = previous?.adapterRuntime.session.view.sessionFile;
   const previousWatched = previousFile ? findWindowBySession(previousFile) !== null : false;
-  if (previous && previous !== runtime && !previous.adapterRuntime.session.view.isStreaming && !previousWatched) {
+  if (previous && previous !== runtime && !previous.adapterRuntime.session.view.isStreaming && !previous.running && !previousWatched) {
     disposeRuntime(previous);
   }
   return state;
@@ -433,6 +434,7 @@ function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
     thinkingLevel: session.thinkingLevel,
     availableThinkingLevels: availableThinkingLevels(session),
     isStreaming: session.isStreaming,
+    running: runtime.running || session.isStreaming,
     messages: session.messages as unknown[],
     historyMessages: history.messages,
     messageEntryIds: messageEntryIds(session),
@@ -794,7 +796,7 @@ export async function detachRuntimesFromSessionFile(sessionPath: string): Promis
 export async function afterSessionReplaced(
   runtime: ActiveRuntime,
   target?: HostActionContext,
-  options?: { replacesSessionId?: string },
+  options?: { replacesSessionId?: string; preserveRunning?: boolean },
 ): Promise<PiRuntimeStateResult> {
   const previousActive = active;
   runtime.unsubscribe();
@@ -821,11 +823,7 @@ export async function afterSessionReplaced(
   }
   // 主窗口发起的隔离替换要更新全局 active（侧栏 isCurrent / 无 scope 回退）；
   // 独立窗口发起时则保持主窗口 active 不变。
-  if (target && isMainWindow(target.sender.id)) {
-    active = runtime;
-    latestMcpStatus = runtime.mcpStatus;
-    sendHostEvent('piMcp', 'statusChanged', { snapshot: latestMcpStatus });
-  }
+  if (options?.preserveRunning) runtime.running = true;
   const state = snapshotState(runtime);
   if (options?.replacesSessionId) state.replacesSessionId = options.replacesSessionId;
   if (target) sendHostEventToWebContents(target.sender, 'piRuntime', 'sessionReplaced', state);
@@ -839,6 +837,7 @@ export async function afterSessionReplaced(
     previousActive &&
     previousActive !== runtime &&
     !previousActive.adapterRuntime.session.isStreaming &&
+    !previousActive.running &&
     !previousActiveWatched
   ) {
     disposeRuntime(previousActive);
@@ -855,9 +854,15 @@ async function createReplacementRuntime(
   current: ActiveRuntime,
   ctx?: HostActionContext,
 ): Promise<ActiveRuntime> {
+  const wasRunning = current.running || current.adapterRuntime.session.isStreaming;
   const replacement = await createRuntime(current.cwd);
-  if (ctx) await afterSessionReplaced(replacement, ctx);
-  else activateSessionRuntime(replacement);
+  if (ctx) {
+    await afterSessionReplaced(replacement, ctx);
+    if (wasRunning) {
+      replacement.running = true;
+      sendHostEventToWebContents(ctx.sender, 'piRuntime', 'sessionReplaced', snapshotState(replacement));
+    }
+  } else activateSessionRuntime(replacement);
   if (ctx) bindSenderToRuntime(ctx, replacement);
   return replacement;
 }
@@ -1104,6 +1109,15 @@ export const piRuntimeApi = {
     else if (active.summarizingBranch) session.abortBranchSummary();
     else if (session.isRetrying) session.abortRetry();
     else await session.abort();
+    if (active.running || session.isStreaming) {
+      active.running = false;
+      noteRunEnded(active.instanceId);
+      sendHostEvent('piRuntime', 'runtimeStateChanged', {
+        sessionId: active.sessionId,
+        sessionPath: session.sessionFile,
+        running: false,
+      });
+    }
     return { success: true, restoredMessages };
   },
 
@@ -1112,7 +1126,7 @@ export const piRuntimeApi = {
     if (!active) return { success: false, error: 'session not started' };
     // 同一会话可同时显示在多个窗口。此时不能在共享 runtime 上原地
     // newSession，否则所有窗口都会收到 sessionReplaced；只为发起窗口创建新 runtime。
-    if (active.adapterRuntime.session.isStreaming || shouldIsolateSessionReplacement(active, ctx)) {
+    if (active.adapterRuntime.session.isStreaming || active.running || shouldIsolateSessionReplacement(active, ctx)) {
       try {
         await createReplacementRuntime(active, ctx);
         return { success: true };

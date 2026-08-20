@@ -250,6 +250,8 @@ export type PiRuntimeStateResult = {
   thinkingLevel: string;
   availableThinkingLevels: string[];
   isStreaming: boolean;
+  /** Main-maintained run state covers providers that lag isStreaming during resume. */
+  running?: boolean;
   /** 当前 pi 上下文中的 AgentMessage[]，用于运行时增量更新。 */
   messages: unknown[];
   /**

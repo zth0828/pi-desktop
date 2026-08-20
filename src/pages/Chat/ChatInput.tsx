@@ -129,6 +129,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const chatStore = usePaneChatStoreApi();
   const paneApi = usePaneHostApi();
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
+  const isRunning = usePaneChatStore((s) => s.running);
   const compacting = usePaneChatStore((s) => s.compaction !== null);
   const transcriptSyncing = usePaneChatStore((s) => s.transcriptSyncing);
   const lastCompaction = usePaneChatStore((s) => s.lastCompaction);
@@ -300,7 +301,10 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const lastTurnHitRate = usage?.latestTurn ? cacheHitRate(usage.latestTurn) : null;
   const cacheStatsAvailable = usageTotals.cacheRead + usageTotals.cacheWrite > 0;
   const selectedModel = models.find((candidate) => `${candidate.provider}/${candidate.id}` === modelKey);
-  const reasoning = Boolean(selectedModel?.reasoning ?? model?.reasoning);
+  const reasoning = Boolean(model?.reasoning ?? selectedModel?.reasoning);
+  const effectiveThinkingLevels = availableThinkingLevels.length > 1
+    ? availableThinkingLevels
+    : reasoning ? ['off', 'minimal', 'low', 'medium', 'high'] : availableThinkingLevels;
   const planAvailable = commands.some((command) => /(^|[-_])plan([-_]|$)/i.test(command.name));
   // 模型下拉按供应商分组（optgroup），供应商顺序保持 listModels 的首现顺序
   const modelGroups = new Map<string, PiModelRow[]>();
@@ -494,14 +498,17 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
 
   useEffect(() => {
     const stopOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== 'Escape' || !isStreaming) return;
+      if (event.key !== 'Escape' || (!isStreaming && !isRunning)) return;
       if (panelOpen || filePanelOpen || composerMenuOpen || usageOpen || modelMenuOpen) return;
+      // 焦点在其他浮层（侧栏会话菜单、对话框等）时按 Escape 只关该浮层，不触发 stop
+      const target = event.target as HTMLElement | null;
+      if (target && target !== document.body && !target.closest('.chat-input-card')) return;
       event.preventDefault();
       void abort();
     };
     document.addEventListener('keydown', stopOnEscape);
     return () => document.removeEventListener('keydown', stopOnEscape);
-  }, [abort, composerMenuOpen, filePanelOpen, isStreaming, modelMenuOpen, panelOpen, usageOpen]);
+  }, [abort, composerMenuOpen, filePanelOpen, isRunning, isStreaming, modelMenuOpen, panelOpen, usageOpen]);
 
   useEffect(() => {
     setFileSelected(0);
@@ -929,7 +936,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                   )}
                   {modelMenuSection === 'thinking' && (
                     <div className="model-submenu" data-testid="model-submenu">
-                      {availableThinkingLevels.map((level) => (
+                      {effectiveThinkingLevels.map((level) => (
                         <button
                           key={level}
                           className="model-option"
@@ -960,7 +967,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                       </span>
                       <ChevronLeft size={13} />
                     </button>
-                    {reasoning && availableThinkingLevels.length > 0 && (
+                    {reasoning && effectiveThinkingLevels.length > 0 && (
                       <button
                         className={`model-menu-row${modelMenuSection === 'thinking' ? ' active' : ''}`}
                         data-testid="model-menu-thinking"
@@ -1028,6 +1035,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 title={t('chat.queueSendTipSteer')}
               >
                 <ArrowUp size={15} />
+                <span>{t(followupBehavior === 'steer' ? 'chat.steerSend' : 'chat.queueSend')}</span>
               </button>
               <button
                 data-testid="chat-stop"
@@ -1050,7 +1058,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 <ArrowUp size={15} />
               </button>
               {/* 压缩中/重试等待中/bash 执行中 isStreaming=false，但回合仍可中断（pi Escape 语义） */}
-              {(compacting || retrying || bashing) && (
+              {(compacting || retrying || bashing || isRunning) && (
                 <button
                   data-testid="chat-stop"
                   className="send-button stop"

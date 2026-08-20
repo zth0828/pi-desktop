@@ -83,6 +83,7 @@ export type ChatState = {
   thinkingLevel: string;
   availableThinkingLevels: string[];
   isStreaming: boolean;
+  running: boolean;
   runStartedAt: number | null;
   turnStats: TurnStats | null;
   messages: ChatMessage[];
@@ -219,6 +220,11 @@ function bindInstanceEvents(
       s.applyState(state);
       store.setState({ boundSessionId: state.sessionId, expectingReplacement: false });
     }),
+    onEvent('piRuntime', 'runtimeStateChanged', (event) => {
+      const current = store.getState();
+      if (!matchesBoundSession(current.boundSessionId, event.sessionId)) return;
+      store.setState({ running: event.running });
+    }),
     onEvent('piRuntime', 'uiRequest', (req) => {
       const s = store.getState();
       if (!matchesBoundSession(s.boundSessionId, req.sessionId)) return; // 非本面板会话的请求丢弃
@@ -264,6 +270,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       thinkingLevel: 'off',
       availableThinkingLevels: [],
       isStreaming: false,
+      running: false,
       runStartedAt: null,
       turnStats: null,
       messages: [],
@@ -470,7 +477,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           thinkingLevel: state.thinkingLevel,
           availableThinkingLevels: state.availableThinkingLevels ?? [],
           isStreaming: state.isStreaming,
-          runStartedAt: null,
+          running: state.running ?? state.isStreaming,
           turnStats: null,
           messages,
           historyMessages,
@@ -557,13 +564,13 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         const { event } = envelope;
         switch (event.type) {
           case 'run.started':
-            set({ isStreaming: true, runStartedAt: Date.now(), turnStats: null, retry: null, queue: { steering: [], followUp: [] } });
+            set({ isStreaming: true, running: true, runStartedAt: Date.now(), turnStats: null, retry: null, queue: { steering: [], followUp: [] } });
             break;
           case 'run.ended': {
             // 收尾：run 结束时仍在 running 的工具（abort/error 中断）标记为中断，
             // 避免工具卡永远停在 running。willRetry 时 run 会继续，不动工具状态。
             if (event.willRetry) {
-              set({ isStreaming: false, retry: null });
+              set({ isStreaming: false, running: false, retry: null });
               break;
             }
             const now = Date.now();
@@ -575,7 +582,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
                   : [id, ex],
               ),
             );
-            set({ isStreaming: false, runStartedAt: null, toolExecutions, retry: null });
+            set({ isStreaming: false, running: false, runStartedAt: null, toolExecutions, retry: null });
             // 流式中执行的 bash 消息由 pi 延迟到 run 结束才落盘，此刻同步进列表
             if (get().bashDraft) {
               set({ bashDraft: null });
