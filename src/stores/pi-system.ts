@@ -84,7 +84,17 @@ export const usePiSystemStore = create<PiSystemState>((set, get) => ({
 
 // 订阅 Main 推送的安装进度（模块级一次性绑定）
 export function bindPiSystemEvents(): () => void {
-  return onHostEvent('piSystem', 'installProgress', ({ text }) => {
+  const unbindInstall = onHostEvent('piSystem', 'installProgress', ({ text }) => {
     usePiSystemStore.getState().appendInstallLog(text);
   });
+  // 兼容性报告异步补齐后 Main 推送完整环境：更新状态并持久化
+  //（完整 env 含 compatibility，下次启动的缓存能正确推导 pi-incompatible）。
+  const unbindEnv = onHostEvent('piSystem', 'envChanged', (env) => {
+    saveCachedEnvironment(env);
+    usePiSystemStore.setState({ env, state: computeOnboardingState(env) });
+  });
+  return () => {
+    unbindInstall();
+    unbindEnv();
+  };
 }

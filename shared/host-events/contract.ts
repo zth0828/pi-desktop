@@ -5,6 +5,7 @@ import type { PiRuntimeEventEnvelope } from '../pi-event-map';
 import type {
   PiExtensionUiNotification,
   PiExtensionUiState,
+  PiEnvironment,
   PiOAuthProgressEvent,
   PiPackageProgressEvent,
   PiRuntimeStateResult,
@@ -28,6 +29,8 @@ export type HostEventContract = {
   };
   piSystem: {
     installProgress: (payload: PiInstallProgressEvent) => void;
+    /** 兼容性报告异步补齐后推送完整环境；主界面无需阻塞等待 SDK 加载。 */
+    envChanged: (payload: PiEnvironment) => void;
   };
   piRuntime: {
     /** prompt request lifecycle, correlated by requestId and runtime generation */
@@ -91,6 +94,7 @@ export const HOST_EVENT_CHANNELS = {
   },
   piSystem: {
     installProgress: 'pi-system:install-progress',
+    envChanged: 'pi-system:env-changed',
   },
   piRuntime: {
     promptLifecycle: 'pi-runtime:prompt-lifecycle',
