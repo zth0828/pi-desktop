@@ -133,6 +133,23 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
     }
   };
 
+  const syncRuntimeReasoning = (modelId: string, reasoning: boolean) => {
+    const activeStore = getActiveChatStore();
+    const runtime = activeStore?.getState();
+    if (!activeStore || !runtime?.model || runtime.model.provider !== provider.id || runtime.model.id !== modelId) return;
+    const levels = runtime.availableThinkingLevels.length > 0
+      ? runtime.availableThinkingLevels
+      : reasoning ? ['off', 'minimal', 'low', 'medium', 'high'] : [];
+    activeStore.getState().applyModelUpdate({
+
+      success: true,
+      model: { ...runtime.model, reasoning },
+      thinkingLevel: runtime.thinkingLevel,
+      availableThinkingLevels: levels,
+      contextUsage: runtime.contextUsage ?? undefined,
+    });
+  };
+
   const setReasoning = async (modelId: string, reasoning: boolean) => {
     setBusy(true);
     setMessage(undefined);
@@ -143,17 +160,8 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
       return;
     }
     onChanged();
+    syncRuntimeReasoning(modelId, reasoning);
     // 若活动会话正在使用该模型，同步会话状态，思考深度菜单立即恢复可用
-    const runtimeState = await hostApi.piRuntime.getState().catch(() => null);
-    if (runtimeState?.model) {
-      getActiveChatStore()?.getState().applyModelUpdate({
-        success: true,
-        model: runtimeState.model,
-        thinkingLevel: runtimeState.thinkingLevel,
-        availableThinkingLevels: runtimeState.availableThinkingLevels,
-        contextUsage: runtimeState.contextUsage,
-      });
-    }
   };
 
   const isDefault = (modelId: string) =>
