@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { hostApi } from '../lib/host-api';
 import { usePiSystemStore } from '../stores/pi-system';
@@ -41,12 +42,33 @@ export default function Onboarding() {
   const detect = usePiSystemStore((s) => s.detect);
   const installPhase = usePiSystemStore((s) => s.installPhase);
   const installError = usePiSystemStore((s) => s.installError);
+  // 检测卡住兜底：detect 失败/挂起时不再无限“正在检查”，10s 后给出重试入口，
+  // 避免启动页长期空白无任何可操作项（Windows 上环境检测偶发卡住的历史问题）。
+  const [checkStalled, setCheckStalled] = useState(false);
+  useEffect(() => {
+    if (env && state) return;
+    const timer = window.setTimeout(() => setCheckStalled(true), 10_000);
+    return () => window.clearTimeout(timer);
+  }, [env, state]);
 
   if (!env || !state) {
     return (
       <div className="onboarding">
         <h1>Pi Desktop</h1>
         <p>{t('onboarding.checking')}</p>
+        {checkStalled && (
+          <div className="actions">
+            <button
+              disabled={checking}
+              onClick={() => {
+                setCheckStalled(false);
+                void detect(true);
+              }}
+            >
+              {t('onboarding.recheck')}
+            </button>
+          </div>
+        )}
       </div>
     );
   }

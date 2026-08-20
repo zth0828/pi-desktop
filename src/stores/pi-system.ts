@@ -21,6 +21,9 @@ type PiSystemState = {
 };
 
 const ENV_CACHE_KEY = 'pi-desktop.pi-environment';
+// 缓存时效：机器环境（pi 安装/升级、PATH 变化）可能已变，超过 24h 的缓存
+// 不再用于首帧状态推导（避免按旧环境错误进入主界面或 onboarding 分支）。
+const ENV_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 type CachedEnvironment = { savedAt: number; env: PiEnvironment };
 
@@ -29,6 +32,7 @@ function readCachedEnvironment(): PiEnvironment | null {
     const raw = window.localStorage.getItem(ENV_CACHE_KEY);
     if (!raw) return null;
     const cached = JSON.parse(raw) as CachedEnvironment;
+    if (typeof cached.savedAt !== 'number' || Date.now() - cached.savedAt > ENV_CACHE_TTL_MS) return null;
     return cached.env?.pi && cached.env?.node ? cached.env : null;
   } catch {
     return null;

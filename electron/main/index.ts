@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { HostApiRegistry, registerHostInvokeHandler } from './ipc/host-invoke';
-import { createMainWindow, setQuitting } from './window-manager';
+import { createMainWindow, focusOrCreateMainWindow, setQuitting } from './window-manager';
 import { createTray } from './tray';
 import { createHostServices } from '../services';
 import { disposeAllRuntimes, hasStreamingRuntimes } from '../services/pi-runtime-api';
@@ -69,30 +69,49 @@ if (process.env.VITE_DEV_SERVER_URL) {
   });
 }
 
-app.whenReady().then(() => {
-  if (process.platform === 'darwin') {
-    app.dock?.setIcon(resolveAppIconPath('png', {
-      isPackaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-      mainDir: __dirname,
-    }));
-  }
-  createMainWindow();
-  createTray();
-  scheduleVersionChecks();
+// 单实例锁：Windows/Linux 主窗口关闭会 hide 到托盘继续运行；再次启动快捷方式
+// 必须聚焦已有实例，而不是开第二个进程——第二个实例与托盘实例共用 userData，
+// 磁盘缓存互相冲突（GPU/disk cache access denied，见 dev-server.log），
+// 渲染进程可能白屏且状态混乱（“打开软件空白”）。
+// dev 模式（vite 重启 electron 同一 userData 是常态）与 E2E（每个用例隔离
+// userData，锁按 userData 路径互斥）跳过。
+const hasSingleInstanceLock = process.env.VITE_DEV_SERVER_URL || process.env.PI_DESKTOP_E2E === '1'
+  ? true
+  : app.requestSingleInstanceLock();
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    // 事件在持锁实例（首个）触发：聚焦/恢复已 hide 到托盘的主窗口。
+    focusOrCreateMainWindow();
   });
-});
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+  app.whenReady().then(() => {
+    if (process.platform === 'darwin') {
+      app.dock?.setIcon(resolveAppIconPath('png', {
+        isPackaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+        mainDir: __dirname,
+      }));
+    }
+    createMainWindow();
+    createTray();
+    scheduleVersionChecks();
 
-app.on('before-quit', () => {
-  // 先放行主窗口 close 拦截（否则 quit 流程被 preventDefault 卡住），再清理 runtime。
-  setQuitting(true);
-  if (devRestartTimer) clearTimeout(devRestartTimer);
-  disposeAllRuntimes();
-});
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
+
+  app.on('before-quit', () => {
+    // 先放行主窗口 close 拦截（否则 quit 流程被 preventDefault 卡住），再清理 runtime。
+    setQuitting(true);
+    if (devRestartTimer) clearTimeout(devRestartTimer);
+    disposeAllRuntimes();
+  });
+}
