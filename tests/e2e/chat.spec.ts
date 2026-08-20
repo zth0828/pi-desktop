@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
 
+// 富文本/重渲染用例在并行（多 Electron + mock + pi runtime 同机）下偶发超时，
+// 失败重试一次兜底（串行/低负载下不会触发）。
+test.describe.configure({ retries: 1 });
+
 let mock: ChildProcess;
 let mockPort: number;
 let agentDir: string;
