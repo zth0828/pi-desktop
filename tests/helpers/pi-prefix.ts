@@ -1,7 +1,7 @@
 // 测试用的 pi 安装前缀：每个矩阵版本使用独立 npm 全局布局。
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const PI_PACKAGE = '@earendil-works/pi-coding-agent';
 const REQUESTED_VERSION = process.env.PI_TEST_VERSION ?? '0.84.2';
@@ -28,6 +28,10 @@ function installedVersion(): string | null {
 /** 并发安装互斥：并行 E2E worker 首次运行时都会走到安装分支，npm i -g --prefix
  *  同一目录会竞争损坏；用原子 mkdir 锁 + 轮询，持锁者安装，其余等待。 */
 function acquireInstallLock(lockDir: string): () => void {
+  // 全新 checkout 没有 .cache（gitignore 第 50 行）；先确保父目录存在，
+  // 再原子 mkdir 占锁。不能给 mkdirSync 加 recursive（已存在时不抛 EEXIST，
+  // 两个 worker 会同时“占锁”成功，互斥失效）。
+  mkdirSync(dirname(lockDir), { recursive: true });
   const deadline = Date.now() + 300_000;
   for (;;) {
     try {
