@@ -1,20 +1,18 @@
-## Windows/Linux 兼容性与会话体验修复
+## 版本检查、无证书更新下载与会话运行状态修复
 
-本版本是 `0.2.1` 的补丁更新，重点修复跨平台侧栏操作，并完善会话、上下文与运行时体验。
+本版本是 `0.2.2` 的功能版本，新增 Pi Desktop 与 pi 的自动版本检查、跨平台安装包下载与 SHA-256 校验，并修复了运行中会话切换后的控制与时序问题。
 
-- **Windows/Linux 侧栏修复**：侧栏收起后，内容区左上角会显示悬浮控制按钮，可重新展开侧栏；避免展开入口随侧栏一起隐藏。
-- **Windows 兼容性**：兼容 npm shim 的全局包路径、反斜杠路径、大小写不敏感路径比较、Git `autocrlf`，并补充 Windows Electron E2E fixture 适配。
-- **多窗口会话隔离**：同一会话只由一个窗口持有；重复打开、拖入或拖出时聚焦已有窗口，避免不同窗口竞争同一 runtime。
-- **上下文压缩体验**：压缩后仍可浏览和搜索完整当前分支历史，增加压缩检查点导航、压缩结果与上下文估算展示。
-- **Token 与缓存统计**：恢复历史会话后正确读取上下文和会话累计用量；回合卡片中的缓存命中率改为整个会话累计口径。
-- **输入与运行时设置**：保留各面板未发送草稿，支持 `!` Bash 命令、基于 `fd` 的 `@` 文件补全、默认思考深度、自动重试和自动压缩开关。
-- **Agent 原生能力**：接入项目信任门控、分层停止/中断、跳分支摘要选项，以及 MCP 配置立即重载。
-- **其他修复**：会话删除后的面板切换、失败回复错误展示、Vite 热重载时 Electron 安全重启，以及扩展调用 TUI 专属 UI 时的一次性提示。
+- **自动版本检查**：启动后自动检查 Pi Desktop（GitHub Releases）与 pi（npm registry）的最新版本，最多每 7 天联网一次；手动“立即检查”可随时强制执行。检查结果（最新版本、上次成功时间、错误）持久化在壳设置中，失败不会阻塞主界面。
+- **无证书更新下载**：发现新版本后按当前平台与架构选择安装包（macOS 优先 DMG，Windows 优先 NSIS Setup，Linux 优先 AppImage、DEB 备用），流式下载到用户目录，并用同 Release 发布的 `SHA256SUMS-<platform>.txt` 校验 SHA-256；校验失败或下载中断会删除临时文件。下载完成后提供“打开安装包 / 显示文件位置”，不会自动执行任何安装包。
+- **设置页版本区**：在“关于”区域分开展示 Pi Desktop 与 pi 的当前版本、最新版本、最近检查时间和错误，提供立即检查、下载更新、升级 pi 按钮（双语）。
+- **Linux 资产命名兼容**：按 workflow 实际发布的 `x86_64` AppImage 与 `amd64` DEB 资产名匹配。
+- **测试与注入**：GitHub 与 pi registry 地址可用环境变量注入（生产默认官方地址），E2E 使用本地 mock server，不依赖真实网络。
+- **会话运行状态修复**：运行中的会话切换到其他会话再切回后，仍能显示停止按钮并可用 Escape 停止；历史会话切换后消息列表会钉回最新消息；Models 页切换模型的推理开关后，聊天页思考深度菜单立即恢复可用。
 
 ## 验证情况
 
 - 本地已通过 TypeScript 检查、单元测试和生产构建。
-- Windows/Linux 侧栏展开入口的修复提交已包含在 `main`，且未被后续改动覆盖。
+- 全量 Playwright Electron E2E：138 个用例通过 137 个、跳过 1 个，无失败（覆盖聊天、多会话、多窗口、面板、队列、模型、Review、Workspace、设置、导出、归档、搜索、扩展、MCP、技能、信任等）。
 - 发布工作流会在 macOS、Windows 和 Linux 上分别执行类型检查、单元测试、Vite 构建和安装包构建。
 - 发布产物附带按平台生成的 `SHA256SUMS-<platform>.txt`。
 
@@ -26,7 +24,7 @@ Pi Desktop 需要 Node.js 22.19.0 或更新版本，并要求通过 npm 全局�
 npm i -g @earendil-works/pi-coding-agent
 ```
 
-Windows 和 Linux 预览安装包尚未进行商业代码签名，Windows SmartScreen 可能显示安全提示。请只从本仓库 GitHub Releases 下载，并在运行前核对 SHA-256。
+Windows 和 Linux 安装包尚未进行商业代码签名，Windows SmartScreen 可能显示安全提示。请只从本仓库 GitHub Releases 下载，并在运行前核对 SHA-256。
 
 没有 Apple Developer ID 凭据时，macOS 产物使用完整的 ad-hoc 签名。打开 DMG 后双击 `Install Pi Desktop.command`；如果浏览器 quarantine 阻止双击，请在终端中运行该安装器。安装器只处理 Pi Desktop 自身，不会关闭全局 Gatekeeper。
 
