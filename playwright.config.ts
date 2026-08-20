@@ -14,6 +14,10 @@ export default defineConfig({
   testDir: 'tests/e2e',
   timeout: 60_000,
   workers,
-  retries: 0,
+  // 并行 + 内存预算下的启动 flake 兜底：多 worker 同机（本机 5.9GB、CI 7GB）
+  // 偶发 electron.launch 超时（network service OOM），重试一次即过；
+  // 每个测试独立 HOME/user-data/随机端口，重试天然幂等。chat.spec 的
+  // describe 级 retries: 1 与之等价（冗余但无害）。
+  retries: 1,
   reporter: 'list',
 });
