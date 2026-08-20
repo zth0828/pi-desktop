@@ -188,14 +188,27 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
       // 图片/代码块等延迟布局后再钉一次底
       const raf = requestAnimationFrame(() => {
         const el = listRef.current;
-        if (el && scrollResetRef.current) el.scrollTop = el.scrollHeight;
+        if (el && scrollResetRef.current) {
+          el.scrollTop = el.scrollHeight;
+          el.dispatchEvent(new Event('scroll'));
+        }
       });
+      const settle = window.setTimeout(() => {
+        const el = listRef.current;
+        if (el) {
+          el.scrollTop = el.scrollHeight;
+          el.dispatchEvent(new Event('scroll'));
+        }
+      }, 100);
       const release = window.setTimeout(() => {
         scrollResetRef.current = false;
+        const el = listRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
         updateScrollAffordance();
-      }, 300);
+      }, 400);
       return () => {
         cancelAnimationFrame(raf);
+        window.clearTimeout(settle);
         window.clearTimeout(release);
         scrollResetRef.current = false;
       };
@@ -203,8 +216,6 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
-
-  // user 消息稳定锚点（消息列表在会话内只追加，index 锚点稳定）
   const railAnchors = useMemo<RailAnchor[]>(() => {
     let n = 0;
     return displayMessages.flatMap((m, i) =>
