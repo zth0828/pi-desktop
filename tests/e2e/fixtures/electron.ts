@@ -155,6 +155,9 @@ export const test = base.extend<ElectronFixtures>({
             ...(process.platform === 'win32' ? { USERPROFILE: homeDir } : {}),
             LANG: 'en_US.UTF-8',
             LC_ALL: 'en_US.UTF-8',
+            // E2E 只连本地 mock server：任何继承/系统代理都会干扰 loopback，显式豁免。
+            NO_PROXY: '127.0.0.1,localhost,::1',
+            no_proxy: '127.0.0.1,localhost,::1',
             ...(options.userPath !== undefined || piEnv
               ? {
                 PI_DESKTOP_USER_PATH: options.userPath ?? defaultUserPath(),
