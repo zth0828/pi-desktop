@@ -222,10 +222,191 @@ button.danger-outline {
 
 /* ---------- 布局 ---------- */
 
+:root {
+  --chrome-row1: 36px;
+  --chrome-row2: 40px;
+  --chrome-height: calc(var(--chrome-row1) + var(--chrome-row2));
+}
+
 .app-layout {
   display: flex;
   height: 100vh;
 }
+
+/* Windows/Linux frameless 自绘顶部（固定悬浮层，不参与文档流）：
+   Row 1 标题栏（logo + 菜单 + 窗口控件，整行拖拽区）+ Row 2 工具行
+   （通栏固定，侧栏展开/折叠不改变其位置）。macOS 不渲染此层。 */
+.window-chrome {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 130;
+}
+
+.titlebar {
+  height: var(--chrome-row1);
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar-logo {
+  width: 20px;
+  height: 20px;
+  margin: 0 10px 0 12px;
+  flex: none;
+  border-radius: 5px;
+}
+
+.menu-bar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+}
+
+.menu-wrap { position: relative; flex: none; height: 100%; display: flex; align-items: center; }
+
+.menu-item {
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.menu-item:hover,
+.menu-item.open { background: var(--bg-hover); color: var(--text); }
+
+.titlebar-spacer { flex: 1; min-width: 0; }
+
+/* 菜单下拉：复用 .composer-menu 的浮层样式模式（absolute + shadow），无新依赖。 */
+.menu-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 220px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-panel);
+  z-index: 200;
+  -webkit-app-region: no-drag;
+}
+
+.menu-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 9px;
+  border-radius: 7px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.menu-dropdown-item:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.menu-dropdown-item:disabled { opacity: .45; cursor: default; }
+
+/* 自绘窗口控件（最小化/最大化/关闭），固定在 Row 1 最右侧 */
+.window-controls {
+  display: flex;
+  flex: none;
+  height: 100%;
+  align-items: stretch;
+  -webkit-app-region: no-drag;
+}
+
+.window-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  color: var(--text-secondary);
+}
+
+.window-control:hover { background: var(--bg-hover); color: var(--text); }
+.window-control-close:hover { background: #e81123; color: #fff; }
+
+/* Row 2 工具行：通栏固定，不随侧栏折叠变化 */
+.toolbar {
+  height: var(--chrome-row2);
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar-new-chat {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.toolbar-new-chat:hover { background: var(--bg-hover); }
+
+.toolbar-center {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+/* Chat 页标题栏 portal 进工具行：标题居中、右侧动作靠右 */
+.toolbar .session-titlebar.in-toolbar {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  position: static;
+  z-index: auto;
+}
+
+.toolbar .session-titlebar.in-toolbar .session-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.toolbar .session-titlebar.in-toolbar .session-title-button {
+  width: auto;
+  max-width: min(480px, 40vw);
+}
+
+.toolbar .session-titlebar.in-toolbar .session-title-actions { flex: none; }
 
 .window-drag-strip {
   position: fixed;
@@ -237,6 +418,7 @@ button.danger-outline {
   -webkit-app-region: drag;
 }
 
+/* macOS 悬浮控件层（hiddenInset 红绿灯右侧）；Windows/Linux 已收进 Row 2 工具行 */
 .app-window-controls {
   position: fixed;
   top: 0;
@@ -247,14 +429,6 @@ button.danger-outline {
   align-items: center;
   gap: 2px;
   -webkit-app-region: no-drag;
-}
-
-/* Windows/Linux 用原生标题栏：悬浮控件层只在侧栏收起时出现，
-   落在内容区左上角，提供展开入口 */
-.app-window-controls.is-native-frame {
-  left: 8px;
-  top: 6px;
-  height: 40px;
 }
 
 /* Electron 的拖拽层覆盖整个标题高度；交互控件必须明确声明可点击。 */
@@ -278,19 +452,19 @@ button.danger-outline {
   padding-top: 66px;
 }
 
+/* Windows/Linux：顶部两行由固定悬浮层承担，内容区整体下移，侧栏不再留标题栏空间 */
+.app-layout:not(.is-macos) {
+  padding-top: var(--chrome-height);
+}
+
+.app-layout:not(.is-macos) .sidebar {
+  padding-top: 8px;
+}
+
 .sidebar-title {
   font-weight: 700;
   font-size: 15px;
   padding: 6px 10px 12px;
-}
-
-.sidebar-topbar {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
-  padding: 0 4px;
 }
 
 .sidebar-toggle { flex-shrink: 0; }
@@ -302,7 +476,6 @@ button.danger-outline {
   overflow: hidden;
 }
 
-.app-layout.sidebar-collapsed .sidebar-topbar { justify-content: center; padding-inline: 0; }
 .app-layout.sidebar-collapsed .new-chat { width: 36px; height: 36px; justify-content: center; margin-inline: auto; padding: 0; }
 .app-layout.sidebar-collapsed .new-chat span,
 .app-layout.sidebar-collapsed .nav-item span { display: none; }

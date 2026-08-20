@@ -2,6 +2,28 @@
   "app": {
     "tagline": "pi coding agent 的桌面壳"
   },
+  "menu": {
+    "label": "菜单",
+    "file": "文件",
+    "edit": "编辑",
+    "selection": "选择",
+    "view": "查看",
+    "go": "转到",
+    "run": "运行",
+    "terminal": "终端",
+    "help": "帮助",
+    "newChat": "新建会话",
+    "closeWindow": "关闭窗口",
+    "collapseSidebar": "折叠侧边栏",
+    "searchChats": "会话搜索",
+    "copy": "复制",
+    "paste": "粘贴",
+    "comingSoon": "敬请期待",
+    "maximize": "最大化",
+    "restore": "还原",
+    "minimize": "最小化",
+    "close": "关闭"
+  },
   "onboarding": {
     "checking": "正在检测环境…",
     "recheck": "重新检测",
@@ -642,7 +664,6 @@
       "showInFolder": "显示文件位置",
       "upgradePi": "升级 pi"
     },
-    "sessionExports": "会话导出",
     "exportLocation": "保存位置",
     "themeOptions": {
       "light": "浅色",

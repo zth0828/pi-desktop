@@ -233,9 +233,11 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
     title: 'Pi Desktop',
     icon,
     // 让 macOS 原生红黄绿按钮叠在应用内容上，避免额外占一整行标题栏。
+    // Windows/Linux 改为 frameless：标题栏（菜单 + 窗口控件）由 renderer 自绘，
+    // Row 1 行带 -webkit-app-region:drag 负责拖动与双击语义。
     ...(process.platform === 'darwin'
       ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 14 } }
-      : {}),
+      : { frame: false }),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,

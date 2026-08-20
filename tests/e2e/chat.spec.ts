@@ -132,12 +132,14 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   const isMac = process.platform === 'darwin';
   const sidebar = page.locator('.sidebar');
   const windowControls = page.getByTestId('app-window-controls');
-  // macOS：悬浮控件层常驻（hiddenInset 标题栏）；Windows：按钮在侧栏顶部栏，收起时改由悬浮层提供
+  // macOS：悬浮控件层常驻（hiddenInset 标题栏）；Windows：折叠/搜索收进 Row 2 工具行
   if (isMac) {
     await expect(windowControls).toBeVisible();
     await expect(windowControls).not.toContainText('Pi');
   } else {
     await expect(page.getByTestId('sidebar-toggle')).toBeVisible();
+    await expect(page.getByTestId('titlebar')).toBeVisible();
+    await expect(page.getByTestId('toolbar')).toBeVisible();
   }
   await expect(page.getByTestId('session-search-trigger')).toBeVisible();
   const controlsBox = isMac ? await windowControls.boundingBox() : null;
@@ -158,10 +160,18 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   await page.screenshot({ path: 'output/playwright/chat-chrome-refined.png', fullPage: false });
 
   const expandedWidth = (await sidebar.boundingBox())!.width;
+  const toolbarBox = await page.getByTestId('toolbar').boundingBox();
+  expect(toolbarBox).not.toBeNull();
   await page.getByTestId('sidebar-toggle').click();
   await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByTestId('sidebar-sessions')).toBeHidden();
-  await expect(page.getByTestId('new-chat')).toBeHidden();
+  if (isMac) {
+    // macOS：新会话按钮在侧栏内，随侧栏一起隐藏
+    await expect(page.getByTestId('new-chat')).toBeHidden();
+  } else {
+    // Windows：新会话按钮在 Row 2 工具行（通栏固定），收起侧栏后仍可见
+    await expect(page.getByTestId('new-chat')).toBeVisible();
+  }
   await expect(page.getByTestId('nav-chat')).toBeHidden();
   await expect(windowControls).toBeVisible();
   await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(0);
@@ -175,11 +185,18 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   expect(collapsedContentBox!.x).toBe(0);
   if (isMac) {
     expect(collapsedControlsBox!.x).toBe(controlsBox!.x);
+    expect(collapsedControlsBox!.y).toBeLessThan(12);
   } else {
-    // Windows：收起后悬浮控件层落在内容区左上角
-    expect(collapsedControlsBox!.x).toBeLessThan(60);
+    // Windows：窗口控件固定在 Row 1 最右侧；Row 2 工具行位置不随侧栏折叠变化
+    expect(collapsedControlsBox!.x).toBeGreaterThanOrEqual(expandedSidebarBox!.width);
+    expect(collapsedControlsBox!.y).toBeLessThan(40);
+    const collapsedToolbarBox = await page.getByTestId('toolbar').boundingBox();
+    expect(collapsedToolbarBox).not.toBeNull();
+    expect(collapsedToolbarBox!.x).toBe(toolbarBox!.x);
+    expect(collapsedToolbarBox!.y).toBe(toolbarBox!.y);
+    expect(collapsedToolbarBox!.width).toBe(toolbarBox!.width);
+    expect(collapsedToolbarBox!.height).toBe(toolbarBox!.height);
   }
-  expect(collapsedControlsBox!.y).toBeLessThan(12);
   await page.screenshot({ path: 'output/playwright/sidebar-collapsed-refined.png', fullPage: false });
   await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(expandedWidth - 100);
 

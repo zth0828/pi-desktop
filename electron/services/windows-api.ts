@@ -1,5 +1,6 @@
 // windows 模块：多窗口管理。
 // 窗口创建/聚焦全部委托 window-manager（窗口↔会话绑定的单一注册表）。
+import { BrowserWindow } from 'electron';
 import type {
   WindowListEntry,
   WindowsFocusPayload,
@@ -22,6 +23,24 @@ import { prewarmSessionRuntime } from './pi-runtime-api';
 import { timingMark } from '../utils/timing';
 
 export const windowsApi = {
+  /** frameless 自绘窗口控件：从发起调用的 webContents 反查窗口。 */
+  minimize: (_payload?: undefined, ctx?: HostActionContext): void => {
+    if (ctx) BrowserWindow.fromWebContents(ctx.sender)?.minimize();
+  },
+  maximizeToggle: (_payload?: undefined, ctx?: HostActionContext): void => {
+    const win = ctx ? BrowserWindow.fromWebContents(ctx.sender) : null;
+    if (!win) return;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  },
+  isMaximized: (_payload?: undefined, ctx?: HostActionContext): boolean => {
+    return ctx ? BrowserWindow.fromWebContents(ctx.sender)?.isMaximized() ?? false : false;
+  },
+  // 关闭必须走 win.close()：window-manager 对主窗口拦截 close → hide 到托盘；
+  // 退出流程（before-quit 置 quitting）自然放行。绝不在这里调 app.quit()。
+  close: (_payload?: undefined, ctx?: HostActionContext): void => {
+    if (ctx) BrowserWindow.fromWebContents(ctx.sender)?.close();
+  },
   openDetached: (payload: WindowsOpenDetachedPayload): void => {
     timingMark('openDetached:recv');
     // 会话已经在主窗口或其他独立窗口时，不创建第二份；同时通知持有窗口激活对应面板。

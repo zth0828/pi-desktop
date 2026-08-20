@@ -2,6 +2,28 @@
   "app": {
     "tagline": "A desktop shell for the pi coding agent"
   },
+  "menu": {
+    "label": "Menu",
+    "file": "File",
+    "edit": "Edit",
+    "selection": "Selection",
+    "view": "View",
+    "go": "Go",
+    "run": "Run",
+    "terminal": "Terminal",
+    "help": "Help",
+    "newChat": "New Chat",
+    "closeWindow": "Close Window",
+    "collapseSidebar": "Collapse Sidebar",
+    "searchChats": "Search Chats",
+    "copy": "Copy",
+    "paste": "Paste",
+    "comingSoon": "Coming soon",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "minimize": "Minimize",
+    "close": "Close"
+  },
   "onboarding": {
     "checking": "Checking your environment…",
     "recheck": "Re-check",

@@ -1128,6 +1128,15 @@ export type HostApiContract = {
     setSessions: (payload: WindowsSetSessionsPayload) => void;
     /** 窗口↔会话绑定清单（调试/测试用）。 */
     list: () => WindowListEntry[];
+    /** frameless 自绘标题栏：最小化当前窗口。 */
+    minimize: () => void;
+    /** frameless 自绘标题栏：最大化/还原当前窗口。 */
+    maximizeToggle: () => void;
+    /** frameless 自绘标题栏：查询当前窗口是否最大化（图标切换用）。 */
+    isMaximized: () => boolean;
+    /** frameless 自绘标题栏：关闭当前窗口。必须走 win.close() 复用
+     * 「close→hide 到托盘」语义，绝不 app.quit()（那是托盘「退出」的职责）。 */
+    close: () => void;
   };
   review: {
     /** Git HEAD 或非 Git 会话 baseline ↔ 当前磁盘快照的改动汇总。 */
