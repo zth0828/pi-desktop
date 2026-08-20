@@ -1085,8 +1085,14 @@ export const piRuntimeApi = {
     const text = await removeQueuedItem(session, payload);
     if (text == null) return { success: false, error: 'queue index out of range' };
     try {
-      if (payload.target === 'steering') await session.steer(text);
-      else await session.followUp(text);
+      if (payload.target === 'steering') {
+        // 立即发送：流式中 = steer（当前轮工具间隙插入），空闲 = 直接开新轮投递。
+        // 只入队不投递会让消息在 run 结束后永远卡在队列里（改回 9c7ba38 前的语义）。
+        if (session.isStreaming) await session.steer(text);
+        else await session.prompt({ text });
+      } else {
+        await session.followUp(text);
+      }
       return { success: true, text };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
