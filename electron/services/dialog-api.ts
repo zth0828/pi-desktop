@@ -6,8 +6,11 @@ import { getMainWindow } from '../main/window-manager';
 
 export const dialogApi = {
   open: async (payload: DialogOpenPayload, ctx?: HostActionContext): Promise<DialogOpenResult> => {
-    // 对话框挂在发起调用的窗口上；取不到（旧调用/窗口已销毁）回退主窗口
+    // 对话框挂在发起调用的窗口上；取不到（旧调用/窗口已销毁）回退主窗口。
+    // 主窗口隐藏到托盘后仍是 getMainWindow() 的返回值，挂到隐藏窗口上对话框
+    // 不会显示，先 show 再挂。
     const win = (ctx && BrowserWindow.fromWebContents(ctx.sender)) || getMainWindow();
+    if (win && !win.isVisible()) win.show();
     const options = {
       title: payload.title,
       defaultPath: payload.defaultPath,

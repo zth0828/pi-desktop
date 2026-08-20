@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolveAppIconPath } from '../../electron/utils/app-icon';
+import { resolveAppIconPath, windowIconFormat } from '../../electron/utils/app-icon';
 
 describe('resolveAppIconPath', () => {
   it('uses the project resources directory during development', () => {
@@ -17,5 +17,13 @@ describe('resolveAppIconPath', () => {
       resourcesPath: '/Applications/Pi Desktop.app/Contents/Resources',
       mainDir: '/workspace/dist-electron/main',
     })).toBe(path.join('/Applications/Pi Desktop.app/Contents/Resources', 'icon.ico'));
+  });
+});
+
+describe('windowIconFormat', () => {
+  it('Windows 用 ico（多尺寸），其余平台 png', () => {
+    expect(windowIconFormat('win32')).toBe('ico');
+    expect(windowIconFormat('darwin')).toBe('png');
+    expect(windowIconFormat('linux')).toBe('png');
   });
 });

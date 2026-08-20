@@ -5,7 +5,7 @@
 import { app, BrowserWindow, screen } from 'electron';
 import path from 'node:path';
 import { resolveAppPageId } from '@shared/app-page';
-import { resolveAppIconPath } from '../utils/app-icon';
+import { resolveAppIconPath, windowIconFormat } from '../utils/app-icon';
 import { centerBoundsAtPoint, isPointInsideRects, type DetachPoint, type DetachRect } from '../utils/detach-drop';
 import { samePath } from '../utils/same-path';
 import { resolveMinSizeFor, resolveWindowSizeFor } from '../utils/window-bounds';
@@ -21,6 +21,17 @@ export type WindowRecord = {
 };
 
 const windows = new Map<number, WindowRecord>();
+
+// 应用退出流程标志：before-quit 置位后，主窗口 close 拦截放行（否则永远隐藏无法退出）。
+let quitting = false;
+
+export function setQuitting(value: boolean): void {
+  quitting = value;
+}
+
+export function isQuitting(): boolean {
+  return quitting;
+}
 
 /** 注册窗口（webContentsId 为键）；窗口 destroyed 时自动清除。 */
 export function registerWindow(
@@ -115,6 +126,21 @@ export function getMainWindow(): BrowserWindow | null {
   return null;
 }
 
+/**
+ * 恢复/聚焦主窗口：隐藏到托盘后窗口还在（isMain 的 close 被拦截为 hide），
+ * 直接 show+focus；窗口已销毁（退出流程外异常）则重建。托盘、通知、对话框统一走这里。
+ */
+export function focusOrCreateMainWindow(): BrowserWindow {
+  const existing = getMainWindow();
+  if (existing) {
+    if (existing.isMinimized()) existing.restore();
+    if (!existing.isVisible()) existing.show();
+    existing.focus();
+    return existing;
+  }
+  return createMainWindow();
+}
+
 /** 聚焦绑定了指定会话的窗口；没有对应窗口返回 false。 */
 export function focusWindowForSession(sessionPath: string): boolean {
   const win = findWindowBySession(sessionPath);
@@ -192,7 +218,7 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
   timingMark('window:create:start');
   const { width, height } = resolveWindowSize();
   const minSize = resolveMinSizeFor({ width, height });
-  const icon = resolveAppIconPath('png', {
+  const icon = resolveAppIconPath(windowIconFormat(), {
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
     mainDir: __dirname,
@@ -250,6 +276,15 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
 
   registerWindow(win, { isMain: options.isMain });
   if (options.sessionPath) bindWindowSession(win.webContents.id, options.sessionPath);
+  // Windows/Linux：主窗口点关闭不退出，隐藏到托盘继续跑（托盘是恢复/退出入口）；
+  // 退出流程（before-quit 置 quitting）放行真正关闭。macOS 走 dock activate 重建，不拦截。
+  if (options.isMain && process.platform !== 'darwin') {
+    win.on('close', (event) => {
+      if (isQuitting()) return;
+      event.preventDefault();
+      win.hide();
+    });
+  }
   timingMark('window:create:done');
   if (timingEnabled()) {
     win.webContents.once('did-finish-load', () => timingMark('window:did-finish-load'));

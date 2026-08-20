@@ -1,7 +1,8 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { HostApiRegistry, registerHostInvokeHandler } from './ipc/host-invoke';
-import { createMainWindow } from './window-manager';
+import { createMainWindow, setQuitting } from './window-manager';
+import { createTray } from './tray';
 import { createHostServices } from '../services';
 import { disposeAllRuntimes, hasStreamingRuntimes } from '../services/pi-runtime-api';
 import { DEV_RESTART_READY, DEV_RESTART_REQUEST } from '@shared/dev-reload';
@@ -10,6 +11,12 @@ import { safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { scheduleVersionChecks } from '../services/version-check-api';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+
+// Windows 通知/任务栏/托盘归属：与 electron-builder 的 appId 一致，
+// dev 模式（electron.exe）下也按应用身份分组，通知不再挂到 Electron 名下。
+if (process.platform === 'win32') {
+  app.setAppUserModelId('io.github.zth0828.pidesktop');
+}
 
 let fatalMainFailure = false;
 function handleFatalMainFailure(event: string, error: unknown): void {
@@ -71,6 +78,7 @@ app.whenReady().then(() => {
     }));
   }
   createMainWindow();
+  createTray();
   scheduleVersionChecks();
 
   app.on('activate', () => {
@@ -83,6 +91,8 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  // 先放行主窗口 close 拦截（否则 quit 流程被 preventDefault 卡住），再清理 runtime。
+  setQuitting(true);
   if (devRestartTimer) clearTimeout(devRestartTimer);
   disposeAllRuntimes();
 });
