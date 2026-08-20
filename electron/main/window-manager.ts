@@ -8,6 +8,7 @@ import { resolveAppPageId } from '@shared/app-page';
 import { resolveAppIconPath } from '../utils/app-icon';
 import { centerBoundsAtPoint, isPointInsideRects, type DetachPoint, type DetachRect } from '../utils/detach-drop';
 import { samePath } from '../utils/same-path';
+import { resolveMinSizeFor, resolveWindowSizeFor } from '../utils/window-bounds';
 import { timingEnabled, timingMark } from '../utils/timing';
 
 export type WindowRecord = {
@@ -183,16 +184,14 @@ type CreateWindowOptions = {
 /** 窗口默认尺寸（主窗口与独立会话窗口一致）；按落点居中时复用同一尺寸。 */
 export function resolveWindowSize(): { width: number; height: number } {
   const workArea = screen.getPrimaryDisplay().workAreaSize;
-  return {
-    width: Math.min(1440, Math.max(960, workArea.width - 64)),
-    height: Math.min(900, Math.max(640, workArea.height - 64)),
-  };
+  return resolveWindowSizeFor(workArea);
 }
 
 /** 统一的窗口创建入口：主窗口与独立会话窗口共用配置，创建即注册。 */
 export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindow {
   timingMark('window:create:start');
   const { width, height } = resolveWindowSize();
+  const minSize = resolveMinSizeFor({ width, height });
   const icon = resolveAppIconPath('png', {
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
@@ -203,8 +202,8 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
     height,
     ...(options.position ? { x: options.position.x, y: options.position.y } : {}),
     // 侧栏 + 聊天列(420) + 右侧面板的最小可用宽度；窄于此面板自动转覆盖层（CSS 媒体查询）
-    minWidth: 960,
-    minHeight: 640,
+    minWidth: minSize.width,
+    minHeight: minSize.height,
     title: 'Pi Desktop',
     icon,
     // 让 macOS 原生红黄绿按钮叠在应用内容上，避免额外占一整行标题栏。
