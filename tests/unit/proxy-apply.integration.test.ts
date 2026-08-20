@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import path from 'node:path';
 
 // 集成验证：真实 applyProxyToPi（真实 pi-detector + 真实 http-dispatcher），
 // 只 mock壳设置。验证 Pi Desktop URL 覆盖启动环境并安装全局 dispatcher。
 vi.mock('../../electron/services/settings-api', () => ({
   settingsApi: { getAll: vi.fn() },
 }));
+
+// 干净 CI runner 没有全局 pi：用测试前缀安装真实 pi 并注入 PATH，
+// 保证集成测试在任何环境都能验证 applyProxyToPi 对真实 http-dispatcher 生效。
+import { piTestEnv } from '../helpers/pi-prefix';
+const piEnv = piTestEnv();
+process.env.PATH = `${piEnv.piBinDir}${path.delimiter}${process.env.PATH ?? ''}`;
 
 const settingsApiMock = (await import('../../electron/services/settings-api')).settingsApi as unknown as {
   getAll: ReturnType<typeof vi.fn>;
