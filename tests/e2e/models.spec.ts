@@ -274,17 +274,26 @@ test('Models 页：协议探测拒绝 200 HTML，发现 /v1 并选择真实 Open
   await page.getByTestId('add-custom-provider').click();
   const form = page.getByTestId('custom-provider-form');
   await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}`);
+  // 列表探测：不发生成请求，4 个协议全部未验证、均可下拉选择
   await form.getByTestId('probe-custom-provider').click();
   const results = form.getByTestId('probe-results');
   await expect(results).toBeVisible({ timeout: 30_000 });
-  await expect(results.locator('.probe-result-row').filter({ hasText: 'openai-completions' })).toContainText('Available');
-  await expect(results.locator('.probe-result-row').filter({ hasText: 'openai-responses' })).toContainText('Available');
-  await expect(results.locator('.probe-result-row').filter({ hasText: 'anthropic-messages' })).toContainText('Unavailable');
+  await expect(form.locator('.probe-result-row')).toHaveCount(4);
+  await expect(form.locator('.probe-result-row').first()).toContainText('Unverified');
   await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-responses');
   await expect(form.getByTestId('custom-api-select').locator('option')).toHaveText([
     'openai-responses',
     'openai-completions',
+    'anthropic-messages',
+    'google-generative-ai',
   ]);
+  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/responses`);
+  // 验证协议：发送最小化测试请求，发现 /v1 并确认 openai 两类协议可用
+  await form.getByTestId('verify-protocols').click();
+  await expect(results.locator('.probe-result-row').filter({ hasText: 'openai-completions' })).toContainText('Available');
+  await expect(results.locator('.probe-result-row').filter({ hasText: 'openai-responses' })).toContainText('Available');
+  await expect(results.locator('.probe-result-row').filter({ hasText: 'anthropic-messages' })).toContainText('Unavailable');
+  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-responses');
   await expect(form.getByPlaceholder('baseURL')).toHaveValue(`http://127.0.0.1:${mockPort}/v1`);
   await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/responses`);
   page.once('dialog', (dialog) => dialog.accept());
@@ -308,13 +317,18 @@ test('Models 页：探测全失败时说明不代表供应商不可用并展示�
   await page.getByTestId('add-custom-provider').click();
   const form = page.getByTestId('custom-provider-form');
   await form.getByPlaceholder('baseURL').fill('http://127.0.0.1:1');
+  // 列表探测：未发生成请求，协议未验证、无错误展示
   await form.getByTestId('probe-custom-provider').click();
-
+  await expect(form.getByTestId('probe-results')).toBeVisible({ timeout: 30_000 });
+  await expect(form.getByTestId('probe-rejected-hint')).toHaveCount(0);
+  await expect(form.locator('.probe-result-row')).toHaveCount(4);
+  await expect(form.locator('.probe-result-row').first()).toContainText('Unverified');
+  // 验证协议：全部失败才出现错误与「不代表不可用」提示
+  await form.getByTestId('verify-protocols').click();
   await expect(form.getByTestId('probe-rejected-hint')).toContainText(
-    'This does not mean it is unusable',
+    'does not mean the provider is unusable',
     { timeout: 30_000 },
   );
-  await expect(form.locator('.probe-result-row')).toHaveCount(4);
   await expect(form.locator('.probe-result-row')).toContainText([
     'Unavailable',
     'Unavailable',
@@ -539,14 +553,17 @@ test('Models 页：探测前隐藏协议与模型输入，探测失败后才允�
 
   await form.getByPlaceholder('baseURL').fill('http://127.0.0.1:1');
   await form.getByTestId('probe-custom-provider').click();
-  await expect(form.getByTestId('probe-rejected-hint')).toBeVisible({ timeout: 30_000 });
-  await expect(form.getByTestId('custom-models')).toBeVisible();
+  await expect(form.getByTestId('custom-models')).toBeVisible({ timeout: 30_000 });
   await expect(form.getByTestId('custom-api-select').locator('option')).toHaveText([
     'openai-responses',
     'openai-completions',
     'anthropic-messages',
     'google-generative-ai',
   ]);
+  // 列表探测不判定协议，无「被拒绝」提示；验证全失败后才出现
+  await expect(form.getByTestId('probe-rejected-hint')).toHaveCount(0);
+  await form.getByTestId('verify-protocols').click();
+  await expect(form.getByTestId('probe-rejected-hint')).toBeVisible({ timeout: 30_000 });
 });
 
 test('/ 命令补全：内置命令 + prompt 模板，选中可发送', async ({ launchElectronApp }) => {

@@ -614,6 +614,8 @@ export type PiProviderProbePayload = {
   baseUrl: string;
   apiKey?: string;
   model?: string;
+  /** true = 对每个候选协议发送一次最小化生成请求（约 1 token）做真实验证；缺省只拉模型目录，不发生成请求。 */
+  verifyProtocols?: boolean;
 };
 /** 切换 models.json 自定义模型的推理能力声明（决定思考深度菜单是否可用）。 */
 export type PiProviderSetModelReasoningPayload = {
@@ -623,7 +625,10 @@ export type PiProviderSetModelReasoningPayload = {
 };
 export type PiProviderProbeProtocol = {
   api: string;
+  /** true = 可用：真实验证通过，或服务端 supported_endpoint_types 声明支持（未验证时）。 */
   available: boolean;
+  /** true = 经真实测试请求验证；false = 仅服务端声明或未验证。 */
+  verified: boolean;
   cacheStats: boolean;
   modelIds?: string[];
   error?: string;
@@ -1000,6 +1005,11 @@ export type HostApiContract = {
      * 用户用此开关手动声明；活动会话正在使用该模型时同步重新应用模型定义。
      */
     setModelReasoning: (payload: PiProviderSetModelReasoningPayload) => HostSuccess;
+    /**
+     * 探测自定义供应商：默认只拉模型目录（GET /models，元数据，不发生成请求）；
+     * verifyProtocols=true 时才对每个候选协议发送一次最小化测试请求（约 1 token）。
+     */
+    probe: (payload: PiProviderProbePayload) => PiProviderProbeResult;
     /** 首选模型（pi 原生 defaultProvider/defaultModel）；null = 未设置。 */
     getDefaultModel: () => PiDefaultModelResult;
     /**
@@ -1007,7 +1017,6 @@ export type HostApiContract = {
      * 无会话时经 pi SettingsManager 写 settings.json，新会话启动时应用。
      */
     setDefaultModel: (payload: PiDefaultModel) => HostSuccess;
-    probe: (payload: PiProviderProbePayload) => PiProviderProbeResult;
     getCompaction: () => PiCompactionSettings;
     setCompaction: (payload: Partial<PiCompactionSettings>) => HostSuccess;
     /** 自动重试设置（pi settings.retry：开关/次数/基础退避）。 */

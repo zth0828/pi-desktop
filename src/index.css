@@ -2429,6 +2429,7 @@ button.danger-outline {
 .probe-models-fold summary { cursor: pointer; user-select: none; }
 .probe-models-fold summary:hover { color: var(--accent); }
 .probe-model-spec { margin-left: auto; color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+.probe-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .probe-button { display: inline-flex; align-items: center; gap: 6px; }
 .probe-model-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; cursor: pointer; }
 .probe-model-row input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }

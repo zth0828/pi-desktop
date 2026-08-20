@@ -347,7 +347,28 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       const result = await hostApi.providers.probe({ baseUrl: baseUrl.trim(), apiKey: apiKey.trim() || undefined, model: modelIds.split(',')[0]?.trim() || undefined });
       setProbeResult(result);
       if (result.models.length > 0) setModelIds(result.models.join(', '));
-      setApi(result.recommendedApi ?? 'openai-responses');
+      if (result.recommendedApi) setApi(result.recommendedApi);
+      if (result.recommendedBaseUrl) setBaseUrl(result.recommendedBaseUrl);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProbing(false);
+    }
+  };
+
+  // 协议验证：向服务商发送最小化生成请求（约 1 token），确认实际支持的请求协议。
+  const verifyProtocols = async () => {
+    setProbing(true);
+    setMessage(undefined);
+    try {
+      const result = await hostApi.providers.probe({
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim() || undefined,
+        model: modelIds.split(',')[0]?.trim() || undefined,
+        verifyProtocols: true,
+      });
+      setProbeResult(result);
+      if (result.recommendedApi) setApi(result.recommendedApi);
       if (result.recommendedBaseUrl) setBaseUrl(result.recommendedBaseUrl);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -418,13 +439,28 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
           resetProbe();
         }}
       />
-      <button type="button" className="primary probe-button" data-testid="probe-custom-provider" disabled={probing || !baseUrl.trim()} onClick={() => void probe()}>
-        <Radar size={15} />
-        {probing ? t('models.probing') : t('models.probe')}
-      </button>
+      <div className="probe-actions">
+        <button type="button" className="primary probe-button" data-testid="probe-custom-provider" disabled={probing || !baseUrl.trim()} onClick={() => void probe()}>
+          <Radar size={15} />
+          {probing ? t('models.probing') : t('models.probe')}
+        </button>
+        <button
+          type="button"
+          className="probe-button"
+          data-testid="verify-protocols"
+          title={t('models.verifyProtocolHint')}
+          disabled={probing || !probeResult || !baseUrl.trim()}
+          onClick={() => void verifyProtocols()}
+        >
+          <Radar size={15} />
+          {probing ? t('models.probing') : t('models.verifyProtocol')}
+        </button>
+      </div>
+      <p className="hint" data-testid="probe-list-hint">{t('models.probeListHint')}</p>
       {probeResult && (
         <div className="probe-results" data-testid="probe-results">
-          {probeResult.models.length === 0 && probeResult.protocols.every((protocol) => !protocol.available) && (
+          {probeResult.protocols.length > 0
+            && probeResult.protocols.every((protocol) => protocol.verified && !protocol.available) && (
             <p className="probe-rejected-hint" data-testid="probe-rejected-hint">
               {t('models.probeRejectedHint')}
             </p>
@@ -432,16 +468,28 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
           {probeResult.protocols.map((protocol) => (
             <div className="probe-result-row" key={protocol.api}>
               <span className="probe-protocol-name">{protocol.api}</span>
-              <span className={protocol.available ? 'probe-ok' : 'probe-fail'}>{protocol.available ? t('models.probeAvailable') : t('models.probeUnavailable')}</span>
-              <span className={protocol.available && protocol.cacheStats ? 'probe-ok' : 'hint'}>
-                {protocol.available ? (protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')) : ''}
-              </span>
-              {protocol.error && <span className="probe-error" data-testid={`probe-error-${protocol.api}`}>{protocol.error}</span>}
+              {protocol.verified ? (
+                <span className={protocol.available ? 'probe-ok' : 'probe-fail'}>
+                  {protocol.available ? t('models.probeAvailable') : t('models.probeUnavailable')}
+                </span>
+              ) : protocol.available ? (
+                <span className="probe-ok">{t('models.probeAdvertised')}</span>
+              ) : (
+                <span className="hint">{t('models.probeUnverified')}</span>
+              )}
+              {protocol.verified && protocol.available && (
+                <span className={protocol.cacheStats ? 'probe-ok' : 'hint'}>
+                  {protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')}
+                </span>
+              )}
+              {protocol.verified && protocol.error && (
+                <span className="probe-error" data-testid={`probe-error-${protocol.api}`}>{protocol.error}</span>
+              )}
             </div>
           ))}
           <div className="probe-api-choice">
             <label htmlFor="custom-api-select">
-              {probeResult.protocols.some((protocol) => protocol.available)
+              {probeResult.protocols.some((protocol) => protocol.verified && protocol.available)
                 ? t('models.detectedApi')
                 : t('models.unverifiedApi')}
             </label>
@@ -452,10 +500,7 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
               value={api}
               onChange={(event) => selectApi(event.target.value)}
             >
-              {CUSTOM_API_TYPES.filter((apiType) =>
-                !probeResult.protocols.some((protocol) => protocol.available)
-                || probeResult.protocols.some((protocol) => protocol.api === apiType && protocol.available),
-              ).map((apiType) => (
+              {CUSTOM_API_TYPES.map((apiType) => (
                 <option key={apiType} value={apiType}>{apiType}</option>
               ))}
             </select>

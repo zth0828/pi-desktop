@@ -502,8 +502,13 @@ export const providersApi = {
     }
   },
 
-  /** Probe wire protocols with tiny requests. This is deliberately raw fetch: it is a
-   * connection diagnostic and must not create a pi session or mutate provider state. */
+  /**
+   * 探测自定义供应商，分两层，都在这一个 action 里：
+   * - 模型目录（GET /models 等，元数据请求，不产生生成费用）：恒执行。
+   * - 协议验证（POST 最小化生成请求，约 1 token）：仅 payload.verifyProtocols=true 时执行，
+   *   由用户在 UI 显式触发；未验证的协议仍可在 UI 手动选择。
+   * 全程 raw fetch，刻意不创建 pi session 也不改供应商状态。
+   */
   probe: async (payload: PiProviderProbePayload): Promise<PiProviderProbeResult> => {
     const base = payload.baseUrl.replace(/\/+$/, '');
     const openAiBases = /\/v1$/i.test(base) ? [base] : [base, `${base}/v1`];
@@ -533,6 +538,8 @@ export const providersApi = {
     const models: string[] = [];
     const modelDetails: Array<{ id: string; contextWindow?: number }> = [];
     const advertisedEndpointTypes = new Set<string>();
+    // 目录命中在哪个 base 上：/v1 下命中时把 baseUrl 顺带纠正，与协议验证的 resolvedBaseUrl 语义一致。
+    let modelsBaseUrl: string | undefined;
     for (const candidateBase of openAiBases) {
       try {
         const response = await fetch(`${candidateBase}/models`, { headers, signal: AbortSignal.timeout(9000) });
@@ -540,6 +547,7 @@ export const providersApi = {
         const json = await readJson(response);
         const rows = Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : [];
         if (rows.length === 0) continue;
+        modelsBaseUrl = candidateBase;
         for (const raw of rows) {
           if (!raw || typeof raw !== 'object') continue;
           const row = raw as Record<string, unknown>;
@@ -591,73 +599,93 @@ export const providersApi = {
         modelDetails.push({ id: modelId, contextWindow: matchModelProfile(modelId).contextWindow });
       }
     }
-    const protocols: PiProviderProbeResult['protocols'] = [];
-    const resolvedBaseUrls = new Map<string, string>();
-    const anthropicUrl = /\/v1$/i.test(base) ? `${base}/messages` : `${base}/v1/messages`;
-    type ProbeCandidate = { url: string; resolvedBaseUrl: string };
-    const requests: Array<{ api: string; candidates: ProbeCandidate[]; body: Record<string, unknown>; headers?: Record<string, string> }> = [
-      {
-        api: 'openai-completions',
-        candidates: openAiBases.map((candidateBase) => ({ url: `${candidateBase}/chat/completions`, resolvedBaseUrl: candidateBase })),
-        body: { model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 },
-      },
-      {
-        api: 'openai-responses',
-        candidates: openAiBases.map((candidateBase) => ({ url: `${candidateBase}/responses`, resolvedBaseUrl: candidateBase })),
-        body: { model, input: 'ping', max_output_tokens: 1 },
-      },
-      {
-        api: 'anthropic-messages',
-        candidates: [{ url: anthropicUrl, resolvedBaseUrl: normalizeBaseUrlForApi(base, 'anthropic-messages') }],
-        body: { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] },
-        headers: { ...headers, 'anthropic-version': '2023-06-01' },
-      },
-      {
-        api: 'google-generative-ai',
-        candidates: [{ url: `${base}/models/${encodeURIComponent(model)}:generateContent`, resolvedBaseUrl: base }],
-        body: { contents: [{ parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } },
-      },
-    ];
-    for (const request of requests) {
-      let available = false;
-      let cacheStats = false;
-      let error: string | undefined;
-      for (const candidate of request.candidates) {
-        try {
-          const first = await fetch(candidate.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
-          const firstJson = await readJson(first);
-          available = first.ok && isProtocolPayload(first, firstJson);
-          cacheStats = hasCache(firstJson);
-          error = first.ok
-            ? `unexpected content-type: ${first.headers.get('content-type') ?? 'unknown'}`
-            : `HTTP ${first.status}`;
-          if (!available) continue;
-          const second = await fetch(candidate.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
-          cacheStats ||= hasCache(await readJson(second));
-          resolvedBaseUrls.set(request.api, candidate.resolvedBaseUrl);
-          error = undefined;
-          break;
-        } catch (candidateError) {
-          error = candidateError instanceof Error ? candidateError.message : String(candidateError);
-        }
-      }
-      protocols.push({
-        api: request.api,
-        available,
-        cacheStats,
-        ...(error ? { error } : {}),
-        ...(available ? { resolvedBaseUrl: resolvedBaseUrls.get(request.api) } : {}),
-      });
+    // 服务端 supported_endpoint_types 声明 → 对应协议（不经请求的软提示）。
+    const advertisedToApis: Record<string, string[]> = {
+      chat: ['openai-completions'],
+      completions: ['openai-completions'],
+      responses: ['openai-responses'],
+      openai: ['openai-completions', 'openai-responses'],
+      anthropic: ['anthropic-messages'],
+      google: ['google-generative-ai'],
+      generativeai: ['google-generative-ai'],
+    };
+    const advertisedApis = new Set<string>();
+    for (const endpointType of advertisedEndpointTypes) {
+      for (const api of advertisedToApis[endpointType.toLowerCase()] ?? []) advertisedApis.add(api);
     }
-    const advertisedProtocols = protocols.filter((protocol) =>
-      advertisedEndpointTypes.has(protocol.api)
-      || (advertisedEndpointTypes.has('openai') && protocol.api.startsWith('openai-'))
-      || (advertisedEndpointTypes.has('anthropic') && protocol.api === 'anthropic-messages')
-      || (advertisedEndpointTypes.has('google') && protocol.api === 'google-generative-ai'),
-    );
-    const candidates = advertisedProtocols.some((protocol) => protocol.available)
-      ? advertisedProtocols
-      : protocols;
+    const protocolOrder = [
+      'openai-completions',
+      'openai-responses',
+      'anthropic-messages',
+      'google-generative-ai',
+    ] as const;
+    const protocols: PiProviderProbeResult['protocols'] = [];
+    if (payload.verifyProtocols) {
+      // 真实验证：每个协议发一次最小化生成请求（约 1 token）。只取首个成功的候选，
+      // 不再补发二次请求——首次成功即已判定可用，二次请求的超时不应回灌 error。
+      const anthropicUrl = /\/v1$/i.test(base) ? `${base}/messages` : `${base}/v1/messages`;
+      type ProbeCandidate = { url: string; resolvedBaseUrl: string };
+      const requests: Array<{ api: string; candidates: ProbeCandidate[]; body: Record<string, unknown>; headers?: Record<string, string> }> = [
+        {
+          api: 'openai-completions',
+          candidates: openAiBases.map((candidateBase) => ({ url: `${candidateBase}/chat/completions`, resolvedBaseUrl: candidateBase })),
+          body: { model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 },
+        },
+        {
+          api: 'openai-responses',
+          candidates: openAiBases.map((candidateBase) => ({ url: `${candidateBase}/responses`, resolvedBaseUrl: candidateBase })),
+          body: { model, input: 'ping', max_output_tokens: 1 },
+        },
+        {
+          api: 'anthropic-messages',
+          candidates: [{ url: anthropicUrl, resolvedBaseUrl: normalizeBaseUrlForApi(base, 'anthropic-messages') }],
+          body: { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] },
+          headers: { ...headers, 'anthropic-version': '2023-06-01' },
+        },
+        {
+          api: 'google-generative-ai',
+          candidates: [{ url: `${base}/models/${encodeURIComponent(model)}:generateContent`, resolvedBaseUrl: base }],
+          body: { contents: [{ parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } },
+        },
+      ];
+      for (const request of requests) {
+        let available = false;
+        let cacheStats = false;
+        let error: string | undefined;
+        let resolvedBaseUrl: string | undefined;
+        for (const candidate of request.candidates) {
+          try {
+            const first = await fetch(candidate.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
+            const firstJson = await readJson(first);
+            if (first.ok && isProtocolPayload(first, firstJson)) {
+              available = true;
+              cacheStats = hasCache(firstJson);
+              resolvedBaseUrl = candidate.resolvedBaseUrl;
+              error = undefined;
+              break;
+            }
+            error = first.ok
+              ? `unexpected content-type: ${first.headers.get('content-type') ?? 'unknown'}`
+              : `HTTP ${first.status}`;
+          } catch (candidateError) {
+            error = candidateError instanceof Error ? candidateError.message : String(candidateError);
+          }
+        }
+        protocols.push({
+          api: request.api,
+          available,
+          verified: true,
+          cacheStats,
+          ...(error ? { error } : {}),
+          ...(resolvedBaseUrl ? { resolvedBaseUrl } : {}),
+        });
+      }
+    } else {
+      // 列表探测：不发生成请求，仅标注服务端声明的协议，其余留给用户手动选择。
+      for (const api of protocolOrder) {
+        protocols.push({ api, available: advertisedApis.has(api), verified: false, cacheStats: false });
+      }
+    }
     const protocolPreference = [
       'openai-responses',
       'openai-completions',
@@ -665,14 +693,15 @@ export const providersApi = {
       'google-generative-ai',
     ];
     const recommended = protocolPreference
-      .map((api) => candidates.find((protocol) => protocol.api === api && protocol.available))
+      .map((api) => protocols.find((protocol) => protocol.api === api && protocol.available))
       .find(Boolean);
     return {
       models,
       modelDetails,
       protocols,
       recommendedApi: recommended?.api,
-      recommendedBaseUrl: recommended ? resolvedBaseUrls.get(recommended.api) : undefined,
+      // 协议验证得到的真实 base 优先；没验证时用目录命中的 base 纠正 /v1。
+      recommendedBaseUrl: recommended?.resolvedBaseUrl ?? modelsBaseUrl,
     };
   },
 

@@ -103,7 +103,7 @@ function createHostApi(sessionPath?: string) {
     }) => invoke('providers', 'addCustom', payload),
     setModelReasoning: (providerId: string, modelId: string, reasoning: boolean) =>
       invoke('providers', 'setModelReasoning', { providerId, modelId, reasoning }),
-    probe: (payload: { baseUrl: string; apiKey?: string; model?: string }) =>
+    probe: (payload: { baseUrl: string; apiKey?: string; model?: string; verifyProtocols?: boolean }) =>
       invoke('providers', 'probe', payload),
     getCompaction: () => invoke('providers', 'getCompaction'),
     setCompaction: (payload: { reserveTokens?: number; keepRecentTokens?: number; enabled?: boolean }) =>
