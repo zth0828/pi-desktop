@@ -1,14 +1,14 @@
 // piFiles：@ 文件引用的候选列表（cwd 下递归，相对路径）。
 // 与 pi TUI 同一通道：fd（尊重 .gitignore；经 pi ensureTool 解析，系统 fd 优先、
-// 缺失时由 pi 下载到其 bin 目录）。fd 不可用（离线首装等）回退 node fs 递归。
+// 缺失时由 pi 下载到其 bin 目录）。fd 不可用（离线首装、GitHub 限流/代理拦截等，
+// Windows 上尤其常见）回退 node fs 递归——回退同样按 .gitignore 过滤，避免
+// 被忽略的文件泄漏进补全面板（逐层解析 .gitignore，深层规则覆盖浅层）。
 import { spawn } from 'node:child_process';
-import { readdir } from 'node:fs/promises';
-import path from 'node:path';
 import type { PiFileListPayload, PiFileListResult } from '@shared/host-api/contract';
 import { loadPiAdapter } from './pi-adapter';
+import { readIgnoreLevel, walkGitignoreAware } from '../utils/gitignore-walk';
 
 const MAX_FILES = 200;
-const EXCLUDED_DIRS = new Set(['.git', 'node_modules']);
 
 let fdPathPromise: Promise<string | null> | null = null;
 
@@ -53,26 +53,12 @@ function listWithFd(cwd: string, fdPath: string): Promise<string[] | null> {
   });
 }
 
-async function walk(root: string, dir: string, out: string[]): Promise<void> {
-  if (out.length >= MAX_FILES) return;
-  let entries;
-  try {
-    entries = await readdir(path.join(root, dir), { withFileTypes: true });
-  } catch {
-    return; // 读不了的目录跳过
-  }
-  entries.sort((a, b) => a.name.localeCompare(b.name));
-  for (const entry of entries) {
-    if (out.length >= MAX_FILES) return;
-    const rel = dir ? `${dir}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) {
-      if (EXCLUDED_DIRS.has(entry.name)) continue;
-      await walk(root, rel, out);
-    } else if (entry.isFile()) {
-      out.push(rel);
-    }
-    // 符号链接不跟随（避免循环）
-  }
+/**
+ * 回退遍历：.gitignore 感知（见 gitignore-walk），根层规则从工作区根开始。
+ */
+async function walk(root: string, out: string[]): Promise<void> {
+  const rootLevel = await readIgnoreLevel(root, '', '');
+  await walkGitignoreAware(root, '', out, rootLevel ? [rootLevel] : [], { maxFiles: MAX_FILES });
 }
 
 export const filesApi = {
@@ -83,7 +69,7 @@ export const filesApi = {
       if (files) return { files };
     }
     const files: string[] = [];
-    await walk(payload.cwd, '', files);
+    await walk(payload.cwd, files);
     return { files };
   },
 };
