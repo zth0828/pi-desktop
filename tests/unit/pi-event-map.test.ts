@@ -51,14 +51,14 @@ describe('pi-event-map（录制 fixture 回放，pi 0.83.x / 0.84.x）', () => {
     expect(mapPiSessionEvent({ type: 42 })).toBeNull();
   });
 
-  it('assistant error with empty content becomes a stable renderable text block', () => {
+  it('assistant error with empty content remains a single renderable error result', () => {
     const mapped = mapPiSessionEvent({
       type: 'message_end',
       message: { role: 'assistant', content: [], errorMessage: 'provider failed', stopReason: 'error' },
     });
     expect(mapped).toMatchObject({
       type: 'message.ended',
-      message: { role: 'assistant', content: [{ type: 'text', text: 'provider failed' }], errorMessage: 'provider failed' },
+      message: { role: 'assistant', content: [], errorMessage: 'provider failed', stopReason: 'error' },
     });
   });
 

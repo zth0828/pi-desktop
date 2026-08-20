@@ -170,6 +170,30 @@ describe('turnFinalResponseIndex', () => {
     const [turn] = groupLogicalTurns(messages);
     expect(turnFinalResponseIndex(messages, turn)).toBeUndefined();
   });
+
+  it('失败回合（errorMessage）把带错误的 assistant 消息视为最终结果', () => {
+    const messages = [
+      msg('user'),
+      { ...msg('assistant'), content: [{ type: 'thinking', thinking: 'probe' }] },
+      {
+        ...msg('assistant'),
+        content: [],
+        raw: { role: 'assistant', content: [], stopReason: 'error', errorMessage: 'OpenAI API error (503): boom' },
+      },
+    ];
+    const [turn] = groupLogicalTurns(messages);
+    expect(turnFinalResponseIndex(messages, turn)).toBe(2);
+  });
+
+  it('失败回合没有 errorMessage 时仍不聚合', () => {
+    const messages = [
+      msg('user'),
+      { ...msg('assistant'), content: [{ type: 'thinking', thinking: 'probe' }] },
+      { ...msg('assistant'), content: [], raw: { role: 'assistant', content: [], stopReason: 'stop' } },
+    ];
+    const [turn] = groupLogicalTurns(messages);
+    expect(turnFinalResponseIndex(messages, turn)).toBeUndefined();
+  });
 });
 
 describe('turnTimeRange', () => {

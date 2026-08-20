@@ -84,7 +84,20 @@ test('上游 503 → 显示 upstream 归属提示', async ({ launchElectronApp }
 
   await expect(page.getByTestId('message-error').last()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('message-error').last()).toContainText('Service temporarily unavailable');
+  await expect(page.getByTestId('message-assistant').last().getByText('Service temporarily unavailable', { exact: false })).toHaveCount(1);
   await expect(page.getByTestId('error-hint-upstream')).toBeVisible();
+});
+
+test('上游 server_is_overloaded → upstream 归属提示', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('chat-input').fill('ERR_OVERLOADED');
+  await page.getByTestId('chat-send').click();
+
+  await expect(page.getByTestId('error-hint-upstream')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('message-error').last()).toContainText('server_is_overloaded');
 });
 
 test('上游 auth_unavailable 503 → upstream 归属提示', async ({ launchElectronApp }) => {

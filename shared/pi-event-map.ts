@@ -77,8 +77,6 @@ function normalizeMessage(value: unknown): PiDesktopMessage | null {
       }
     }
   }
-  const errorMessage = typeof source.errorMessage === 'string' ? source.errorMessage : undefined;
-  if (blocks.length === 0 && errorMessage) blocks.push({ type: 'text', text: errorMessage });
   return {
     role: source.role,
     content: blocks,
@@ -86,7 +84,7 @@ function normalizeMessage(value: unknown): PiDesktopMessage | null {
     provider: typeof source.provider === 'string' ? source.provider : undefined,
     model: typeof source.model === 'string' ? source.model : undefined,
     stopReason: typeof source.stopReason === 'string' ? source.stopReason : undefined,
-    errorMessage,
+    errorMessage: typeof source.errorMessage === 'string' ? source.errorMessage : undefined,
     usage: source.usage,
   };
 }

@@ -47,17 +47,18 @@ function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: stri
 
 /** 供应商错误提示：保留 pi 原文，按状态码/关键词附一条归属提示（谁的问题）。
  *  归属提示只在能识别时显示；识别不了的错误保持原样，避免误导。 */
-function ErrorNotice({ message }: { message: string }) {
+function ErrorNotice({ message, responseId }: { message: string; responseId?: string }) {
   const { t } = useTranslation();
   const parsed = parseProviderError(message);
+  const requestId = parsed.requestId ?? responseId;
   return (
     <div className="message-notice error" data-testid="message-error">
       <div className="error-message-raw">{message}</div>
       {parsed.category !== 'unknown' && (
         <div className="error-hint" data-testid={`error-hint-${parsed.category}`}>
           {t(`chat.errors.${parsed.category}`)}
-          {parsed.requestId && (
-            <span className="error-request-id"> {t('chat.errors.requestId', { id: parsed.requestId })}</span>
+          {requestId && (
+            <span className="error-request-id"> {t('chat.errors.requestId', { id: requestId })}</span>
           )}
         </div>
       )}
@@ -323,13 +324,14 @@ function MessageItemView({
     );
   }
   const content = contentOverride ?? message.content;
-  const raw = message.raw as { stopReason?: string; errorMessage?: string } | undefined;
+  const raw = message.raw as { stopReason?: string; errorMessage?: string; responseId?: string } | undefined;
   const errorMessage = raw?.errorMessage;
   const showTail = !message.streaming && !suppressTail;
   const plainText = content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
-  // 失败的回合（stopReason=error）content 为空，错误信息仍要渲染，否则用户看到"发了没反应"。
-  if (content.length === 0 && !(showTail && raw?.errorMessage)) return null;
-  if (content.length === 0) {
+  // 失败回合（stopReason=error）：只保留思考折叠块、过滤普通文本，末尾用
+  // ErrorNotice 展示最终错误；content 为空时退化为仅 ErrorNotice。
+  if (showTail && errorMessage) {
+    const thinkingBlocks = content.filter((block) => block.type === 'thinking');
     return (
       <div
         className={`message message-assistant${highlighted ? ' search-target' : ''}`}
@@ -337,10 +339,20 @@ function MessageItemView({
         id={anchorId}
         tabIndex={highlighted ? -1 : undefined}
       >
-        <ErrorNotice message={errorMessage!} />
+        {thinkingBlocks.map((block, i) => (
+          <AssistantBlock
+            key={i}
+            block={block}
+            expandThinking={expandThinking}
+            groupedThinking={false}
+          />
+        ))}
+        <ErrorNotice message={errorMessage} responseId={raw?.responseId} />
       </div>
     );
   }
+  // 无错误且 content 为空：没有可渲染内容，返回 null。
+  if (content.length === 0) return null;
   const copy = async () => {
     if (!plainText) return;
     try {
@@ -383,7 +395,6 @@ function MessageItemView({
           {t('chat.stopLength')}
         </div>
       )}
-      {showTail && errorMessage && <ErrorNotice message={errorMessage} />}
       {showTail && plainText && (
         <div className="message-actions" data-testid="message-actions">
           <button data-testid="copy-message" title={t('chat.copy')} onClick={() => void copy()}>

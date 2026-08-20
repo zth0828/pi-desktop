@@ -66,6 +66,8 @@ export function groupLogicalTurns(messages: ChatMessage[]): LogicalTurn[] {
 /**
  * 一轮完成后可视为最终答复的 assistant 消息：包含非空文本，且自身不再发起工具调用。
  * 壳只依赖 pi 的原始消息结构判断，不分析或改写模型语义。
+ * 失败回合没有文本答复：带 errorMessage 的 assistant 消息视为最终结果，
+ * 使失败回合也能折叠成一段错误信息，而不是全量平铺展开。
  */
 export function turnFinalResponseIndex(messages: ChatMessage[], turn: LogicalTurn): number | undefined {
   for (let i = turn.endIndex; i > turn.startIndex; i -= 1) {
@@ -74,6 +76,12 @@ export function turnFinalResponseIndex(messages: ChatMessage[], turn: LogicalTur
     const hasText = message.content.some((block) => block.type === 'text' && block.text?.trim());
     const hasToolCall = message.content.some((block) => block.type === 'toolCall');
     if (hasText && !hasToolCall) return i;
+  }
+  for (let i = turn.endIndex; i > turn.startIndex; i -= 1) {
+    const message = messages[i];
+    if (message.role !== 'assistant') continue;
+    const raw = message.raw as { errorMessage?: string } | undefined;
+    if (raw?.errorMessage) return i;
   }
   return undefined;
 }
