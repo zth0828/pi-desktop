@@ -44,5 +44,8 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # @ 文件补全走 fd（尊重 .gitignore）；pi 的按需下载在隔离 E2E 环境不稳定，
+      # 直接用系统 fd 保证补全路径确定性。
+      - run: brew install fd
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:e2e
