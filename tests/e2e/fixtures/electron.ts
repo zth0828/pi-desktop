@@ -26,6 +26,8 @@ export type LaunchOptions = {
   seedSettings?: Record<string, unknown>;
   /** 官方 Package Catalog 的测试替身地址。 */
   packageCatalogUrl?: string;
+  /** GitHub release API 测试替身地址 */
+  githubApiUrl?: string;
   /** npm package 安装测试使用的 registry 地址。 */
   npmRegistryUrl?: string;
   /** 仅 E2E：模拟 dev 脚本指定的初始功能页。 */
@@ -167,6 +169,7 @@ export const test = base.extend<ElectronFixtures>({
               ? { PI_DESKTOP_NPM_ROOT: options.npmRoot ?? piEnv!.npmRoot }
               : {}),
             ...(options.agentDir ? { PI_CODING_AGENT_DIR: options.agentDir } : {}),
+            ...(options.githubApiUrl ? { PI_DESKTOP_GITHUB_API_URL: options.githubApiUrl } : {}),
             ...(options.packageCatalogUrl ? { PI_PACKAGE_CATALOG_URL: options.packageCatalogUrl } : {}),
             ...(options.npmRegistryUrl ? { npm_config_registry: options.npmRegistryUrl } : {}),
             ...(options.initialPage

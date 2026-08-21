@@ -52,6 +52,7 @@ function createHostApi(sessionPath?: string) {
     download: () => invoke('appUpdate', 'download'),
     openDownloaded: () => invoke('appUpdate', 'openDownloaded'),
     showDownloaded: () => invoke('appUpdate', 'showDownloaded'),
+    installDownloaded: (force?: boolean) => invoke('appUpdate', 'installDownloaded', force ? { force } : undefined),
   },
   piRuntime: {
     start: (cwd: string) => invoke('piRuntime', 'start', { cwd }),

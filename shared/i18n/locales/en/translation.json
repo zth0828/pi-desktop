@@ -676,7 +676,13 @@
       "downloading": "Downloading…",
       "open": "Open installer",
       "showInFolder": "Show in folder",
-      "upgradePi": "Upgrade pi"
+      "upgradePi": "Upgrade pi",
+      "downloadFailedHint": "Download failed. You can configure a GitHub download mirror (e.g. https://ghproxy.net/) below and retry."
+    },
+    "downloadMirror": {
+      "title": "Download Mirror",
+      "desc": "GitHub download acceleration mirror prefix, e.g. https://ghproxy.net/",
+      "placeholder": "https://ghproxy.net/"
     },
     "exportLocation": "Location",
     "themeOptions": {
@@ -873,5 +879,29 @@
       "distrust": "Do not trust",
       "distrustSession": "Do not trust (this session only)"
     }
+  },
+  "versionUpdate": {
+    "title": "Update Available",
+    "body": "Pi Desktop v{{version}} is now available.",
+    "bodyPi": "pi v{{version}} is now available.",
+    "download": "Go to Download",
+    "upgradePi": "Upgrade Pi",
+    "releaseNotes": "Release Notes",
+    "dismiss": "Dismiss"
+  },
+  "versionInstall": {
+    "title": "Update Downloaded",
+    "bodyMac": "Click \"Install and Quit\" to open the disk image. Drag Pi Desktop to the Applications folder to replace the existing version, then restart.",
+    "bodyWin": "Click \"Install and Quit\" to launch the installer and follow the setup wizard.",
+    "bodyLinux": "The update package has been downloaded. Please view it in folder and replace manually.",
+    "installAndQuit": "Install and Quit",
+    "later": "Later",
+    "showInFolder": "Show in Folder",
+    "runningWarning": "Active sessions are still running. Quitting now will abort ongoing tasks. Are you sure you want to quit and install?",
+    "confirmQuit": "Quit and Install",
+    "cancel": "Cancel",
+    "failed": "Failed to download update: {{error}}",
+    "waitingInstall": "Update downloaded, ready to install",
+    "waitingInstallVersion": "Downloaded v{{version}}, ready to install"
   }
 }

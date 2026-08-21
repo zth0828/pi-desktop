@@ -676,7 +676,13 @@
       "downloading": "下载中…",
       "open": "打开安装包",
       "showInFolder": "显示文件位置",
-      "upgradePi": "升级 pi"
+      "upgradePi": "升级 pi",
+      "downloadFailedHint": "下载失败。如果在国内网络环境下，可在下方配置 GitHub 下载镜像加速（如 https://ghproxy.net/）后重试。"
+    },
+    "downloadMirror": {
+      "title": "下载镜像加速",
+      "desc": "GitHub 下载加速镜像前缀，如 https://ghproxy.net/",
+      "placeholder": "https://ghproxy.net/"
     },
     "exportLocation": "保存位置",
     "themeOptions": {
@@ -873,5 +879,29 @@
       "distrust": "不信任",
       "distrustSession": "不信任（仅本次会话）"
     }
+  },
+  "versionUpdate": {
+    "title": "发现新版本",
+    "body": "Pi Desktop v{{version}} 现已发布。",
+    "bodyPi": "pi v{{version}} 现已发布。",
+    "download": "前往下载",
+    "upgradePi": "前往升级",
+    "releaseNotes": "更新日志",
+    "dismiss": "忽略"
+  },
+  "versionInstall": {
+    "title": "新版本已下载完成",
+    "bodyMac": "点击『打开安装包并退出』后将打开安装镜像，请将 Pi Desktop 拖入「应用程序」文件夹完成替换，然后重新启动。",
+    "bodyWin": "点击『打开安装程序并退出』后按安装向导完成安装。",
+    "bodyLinux": "安装包已下载完成，请在文件夹中查看并替换。",
+    "installAndQuit": "打开安装包并退出",
+    "later": "稍后",
+    "showInFolder": "在文件夹中显示",
+    "runningWarning": "检测到有会话正在运行，退出应用将中断当前任务。确定要退出并安装吗？",
+    "confirmQuit": "退出并安装",
+    "cancel": "取消",
+    "failed": "下载更新失败：{{error}}",
+    "waitingInstall": "已下载安装包，等待安装",
+    "waitingInstallVersion": "已下载 v{{version}}，等待安装"
   }
 }

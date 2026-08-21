@@ -55,6 +55,7 @@ export default function SettingsPage() {
   const [proxyUrl, setProxyUrl] = useState(DEFAULT_DESKTOP_PROXY_URL);
   const [proxyStatus, setProxyStatus] = useState<ProxyStatus>();
   const [proxyMessage, setProxyMessage] = useState<string>();
+  const [downloadMirror, setDownloadMirror] = useState('');
   const env = usePiSystemStore((s) => s.env);
   const detect = usePiSystemStore((s) => s.detect);
 
@@ -87,6 +88,9 @@ export default function SettingsPage() {
       const url = typeof v === 'string' && v.trim() ? v.trim() : DEFAULT_DESKTOP_PROXY_URL;
       setProxyUrl(url);
       if (v !== url) void hostApi.settings.set('httpProxyUrl', url);
+    }).catch(() => {});
+    void hostApi.settings.get('downloadMirror').then((v) => {
+      if (typeof v === 'string') setDownloadMirror(v);
     }).catch(() => {});
     void hostApi.proxy.detect().then(setProxyStatus).catch(() => {});
     const offTrustChanged = onHostEvent('piTrust', 'changed', (r) => setTrustEntries(r.entries));
@@ -163,6 +167,11 @@ export default function SettingsPage() {
     setProxyUrl(url);
     await hostApi.settings.set('httpProxyUrl', url);
     await refreshProxy();
+  };
+
+  const changeDownloadMirror = async (mirror: string): Promise<void> => {
+    setDownloadMirror(mirror);
+    await hostApi.settings.set('downloadMirror', mirror.trim() || undefined);
   };
 
   return (
@@ -577,13 +586,43 @@ export default function SettingsPage() {
             <div>Pi Desktop</div>
             <div className="settings-row-desc">{t('settings.version.current', { version: appVersion })}</div>
             <div className="settings-row-desc">{versionStatus?.app.latest ? t(versionStatus.app.updateAvailable ? 'settings.version.updateAvailable' : 'settings.version.upToDate', { version: versionStatus.app.latest.replace(/^v/, '') }) : t('settings.version.notChecked')}</div>
-            {versionStatus?.app.error && <div className="error-text">{t('settings.version.checkFailed')}</div>}
+            {versionStatus?.app.downloadedPath && (
+              <div className="settings-row-desc text-accent" data-testid="settings-app-downloaded-status">
+                {t('versionInstall.waitingInstall')}
+              </div>
+            )}
+            {versionStatus?.app.error && (
+              <div className="error-text">
+                {t('settings.version.checkFailed')}
+                <div className="settings-section-hint">{t('settings.version.downloadFailedHint')}</div>
+              </div>
+            )}
           </div>
           <div className="pill-group">
             <button className="pill" data-testid="settings-app-check" disabled={versionChecking} onClick={() => void checkVersions()}>{t(versionChecking ? 'settings.version.checking' : 'settings.version.checkNow')}</button>
-            {versionStatus?.app.updateAvailable && <button className="pill" data-testid="settings-app-download" disabled={appDownloading} onClick={() => void downloadAppUpdate()}>{t(appDownloading ? 'settings.version.downloading' : 'settings.version.download')}{appDownloading && ` ${downloadProgress}%`}</button>}
-            {versionStatus?.app.downloadedPath && <><button className="pill" data-testid="settings-app-open" onClick={() => void hostApi.appUpdate.openDownloaded()}>{t('settings.version.open')}</button><button className="pill" data-testid="settings-app-show" onClick={() => void hostApi.appUpdate.showDownloaded()}>{t('settings.version.showInFolder')}</button></>}
+            {versionStatus?.app.updateAvailable && !versionStatus.app.downloadedPath && <button className="pill" data-testid="settings-app-download" disabled={appDownloading} onClick={() => void downloadAppUpdate()}>{t(appDownloading ? 'settings.version.downloading' : 'settings.version.download')}{appDownloading && ` ${downloadProgress}%`}</button>}
+            {versionStatus?.app.downloadedPath && (
+              <>
+                <button className="pill active" data-testid="settings-app-install" onClick={() => void hostApi.appUpdate.installDownloaded()}>{t('versionInstall.installAndQuit')}</button>
+                <button className="pill" data-testid="settings-app-open" onClick={() => void hostApi.appUpdate.openDownloaded()}>{t('settings.version.open')}</button>
+                <button className="pill" data-testid="settings-app-show" onClick={() => void hostApi.appUpdate.showDownloaded()}>{t('settings.version.showInFolder')}</button>
+              </>
+            )}
           </div>
+        </div>
+        <div className="settings-row" data-testid="settings-download-mirror-row">
+          <div className="settings-row-label">
+            <div>{t('settings.downloadMirror.title')}</div>
+            <div className="settings-row-desc">{t('settings.downloadMirror.desc')}</div>
+          </div>
+          <input
+            className="settings-number settings-proxy-url"
+            data-testid="settings-download-mirror"
+            type="text"
+            placeholder={t('settings.downloadMirror.placeholder')}
+            value={downloadMirror}
+            onChange={(e) => void changeDownloadMirror(e.target.value)}
+          />
         </div>
         <div className="settings-row" data-testid="settings-pi-status">
           <div className="settings-row-label">

@@ -506,6 +506,9 @@ export type SettingsSnapshot = {
   appVersionCheckReleaseUrl?: string;
   appVersionCheckAssetName?: string;
   appVersionCheckDownloadedPath?: string;
+  appVersionCheckNoticedLatest?: string;
+  piVersionCheckNoticedLatest?: string;
+  downloadMirror?: string;
 };
 
 export type SettingsGetPayload = { key: keyof SettingsSnapshot };
@@ -966,6 +969,7 @@ export type HostApiContract = {
     download: () => AppUpdateDownloadResult;
     openDownloaded: () => HostSuccess;
     showDownloaded: () => HostSuccess;
+    installDownloaded: (payload?: { force?: boolean }) => HostSuccess;
   };
   piRuntime: {
     /** 启动（或复用）指定 cwd 的会话运行时；更换 cwd 会重建。 */
