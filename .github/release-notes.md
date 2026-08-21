@@ -1,19 +1,34 @@
-## 版本检查、无证书更新下载与会话运行状态修复
+## 跨平台窗口体验、系统托盘与本地模型连接修复
 
-本版本是 `0.2.2` 的功能版本，新增 Pi Desktop 与 pi 的自动版本检查、跨平台安装包下载与 SHA-256 校验，并修复了运行中会话切换后的控制与时序问题。
+本版本基于 `v0.3.0`，主要带来跨平台窗口体验统一（系统托盘、Windows 无边框窗口、macOS 原生菜单栏）、本地 LLM 连接可靠性提升与工作区安全加固。
 
-- **自动版本检查**：启动后自动检查 Pi Desktop（GitHub Releases）与 pi（npm registry）的最新版本，最多每 7 天联网一次；手动“立即检查”可随时强制执行。检查结果（最新版本、上次成功时间、错误）持久化在壳设置中，失败不会阻塞主界面。
-- **无证书更新下载**：发现新版本后按当前平台与架构选择安装包（macOS 优先 DMG，Windows 优先 NSIS Setup，Linux 优先 AppImage、DEB 备用），流式下载到用户目录，并用同 Release 发布的 `SHA256SUMS-<platform>.txt` 校验 SHA-256；校验失败或下载中断会删除临时文件。下载完成后提供“打开安装包 / 显示文件位置”，不会自动执行任何安装包。
-- **设置页版本区**：在“关于”区域分开展示 Pi Desktop 与 pi 的当前版本、最新版本、最近检查时间和错误，提供立即检查、下载更新、升级 pi 按钮（双语）。
-- **Linux 资产命名兼容**：按 workflow 实际发布的 `x86_64` AppImage 与 `amd64` DEB 资产名匹配。
-- **测试与注入**：GitHub 与 pi registry 地址可用环境变量注入（生产默认官方地址），E2E 使用本地 mock server，不依赖真实网络。
-- **会话运行状态修复**：运行中的会话切换到其他会话再切回后，仍能显示停止按钮并可用 Escape 停止；历史会话切换后消息列表会钉回最新消息；Models 页切换模型的推理开关后，聊天页思考深度菜单立即恢复可用。
+## 新功能
+
+- **系统托盘与关闭到托盘（Windows/Linux）**：主窗口关闭后最小化到系统托盘，可随时恢复或退出；托盘图标按平台使用正确格式。
+- **Windows 无边框窗口**：双行窗口 chrome + 菜单栏，消除旧版空白窗口与重复实例卡启动问题；小屏幕 workArea 自动适配窗口尺寸。
+- **跨平台统一布局**：顶部 chrome 与侧栏布局在 macOS/Windows/Linux 上保持一致。
+- **macOS 原生菜单栏**：traffic-light 侧边控件、与 Windows 菜单栏对齐的结构与标签、本地化菜单（含 Select All）、顶部固定会话标题栏；开发时自动生成 Pi Desktop dev bundle。
+- **工作区信息展示**：composer 显示当前工作区的 git 分支，移除 untitled 会话占位。
+- **错误体验优化**：失败 turn 折叠为紧凑错误结果；provider 聊天错误分类并显示归属提示（API key / 网络 / 服务端）。
+
+## 修复
+
+- **本地 LLM 连接**：loopback 请求绕过系统代理（本地模型探测不再 502），probe catalog 失败显性化而不静默返回空模型，LM Studio 仅暴露原生 endpoint 时回退 `/v1` base；无 key 的本地服务器可直接使用，reasoning 可按服务器独立控制。
+- **工作区安全护栏**：主目录与盘符根不能作为 pi 工作区；删除会话时全程留痕，无 runtime 使用时清理空目录。
+- **输入与补全**：`@`-补全的 fallback 遍历尊重 `.gitignore`（fd 不可用时）。
+- **消息队列**：会话 idle 时正确交付排队中的 send-now 消息。
+- **provider 探测**：custom provider probe 拆分为仅列表 + 可选协议校验，覆盖更多上游错误形状。
+
+## 性能与测试
+
+- 延迟 pi SDK 兼容性探测、缓存环境检测并复用 warm adapter，加速启动。
+- Electron E2E 覆盖 Windows，并行化 worker 并加入 pi prefix 安装锁与失败重试。
+- 新增单测与 E2E：托盘行为、窗口 chrome、原生菜单、队列交付、工作区安全、git 分支展示、gitignore 遍历、provider 错误分类、LM Studio 模型发现、窗口尺寸边界等。
 
 ## 验证情况
 
-- 本地已通过 TypeScript 检查、单元测试和生产构建。
-- 全量 Playwright Electron E2E：138 个用例通过 137 个、跳过 1 个，无失败（覆盖聊天、多会话、多窗口、面板、队列、模型、Review、Workspace、设置、导出、归档、搜索、扩展、MCP、技能、信任等）。
-- 发布工作流会在 macOS、Windows 和 Linux 上分别执行类型检查、单元测试、Vite 构建和安装包构建。
+- 本地通过 TypeScript 检查、单元测试（360 通过）与生产构建。
+- CI 在 macOS、Windows、Linux 上分别执行类型检查、单元测试、Vite 构建与安装包构建，全绿。
 - 发布产物附带按平台生成的 `SHA256SUMS-<platform>.txt`。
 
 ## 安装提示
