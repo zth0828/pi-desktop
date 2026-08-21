@@ -73,6 +73,7 @@ import { createShellTrustContext, resolveProjectTrusted } from './project-trust'
 import { settingsApi } from './settings-api';
 import { timingMark } from '../utils/timing';
 import { safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
+import { riskyWorkspaceReason } from '../utils/workspace-safety';
 import {
   compatibilityFailure,
   loadPiAdapter,
@@ -960,6 +961,10 @@ const START_TIMEOUT_MS = 45_000;
 
 export const piRuntimeApi = {
   start: async (payload: PiRuntimeStartPayload, ctx?: HostActionContext): Promise<PiRuntimeStateResult> => {
+    // 工作区安全：主目录/根目录不启动 runtime（覆盖启动恢复 workspaceCwd 的旧危险值）；
+    // 抛出的错误码由渲染层翻译成用户可见文案。
+    const risky = riskyWorkspaceReason(payload.cwd);
+    if (risky) throw new Error(`risky-workspace-${risky}`);
     // samePath：/tmp ↔ /private/tmp 等形式差异不应触发无谓的 runtime 重建
     if (active && samePath(active.cwd, payload.cwd)) {
       bindSenderToRuntime(ctx, active);

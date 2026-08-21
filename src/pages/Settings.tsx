@@ -4,6 +4,7 @@ import { FolderOpen, Monitor, Moon, Sun } from 'lucide-react';
 import { DEFAULT_DESKTOP_PROXY_URL, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
+import { workspaceErrorMessage } from '../lib/workspace-error';
 import { setTheme, type Theme } from '../lib/theme';
 import { usePiSystemStore } from '../stores/pi-system';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '../lib/i18n';
@@ -37,6 +38,7 @@ export default function SettingsPage() {
   const [appDownloading, setAppDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [cwd, setCwd] = useState<string | undefined>();
+  const [workspaceError, setWorkspaceError] = useState<string>();
   const [theme, setThemeState] = useState<Theme>('system');
   const [notifyMode, setNotifyMode] = useState<NotifyMode>('unfocused');
   const [followupBehavior, setFollowupBehavior] = useState<FollowupBehavior>('queue');
@@ -115,7 +117,13 @@ export default function SettingsPage() {
   const changeWorkspace = async () => {
     const result = await hostApi.dialog.openDirectory(t('chat.workspace.choose'));
     if (result.canceled || !result.filePaths[0]) return;
-    await hostApi.settings.set('workspaceCwd', result.filePaths[0]);
+    // 工作区安全：主目录/盘符根被 main 侧拒绝，这里提示且不更新显示值
+    const saved = await hostApi.settings.set('workspaceCwd', result.filePaths[0]);
+    if (!saved.success) {
+      setWorkspaceError(workspaceErrorMessage(saved.error, t));
+      return;
+    }
+    setWorkspaceError(undefined);
     setCwd(result.filePaths[0]);
   };
 
@@ -215,6 +223,11 @@ export default function SettingsPage() {
           <button className="pill" onClick={() => void changeWorkspace()}>
             {t('chat.workspace.change')}
           </button>
+          {workspaceError && (
+            <div className="error-text settings-workspace-error" data-testid="settings-workspace-error">
+              {workspaceError}
+            </div>
+          )}
         </div>
 
         <div className="settings-row">

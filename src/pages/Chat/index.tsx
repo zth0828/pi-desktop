@@ -6,6 +6,7 @@ import { collectCacheMisses } from '../../lib/cache-stats';
 import { cacheHitRate, summarizeUsage } from '../../lib/usage-stats';
 import { hostApi } from '../../lib/host-api';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
+import { workspaceErrorMessage } from '../../lib/workspace-error';
 import { timingMark } from '../../lib/timing';
 import { groupLogicalTurns, groupTurnStages, turnDurationMs, turnFinalResponseIndex } from '../../lib/turn-changes';
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
@@ -147,6 +148,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const { t } = useTranslation();
   const chatStore = usePaneChatStoreApi();
   const [cwd, setCwd] = useState<string | undefined>();
+  const [workspaceError, setWorkspaceError] = useState<string>();
   const started = usePaneChatStore((s) => s.started);
   const starting = usePaneChatStore((s) => s.starting);
   const startError = usePaneChatStore((s) => s.startError);
@@ -400,7 +402,13 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     const result = await hostApi.dialog.openDirectory(t('chat.workspace.choose'));
     if (result.canceled || !result.filePaths[0]) return;
     const dir = result.filePaths[0];
-    await hostApi.settings.set('workspaceCwd', dir);
+    // 工作区安全：主目录/盘符根被 main 侧拒绝，这里中止并提示（不再启动）
+    const saved = await hostApi.settings.set('workspaceCwd', dir);
+    if (!saved.success) {
+      setWorkspaceError(workspaceErrorMessage(saved.error, t));
+      return;
+    }
+    setWorkspaceError(undefined);
     setCwd(dir);
     void start(dir);
   };
@@ -568,7 +576,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               <X size={16} />
             </button>
           )}
-          <p data-testid="chat-attaching">{startError ?? t('chat.starting')}</p>
+          <p data-testid="chat-attaching">{startError === 'start-timeout' ? t('chat.startTimeout') : workspaceErrorMessage(startError, t) ?? t('chat.starting')}</p>
           {startError && attachRetry && (
             <button className="primary" data-testid="attach-retry" onClick={attachRetry}>
               {t('chat.startRetry')}
@@ -584,6 +592,9 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
         <button className="primary" data-testid="choose-workspace" onClick={() => void chooseWorkspace()}>
           {t('chat.workspace.choose')}
         </button>
+        {workspaceError && (
+          <p className="error-text" data-testid="workspace-error">{workspaceError}</p>
+        )}
         <ExtensionUiDialog />
       </div>
     );
@@ -593,7 +604,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     <div className={`chat-page${workspaceVisible ? ' workspace-visible' : ''}`}>
       {startError && (
         <div className="error-banner">
-          <span>{startError === 'start-timeout' ? t('chat.startTimeout') : startError}</span>
+          <span>{startError === 'start-timeout' ? t('chat.startTimeout') : workspaceErrorMessage(startError, t)}</span>
           {effectiveCwd && (
             <button data-testid="start-retry" onClick={() => void start(effectiveCwd)}>
               {t('chat.startRetry')}

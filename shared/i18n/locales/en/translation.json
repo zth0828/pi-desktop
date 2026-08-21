@@ -138,7 +138,9 @@
     "workspace": {
       "required": "Pick a working directory for pi sessions first.",
       "choose": "Choose folder",
-      "change": "Change"
+      "change": "Change",
+      "riskyHome": "The user home directory cannot be used as a workspace (the agent would scan or touch all your personal files). Pick a project directory instead.",
+      "riskyRoot": "The filesystem root cannot be used as a workspace. Pick a project directory instead."
     },
     "tool": {
       "running": "running",

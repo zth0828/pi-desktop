@@ -3,6 +3,7 @@ import type {
   SettingsSnapshot,
 } from '@shared/host-api/contract';
 import { getElectronStore } from '../utils/electron-store';
+import { riskyWorkspaceReason } from '../utils/workspace-safety';
 import { rebuildNativeMacMenu } from '../main/menu';
 
 export const settingsApi = {
@@ -41,6 +42,12 @@ export const settingsApi = {
   },
   set: async (payload: SettingsSetPayload) => {
     const store = await getElectronStore();
+    // 工作区安全：主目录 / 盘符根不能作为持久化工作区（agent 会扫描个人全部文件）。
+    // 这里拒绝写入，两个 UI 入口（Chat 空态选择 / 设置页）都会拿到失败并提示。
+    if (payload.key === 'workspaceCwd' && typeof payload.value === 'string') {
+      const risky = riskyWorkspaceReason(payload.value);
+      if (risky) return { success: false, error: `risky-workspace-${risky}` };
+    }
     if (payload.value === undefined) store.delete(payload.key);
     else store.set(payload.key, payload.value);
     // macOS 原生菜单文案跟随应用语言设置（与 Windows 自绘菜单 react-i18next

@@ -138,7 +138,9 @@
     "workspace": {
       "required": "先为 pi 会话选择一个工作目录。",
       "choose": "选择目录",
-      "change": "更换"
+      "change": "更换",
+      "riskyHome": "用户主目录不能作为工作区（agent 会扫描/触碰你的全部个人文件）。请选择一个项目目录。",
+      "riskyRoot": "磁盘根目录不能作为工作区。请选择一个项目目录。"
     },
     "tool": {
       "running": "执行中",
