@@ -622,6 +622,9 @@ async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
 const projectTrustByCwd = new Map<string, boolean>();
 
 async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveRuntime> {
+  // 工作区安全：主目录/盘符根不建 runtime（覆盖会话列表点击 home 组会话等入口）
+  const risky = riskyWorkspaceReason(cwd);
+  if (risky) throw new Error(`risky-workspace-${risky}`);
   timingMark('runtime:create:start');
   const adapter = await loadPiAdapter();
   if (adapter.compatibility.status === 'incompatible' || adapter.compatibility.status === 'restart-required') {
