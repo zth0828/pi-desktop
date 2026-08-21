@@ -2,6 +2,7 @@
 // 新能力 = contract.ts 加类型 + services/ 加实现 + 这里加一行。
 import { invokeHost, scopedInvokeHost } from './host-api-client';
 import type {
+  AppEditCommand,
   HostApiAction,
   HostApiModule,
   HostApiPayloadArgs,
@@ -28,6 +29,7 @@ function createHostApi(sessionPath?: string) {
     name: () => invoke('app', 'name'),
     platform: () => invoke('app', 'platform'),
     writeClipboard: (text: string) => invoke('app', 'writeClipboard', { text }),
+    editCommand: (command: AppEditCommand) => invoke('app', 'editCommand', { command }),
   },
   shell: {
     openExternal: (url: string) => invoke('shell', 'openExternal', { url }),

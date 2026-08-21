@@ -25,6 +25,10 @@ export type ShellOpenPathWithPayload = {
 };
 export type ShellOpenPathPayload = { path: string };
 export type AppClipboardWritePayload = { text: string };
+export type AppEditCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll';
+export type AppEditCommandPayload = {
+  command: AppEditCommand;
+};
 
 // —— piSystem：pi/Node/npm 环境检测与安装引导 ——
 
@@ -933,6 +937,7 @@ export type HostApiContract = {
     name: () => string;
     platform: () => string;
     writeClipboard: (payload: AppClipboardWritePayload) => HostSuccess;
+    editCommand: (payload: AppEditCommandPayload) => HostSuccess;
   };
   shell: {
     openExternal: (payload: ShellOpenExternalPayload) => void;

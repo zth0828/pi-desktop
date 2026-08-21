@@ -113,7 +113,7 @@ test.describe('macOS 原生系统菜单栏', () => {
       expect(labels).toContain(group);
     }
     // 菜单项与 Windows 自绘菜单一致
-    for (const item of ['新建会话', '关闭窗口', '全选', '复制', '粘贴', '折叠侧边栏', '会话搜索', '敬请期待']) {
+    for (const item of ['新建会话', '关闭窗口', '撤销', '重做', '剪切', '复制', '粘贴', '全选', '折叠侧边栏', '会话搜索', '敬请期待']) {
       expect(joined).toContain(item);
     }
     // 语言跟随应用设置：系统 locale 为英文时也不应出现 role 项自动本地化的英文
@@ -194,9 +194,45 @@ test.describe('macOS 原生系统菜单栏', () => {
     for (const group of ['File', 'Edit', 'Selection', 'View', 'Go', 'Run', 'Terminal', 'Help']) {
       expect(labels).toContain(group);
     }
-    for (const item of ['New Chat', 'Close Window', 'Copy', 'Paste', 'Collapse Sidebar', 'Search Chats', 'Coming soon']) {
+    for (const item of ['New Chat', 'Close Window', 'Undo', 'Redo', 'Cut', 'Copy', 'Paste', 'Select All', 'Collapse Sidebar', 'Search Chats', 'Coming soon']) {
       expect(joined).toContain(item);
     }
+    await app.close();
+  });
+
+  test('Cmd+Z / Cmd+Shift+Z / Cmd+X 编辑快捷键在输入框中正常工作', async ({ launchElectronApp }) => {
+    const app = await launchElectronApp({
+      withPi: true,
+      agentDir,
+      seedSettings: { workspaceCwd: workspace, language: 'zh' },
+    });
+    const page = await app.firstWindow();
+
+    const input = page.getByTestId('chat-input');
+    await expect(input).toBeVisible({ timeout: 30_000 });
+    await input.click();
+    await input.fill('');
+
+    await page.keyboard.type('Hello World');
+    await expect(input).toHaveValue('Hello World');
+
+    // Cmd+A 全选，Cmd+X 剪切
+    await page.keyboard.press('Meta+A');
+    await page.keyboard.press('Meta+X');
+    await expect(input).toHaveValue('');
+
+    // Cmd+V 粘贴
+    await page.keyboard.press('Meta+V');
+    await expect(input).toHaveValue('Hello World');
+
+    // Cmd+Z 撤销
+    await page.keyboard.press('Meta+Z');
+    await expect(input).toHaveValue('');
+
+    // Cmd+Shift+Z 重做
+    await page.keyboard.press('Meta+Shift+Z');
+    await expect(input).toHaveValue('Hello World');
+
     await app.close();
   });
 });

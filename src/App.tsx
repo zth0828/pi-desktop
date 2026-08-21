@@ -169,8 +169,12 @@ export default function App() {
       { key: 'menu.closeWindow', action: () => void hostApi.windows.close() },
     ],
     edit: [
-      { key: 'menu.copy', disabled: true },
-      { key: 'menu.paste', disabled: true },
+      { key: 'menu.undo', action: () => void hostApi.app.editCommand('undo') },
+      { key: 'menu.redo', action: () => void hostApi.app.editCommand('redo') },
+      { key: 'menu.cut', action: () => void hostApi.app.editCommand('cut') },
+      { key: 'menu.copy', action: () => void hostApi.app.editCommand('copy') },
+      { key: 'menu.paste', action: () => void hostApi.app.editCommand('paste') },
+      { key: 'menu.selectAll', action: () => void hostApi.app.editCommand('selectAll') },
     ],
     view: [
       { key: 'menu.collapseSidebar', action: toggleSidebar },
@@ -230,6 +234,10 @@ export default function App() {
                   role="menuitem"
                   aria-haspopup="menu"
                   aria-expanded={openMenu === group}
+                  onMouseDown={(e) => {
+                    // 阻止点击菜单栏夺走输入区域焦点
+                    e.preventDefault();
+                  }}
                   onClick={() => setOpenMenu((current) => (current === group ? null : group))}
                 >
                   {t(`menu.${group}`)}
@@ -243,6 +251,9 @@ export default function App() {
                         role="menuitem"
                         data-testid={`menu-item-${group}-${index}`}
                         disabled={item.disabled}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                        }}
                         onClick={() => {
                           setOpenMenu(null);
                           item.action?.();

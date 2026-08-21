@@ -10,6 +10,7 @@ import { centerBoundsAtPoint, isPointInsideRects, type DetachPoint, type DetachR
 import { samePath } from '../utils/same-path';
 import { resolveMinSizeFor, resolveWindowSizeFor } from '../utils/window-bounds';
 import { timingEnabled, timingMark } from '../utils/timing';
+import { registerContextMenu } from './menu';
 
 export type WindowRecord = {
   win: BrowserWindow;
@@ -277,6 +278,7 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
   }
 
   registerWindow(win, { isMain: options.isMain });
+  registerContextMenu(win);
   if (options.sessionPath) bindWindowSession(win.webContents.id, options.sessionPath);
   // Windows/Linux：主窗口点关闭不退出，隐藏到托盘继续跑（托盘是恢复/退出入口）；
   // 退出流程（before-quit 置 quitting）放行真正关闭。macOS 走 dock activate 重建，不拦截。

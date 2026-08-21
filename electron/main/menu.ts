@@ -4,7 +4,7 @@
 // role 项造成中英混杂；文案语言跟随应用设置（electron-store language，
 // 与 renderer 的 i18n 同一来源），用户切换语言时 settings-api 触发重建。
 // 平台差异只保留两处 macOS 必需项：应用菜单（关于/服务/隐藏/退出）与原生
-// 编辑行为（selectAll/copy/paste role 随选区自动启用/禁用）。
+// 编辑行为（undo/redo/cut/copy/paste 等 role 随选区与可编辑状态自动启用/禁用）。
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import { sendHostEventToWindow } from './ipc/host-events';
 import { getElectronStore } from '../utils/electron-store';
@@ -16,9 +16,14 @@ type MenuLabels = {
   newChat: string;
   closeWindow: string;
   edit: string;
-  selectAll: string;
+  undo: string;
+  redo: string;
+  cut: string;
   copy: string;
   paste: string;
+  pastePlain: string;
+  delete: string;
+  selectAll: string;
   selection: string;
   view: string;
   collapseSidebar: string;
@@ -31,16 +36,21 @@ type MenuLabels = {
 };
 
 /** 菜单文案：zh → 中文，其余英文（与 shared/i18n zh/en 两套文案保持一致）。 */
-function menuLabels(language: string): MenuLabels {
+export function menuLabels(language: string): MenuLabels {
   const zh = language.toLowerCase().startsWith('zh');
   return {
     file: zh ? '文件' : 'File',
     newChat: zh ? '新建会话' : 'New Chat',
     closeWindow: zh ? '关闭窗口' : 'Close Window',
     edit: zh ? '编辑' : 'Edit',
-    selectAll: zh ? '全选' : 'Select All',
+    undo: zh ? '撤销' : 'Undo',
+    redo: zh ? '重做' : 'Redo',
+    cut: zh ? '剪切' : 'Cut',
     copy: zh ? '复制' : 'Copy',
     paste: zh ? '粘贴' : 'Paste',
+    pastePlain: zh ? '粘贴为纯文本' : 'Paste as Plain Text',
+    delete: zh ? '删除' : 'Delete',
+    selectAll: zh ? '全选' : 'Select All',
     selection: zh ? '选择' : 'Selection',
     view: zh ? '查看' : 'View',
     collapseSidebar: zh ? '折叠侧边栏' : 'Collapse Sidebar',
@@ -55,7 +65,7 @@ function menuLabels(language: string): MenuLabels {
 
 /** 菜单语言：应用设置优先（用户可在设置页切换，Windows 自绘菜单即时跟随），
     未设置时回退系统 locale。 */
-async function resolveMenuLanguage(): Promise<string> {
+export async function resolveMenuLanguage(): Promise<string> {
   try {
     const store = await getElectronStore();
     const language = store.get('language') as string | undefined;
@@ -111,10 +121,16 @@ function buildMenuTemplate(labels: MenuLabels): MenuItemConstructorOptions[] {
     {
       label: labels.edit,
       submenu: [
-        { role: 'selectAll', label: labels.selectAll },
+        { role: 'undo', label: labels.undo },
+        { role: 'redo', label: labels.redo },
         { type: 'separator' },
+        { role: 'cut', label: labels.cut },
         { role: 'copy', label: labels.copy },
         { role: 'paste', label: labels.paste },
+        { role: 'pasteAndMatchStyle', label: labels.pastePlain },
+        { role: 'delete', label: labels.delete },
+        { type: 'separator' },
+        { role: 'selectAll', label: labels.selectAll },
       ],
     },
     {
@@ -156,5 +172,39 @@ export function installNativeMacMenu(): void {
   void rebuildNativeMacMenu().catch((error) => {
     // 菜单安装失败只影响菜单栏，不应触发 main 的 unhandledRejection 退出流程
     console.error('[menu] failed to install native menu', error);
+  });
+}
+
+/** 为窗口注册右键上下文菜单（可编辑区域及选中文本）。 */
+export function registerContextMenu(win: BrowserWindow): void {
+  win.webContents?.on?.('context-menu', async (_event, params) => {
+    if (!params.isEditable && !params.selectionText) return;
+    const language = await resolveMenuLanguage();
+    const labels = menuLabels(language);
+    const template: MenuItemConstructorOptions[] = [];
+    if (params.isEditable) {
+      template.push(
+        { role: 'undo', label: labels.undo, enabled: params.editFlags.canUndo },
+        { role: 'redo', label: labels.redo, enabled: params.editFlags.canRedo },
+        { type: 'separator' },
+        { role: 'cut', label: labels.cut, enabled: params.editFlags.canCut },
+        { role: 'copy', label: labels.copy, enabled: params.editFlags.canCopy },
+        { role: 'paste', label: labels.paste, enabled: params.editFlags.canPaste },
+        { role: 'pasteAndMatchStyle', label: labels.pastePlain, enabled: params.editFlags.canPaste },
+        { role: 'delete', label: labels.delete, enabled: params.editFlags.canDelete },
+        { type: 'separator' },
+        { role: 'selectAll', label: labels.selectAll, enabled: params.editFlags.canSelectAll },
+      );
+    } else if (params.selectionText) {
+      template.push(
+        { role: 'copy', label: labels.copy, enabled: params.editFlags.canCopy },
+        { type: 'separator' },
+        { role: 'selectAll', label: labels.selectAll, enabled: params.editFlags.canSelectAll },
+      );
+    }
+    if (template.length > 0 && !win.isDestroyed()) {
+      const menu = Menu.buildFromTemplate(template);
+      menu.popup({ window: win });
+    }
   });
 }
