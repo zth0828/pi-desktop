@@ -132,20 +132,21 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   const isMac = process.platform === 'darwin';
   const sidebar = page.locator('.sidebar');
   const windowControls = page.getByTestId('app-window-controls');
-  // 全平台共用自绘标题栏 + sidebar-head（新会话 + 折叠/搜索同一行）；
-  // 收起后由悬浮层（内容区左上角，标题栏之下）提供展开入口。
-  // 平台差异仅：mac 用原生红绿灯（标题栏左侧占位，不渲染自绘窗口控件）。
-  await expect(page.getByTestId('titlebar')).toBeVisible();
-  // 菜单栏全平台渲染（Row 1 菜单组 + 窗口控件同一行）
-  await expect(page.getByTestId('menu-file')).toBeVisible();
+  // 全平台共用 sidebar-head（新会话 + 折叠/搜索同一行）；收起后由悬浮层
+  // （内容区左上角，顶部留白之下）提供展开入口。
+  // 平台差异：Windows/Linux 渲染内嵌自绘标题栏（window-chrome）；
+  // macOS 走原生规范（系统菜单栏 + 原生红绿灯），内部不渲染自绘标题栏。
   if (isMac) {
-    // mac：原生红绿灯占位存在、无自绘窗口控件
-    await expect(page.locator('.titlebar-traffic')).toHaveCount(1);
+    // mac：无自绘标题栏、无内嵌菜单栏/窗口控件（控件在系统顶部菜单栏）
+    await expect(page.getByTestId('window-chrome')).toHaveCount(0);
+    await expect(page.getByTestId('titlebar')).toHaveCount(0);
+    await expect(page.getByTestId('menu-file')).toHaveCount(0);
     await expect(page.getByTestId('window-controls')).toHaveCount(0);
-    await expect(page.getByTestId('window-close')).toHaveCount(0);
   } else {
-    // Windows/Linux：有自绘窗口控件、无红绿灯占位
-    await expect(page.locator('.titlebar-traffic')).toHaveCount(0);
+    await expect(page.getByTestId('window-chrome')).toHaveCount(1);
+    await expect(page.getByTestId('titlebar')).toBeVisible();
+    // 菜单栏与窗口控件同一行渲染
+    await expect(page.getByTestId('menu-file')).toBeVisible();
     await expect(page.getByTestId('window-close')).toBeVisible();
   }
   const expandedSidebarBox = await sidebar.boundingBox();
@@ -178,8 +179,8 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   await page.screenshot({ path: 'output/playwright/chat-chrome-refined.png', fullPage: false });
 
   const expandedWidth = (await sidebar.boundingBox())!.width;
-  const titlebarBox = await page.getByTestId('titlebar').boundingBox();
-  expect(titlebarBox).not.toBeNull();
+  const titlebarBox = isMac ? null : await page.getByTestId('titlebar').boundingBox();
+  if (!isMac) expect(titlebarBox).not.toBeNull();
   await page.getByTestId('sidebar-toggle').click();
   await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByTestId('sidebar-sessions')).toBeHidden();
@@ -193,20 +194,22 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   expect(collapsedContentBox).not.toBeNull();
   expect(collapsedSidebarBox!.width).toBe(0);
   expect(collapsedContentBox!.x).toBe(0);
-  // 收起后：悬浮层出现在内容区左上角（标题栏之下），提供展开入口
+  // 收起后：悬浮层出现在内容区左上角（顶部留白之下），提供展开入口
   await expect(windowControls).toBeVisible();
   const collapsedControlsBox = await windowControls.boundingBox();
   expect(collapsedControlsBox).not.toBeNull();
   expect(collapsedControlsBox!.x).toBeLessThan(60);
   expect(collapsedControlsBox!.y).toBeGreaterThanOrEqual(30);
   expect(collapsedControlsBox!.y).toBeLessThan(60);
-  // Row 1 标题栏位置不随侧栏折叠变化
-  const collapsedTitlebarBox = await page.getByTestId('titlebar').boundingBox();
-  expect(collapsedTitlebarBox).not.toBeNull();
-  expect(collapsedTitlebarBox!.x).toBe(titlebarBox!.x);
-  expect(collapsedTitlebarBox!.y).toBe(titlebarBox!.y);
-  expect(collapsedTitlebarBox!.width).toBe(titlebarBox!.width);
-  expect(collapsedTitlebarBox!.height).toBe(titlebarBox!.height);
+  // Row 1 标题栏位置不随侧栏折叠变化（仅 Windows/Linux 有自绘标题栏）
+  if (!isMac) {
+    const collapsedTitlebarBox = await page.getByTestId('titlebar').boundingBox();
+    expect(collapsedTitlebarBox).not.toBeNull();
+    expect(collapsedTitlebarBox!.x).toBe(titlebarBox!.x);
+    expect(collapsedTitlebarBox!.y).toBe(titlebarBox!.y);
+    expect(collapsedTitlebarBox!.width).toBe(titlebarBox!.width);
+    expect(collapsedTitlebarBox!.height).toBe(titlebarBox!.height);
+  }
   await page.screenshot({ path: 'output/playwright/sidebar-collapsed-refined.png', fullPage: false });
   await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(expandedWidth - 100);
 

@@ -202,14 +202,13 @@ export default function App() {
     </>
   );
 
-  // 全平台共用自绘顶部：Row 1 标题栏（logo + 菜单 + 窗口控件，整行拖拽区，
-  // 交互子元素显式 no-drag）。平台差异只保留两处：macOS 用原生红绿灯
-  // （左侧预留占位、不渲染自绘窗口控件）；Windows/Linux 渲染最小化/最大化/关闭。
-  // 未就绪（onboarding）时同样渲染，保证窗口可拖动、可最小化/关闭。
+  // Windows/Linux frameless 顶部：Row 1 标题栏（logo + 菜单 + 窗口控件，整行拖拽区，
+  // 交互子元素显式 no-drag）。macOS 走原生规范：系统菜单栏 + 原生红绿灯，
+  // 内部不渲染自绘标题栏（自绘浮层会遮挡界面按钮）。未就绪（onboarding）时
+  // 同样渲染，保证窗口可拖动、可最小化/关闭。侧边栏顶部为全平台共用 sidebar-head。
   const chrome = (
     <div className="window-chrome" data-testid="window-chrome">
       <div className="titlebar" data-testid="titlebar">
-        {isMac && <div className="titlebar-traffic" aria-hidden="true" />}
         <img className="titlebar-logo" src={logoUrl} alt="" draggable={false} />
         {state === 'ready' && (
           <div className="menu-bar" role="menubar" aria-label={t('menu.label')} data-testid="menu-bar" ref={menuBarRef}>
@@ -249,11 +248,10 @@ export default function App() {
           </div>
         )}
         <div className="titlebar-spacer" />
-        {!isMac && (
-          <div className="window-controls" data-testid="window-controls">
-            <button
-              className="window-control"
-              data-testid="window-minimize"
+        <div className="window-controls" data-testid="window-controls">
+          <button
+            className="window-control"
+            data-testid="window-minimize"
               title={t('menu.minimize')}
               aria-label={t('menu.minimize')}
               onClick={() => void hostApi.windows.minimize()}
@@ -279,7 +277,6 @@ export default function App() {
               <X size={14} />
             </button>
           </div>
-        )}
       </div>
     </div>
   );
@@ -288,7 +285,7 @@ export default function App() {
     return (
       <>
         {dragStrip}
-        {chrome}
+        {!isMac && chrome}
         <Onboarding />
       </>
     );
@@ -296,7 +293,7 @@ export default function App() {
 
   return (
     <div className={`${isMac ? 'app-layout is-macos' : 'app-layout'}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-      {chrome}
+      {!isMac && chrome}
       {dragStrip}
       {/* 折叠/搜索悬浮层：仅侧栏收起时出现（内容区左上角，标题栏之下），提供展开入口。
          全平台同一结构同一位置。 */}

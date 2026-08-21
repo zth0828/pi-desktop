@@ -229,13 +229,14 @@ button.danger-outline {
 .app-layout {
   display: flex;
   height: 100vh;
-  /* Row 1 自绘标题栏高度：全平台统一基线（mac 原生红绿灯悬浮于该行内，不额外占高） */
+  /* 顶部留白 = 标题栏高度：Windows/Linux 是自绘标题栏；macOS 是原生红绿灯
+     悬浮带（红绿灯位于该行内，不额外占高）。全平台统一基线，侧栏与内容对齐。 */
   padding-top: var(--chrome-row1);
 }
 
-/* 全平台共用自绘顶部（固定悬浮层，不参与文档流）：
-   Row 1 标题栏（logo + 菜单 + 窗口控件，整行拖拽区）。macOS 用原生红绿灯
-   （左侧占位 .titlebar-traffic），不渲染自绘窗口控件。 */
+/* Windows/Linux frameless 自绘顶部（固定悬浮层，不参与文档流）：
+   Row 1 标题栏（logo + 菜单 + 窗口控件，整行拖拽区）。
+   macOS 走原生规范：系统菜单栏 + 原生红绿灯，内部不渲染此层。 */
 .window-chrome {
   position: fixed;
   top: 0;
@@ -262,13 +263,6 @@ button.danger-outline {
   margin: 0 10px 0 12px;
   flex: none;
   border-radius: 5px;
-}
-
-/* macOS 原生红绿灯占位（hiddenInset 悬浮于标题栏内）：左侧预留宽度避免 logo
-   与红绿灯重叠。仅 mac 渲染；Windows/Linux 标题栏从最左开始。 */
-.titlebar-traffic {
-  width: 78px;
-  flex: none;
 }
 
 .menu-bar {
@@ -353,9 +347,8 @@ button.danger-outline {
 .window-control:hover { background: var(--bg-hover); color: var(--text); }
 .window-control-close:hover { background: #e81123; color: #fff; }
 
-/* Row 2 工具行已移除：新会话/折叠/搜索回到侧边栏顶部（sidebar-topbar），
-   会话标题回内容区顶部。标题栏之下直接是 [侧栏 | 内容区]。 */
-
+/* 窗口拖拽条：仅 macOS 渲染（原生红绿灯 + 无自绘标题栏，顶部需要拖拽区域）。
+   高度与顶部留白一致，不覆盖内容区。 */
 .window-drag-strip {
   position: fixed;
   top: 0;
@@ -366,9 +359,8 @@ button.danger-outline {
   -webkit-app-region: drag;
 }
 
-/* 侧栏收起时：折叠/搜索悬浮层出现在内容区左上角（标题栏之下），提供展开入口。
-   全平台同一形态。z-index 高于 window-chrome(130) 与 session-titlebar(101)，
-   避免被自绘标题栏盖住。 */
+/* 侧栏收起时：折叠/搜索悬浮层出现在内容区左上角（顶部留白之下），提供展开入口。
+   全平台同一形态。z-index 高于 window-chrome(130) 与 session-titlebar(101)。 */
 .app-window-controls {
   position: fixed;
   left: 8px;
@@ -393,7 +385,7 @@ button.danger-outline {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* 标题栏之下 10px，全平台统一 */
+/* 顶部留白（标题栏/红绿灯带）之下 10px，全平台统一 */
   padding: 10px 10px 10px;
   background: var(--bg);
   transition: width 160ms ease, padding 160ms ease;
