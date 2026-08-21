@@ -225,6 +225,68 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     }
   };
 
+  const deleteSession = async (sessionPath: string) => {
+    const previous = sessions;
+    setSessions((prev) => prev.filter((s) => s.path !== sessionPath));
+    setOpenMenu(undefined);
+    setConfirmDelete(undefined);
+    setBusy(true);
+    try {
+      const result = await hostApi.piSessions.remove(sessionPath);
+      if (!result.success) {
+        setSessions(previous);
+        refresh();
+      }
+    } catch {
+      setSessions(previous);
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const archiveSession = async (sessionPath: string, archived: boolean) => {
+    const previous = sessions;
+    setSessions((prev) =>
+      prev.map((s) => (s.path === sessionPath ? { ...s, archived } : s)),
+    );
+    setOpenMenu(undefined);
+    setBusy(true);
+    try {
+      const result = await hostApi.piSessions.archive(sessionPath, archived);
+      if (!result.success) {
+        setSessions(previous);
+        refresh();
+      }
+    } catch {
+      setSessions(previous);
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const archiveProject = async (cwd: string, archived: boolean) => {
+    const previous = sessions;
+    setSessions((prev) =>
+      prev.map((s) => (s.cwd === cwd ? { ...s, archived } : s)),
+    );
+    setOpenMenu(undefined);
+    setBusy(true);
+    try {
+      const result = await hostApi.piSessions.archiveProject(cwd, archived);
+      if (!result.success) {
+        setSessions(previous);
+        refresh();
+      }
+    } catch {
+      setSessions(previous);
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const renderGroup = (group: ProjectGroup, archivedOnly: boolean) => {
     // 只有真正发送过内容（有消息）的会话才出现在列表里：
     // 未发送任何内容的新会话不占位，也不显示「未命名会话」。
@@ -284,7 +346,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
               style={menuPosition}
             >
               <button
-                onClick={() => void run(() => hostApi.piSessions.archiveProject(group.cwd, !archivedOnly))}
+                onClick={() => void archiveProject(group.cwd, !archivedOnly)}
                 disabled={busy || projectRunning}
               >
                 {archivedOnly ? <ArchiveRestore size={14} /> : <Archive size={14} />}
@@ -484,7 +546,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                       </button>
                       <div className="session-context-separator" />
                       <button
-                        onClick={() => void run(() => hostApi.piSessions.archive(session.path, !session.archived))}
+                        onClick={() => void archiveSession(session.path, !session.archived)}
                         disabled={busy || session.isRunning}
                       >
                         {session.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
@@ -493,7 +555,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                       {deleting ? (
                         <button
                           className="session-context-danger"
-                          onClick={() => void run(() => hostApi.piSessions.remove(session.path))}
+                          onClick={() => void deleteSession(session.path)}
                           disabled={busy || session.isRunning}
                         >
                           <Trash2 size={14} />

@@ -2,7 +2,7 @@
 // 列表/切换/重命名/分叉走 pi SDK（SessionManager 静态方法 + runtime.switchSession）；
 // 删除 pi 无 SDK API（已确认），对齐 pi `/resume`：优先移入系统废纸篓。
 // 会话替换后必须 afterSessionReplaced（重订阅 + 重绑扩展 + 推 sessionReplaced）。
-import { readFile, rm, rmdir } from 'node:fs/promises';
+import { readFile, rm, rmdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { shell } from 'electron';
 import { sendHostEvent } from '../main/ipc/host-events';
@@ -49,6 +49,7 @@ import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { ensureSessionExportDirectory, sessionExportPath } from '../utils/session-export';
 import { searchSessions } from './session-search';
 import { timingMark } from '../utils/timing';
+import { readSessionArchivedFlag } from '../utils/session-tail';
 
 function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -76,6 +77,18 @@ function currentSessionFile(): string | undefined {
 
 const ARCHIVE_CUSTOM_TYPE = 'pi-desktop.archive';
 
+type SessionMetadataCacheEntry = {
+  mtimeMs: number;
+  size: number;
+  archived: boolean;
+};
+
+export const sessionMetadataCache = new Map<string, SessionMetadataCacheEntry>();
+
+export function clearSessionMetadataCache(): void {
+  sessionMetadataCache.clear();
+}
+
 function sessionManagerFor(path: string, sessions: PiSessionCatalogPort): PiSessionDocumentHandle {
   const active = getActiveRuntime();
   if (active && samePath(path, active.adapterRuntime.session.view.sessionFile)) {
@@ -84,8 +97,11 @@ function sessionManagerFor(path: string, sessions: PiSessionCatalogPort): PiSess
   return sessions.open(path);
 }
 
-function isArchived(path: string, sessions: PiSessionCatalogPort): boolean {
-  const entries = sessions.getEntries(sessionManagerFor(path, sessions));
+function isArchivedForActive(
+  active: NonNullable<ReturnType<typeof getActiveRuntime>>,
+  sessions: PiSessionCatalogPort,
+): boolean {
+  const entries = sessions.getEntries(active.adapterRuntime.session.view.sessionManager);
   for (let i = entries.length - 1; i >= 0; i -= 1) {
     const entry = entries[i] as { type?: string; customType?: string; data?: { archived?: unknown } };
     if (entry.type === 'custom' && entry.customType === ARCHIVE_CUSTOM_TYPE) {
@@ -93,6 +109,33 @@ function isArchived(path: string, sessions: PiSessionCatalogPort): boolean {
     }
   }
   return false;
+}
+
+async function resolveIsArchived(
+  sessionPath: string,
+  sessions: PiSessionCatalogPort,
+): Promise<boolean> {
+  const active = getActiveRuntime();
+  if (active && samePath(sessionPath, active.adapterRuntime.session.view.sessionFile)) {
+    return isArchivedForActive(active, sessions);
+  }
+
+  try {
+    const fileStat = await stat(sessionPath);
+    const cached = sessionMetadataCache.get(sessionPath);
+    if (cached && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size) {
+      return cached.archived;
+    }
+    const archived = await readSessionArchivedFlag(sessionPath);
+    sessionMetadataCache.set(sessionPath, {
+      mtimeMs: fileStat.mtimeMs,
+      size: fileStat.size,
+      archived,
+    });
+    return archived;
+  } catch {
+    return false;
+  }
 }
 
 function setArchived(path: string, archived: boolean, sessions: PiSessionCatalogPort): void {
@@ -182,9 +225,15 @@ export const sessionsApi = {
     const adapter = await loadPiAdapter();
     const infos = await adapter.sessions.list(cwd);
     const current = ctx?.sessionPath ?? currentSessionFile();
-    const sessions = mergeLiveSessions(infos)
-      .map((s) => toRow(s, current, isArchived(s.path, adapter.sessions)))
-      .sort((a, b) => b.modified.localeCompare(a.modified));
+    const liveSessions = mergeLiveSessions(infos);
+    const sessions = (
+      await Promise.all(
+        liveSessions.map(async (s) => {
+          const archived = await resolveIsArchived(s.path, adapter.sessions);
+          return toRow(s, current, archived);
+        }),
+      )
+    ).sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
   },
 
@@ -192,9 +241,15 @@ export const sessionsApi = {
     const adapter = await loadPiAdapter();
     const infos = await adapter.sessions.listAll();
     const current = ctx?.sessionPath ?? currentSessionFile();
-    const sessions = mergeLiveSessions(infos)
-      .map((s) => toRow(s, current, isArchived(s.path, adapter.sessions)))
-      .sort((a, b) => b.modified.localeCompare(a.modified));
+    const liveSessions = mergeLiveSessions(infos);
+    const sessions = (
+      await Promise.all(
+        liveSessions.map(async (s) => {
+          const archived = await resolveIsArchived(s.path, adapter.sessions);
+          return toRow(s, current, archived);
+        }),
+      )
+    ).sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
   },
 
@@ -219,14 +274,19 @@ export const sessionsApi = {
       const messageTexts = branchSearchableMessages(adapter.sessions, candidatePath);
       return searchSessions([{ ...candidate.session, messageTexts }], query, 1)[0] ?? candidate;
     });
-    const sessions = preciseCandidates
-      .slice(0, limit)
-      .map(({ session, match, snippet, messageIndex }) => ({
-        ...toRow(session, current, isArchived(session.path, adapter.sessions)),
-        match,
-        snippet,
-        messageIndex,
-      }));
+    const sessions = await Promise.all(
+      preciseCandidates
+        .slice(0, limit)
+        .map(async ({ session, match, snippet, messageIndex }) => {
+          const archived = await resolveIsArchived(session.path, adapter.sessions);
+          return {
+            ...toRow(session, current, archived),
+            match,
+            snippet,
+            messageIndex,
+          };
+        }),
+    );
     return { sessions };
   },
 
@@ -338,6 +398,7 @@ export const sessionsApi = {
       } else {
         adapter.sessions.appendSessionInfo(adapter.sessions.open(payload.path), name);
       }
+      sessionMetadataCache.delete(payload.path);
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'rename' });
       return { success: true };
     } catch (err) {
@@ -369,6 +430,7 @@ export const sessionsApi = {
     try {
       const adapter = await loadPiAdapter();
       setArchived(payload.path, payload.archived, adapter.sessions);
+      sessionMetadataCache.delete(payload.path);
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'archive' });
       return { success: true };
     } catch (err) {
@@ -383,7 +445,10 @@ export const sessionsApi = {
       if (projectSessions.some((session) => isSessionRunning(session.path))) {
         return { success: false, error: 'project has a running session' };
       }
-      for (const session of projectSessions) setArchived(session.path, payload.archived, adapter.sessions);
+      for (const session of projectSessions) {
+        setArchived(session.path, payload.archived, adapter.sessions);
+        sessionMetadataCache.delete(session.path);
+      }
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'archive' });
       return { success: true };
     } catch (err) {
@@ -393,6 +458,7 @@ export const sessionsApi = {
 
   remove: async (payload: PiSessionPathPayload): Promise<HostSuccess> => {
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
+    sessionMetadataCache.delete(payload.path);
     const sessionPathHash = hashSessionPath(payload.path);
     // 删除后清理空目录需要知道会话属于哪个工作区（文件删除前读取）
     const sessionCwd = await sessionHeaderCwd(payload.path);

@@ -14,9 +14,11 @@ type RowProps = {
   onError: (message: string) => void;
   onExported: (path: string) => void;
   onOpenChat: () => void;
+  onDelete: (path: string) => Promise<void>;
+  onArchive: (path: string, archived: boolean) => Promise<void>;
 };
 
-function SessionRow({ session, onChanged, onError, onExported, onOpenChat }: RowProps) {
+function SessionRow({ session, onChanged, onError, onExported, onOpenChat, onDelete, onArchive }: RowProps) {
   const { t, i18n } = useTranslation();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(session.name ?? '');
@@ -45,8 +47,8 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat }: Row
   // 已在某面板打开 → 聚焦该面板；否则替换活跃面板会话
   const switchTo = () => run(() => panesStore.getState().openOrFocusSession(session.path, session.cwd) ?? Promise.resolve({ success: true }), true);
   const fork = () => run(() => hostApi.piSessions.fork(session.path), true);
-  const archive = () => run(() => hostApi.piSessions.archive(session.path, !session.archived));
-  const remove = () => run(() => hostApi.piSessions.remove(session.path));
+  const archive = () => onArchive(session.path, !session.archived);
+  const remove = () => onDelete(session.path);
   const exportHtml = async () => {
     setBusy(true);
     try {
@@ -208,6 +210,38 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
     }));
   };
 
+  const handleDelete = async (sessionPath: string) => {
+    const previous = sessions;
+    setSessions((prev) => prev.filter((s) => s.path !== sessionPath));
+    try {
+      const result = await hostApi.piSessions.remove(sessionPath);
+      if (!result.success) {
+        setSessions(previous);
+        setError(result.error ?? 'unknown');
+      }
+    } catch (err) {
+      setSessions(previous);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleArchive = async (sessionPath: string, archived: boolean) => {
+    const previous = sessions;
+    setSessions((prev) =>
+      prev.map((s) => (s.path === sessionPath ? { ...s, archived } : s)),
+    );
+    try {
+      const result = await hostApi.piSessions.archive(sessionPath, archived);
+      if (!result.success) {
+        setSessions(previous);
+        setError(result.error ?? 'unknown');
+      }
+    } catch (err) {
+      setSessions(previous);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const lastExportName = exportInfo?.lastPath?.split(/[\\/]/).pop();
 
   const groups = useMemo(() => groupByProject(sessions), [sessions]);
@@ -295,6 +329,8 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
                   onError={setError}
                   onExported={onExported}
                   onOpenChat={onOpenChat}
+                  onDelete={handleDelete}
+                  onArchive={handleArchive}
                 />
               ))}
             </div>
