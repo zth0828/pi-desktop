@@ -150,12 +150,13 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   const newChatBox = await page.getByTestId('new-chat').boundingBox();
   expect(newChatBox).not.toBeNull();
   if (isMac) {
-    // mac：折叠/搜索在红绿灯右侧悬浮层（顶部带内）；新会话独占侧边栏整宽
+    // mac：折叠/搜索在红绿灯右侧悬浮层（顶部带内），右缘与侧边栏右缘（224px）对齐
     await expect(windowControls).toBeVisible();
     const trafficBox = await windowControls.boundingBox();
     expect(trafficBox).not.toBeNull();
-    expect(trafficBox!.x).toBeGreaterThanOrEqual(70);
-    expect(trafficBox!.x).toBeLessThan(160);
+    expect(trafficBox!.x).toBeGreaterThanOrEqual(140);
+    expect(trafficBox!.x + trafficBox!.width).toBeGreaterThanOrEqual(218);
+    expect(trafficBox!.x + trafficBox!.width).toBeLessThanOrEqual(230);
     expect(trafficBox!.y + trafficBox!.height).toBeLessThanOrEqual(40);
     await expect(windowControls.getByTestId('sidebar-toggle')).toBeVisible();
     await expect(windowControls.getByTestId('session-search-trigger')).toBeVisible();

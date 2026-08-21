@@ -360,12 +360,13 @@ button.danger-outline {
 }
 
 /* macOS：折叠/搜索常驻红绿灯右侧（顶部带内）。垂直中心与红绿灯对齐
-   （红绿灯 y14 高 12 → 中心 20；按钮 30px → top 5）。z-index 高于
-   window-drag-strip(100)，按钮可点（自身 no-drag）。 */
+   （红绿灯 y14 高 12 → 中心 20；按钮 30px → top 5）；右缘与侧边栏右缘对齐
+   （侧边栏宽 224，按钮组宽 62 → left 162）。z-index 高于 window-drag-strip(100)，
+   按钮可点（自身 no-drag）。 */
 .app-window-controls.is-traffic {
   position: fixed;
   top: 5px;
-  left: 78px;
+  left: 162px;
   z-index: 132;
   display: flex;
   height: 30px;
