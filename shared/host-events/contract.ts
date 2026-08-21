@@ -72,6 +72,10 @@ export type HostEventContract = {
     /** trust.json 记录被修改（Settings 页外部改动同步） */
     changed: (payload: PiTrustListResult) => void;
   };
+  menu: {
+    /** macOS 原生系统菜单栏业务项被点击（App.tsx 绑定后走与自绘菜单相同的 action） */
+    action: (payload: { action: 'new-chat' | 'collapse-sidebar' | 'search-chats' }) => void;
+  };
 };
 
 export type HostEventModule = keyof HostEventContract;
@@ -120,6 +124,9 @@ export const HOST_EVENT_CHANNELS = {
     request: 'pi-trust:request',
     settled: 'pi-trust:settled',
     changed: 'pi-trust:changed',
+  },
+  menu: {
+    action: 'menu:action',
   },
 } as const satisfies {
   [M in HostEventModule]: { [E in HostEventName<M>]: string };

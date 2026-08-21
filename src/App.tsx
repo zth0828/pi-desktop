@@ -20,6 +20,7 @@ import {
 import logoUrl from '../resources/icon.png';
 import { bindPiSystemEvents, usePiSystemStore } from './stores/pi-system';
 import { getActiveChatStore } from './stores/chat-registry';
+import { onHostEvent } from './lib/host-events';
 import { hostApi } from './lib/host-api';
 import { onNavigateToPage } from './lib/app-navigation';
 import { initTheme } from './lib/theme';
@@ -131,6 +132,15 @@ export default function App() {
     };
     document.addEventListener('keydown', openSearch);
     return () => document.removeEventListener('keydown', openSearch);
+  }, []);
+
+  // macOS 原生系统菜单栏业务项：与自绘菜单（Windows/Linux）走同一组 action。
+  useEffect(() => {
+    return onHostEvent('menu', 'action', ({ action }) => {
+      if (action === 'new-chat') newChat();
+      else if (action === 'collapse-sidebar') toggleSidebar();
+      else if (action === 'search-chats') setSessionSearchOpen(true);
+    });
   }, []);
 
   const newChat = () => {
@@ -295,23 +305,26 @@ export default function App() {
     <div className={`${isMac ? 'app-layout is-macos' : 'app-layout'}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
       {!isMac && chrome}
       {dragStrip}
-      {/* 折叠/搜索悬浮层：仅侧栏收起时出现（内容区左上角，标题栏之下），提供展开入口。
-         全平台同一结构同一位置。 */}
-      {sidebarCollapsed && (
-        <div className="app-window-controls" data-testid="app-window-controls">
+      {/* 折叠/搜索悬浮层：macOS 常驻于红绿灯右侧（顶部带内）；Windows/Linux 仅侧栏收起时
+         出现在内容区左上角（提供展开入口）。同一组件、同一 testid，仅位置不同。 */}
+      {(isMac || sidebarCollapsed) && (
+        <div
+          className={`app-window-controls${isMac ? ' is-traffic' : ' is-native-frame'}`}
+          data-testid="app-window-controls"
+        >
           {sidebarActions}
         </div>
       )}
       <nav className="sidebar">
-        {/* 侧边栏顶部一行 = 新会话按钮（与侧边栏同宽）+ 折叠/搜索（同行靠右），全平台共用。
-           折叠时整行随侧栏隐藏（DOM 移除），展开入口由悬浮层提供 */}
+        {/* 侧边栏顶部一行：新会话按钮（与侧边栏同宽）。Windows/Linux 折叠/搜索与它同行靠右；
+           macOS 折叠/搜索在红绿灯右侧，这里只剩全宽新会话按钮。折叠时整行随侧栏隐藏。 */}
         {!sidebarCollapsed && (
           <div className="sidebar-head">
             <button className="new-chat" data-testid="new-chat" onClick={newChat}>
               <MessageSquarePlus size={16} />
               <span>{t('sidebar.newChat')}</span>
             </button>
-            {sidebarActions}
+            {!isMac && sidebarActions}
           </div>
         )}
         <SessionList onOpenChat={() => navigate('chat')} />

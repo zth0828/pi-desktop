@@ -9,8 +9,16 @@ import { DEV_RESTART_READY, DEV_RESTART_REQUEST } from '@shared/dev-reload';
 import { resolveAppIconPath } from '../utils/app-icon';
 import { safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { scheduleVersionChecks } from '../services/version-check-api';
+import { installNativeMacMenu } from './menu';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+
+// macOS：dev（electron 直接启动入口文件）下 app.name 是 Electron，打包产物是
+// productName（Pi Desktop）；统一应用名，让系统菜单栏应用菜单两种模式一致。
+// 需在 userData 派生之前设置（dev 下 userData 也随之与打包产物对齐）。
+if (process.platform === 'darwin') {
+  app.setName('Pi Desktop');
+}
 
 // Windows 通知/任务栏/托盘归属：与 electron-builder 的 appId 一致，
 // dev 模式（electron.exe）下也按应用身份分组，通知不再挂到 Electron 名下。
@@ -94,6 +102,7 @@ if (!hasSingleInstanceLock) {
         resourcesPath: process.resourcesPath,
         mainDir: __dirname,
       }));
+      installNativeMacMenu();
     }
     createMainWindow();
     createTray();

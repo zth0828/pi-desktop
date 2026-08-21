@@ -359,9 +359,24 @@ button.danger-outline {
   -webkit-app-region: drag;
 }
 
-/* 侧栏收起时：折叠/搜索悬浮层出现在内容区左上角（顶部留白之下），提供展开入口。
-   全平台同一形态。z-index 高于 window-chrome(130) 与 session-titlebar(101)。 */
-.app-window-controls {
+/* macOS：折叠/搜索常驻红绿灯右侧（顶部带内）。垂直中心与红绿灯对齐
+   （红绿灯 y14 高 12 → 中心 20；按钮 30px → top 5）。z-index 高于
+   window-drag-strip(100)，按钮可点（自身 no-drag）。 */
+.app-window-controls.is-traffic {
+  position: fixed;
+  top: 5px;
+  left: 78px;
+  z-index: 132;
+  display: flex;
+  height: 30px;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+/* Windows/Linux：侧栏收起时悬浮层出现在内容区左上角（顶部留白之下），
+   提供展开入口。z-index 高于 window-chrome(130) 与 session-titlebar(101)。 */
+.app-window-controls.is-native-frame {
   position: fixed;
   left: 8px;
   top: calc(var(--chrome-row1) + 6px);
