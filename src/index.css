@@ -234,6 +234,12 @@ button.danger-outline {
   padding-top: var(--chrome-row1);
 }
 
+/* macOS 顶部带略高（容纳单面板会话标题条 fixed 到窗口顶部时的可读高度） */
+.app-layout.is-macos {
+  --mac-topbar: 44px;
+  padding-top: var(--mac-topbar);
+}
+
 /* Windows/Linux frameless 自绘顶部（固定悬浮层，不参与文档流）：
    Row 1 标题栏（logo + 菜单 + 窗口控件，整行拖拽区）。
    macOS 走原生规范：系统菜单栏 + 原生红绿灯，内部不渲染此层。 */
@@ -360,12 +366,12 @@ button.danger-outline {
 }
 
 /* macOS：折叠/搜索常驻红绿灯右侧（顶部带内）。垂直中心与红绿灯对齐
-   （红绿灯 y14 高 12 → 中心 20；按钮 30px → top 5）；右缘与侧边栏右缘对齐
-   （侧边栏宽 224，按钮组宽 62 → left 162）。z-index 高于 window-drag-strip(100)，
-   按钮可点（自身 no-drag）。 */
+   （红绿灯 y14 高 12 → 中心 20；44px 顶部带内 30px 按钮 → top 7）；
+   右缘与侧边栏右缘对齐（侧边栏宽 224，按钮组宽 62 → left 162）。
+   z-index 高于 window-drag-strip(100)，按钮可点（自身 no-drag）。 */
 .app-window-controls.is-traffic {
   position: fixed;
-  top: 5px;
+  top: calc((var(--mac-topbar, var(--chrome-row1)) - 30px) / 2);
   left: 162px;
   z-index: 132;
   display: flex;
@@ -387,6 +393,20 @@ button.danger-outline {
   align-items: center;
   gap: 2px;
   -webkit-app-region: no-drag;
+}
+
+/* macOS 单面板：会话标题条 fixed 到窗口顶部（侧边栏右侧起、右缘贴窗口右缘），
+   不再放在内容区；右侧展开按钮随之固定到页面最右。
+   多面板不加 fixed（session-titlebar-top 由 ChatPane 按 onClosePane 判断添加），
+   避免多个标题条叠加。z-index 高于 window-drag-strip(100)，按钮可点。 */
+.app-layout.is-macos .session-titlebar.session-titlebar-top {
+  position: fixed;
+  top: 0;
+  left: 224px;
+  right: 0;
+  min-height: var(--mac-topbar);
+  padding: 4px 18px;
+  z-index: 131;
 }
 
 /* Electron 的拖拽层覆盖整个标题高度；交互控件必须明确声明可点击。 */

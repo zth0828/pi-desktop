@@ -7,6 +7,18 @@ import { sendHostEventToWindow } from './ipc/host-events';
 
 export type NativeMenuAction = 'new-chat' | 'collapse-sidebar' | 'search-chats';
 
+/** 菜单文案跟随系统语言（zh → 中文，其余英文）；role 项由 macOS 自动本地化。 */
+function menuLabels(locale: string) {
+  const zh = locale.toLowerCase().startsWith('zh');
+  return {
+    file: zh ? '文件' : 'File',
+    newChat: zh ? '新建会话' : 'New Chat',
+    view: zh ? '视图' : 'View',
+    collapseSidebar: zh ? '折叠侧边栏' : 'Collapse Sidebar',
+    searchChats: zh ? '搜索会话' : 'Search Chats',
+  };
+}
+
 /** 业务菜单项 → 聚焦窗口的 renderer（App.tsx 绑定后走与自绘菜单相同的 action）。 */
 function dispatchMenuAction(action: NativeMenuAction): void {
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -16,6 +28,7 @@ function dispatchMenuAction(action: NativeMenuAction): void {
 }
 
 export function installNativeMacMenu(): void {
+  const l = menuLabels(app.getLocale());
   const template: MenuItemConstructorOptions[] = [
     // 不用 role:'appMenu'：macOS 系统菜单栏的应用菜单标题取自 bundle 的
     // CFBundleName（dev 下是 Electron.app → "Electron"），与 app.setName 解耦；
@@ -35,24 +48,24 @@ export function installNativeMacMenu(): void {
       ],
     },
     {
-      label: 'File',
+      label: l.file,
       submenu: [
-        { label: 'New Chat', accelerator: 'CmdOrCtrl+N', click: () => dispatchMenuAction('new-chat') },
+        { label: l.newChat, accelerator: 'CmdOrCtrl+N', click: () => dispatchMenuAction('new-chat') },
         { type: 'separator' },
         { role: 'close' },
       ],
     },
     { role: 'editMenu' },
     {
-      label: 'View',
+      label: l.view,
       submenu: [
         {
-          label: 'Collapse Sidebar',
+          label: l.collapseSidebar,
           accelerator: 'CmdOrCtrl+\\',
           click: () => dispatchMenuAction('collapse-sidebar'),
         },
         {
-          label: 'Search Chats',
+          label: l.searchChats,
           accelerator: 'CmdOrCtrl+K',
           click: () => dispatchMenuAction('search-chats'),
         },
@@ -71,6 +84,6 @@ export function installNativeMacMenu(): void {
   // dev 直接启动 Electron.app 时 bundle 名是 Electron，菜单标题可能仍显示
   // Electron；打印到终端便于验证实际生效的应用名（打包产物为 Pi Desktop）。
   if (process.env.VITE_DEV_SERVER_URL) {
-    console.log(`[menu] darwin application menu title = ${app.getName()}`);
+    console.log(`[menu] darwin application menu title = ${app.getName()} (locale=${app.getLocale()})`);
   }
 }

@@ -33,7 +33,7 @@
     ]
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
     "dev:local-pi": "node scripts/dev-with-local-pi.mjs",
     "build:vite": "vite build",
     "build": "pnpm run build:vite && electron-builder --dir",

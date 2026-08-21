@@ -61,7 +61,10 @@ function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
     setEditing(false);
   };
   return (
-    <div className="session-titlebar" data-testid="session-titlebar">
+    // 单面板（onClosePane 为空）时加 session-titlebar-top：macOS 上该标题条
+    // 固定到窗口顶部（平台样式在 CSS 里按 .is-macos 限定，Windows 不受影响）；
+    // 多面板时留在内容区顶部，避免多个标题条叠加。
+    <div className={`session-titlebar${onClosePane ? '' : ' session-titlebar-top'}`} data-testid="session-titlebar">
       <div className="session-title">
         {editing ? (
           <>

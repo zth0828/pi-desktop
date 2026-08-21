@@ -104,21 +104,28 @@ test.describe('macOS 原生系统菜单栏', () => {
     const labels = await app.evaluate(collectMenuLabels());
     const joined = labels.filter(Boolean).join(' | ');
     expect(joined).toContain('Pi Desktop');
-    for (const top of ['File', 'Edit', 'View', 'Window', 'Help']) {
-      expect(labels).toContain(top);
-    }
-    expect(joined).toContain('New Chat');
-    expect(joined).toContain('Collapse Sidebar');
-    expect(joined).toContain('Search Chats');
+    // 菜单文案跟随系统语言（role 项由 macOS 本地化；业务项我们按 locale 渲染）
+    const locale = await app.evaluate(({ app: mainApp }) => mainApp.getLocale());
+    const zh = locale.toLowerCase().startsWith('zh');
+    const fileMenu = zh ? '文件' : 'File';
+    const viewMenu = zh ? '视图' : 'View';
+    const newChat = zh ? '新建会话' : 'New Chat';
+    const collapseSidebar = zh ? '折叠侧边栏' : 'Collapse Sidebar';
+    const searchChats = zh ? '搜索会话' : 'Search Chats';
+    expect(labels).toContain(fileMenu);
+    expect(labels).toContain(viewMenu);
+    expect(joined).toContain(newChat);
+    expect(joined).toContain(collapseSidebar);
+    expect(joined).toContain(searchChats);
 
     const sidebar = page.locator('.sidebar');
     await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeGreaterThan(0);
 
-    // Collapse Sidebar → 侧栏收起
-    expect(await app.evaluate(clickMenuLabel(), 'Collapse Sidebar')).toBe(true);
+    // Collapse Sidebar → 侧栏收起（label 随 locale，用与上面一致的变量）
+    expect(await app.evaluate(clickMenuLabel(), collapseSidebar)).toBe(true);
     await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(0);
     // 再点一次 → 展开
-    expect(await app.evaluate(clickMenuLabel(), 'Collapse Sidebar')).toBe(true);
+    expect(await app.evaluate(clickMenuLabel(), collapseSidebar)).toBe(true);
     await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeGreaterThan(100);
     await app.close();
   });
