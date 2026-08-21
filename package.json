@@ -1,6 +1,6 @@
 {
   "name": "pi-desktop",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "A local-first desktop workbench for the pi coding agent",
   "main": "dist-electron/main/index.js",
