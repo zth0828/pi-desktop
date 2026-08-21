@@ -218,6 +218,7 @@
     "turnFold": {
       "expand": "Show turn process",
       "collapse": "Hide turn process",
+      "interrupted": "Interrupted",
       "stage": "Stage {{index}} · {{count}} process messages",
       "duration": "Took {{duration}}",
       "durationSeconds": "{{seconds}}s",

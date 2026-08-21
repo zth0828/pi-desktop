@@ -20,6 +20,7 @@ import { ToolCallCard } from './ToolCallCard';
 function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: string; active: boolean; expanded?: boolean; grouped?: boolean }) {
   const { t } = useTranslation();
   const hiddenThinkingLabel = usePaneChatStore((s) => s.extensionUi?.hiddenThinkingLabel);
+  const [userToggled, setUserToggled] = useState<boolean | null>(null);
   const startedRef = useRef<number | null>(null);
   const endedRef = useRef<number | null>(null);
   if (active && startedRef.current === null) startedRef.current = Date.now();
@@ -29,8 +30,16 @@ function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: stri
       ? formatDuration(startedRef.current, endedRef.current)
       : null;
   if (grouped) return <div className="thinking-block grouped"><pre>{thinking}</pre></div>;
+  const isOpen = userToggled ?? Boolean(expanded || active);
   return (
-    <details className={`thinking-block${active ? ' streaming' : ''}`} open={expanded || active}>
+    <details
+      className={`thinking-block${active ? ' streaming' : ''}`}
+      open={isOpen}
+      onToggle={(e) => {
+        const target = e.currentTarget as HTMLDetailsElement;
+        setUserToggled(target.open);
+      }}
+    >
       <summary>
         {active
           ? t('chat.thinkingStreaming')

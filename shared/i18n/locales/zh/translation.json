@@ -218,6 +218,7 @@
     "turnFold": {
       "expand": "展开本轮过程",
       "collapse": "收起本轮过程",
+      "interrupted": "已中断",
       "stage": "阶段 {{index}} · {{count}} 条过程消息",
       "duration": "耗时 {{duration}}",
       "durationSeconds": "{{seconds}} 秒",

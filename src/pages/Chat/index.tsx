@@ -433,19 +433,18 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     const finalIndex = turnFinalResponseIndex(displayMessages, turn);
     const completed = !turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running')
       && (turnIndex < logicalTurns.length - 1 || !isStreaming);
-    // 异常/中断轮可能没有最终答复，这时全量展示，避免隐藏唯一的错误信息。
     // 压缩摘要是会话历史的重要内容，不能随着它恰好落入某一轮而被折叠隐藏。
     const hasCompactionSummary = displayMessages
       .slice(turn.startIndex, turn.endIndex + 1)
       .some((message) => message.role === 'compactionSummary');
-    const canFold = completed && finalIndex !== undefined && !hasCompactionSummary;
+    const canFold = completed && !hasCompactionSummary;
     const expanded = expandedTurns[turn.startIndex] ?? false;
     const hasEdits = completed && turn.toolCallIds.some((id) => {
       const name = toolExecutions[id]?.toolName;
       return name === 'edit' || name === 'write';
     });
 
-    if (!canFold || finalIndex === undefined) {
+    if (!canFold) {
       return (
         <Fragment key={turn.startIndex}>
           {Array.from({ length: turn.endIndex - turn.startIndex + 1 }, (_, offset) => turn.startIndex + offset).map((i) => (
@@ -457,9 +456,91 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               cacheMiss={cacheMisses.get(i)}
               turnStats={i === latestFinalResponseIndex ? turnStats : null}
               sessionCacheHitRate={i === latestFinalResponseIndex ? sessionCacheHitRate : null}
-              expandThinking
             />
           ))}
+          {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
+        </Fragment>
+      );
+    }
+
+    if (finalIndex === undefined) {
+      const processIndices = Array.from(
+        { length: turn.endIndex - turn.startIndex },
+        (_, offset) => turn.startIndex + 1 + offset,
+      );
+      const stages = groupTurnStages(displayMessages, processIndices, String(turn.startIndex));
+      const hasProcess = stages.length > 0;
+      const duration = formatTurnDuration(turnDurationMs(
+        displayMessages,
+        turn,
+        toolExecutions,
+      ));
+
+      return (
+        <Fragment key={turn.startIndex}>
+          <MessageItem
+            message={displayMessages[turn.startIndex]}
+            anchorId={`chat-msg-${turn.startIndex}`}
+            highlighted={searchHighlightIndex === turn.startIndex}
+          />
+          {hasProcess && (
+            <section className={`turn-fold${expanded ? ' expanded' : ''}`} data-testid="turn-fold">
+              <button
+                className="turn-fold-toggle"
+                data-testid="turn-fold-toggle"
+                aria-expanded={expanded}
+                onClick={() => setExpandedTurns((current) => ({
+                  ...current,
+                  [turn.startIndex]: !expanded,
+                }))}
+              >
+                <span className="turn-fold-label">
+                  <span className="turn-fold-status" data-testid="turn-fold-status">{t('chat.turnFold.interrupted')}</span>
+                  {duration && <span className="turn-fold-duration" data-testid="turn-fold-duration">{duration}</span>}
+                  <span className="turn-fold-action">
+                    {expanded ? t('chat.turnFold.collapse') : t('chat.turnFold.expand')}
+                  </span>
+                </span>
+                <ChevronRight size={14} aria-hidden="true" />
+              </button>
+              {expanded && (
+                <div className="turn-fold-content" data-testid="turn-fold-content">
+                  {stages.map((stage, stageIndex) => {
+                    const stageExpanded = expandedStages[stage.key] ?? false;
+                    return (
+                      <section className={`process-stage${stageExpanded ? ' expanded' : ''}`} data-testid="process-stage" key={stage.key}>
+                        <button
+                          className="process-stage-toggle"
+                          data-testid="process-stage-toggle"
+                          aria-expanded={stageExpanded}
+                          onClick={() => setExpandedStages((current) => ({ ...current, [stage.key]: !stageExpanded }))}
+                        >
+                          <ChevronRight size={13} aria-hidden="true" />
+                          <span>{t('chat.turnFold.stage', { index: stageIndex + 1, count: stage.indices.length })}</span>
+                        </button>
+                        {stageExpanded && (
+                          <div className="process-stage-content">
+                            {stage.indices.map((i) => (
+                              <MessageItem
+                                key={i}
+                                message={displayMessages[i]}
+                                anchorId={`chat-msg-${i}`}
+                                highlighted={searchHighlightIndex === i}
+                                cacheMiss={cacheMisses.get(i)}
+                                expandThinking
+                                expandTools
+                                groupedThinking
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
           {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
         </Fragment>
       );

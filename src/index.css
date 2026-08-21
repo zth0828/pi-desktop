@@ -2490,6 +2490,11 @@ button.danger-outline {
   gap: 8px;
 }
 
+.turn-fold-status {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
 .turn-fold-duration {
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
