@@ -2,7 +2,8 @@
 // 列表/切换/重命名/分叉走 pi SDK（SessionManager 静态方法 + runtime.switchSession）；
 // 删除 pi 无 SDK API（已确认），对齐 pi `/resume`：优先移入系统废纸篓。
 // 会话替换后必须 afterSessionReplaced（重订阅 + 重绑扩展 + 推 sessionReplaced）。
-import { rm } from 'node:fs/promises';
+import { readFile, rm, rmdir } from 'node:fs/promises';
+import path from 'node:path';
 import { shell } from 'electron';
 import { sendHostEvent } from '../main/ipc/host-events';
 import type {
@@ -30,6 +31,7 @@ import {
   getActiveRuntime,
   getLiveSessionRows,
   getRuntimeForSession,
+  hasRuntimeWithCwd,
   sendRuntimeStateToWindow,
   isSessionRunning,
 } from './pi-runtime-api';
@@ -42,6 +44,7 @@ import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 import { loadPiAdapter, type PiSessionCatalogPort, type PiSessionDocumentHandle } from './pi-adapter';
 import { samePath } from '../utils/same-path';
+import { hashSessionPath, safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { ensureSessionExportDirectory, sessionExportPath } from '../utils/session-export';
 import { searchSessions } from './session-search';
@@ -49,6 +52,17 @@ import { timingMark } from '../utils/timing';
 
 function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** 读会话文件 header 的 cwd（删除后目录清理需要知道它属于哪个工作区）。 */
+async function sessionHeaderCwd(sessionPath: string): Promise<string | null> {
+  try {
+    const firstLine = (await readFile(sessionPath, 'utf8')).split('\n', 1)[0];
+    const header = JSON.parse(firstLine) as { type?: string; cwd?: unknown };
+    return header.type === 'session' && typeof header.cwd === 'string' ? header.cwd : null;
+  } catch {
+    return null;
+  }
 }
 
 /** switch 成功后把调用方窗口绑定到目标会话（ctx 缺省 = 旧调用，跳过）。 */
@@ -379,23 +393,62 @@ export const sessionsApi = {
 
   remove: async (payload: PiSessionPathPayload): Promise<HostSuccess> => {
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
+    const sessionPathHash = hashSessionPath(payload.path);
+    // 删除后清理空目录需要知道会话属于哪个工作区（文件删除前读取）
+    const sessionCwd = await sessionHeaderCwd(payload.path);
     try {
       // 任一窗口/面板打开着该会话都先切到全新会话，避免 runtime 往已删文件追加
       await detachRuntimesFromSessionFile(payload.path);
       // 对齐 pi `/resume` 的删除语义：真实应用优先移到系统废纸篓；
       // E2E 隔离目录直接删除，避免把测试会话灌进用户废纸篓。
+      let method: 'trash' | 'rm' = 'trash';
       if (process.env.PI_DESKTOP_USER_DATA_DIR) {
         await rm(payload.path, { force: true });
+        method = 'rm';
       } else {
         try {
           await shell.trashItem(payload.path);
-        } catch {
+        } catch (err) {
+          // trashItem 失败 fallback 到永久删除：必须留痕，否则用户无从追溯
+          method = 'rm';
+          writePiDiagnostic({
+            level: 'warning',
+            event: 'session.remove.fallback',
+            module: 'sessions',
+            action: 'remove',
+            sessionPathHash,
+            detail: 'trashItem failed, permanently deleted instead',
+            errorMessage: toError(err),
+          });
           await rm(payload.path, { force: true });
         }
       }
+      writePiDiagnostic({
+        level: 'info',
+        event: 'session.remove',
+        module: 'sessions',
+        action: 'remove',
+        sessionPathHash,
+        detail: `method=${method}`,
+      });
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'remove' });
+      // 会话目录空了就清掉：pi 的 listAll 每次都会 readdir 所有目录，
+      // 空目录留着只会拖慢会话列表扫描。只在没有 runtime 把该 cwd 当工作区时
+      // 清理——删除「当前打开的会话」后 runtime 的 newSession 尚未落盘新文件，
+      // 目录此时为空但马上要写入，删了会让后续写文件 ENOENT。
+      if (sessionCwd && !hasRuntimeWithCwd(sessionCwd)) {
+        await rmdir(path.dirname(payload.path)).catch(() => {});
+      }
       return { success: true };
     } catch (err) {
+      writePiDiagnostic({
+        level: 'error',
+        event: 'session.remove.failure',
+        module: 'sessions',
+        action: 'remove',
+        sessionPathHash,
+        ...safeErrorFields(err),
+      });
       return { success: false, error: toError(err) };
     }
   },

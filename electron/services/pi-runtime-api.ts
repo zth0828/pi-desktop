@@ -149,6 +149,11 @@ export function getRuntimeForSession(sessionPath: string): ActiveRuntime | null 
   return null;
 }
 
+/** 是否还有 runtime 把 cwd 作为工作区：该目录可能即将写入新会话文件，不能清空。 */
+export function hasRuntimeWithCwd(cwd: string): boolean {
+  return [...runtimes].some((runtime) => samePath(runtime.cwd, cwd));
+}
+
 /** 将已有 runtime 的完整状态只发送给一个窗口，用于独立窗口 attach/切换。 */
 export function sendRuntimeStateToWindow(runtime: ActiveRuntime, target: HostActionContext): void {
   const state = snapshotState(runtime);
