@@ -7,6 +7,8 @@ export type ContentBlock = {
   id?: string;
   name?: string;
   arguments?: Record<string, unknown>;
+  data?: string;
+  mimeType?: string;
 };
 
 export type ChatMessage = {

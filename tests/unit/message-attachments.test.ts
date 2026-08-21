@@ -41,6 +41,16 @@ describe('ordered message attachments', () => {
     ]));
     expect(parsed.attachments[0].name).toBe('a & b.png');
   });
+
+  it('parses manifest when not anchored at start of text', () => {
+    const raw = 'prefix text\n<attachments>\n<attachment index="1" kind="image" name="pic.png" image-index="1"></attachment>\n</attachments>\n<file name="data.json">\n{"a":1}\n</file>\nUser prompt';
+    const parsed = parseUserMessage(raw);
+    expect(parsed.text).toBe('prefix text\nUser prompt');
+    expect(parsed.attachments).toEqual([
+      { index: 1, kind: 'image', name: 'pic.png', imageIndex: 1 },
+    ]);
+    expect(parsed.files).toEqual([{ name: 'data.json', text: '{"a":1}' }]);
+  });
 });
 
 describe('stripAttachmentEnvelope — 标题等纯文本场景剥离附件信封', () => {

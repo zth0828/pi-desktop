@@ -305,10 +305,13 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     };
   }, [cwd]);
 
-  // fork / 跳分支后被选消息的文本回填输入框（TUI /fork、/tree 的 editorText 语义）
+  // fork / 跳分支后被选消息的文本与附件回填输入框（TUI /fork、/tree 的 editorText 语义）
   useEffect(() => {
     if (!inputDraft) return;
     setValue(inputDraft.text);
+    if (inputDraft.attachments !== undefined) {
+      setAttachments(inputDraft.attachments);
+    }
     clearInputDraft();
     textareaRef.current?.focus();
   }, [inputDraft, clearInputDraft]);

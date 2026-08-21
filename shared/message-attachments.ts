@@ -22,7 +22,7 @@ export type ParsedUserMessage = {
   files: ParsedMessageFile[];
 };
 
-const MANIFEST_RE = /^<attachments>\n([\s\S]*?)<\/attachments>\n?/;
+const MANIFEST_RE = /<attachments>\n?([\s\S]*?)<\/attachments>\n?/;
 const ATTACHMENT_RE = /<attachment\s+([^>]+)><\/attachment>/g;
 const ATTRIBUTE_RE = /([\w-]+)="([^"]*)"/g;
 const FILE_RE = /<file name="([^"]*)">\n?([\s\S]*?)\n?<\/file>\n?/g;
@@ -101,7 +101,7 @@ export function parseUserMessage(text: string): ParsedUserMessage {
     }
   }
 
-  const withoutManifest = manifest ? text.slice(manifest[0].length) : text;
+  const withoutManifest = manifest ? text.replace(manifest[0], '') : text;
   const files: ParsedMessageFile[] = [];
   const visibleText = withoutManifest.replace(FILE_RE, (_block, name: string, fileText: string) => {
     files.push({ name, text: fileText });

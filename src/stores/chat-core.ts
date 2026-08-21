@@ -18,6 +18,7 @@ import type {
 import { hostApi, scopedHostApi, type HostApi } from '../lib/host-api';
 import { matchesBoundSession, shouldApplySessionReplaced } from '../lib/session-binding';
 import { createStreamBatcher } from '../lib/stream-throttle';
+import { restoreFromText, restoreToComposer } from '../lib/message-restore';
 import {
   rebuildToolExecutionsFromMessages,
   type ChatMessage,
@@ -110,8 +111,10 @@ export type ChatState = {
   workspaceOpen: boolean;
   /** 工具卡请求打开工作区文件（nonce 保证重复点击同一路径也能激活）。 */
   workspaceFileRequest: { path: string; nonce: number } | null;
-  /** fork/跳分支后回填输入框的文本（nonce 保证同文本也触发） */
-  inputDraft: { text: string; nonce: number } | null;
+  /** fork/跳分支后回填输入框的文本与附件（nonce 保证同文本也触发） */
+  inputDraft: { text: string; attachments?: ComposerAttachment[]; nonce: number } | null;
+  /** 流式中点击编辑历史消息时挂起的目标 entryId，等 run.ended 后触发 fork */
+  pendingEditEntryId: string | null;
   /** 扩展 UI 请求队列（ctx.ui.confirm/select/input）；同一时间通常只有一个，设计上按队列 */
   uiRequests: PiUiRequestPayload[];
   /** pi 扩展可序列化 UI 快照（状态、working 文案、文本 widget）。 */
@@ -145,6 +148,8 @@ export type ChatState = {
   clearInputDraft: () => void;
   /** 消息级 fork：从指定 user 消息分叉新会话（sessionReplaced 事件负责刷新列表） */
   forkFrom: (entryId: string) => Promise<void>;
+  /** 编辑并重发：空闲时直接 fork + 回填；流式中先 abort 等 run 结束后 fork + 回填 */
+  editMessage: (entryId: string) => Promise<void>;
   /** 跳分支：同会话文件内移动 leaf（navigateTree 后 main 推全量状态刷新） */
   navigateTo: (
     targetId: string,
@@ -289,6 +294,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       workspaceOpen: false,
       workspaceFileRequest: null,
       inputDraft: null,
+      pendingEditEntryId: null,
       uiRequests: [],
       extensionUi: undefined,
       transcriptSyncing: false,
@@ -318,7 +324,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       switchSession: async (path, cwd) => {
-        set({ starting: true, startError: undefined });
+        set({ starting: true, startError: undefined, pendingEditEntryId: null });
         try {
           // 用切换前的绑定寻址本面板 runtime（main 侧据此决定复用/新建/改绑）；
           // 尚未绑定（新面板 attach）时按目标路径寻址：窗口级调用会把
@@ -362,9 +368,12 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       abort: async () => {
         const result = await api().piRuntime.abort();
         if (result.success && result.restoredMessages?.length) {
+          const restoredList = result.restoredMessages.map((msg) => restoreFromText(msg));
+          const text = restoredList.map((r) => r.text).filter(Boolean).join('\n\n');
+          const attachments = restoredList.flatMap((r) => r.attachments);
           set({
-            composerText: result.restoredMessages.join('\n\n'),
-            composerAttachments: [],
+            composerText: text,
+            composerAttachments: attachments,
             queue: { steering: [], followUp: [] },
           });
         }
@@ -385,7 +394,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           return;
         }
         if (result.text) {
-          set({ composerText: result.text, composerAttachments: [] });
+          const restored = restoreFromText(result.text);
+          set({ composerText: restored.text, composerAttachments: restored.attachments });
         }
       },
 
@@ -396,7 +406,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
 
       newSession: async () => {
         // 新会话 sessionId 会变：放行随后的 sessionReplaced 并改绑
-        set({ expectingReplacement: true });
+        set({ expectingReplacement: true, pendingEditEntryId: null });
         const result = await api().piRuntime.newSession();
         if (!result.success) set({ expectingReplacement: false, startError: result.error });
         // sessionReplaced 事件会带回新状态
@@ -431,6 +441,12 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       forkFrom: async (entryId) => {
+        const targetMessage = get().messages.find((m) => m.entryId === entryId)
+          ?? get().historyMessages.find((m) => m.entryId === entryId);
+        const restored = targetMessage
+          ? restoreToComposer(targetMessage)
+          : null;
+
         // fork 产生新会话（sessionId 变）：放行随后的 sessionReplaced 并改绑
         set({ expectingReplacement: true });
         const result = await api().piRuntime.fork(entryId);
@@ -438,8 +454,32 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           set({ expectingReplacement: false, startError: result.error });
           return;
         }
-        // sessionReplaced 事件刷新消息列表；被选消息文本回填输入框供编辑重发
-        if (result.selectedText) set({ inputDraft: { text: result.selectedText, nonce: Date.now() } });
+        // sessionReplaced 事件刷新消息列表；被选消息文本与附件回填输入框供编辑重发
+        const finalRestored = restored ?? (result.selectedText ? restoreFromText(result.selectedText) : { text: '', attachments: [] });
+        set({
+          inputDraft: {
+            text: finalRestored.text,
+            attachments: finalRestored.attachments,
+            nonce: Date.now(),
+          },
+        });
+      },
+
+      editMessage: async (entryId) => {
+        const s = get();
+        if (s.isStreaming || s.running) {
+          set({ pendingEditEntryId: entryId });
+          try {
+            await s.abort();
+          } catch (err) {
+            set({
+              pendingEditEntryId: null,
+              startError: err instanceof Error ? err.message : String(err),
+            });
+          }
+          return;
+        }
+        await get().forkFrom(entryId);
       },
 
       navigateTo: async (targetId, options) => {
@@ -450,7 +490,16 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           return result;
         }
         // 目标是 user 消息时 pi 把文本退回编辑器（/tree 语义）
-        if (result.editorText) set({ inputDraft: { text: result.editorText, nonce: Date.now() } });
+        if (result.editorText) {
+          const restored = restoreFromText(result.editorText);
+          set({
+            inputDraft: {
+              text: restored.text,
+              attachments: restored.attachments,
+              nonce: Date.now(),
+            },
+          });
+        }
         return result;
       },
 
@@ -587,6 +636,11 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             if (get().bashDraft) {
               set({ bashDraft: null });
               void get().refreshMessages();
+            }
+            const pendingEdit = get().pendingEditEntryId;
+            if (pendingEdit) {
+              set({ pendingEditEntryId: null });
+              void get().forkFrom(pendingEdit);
             }
             void api().piRuntime.getUsage().then((usage) => {
               if (usage?.latestTurn && get().generation === envelope.generation && get().runStartedAt === null && get().turnStats === null) {

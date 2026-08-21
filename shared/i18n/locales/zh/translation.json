@@ -240,6 +240,7 @@
     "expandTools": "展开全部工具",
     "collapseTools": "折叠全部工具",
     "forkFromHere": "从此分叉",
+    "editMessage": "编辑并重发",
     "branches": "分支",
     "tree": {
       "title": "会话分支",

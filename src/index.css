@@ -1893,6 +1893,21 @@ button.danger-outline {
   gap: 6px;
 }
 
+.message-user-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
+  flex-shrink: 0;
+}
+
+.message-user:hover .message-user-actions,
+.message-user-actions:focus-within {
+  opacity: 1;
+}
+
+.message-user-btn,
 .message-fork-btn {
   display: flex;
   align-items: center;
@@ -1903,8 +1918,6 @@ button.danger-outline {
   border-radius: 8px;
   background: var(--bg-raised);
   color: var(--text-tertiary);
-  opacity: 0;
-  transition: opacity 0.12s;
   flex-shrink: 0;
 }
 
@@ -1913,6 +1926,7 @@ button.danger-outline {
   opacity: 1;
 }
 
+.message-user-btn:hover,
 .message-fork-btn:hover {
   background: var(--bg-hover);
   color: var(--text);

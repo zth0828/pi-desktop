@@ -240,6 +240,7 @@
     "expandTools": "Expand all tools",
     "collapseTools": "Collapse all tools",
     "forkFromHere": "Fork from here",
+    "editMessage": "Edit and resend",
     "branches": "Branches",
     "tree": {
       "title": "Session branches",

@@ -1,6 +1,6 @@
 import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Copy, FileText, GitFork } from 'lucide-react';
+import { Check, Copy, FileText, GitFork, Pencil } from 'lucide-react';
 import { parseUserMessage } from '@shared/message-attachments';
 import { parseProviderError } from '../../lib/provider-error';
 import { Markdown } from '../../components/Markdown';
@@ -185,6 +185,7 @@ function MessageItemView({
 }: MessageItemProps) {
   const { t } = useTranslation();
   const forkFrom = usePaneChatStore((s) => s.forkFrom);
+  const editMessage = usePaneChatStore((s) => s.editMessage);
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
   const [copied, setCopied] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -242,15 +243,27 @@ function MessageItemView({
         id={anchorId}
         tabIndex={highlighted ? -1 : undefined}
       >
-        {message.entryId && !isStreaming && (
-          <button
-            className="message-fork-btn"
-            data-testid="fork-message"
-            title={t('chat.forkFromHere')}
-            onClick={() => void forkFrom(message.entryId!)}
-          >
-            <GitFork size={14} />
-          </button>
+        {message.entryId && (
+          <div className="message-user-actions">
+            <button
+              className="message-user-btn"
+              data-testid="edit-message"
+              title={t('chat.editMessage')}
+              onClick={() => void editMessage(message.entryId!)}
+            >
+              <Pencil size={13} />
+            </button>
+            {!isStreaming && (
+              <button
+                className="message-user-btn message-fork-btn"
+                data-testid="fork-message"
+                title={t('chat.forkFromHere')}
+                onClick={() => void forkFrom(message.entryId!)}
+              >
+                <GitFork size={13} />
+              </button>
+            )}
+          </div>
         )}
         <div className="message-user-content">
           {orderedAttachments.length > 0 && (
