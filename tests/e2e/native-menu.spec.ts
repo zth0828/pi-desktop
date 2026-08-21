@@ -113,7 +113,7 @@ test.describe('macOS 原生系统菜单栏', () => {
       expect(labels).toContain(group);
     }
     // 菜单项与 Windows 自绘菜单一致
-    for (const item of ['新建会话', '关闭窗口', '复制', '粘贴', '折叠侧边栏', '会话搜索', '敬请期待']) {
+    for (const item of ['新建会话', '关闭窗口', '全选', '复制', '粘贴', '折叠侧边栏', '会话搜索', '敬请期待']) {
       expect(joined).toContain(item);
     }
     // 语言跟随应用设置：系统 locale 为英文时也不应出现 role 项自动本地化的英文
@@ -128,6 +128,37 @@ test.describe('macOS 原生系统菜单栏', () => {
     await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(0);
     expect(await app.evaluate(clickMenuLabel(), '折叠侧边栏')).toBe(true);
     await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeGreaterThan(100);
+    await app.close();
+  });
+
+  test('Cmd+A 通过原生编辑菜单全选输入框内容（selectAll role）', async ({ launchElectronApp }) => {
+    const app = await launchElectronApp({
+      withPi: true,
+      agentDir,
+      seedSettings: { workspaceCwd: workspace, language: 'zh' },
+    });
+    const page = await app.firstWindow();
+
+    // 菜单里必须有全选项：没有 selectAll role 时 macOS 上 Cmd+A 不会落到输入框
+    const labels = await app.evaluate(collectMenuLabels());
+    expect(labels.filter(Boolean)).toContain('全选');
+
+    await page.getByTestId('nav-models').click();
+    await page.getByTestId('add-custom-provider').click();
+    const form = page.getByTestId('custom-provider-form');
+    const input = form.getByPlaceholder('baseURL');
+    await input.fill('http://127.0.0.1:9/v1');
+    await input.click();
+    await page.keyboard.press('Meta+A');
+    await expect.poll(async () =>
+      page.evaluate(() => {
+        const doc = (globalThis as unknown as {
+          document: { activeElement: { selectionStart: number | null; selectionEnd: number | null; value: string } | null };
+        }).document;
+        const el = doc.activeElement;
+        return el ? { start: el.selectionStart, end: el.selectionEnd, len: el.value.length } : null;
+      }),
+    ).toEqual({ start: 0, end: 21, len: 21 });
     await app.close();
   });
 

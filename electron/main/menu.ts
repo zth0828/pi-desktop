@@ -4,7 +4,7 @@
 // role 项造成中英混杂；文案语言跟随应用设置（electron-store language，
 // 与 renderer 的 i18n 同一来源），用户切换语言时 settings-api 触发重建。
 // 平台差异只保留两处 macOS 必需项：应用菜单（关于/服务/隐藏/退出）与原生
-// 编辑行为（copy/paste role 随选区自动启用/禁用）。
+// 编辑行为（selectAll/copy/paste role 随选区自动启用/禁用）。
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import { sendHostEventToWindow } from './ipc/host-events';
 import { getElectronStore } from '../utils/electron-store';
@@ -16,6 +16,7 @@ type MenuLabels = {
   newChat: string;
   closeWindow: string;
   edit: string;
+  selectAll: string;
   copy: string;
   paste: string;
   selection: string;
@@ -37,6 +38,7 @@ function menuLabels(language: string): MenuLabels {
     newChat: zh ? '新建会话' : 'New Chat',
     closeWindow: zh ? '关闭窗口' : 'Close Window',
     edit: zh ? '编辑' : 'Edit',
+    selectAll: zh ? '全选' : 'Select All',
     copy: zh ? '复制' : 'Copy',
     paste: zh ? '粘贴' : 'Paste',
     selection: zh ? '选择' : 'Selection',
@@ -109,6 +111,8 @@ function buildMenuTemplate(labels: MenuLabels): MenuItemConstructorOptions[] {
     {
       label: labels.edit,
       submenu: [
+        { role: 'selectAll', label: labels.selectAll },
+        { type: 'separator' },
         { role: 'copy', label: labels.copy },
         { role: 'paste', label: labels.paste },
       ],
