@@ -86,6 +86,26 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   // 分栏树中已打开的会话：行内"已打开"标记；实例绑定由 watcher 回写叶子
   const paneRoot = useStore(panesStore, (s) => s.root);
   const openSessionPaths = useMemo(() => new Set(sessionPathsInTree(paneRoot)), [paneRoot]);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const collapseGroup = (event: React.MouseEvent<HTMLButtonElement>, groupKey: string) => {
+    const groupElement = event.currentTarget.closest('.session-group');
+    setVisibleCounts((previous) => ({
+      ...previous,
+      [groupKey]: SESSION_PAGE_SIZE,
+    }));
+    const list = listRef.current;
+    if (list && groupElement) {
+      const listRect = list.getBoundingClientRect();
+      const groupRect = groupElement.getBoundingClientRect();
+      if (groupRect.top < listRect.top) {
+        list.scrollTo({
+          top: Math.max(0, list.scrollTop + groupRect.top - listRect.top),
+          behavior: 'smooth',
+        });
+      }
+    }
+  };
 
   /** 侧栏普通点击：同窗口已有该会话时只激活原面板。 */
   const focusOpenSession = useCallback((sessionPath: string, cwd?: string): boolean => {
@@ -503,10 +523,19 @@ export function SessionList({ onOpenChat }: SessionListProps) {
             data-testid={`${archivedOnly ? 'archived-' : ''}session-group-show-more-${group.name}`}
             onClick={() => setVisibleCounts((previous) => ({
               ...previous,
-              [groupKey]: visibleCount + SESSION_PAGE_SIZE,
+              [groupKey]: visibleSessions.length,
             }))}
           >
             {t('sessions.showMore', { count: remainingCount })}
+          </button>
+        )}
+        {!isCollapsed && (visibleCounts[groupKey] ?? SESSION_PAGE_SIZE) > SESSION_PAGE_SIZE && (
+          <button
+            className="session-show-more"
+            data-testid={`${archivedOnly ? 'archived-' : ''}session-group-show-less-${group.name}`}
+            onClick={(event) => collapseGroup(event, groupKey)}
+          >
+            {t('sessions.showLess')}
           </button>
         )}
       </div>
@@ -514,7 +543,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   };
 
   return (
-    <div className="sidebar-sessions" data-testid="sidebar-sessions">
+    <div ref={listRef} className="sidebar-sessions" data-testid="sidebar-sessions">
       {draggingPath && <SessionDragHint />}
       {started && activeGroups.map((group) => renderGroup(group, false))}
       {started && archivedGroups.length > 0 && (

@@ -448,6 +448,7 @@
     "openInPane": "Open in a pane",
     "continueNewChat": "Continue in new chat",
     "showMore": "Show more ({{count}} remaining)",
+    "showLess": "Show less",
     "save": "Save",
     "cancel": "Cancel",
     "fork": "Fork",

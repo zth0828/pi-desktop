@@ -499,3 +499,129 @@ test('侧栏会话菜单 → 复制 ID、重命名、在新聊天中继续', asy
   await page.getByRole('button', { name: 'Continue in new chat' }).click();
   await expect(page.locator('.sidebar-session-row')).toHaveCount(2, { timeout: 15_000 });
 });
+
+test('侧栏会话列表：长列表展开与收起（含当前会话保底与归档分组）', async ({ launchElectronApp }) => {
+  // 预置活跃工作区的 25 个会话
+  const longWorkspace = await realpath(await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-long-')));
+  const longName = path.basename(longWorkspace);
+  const encodedLong = `--${longWorkspace.replace(/^\//, '').replace(/[\/\\:]/g, '-')}--`;
+  const seedDirLong = path.join(agentDir, 'sessions', encodedLong);
+  await mkdir(seedDirLong, { recursive: true });
+  for (let i = 0; i < 25; i += 1) {
+    const seedId = `019fe296-0000-7000-8000-${String(i).padStart(12, '0')}`;
+    const seedTs = new Date(Date.parse('2026-08-01T00:00:00.000Z') + i * 60_000).toISOString();
+    const lines = [
+      JSON.stringify({ type: 'session', version: 3, id: seedId, timestamp: seedTs, cwd: longWorkspace }),
+      JSON.stringify({
+        type: 'message',
+        id: `msg-${i}`,
+        parentId: null,
+        timestamp: seedTs,
+        message: { role: 'user', content: [{ type: 'text', text: `active session ${i}` }], timestamp: Date.parse(seedTs) },
+      }),
+    ];
+    await writeFile(path.join(seedDirLong, `${seedTs.replace(/[:.]/g, '-')}_${seedId}.jsonl`), lines.join('\n') + '\n');
+  }
+
+  // 预置归档工作区的 25 个会话
+  const archivedWorkspace = await realpath(await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-archived-')));
+  const archivedName = path.basename(archivedWorkspace);
+  const encodedArchived = `--${archivedWorkspace.replace(/^\//, '').replace(/[\/\\:]/g, '-')}--`;
+  const seedDirArchived = path.join(agentDir, 'sessions', encodedArchived);
+  await mkdir(seedDirArchived, { recursive: true });
+  for (let i = 0; i < 25; i += 1) {
+    const seedId = `019fe296-0000-7000-8000-${String(100 + i).padStart(12, '0')}`;
+    const seedTs = new Date(Date.parse('2026-08-02T00:00:00.000Z') + i * 60_000).toISOString();
+    const lines = [
+      JSON.stringify({ type: 'session', version: 3, id: seedId, timestamp: seedTs, cwd: archivedWorkspace }),
+      JSON.stringify({
+        type: 'message',
+        id: `msg-archived-${i}`,
+        parentId: null,
+        timestamp: seedTs,
+        message: { role: 'user', content: [{ type: 'text', text: `archived session ${i}` }], timestamp: Date.parse(seedTs) },
+      }),
+      JSON.stringify({
+        type: 'custom',
+        customType: 'pi-desktop.archive',
+        data: { archived: true },
+      }),
+    ];
+    await writeFile(path.join(seedDirArchived, `${seedTs.replace(/[:.]/g, '-')}_${seedId}.jsonl`), lines.join('\n') + '\n');
+  }
+
+  try {
+    const app = await launchElectronApp({
+      withPi: true,
+      agentDir,
+      seedSettings: { workspaceCwd: longWorkspace },
+    });
+    const page = await app.firstWindow();
+    await waitSessionReady(page);
+
+    const activeGroup = page.getByTestId(`session-group-${longName}`);
+    await expect(activeGroup).toBeVisible({ timeout: 15_000 });
+
+    // 默认展示 10 条
+    const activeRows = activeGroup.locator('.sidebar-session-row');
+    await expect(activeRows).toHaveCount(10);
+
+    // 显示更多按钮可见（剩余 15 条），收起按钮不可见
+    const showMoreBtn = page.getByTestId(`session-group-show-more-${longName}`);
+    const showLessBtn = page.getByTestId(`session-group-show-less-${longName}`);
+    await expect(showMoreBtn).toBeVisible();
+    await expect(showMoreBtn).toContainText('15');
+    await expect(showLessBtn).toHaveCount(0);
+
+    // 点击一次「显示更多」→ 直接全部展开（25 条全部可见），显示更多消失，收起可见
+    await showMoreBtn.click();
+    await expect(activeRows).toHaveCount(25);
+    await expect(showMoreBtn).toHaveCount(0);
+    await expect(showLessBtn).toBeVisible();
+
+    // 点击「收起」→ 回到 10 条，显示更多恢复，收起消失
+    await showLessBtn.click();
+    await expect(activeRows).toHaveCount(10);
+    await expect(showMoreBtn).toBeVisible();
+    await expect(showMoreBtn).toContainText('15');
+    await expect(showLessBtn).toHaveCount(0);
+
+    // 测试当前会话在第 25 条时的保底逻辑：
+    // 先全部展开至 25 条，点击第 25 个会话使其成为当前活跃会话（isCurrent）
+    await showMoreBtn.click();
+    await expect(activeRows).toHaveCount(25);
+    const lastSessionRow = activeRows.nth(24);
+    await lastSessionRow.locator('.sidebar-session').click();
+    await expect(lastSessionRow.locator('.sidebar-session.current')).toBeVisible();
+
+    // 点击「收起」：因为当前会话在第 25 条，保底显示 25 条而非 10 条
+    await showLessBtn.click();
+    await expect(activeRows).toHaveCount(25);
+    await expect(showLessBtn).toHaveCount(0);
+
+    // 归档分组展开与收起测试
+    const archivedHeader = page.getByTestId(`archived-session-group-header-${archivedName}`);
+    await expect(archivedHeader).toBeVisible();
+    await archivedHeader.click();
+
+    const archivedGroup = page.getByTestId(`archived-session-group-${archivedName}`);
+    const archivedRows = archivedGroup.locator('.sidebar-session-row');
+    await expect(archivedRows).toHaveCount(10);
+
+    const archivedShowMoreBtn = page.getByTestId(`archived-session-group-show-more-${archivedName}`);
+    const archivedShowLessBtn = page.getByTestId(`archived-session-group-show-less-${archivedName}`);
+    await expect(archivedShowMoreBtn).toBeVisible();
+    await expect(archivedShowLessBtn).toHaveCount(0);
+
+    await archivedShowMoreBtn.click();
+    await expect(archivedRows).toHaveCount(25);
+    await expect(archivedShowLessBtn).toBeVisible();
+
+    await archivedShowLessBtn.click();
+    await expect(archivedRows).toHaveCount(10);
+    await expect(archivedShowLessBtn).toHaveCount(0);
+  } finally {
+    await rm(longWorkspace, { recursive: true, force: true });
+    await rm(archivedWorkspace, { recursive: true, force: true });
+  }
+});

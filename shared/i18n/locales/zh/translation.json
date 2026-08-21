@@ -448,6 +448,7 @@
     "openInPane": "已在面板中打开",
     "continueNewChat": "在新聊天中继续",
     "showMore": "显示更多（剩余 {{count}} 条）",
+    "showLess": "收起",
     "save": "保存",
     "cancel": "取消",
     "fork": "分叉",
