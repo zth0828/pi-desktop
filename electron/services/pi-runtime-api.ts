@@ -193,6 +193,13 @@ export function isSessionRunning(sessionPath: string): boolean {
   return runtime?.adapterRuntime.session.view.isStreaming === true || runtime?.running === true;
 }
 
+/** 判断指定 cwd 是否有正在运行或流式输出中的 runtime。 */
+export function isCwdRunning(cwd: string): boolean {
+  return [...runtimes].some(
+    (runtime) => samePath(runtime.cwd, cwd) && (runtime.adapterRuntime.session.view.isStreaming || runtime.running),
+  );
+}
+
 /** 开发热更新等待安全重启时使用，覆盖主窗口和独立窗口的保活 runtime。 */
 export function hasStreamingRuntimes(): boolean {
   return [...runtimes].some((runtime) => runtime.adapterRuntime.session.view.isStreaming || runtime.running);

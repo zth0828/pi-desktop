@@ -442,6 +442,16 @@ export type WorkspaceListResult = { path: string; entries: WorkspaceEntry[] };
 
 /** 当前工作区 git 分支（pi TUI footer 同口径；非仓库返回 branch: null）。 */
 export type GitBranchResult = { branch: string | null };
+export type GitBranchListResult = {
+  branches: string[];
+  current: string | null;
+  isDirty: boolean;
+};
+export type GitCheckoutResult = {
+  success: boolean;
+  error?: 'dirty' | 'running' | string;
+  branch?: string;
+};
 export type WorkspaceReadPayload = { path: string };
 export type WorkspaceReadResult = {
   path: string;
@@ -1090,6 +1100,10 @@ export type HostApiContract = {
   git: {
     /** 当前工作区的 git 分支（非仓库 / git 不可用返回 null；detached HEAD 返回 'detached'）。 */
     getBranch: (payload: { cwd: string }) => GitBranchResult;
+    /** 列出当前仓库的本地分支及工作区是否干净。 */
+    listBranches: (payload: { cwd: string }) => GitBranchListResult;
+    /** 切换分支（带 dirty 预检与运行状态检查）。 */
+    checkout: (payload: { cwd: string; branch: string }) => GitCheckoutResult;
   };
   piSkills: {
     /** 活动 runtime 的 skills（resourceLoader.getSkills()）；runtime 未启动返回空列表。 */

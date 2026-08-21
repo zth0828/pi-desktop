@@ -99,6 +99,17 @@
     "gitBranchTitle": "Git branch: {{branch}}",
     "gitDetachedTitle": "Detached HEAD",
     "gitDetached": "detached",
+    "branchSwitch": {
+      "title": "Switch branch",
+      "locked": "Cannot switch branch after conversation has started",
+      "dirty": "Working tree has uncommitted changes, cannot switch branch",
+      "dirtyHint": "Working tree has uncommitted changes. Commit or stash them before switching.",
+      "running": "Session is running, cannot switch branch",
+      "failed": "Failed to switch branch: {{error}}",
+      "success": "Switched to branch {{branch}}",
+      "empty": "No local branches found",
+      "loading": "Loading branches..."
+    },
     "queueSend": "Follow up",
     "steerSend": "Guide turn",
     "stopTip": "Stop the current run",

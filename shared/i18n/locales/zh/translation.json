@@ -99,6 +99,17 @@
     "gitBranchTitle": "Git 分支：{{branch}}",
     "gitDetachedTitle": "HEAD 分离（detached）",
     "gitDetached": "detached",
+    "branchSwitch": {
+      "title": "切换分支",
+      "locked": "会话开始后不可切换分支",
+      "dirty": "工作区有未提交的改动，无法切换分支",
+      "dirtyHint": "工作区有未提交的改动，请先提交或暂存后再切换",
+      "running": "当前会话正在运行中，无法切换分支",
+      "failed": "切换分支失败：{{error}}",
+      "success": "已切换到分支 {{branch}}",
+      "empty": "未找到本地分支",
+      "loading": "正在加载分支..."
+    },
     "queueSend": "稍后继续",
     "steerSend": "引导当前轮",
     "stopTip": "停止当前生成",

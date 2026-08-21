@@ -219,6 +219,8 @@ function createHostApi(sessionPath?: string) {
   },
   git: {
     getBranch: (cwd: string) => invoke('git', 'getBranch', { cwd }),
+    listBranches: (cwd: string) => invoke('git', 'listBranches', { cwd }),
+    checkout: (cwd: string, branch: string) => invoke('git', 'checkout', { cwd, branch }),
   },
   dialog: {
     openDirectory: (title?: string, defaultPath?: string) =>

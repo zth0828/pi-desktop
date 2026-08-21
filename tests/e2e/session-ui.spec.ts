@@ -189,3 +189,50 @@ test('git 分支 chip：仓库显示分支、checkout 换分支 / detached 后�
 
   await rm(gitWorkspace, { recursive: true, force: true });
 });
+
+test('git 分支切换：新会话状态下可切换分支，发送消息后变只读', async ({ launchElectronApp }) => {
+  const gitWorkspace = await mkdtemp(path.join(tmpdir(), 'pi-e2e-git-switch-'));
+  const { execSync } = await import('node:child_process');
+  execSync('git init -b main', { cwd: gitWorkspace });
+  execSync('git config user.name "Test"', { cwd: gitWorkspace });
+  execSync('git config user.email "test@test.com"', { cwd: gitWorkspace });
+  await writeFile(path.join(gitWorkspace, 'init.txt'), 'init');
+  execSync('git add init.txt && git commit -m "init"', { cwd: gitWorkspace });
+  execSync('git branch feature-a', { cwd: gitWorkspace });
+
+  try {
+    const app = await launchElectronApp({
+      withPi: true,
+      agentDir,
+      seedSettings: { workspaceCwd: gitWorkspace },
+    });
+    const page = await app.firstWindow();
+    await expect(
+      page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+    ).toBeVisible({ timeout: 30_000 });
+
+    const chip = page.getByTestId('git-branch');
+    await expect(chip).toBeVisible({ timeout: 10_000 });
+    await expect(chip).toContainText('main');
+    await expect(chip).toHaveClass(/switchable/);
+
+    // 点击 chip 弹出分支菜单
+    await chip.click();
+    const menu = page.getByTestId('git-branch-menu');
+    await expect(menu).toBeVisible();
+    await expect(menu.locator('[data-testid="git-branch-option"]')).toHaveCount(2);
+
+    // 点击 feature-a 切换
+    await menu.locator('[data-testid="git-branch-option"][data-value="feature-a"]').click();
+    await expect(chip).toContainText('feature-a');
+
+    // 发送消息后，chip 变为只读 disabled
+    await page.getByTestId('chat-input').fill('Say PONG test branch lock');
+    await page.getByTestId('chat-send').click();
+    await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+
+    await expect(page.getByTestId('git-branch')).toHaveClass(/disabled/);
+  } finally {
+    await rm(gitWorkspace, { recursive: true, force: true });
+  }
+});

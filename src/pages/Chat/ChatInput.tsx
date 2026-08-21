@@ -164,6 +164,11 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const [followupBehavior, setFollowupBehavior] = useState<FollowupBehavior>('queue');
   const [sendWith, setSendWith] = useState<SendWith>('enter');
   const [gitBranch, setGitBranch] = useState<string | null>(null);
+  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+  const [branchList, setBranchList] = useState<string[]>([]);
+  const [isBranchDirty, setIsBranchDirty] = useState(false);
+  const [loadingBranches, setLoadingBranches] = useState(false);
+  const [switchingBranch, setSwitchingBranch] = useState(false);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelMenuSection, setModelMenuSection] = useState<'models' | 'thinking' | null>(null);
@@ -175,6 +180,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const filePanelRef = useRef<HTMLDivElement>(null);
   const composerMenuRef = useRef<HTMLDivElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
+  const branchMenuRef = useRef<HTMLDivElement>(null);
   const usageControlRef = useRef<HTMLDivElement>(null);
   const noticeTimerRef = useRef<number | null>(null);
   const composerScrollTimerRef = useRef<number | null>(null);
@@ -207,18 +213,20 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   }, []);
 
   useEffect(() => {
-    if (!composerMenuOpen && !usageOpen && !modelMenuOpen) return;
+    if (!composerMenuOpen && !usageOpen && !modelMenuOpen && !branchMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (composerMenuOpen && !composerMenuRef.current?.contains(target)) setComposerMenuOpen(false);
       if (usageOpen && !usageControlRef.current?.contains(target)) setUsageOpen(false);
       if (modelMenuOpen && !modelMenuRef.current?.contains(target)) setModelMenuOpen(false);
+      if (branchMenuOpen && !branchMenuRef.current?.contains(target)) setBranchMenuOpen(false);
     };
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setComposerMenuOpen(false);
       setUsageOpen(false);
       setModelMenuOpen(false);
+      setBranchMenuOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
@@ -226,7 +234,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [composerMenuOpen, usageOpen, modelMenuOpen]);
+  }, [composerMenuOpen, usageOpen, modelMenuOpen, branchMenuOpen]);
 
   /** 命令执行的轻量确认（/name /copy /export /reload 等），5s 自动消失 */
   const showNotice = (text: string) => {
@@ -315,6 +323,61 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     clearInputDraft();
     textareaRef.current?.focus();
   }, [inputDraft, clearInputDraft]);
+
+  const hasMessages = usePaneChatStore((s) => s.messages.length > 0 || s.historyMessages.length > 0);
+  const canSwitchBranch = started && !isStreaming && !isRunning && !hasMessages;
+
+  const toggleBranchMenu = () => {
+    if (!canSwitchBranch) return;
+    if (branchMenuOpen) {
+      setBranchMenuOpen(false);
+      return;
+    }
+    const chatState = chatStore.getState();
+    if ((chatState.messages?.length ?? 0) > 0 || (chatState.historyMessages?.length ?? 0) > 0) {
+      return;
+    }
+    setBranchMenuOpen(true);
+    setLoadingBranches(true);
+    hostApi.git.listBranches(cwd)
+      .then((result) => {
+        setBranchList(result.branches);
+        setIsBranchDirty(result.isDirty);
+        if (result.current) setGitBranch(result.current);
+      })
+      .catch(() => {
+        setBranchList([]);
+        setIsBranchDirty(false);
+      })
+      .finally(() => {
+        setLoadingBranches(false);
+      });
+  };
+
+  const handleSwitchBranch = async (targetBranch: string) => {
+    if (targetBranch === gitBranch || switchingBranch) return;
+    setSwitchingBranch(true);
+    try {
+      const result = await hostApi.git.checkout(cwd, targetBranch);
+      if (result.success) {
+        setGitBranch(targetBranch);
+        setBranchMenuOpen(false);
+        showNotice(t('chat.branchSwitch.success', { branch: targetBranch }));
+      } else {
+        if (result.error === 'dirty') {
+          showNotice(t('chat.branchSwitch.dirty'));
+        } else if (result.error === 'running') {
+          showNotice(t('chat.branchSwitch.running'));
+        } else {
+          showNotice(t('chat.branchSwitch.failed', { error: result.error ?? 'unknown' }));
+        }
+      }
+    } catch (err) {
+      showNotice(t('chat.branchSwitch.failed', { error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setSwitchingBranch(false);
+    }
+  };
 
   const contextUsage = usage?.context ?? runtimeContextUsage ?? null;
   const usageTotals = usage?.session ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
@@ -908,14 +971,62 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
             <ChevronDown size={13} />
           </button>
           {gitBranch && (
-            <span
-              className="context-chip git-branch-chip"
-              data-testid="git-branch"
-              title={gitBranch === 'detached' ? t('chat.gitDetachedTitle') : t('chat.gitBranchTitle', { branch: gitBranch })}
-            >
-              <GitBranch size={14} />
-              <span>{gitBranch === 'detached' ? t('chat.gitDetached') : gitBranch}</span>
-            </span>
+            <div className="git-branch-wrap" ref={branchMenuRef}>
+              {canSwitchBranch ? (
+                <button
+                  className="context-chip git-branch-chip switchable"
+                  data-testid="git-branch"
+                  aria-haspopup="menu"
+                  aria-expanded={branchMenuOpen}
+                  title={t('chat.branchSwitch.title')}
+                  onClick={toggleBranchMenu}
+                >
+                  <GitBranch size={14} />
+                  <span>{gitBranch === 'detached' ? t('chat.gitDetached') : gitBranch}</span>
+                  <ChevronDown size={13} />
+                </button>
+              ) : (
+                <span
+                  className="context-chip git-branch-chip disabled"
+                  data-testid="git-branch"
+                  title={t('chat.branchSwitch.locked')}
+                >
+                  <GitBranch size={14} />
+                  <span>{gitBranch === 'detached' ? t('chat.gitDetached') : gitBranch}</span>
+                </span>
+              )}
+              {branchMenuOpen && (
+                <div className="git-branch-menu" data-testid="git-branch-menu" role="menu">
+                  {loadingBranches && (
+                    <div className="git-branch-menu-hint">{t('chat.branchSwitch.loading')}</div>
+                  )}
+                  {!loadingBranches && branchList.length === 0 && (
+                    <div className="git-branch-menu-hint">{t('chat.branchSwitch.empty')}</div>
+                  )}
+                  {!loadingBranches && branchList.map((branch) => {
+                    const isCurrent = branch === gitBranch;
+                    return (
+                      <button
+                        key={branch}
+                        className={`git-branch-option${isCurrent ? ' current' : ''}`}
+                        data-testid="git-branch-option"
+                        data-value={branch}
+                        disabled={switchingBranch}
+                        onClick={() => void handleSwitchBranch(branch)}
+                      >
+                        <span>{branch}</span>
+                        {isCurrent && <Check size={14} />}
+                      </button>
+                    );
+                  })}
+                  {isBranchDirty && (
+                    <div className="git-branch-menu-dirty-hint">
+                      {t('chat.branchSwitch.dirtyHint')}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
           <span className="spacer" />
           {(models.length > 0 || model) && (

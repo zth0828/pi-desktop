@@ -2253,9 +2253,27 @@ button.danger-outline {
   cursor: default;
 }
 
-.git-branch-chip:hover {
+.git-branch-wrap {
+  position: relative;
+}
+
+.git-branch-chip.switchable {
+  cursor: pointer;
+}
+
+.git-branch-chip.switchable:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.git-branch-chip.disabled {
+  cursor: default;
+  opacity: 0.8;
+}
+
+.git-branch-chip.disabled:hover {
   background: transparent;
-  color: var(--accent);
+  color: var(--text-secondary);
 }
 
 .git-branch-chip svg {
@@ -2267,6 +2285,70 @@ button.danger-outline {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.git-branch-menu {
+  position: absolute;
+  left: 0;
+  bottom: 38px;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  max-width: 280px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-panel);
+  z-index: 20;
+}
+
+.git-branch-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-branch-option:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.git-branch-option.current {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.git-branch-option span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-branch-menu-dirty-hint {
+  padding: 6px 8px 4px;
+  border-top: 1px solid var(--border);
+  color: var(--warning, #e09f3e);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.git-branch-menu-hint {
+  padding: 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: center;
 }
 
 /* Codex 风格模型菜单：触发器在输入框右下，主菜单 + 子菜单并排 */
