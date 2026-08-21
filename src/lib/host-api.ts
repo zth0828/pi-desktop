@@ -99,6 +99,7 @@ function createHostApi(sessionPath?: string) {
       baseUrl: string;
       api: string;
       apiKey?: string;
+      serverType?: 'lm-studio' | 'vllm' | 'generic';
       models: Array<{ id: string; name?: string }>;
     }) => invoke('providers', 'addCustom', payload),
     setModelReasoning: (providerId: string, modelId: string, reasoning: boolean) =>

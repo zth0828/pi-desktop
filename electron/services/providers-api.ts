@@ -15,6 +15,7 @@ import type {
   PiProviderSetKeyPayload,
   PiProviderProbePayload,
   PiProviderProbeResult,
+  PiProviderServerType,
   PiProviderSetModelReasoningPayload,
   PiProviderSetKeyResult,
   PiCompactionSettings,
@@ -24,7 +25,8 @@ import type {
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiAdapter, type PiModelRuntimeHandle } from './pi-adapter';
-import { isLmStudioProvider, syncLmStudioModels } from '../utils/lmstudio-models';
+import { isLmStudioProvider, isLocalServer, syncLmStudioModels } from '../utils/lmstudio-models';
+import { compatForOpenAi, placeholderApiKey, resolveServerType, thinkingLevelMapFor } from '../utils/custom-provider-config';
 import { syncConfiguredProviderModels } from '../utils/configured-provider-models';
 import {
   piRuntimeApi,
@@ -416,15 +418,26 @@ export const providersApi = {
           ? doc.providers as Record<string, unknown>
           : {};
         doc.providers = providers;
+        // 本机回环服务器（LM Studio/Ollama/vLLM 等）不需要鉴权，但 pi 在请求时
+        // 强制要求 apiKey 或 headers（models.md：keyless 本地服务器应保留占位值），
+        // 否则会话报 "No API key found"。写入服务器会忽略的占位 key 解除门槛。
+        const localServer = isLocalServer(payload.baseUrl);
+        const serverType = resolveServerType(payload.serverType, payload.id, payload.baseUrl);
+        const lmStudio = serverType === 'lm-studio';
+        // 思考控制按服务器类型决定（见 custom-provider-config.ts）：LM Studio 走
+        // reasoning_effort + off 映射；vLLM（Qwen3 等）走 chat_template_kwargs。
+        const compat = compatForOpenAi(serverType);
+        const thinkingMap = thinkingLevelMapFor(serverType);
         providers[payload.id] = {
         baseUrl: normalizeBaseUrlForApi(payload.baseUrl, payload.api),
         api: payload.api,
+        ...(localServer && !payload.apiKey ? { apiKey: placeholderApiKey(serverType) } : {}),
         // 第三方 OpenAI 兼容服务器（vLLM/SGLang/Ollama/LM Studio 等）普遍不接受
         // developer role 与 reasoning_effort 参数：推理模型（Qwen3 等）直接 400。
         // 自定义供应商缺省声明关闭，pi 改发 system role；需要 developer role 的
         // 网关可在 models.json 手动改回 true。
         ...(payload.api === 'openai-completions' || payload.api === 'openai-responses'
-          ? { compat: { supportsDeveloperRole: false, supportsReasoningEffort: false } }
+          ? { compat }
           : {}),
         // 第三方模型缺省按支持推理处理：思考深度菜单可用；网关拒绝思考参数时
         // 用户可在 Models 页逐模型关闭。
@@ -434,6 +447,7 @@ export const providersApi = {
             id: m.id,
             name: m.name ?? m.id,
             reasoning: m.reasoning ?? true,
+            ...(lmStudio && (m.reasoning ?? true) && thinkingMap ? { thinkingLevelMap: thinkingMap } : {}),
             input: ['text'],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             contextWindow: m.contextWindow ?? profile.contextWindow,
@@ -569,6 +583,7 @@ export const providersApi = {
     }
     // LM Studio's OpenAI-compatible /models currently omits loaded context metadata.
     // Its native endpoint exposes both the model maximum and the active instance value.
+    let serverType: PiProviderServerType = 'generic';
     try {
       const nativeBase = base.replace(/\/v1$/, '');
       const response = await fetch(`${nativeBase}/api/v1/models`, {
@@ -576,6 +591,7 @@ export const providersApi = {
         signal: AbortSignal.timeout(4000),
       });
       if (response.ok) {
+        serverType = 'lm-studio';
         const json = await readJson(response);
         const rows = Array.isArray(json.models) ? json.models : Array.isArray(json.data) ? json.data : [];
         for (const raw of rows) {
@@ -592,6 +608,21 @@ export const providersApi = {
         }
       }
     } catch { /* Native metadata is optional and only available on LM Studio. */ }
+    // vLLM 的 OpenAI 兼容层在根路径暴露 /version（vllm-<版本>）。Qwen3 等推理
+    // 模型在 vLLM 上的思考控制走 chat_template_kwargs.enable_thinking（见
+    // compatForOpenAi），与 LM Studio 的 reasoning_effort 不同，必须先识别。
+    if (serverType === 'generic') {
+      try {
+        const root = base.replace(/\/v1$/, '');
+        const versionResponse = await fetch(`${root}/version`, { headers, signal: AbortSignal.timeout(3000) });
+        if (versionResponse.ok) {
+          const versionJson = await readJson(versionResponse);
+          if (typeof versionJson.version === 'string' && /^vllm/i.test(versionJson.version)) {
+            serverType = 'vllm';
+          }
+        }
+      } catch { /* 非 vLLM 服务器没有 /version 端点。 */ }
+    }
     const model = payload.model || models[0] || 'test-model';
     // 目录未上报上下文的模型补上前缀规格表（探测不出时给用户一个合理的默认展示）。
     for (const modelId of models) {
@@ -702,6 +733,7 @@ export const providersApi = {
       recommendedApi: recommended?.api,
       // 协议验证得到的真实 base 优先；没验证时用目录命中的 base 纠正 /v1。
       recommendedBaseUrl: recommended?.resolvedBaseUrl ?? modelsBaseUrl,
+      serverType,
     };
   },
 

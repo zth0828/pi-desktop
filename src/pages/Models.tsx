@@ -401,6 +401,7 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       baseUrl: baseUrl.trim(),
       api,
       apiKey: apiKey.trim() || undefined,
+      serverType: probeResult?.serverType,
       models,
     });
     if (result.success) {

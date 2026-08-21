@@ -600,11 +600,16 @@ export type PiProviderRefreshResult = HostSuccess & {
   addedModels?: number;
   migratedProviders?: number;
 };
+/** 探测到的自定义服务器类型：决定 models.json 写库时的思考控制兼容配置。 */
+export type PiProviderServerType = 'lm-studio' | 'vllm' | 'generic';
+
 export type PiProviderAddCustomPayload = {
   id: string;
   baseUrl: string;
   api: string;
   apiKey?: string;
+  /** 探测结果（probe.serverType）；未探测时由 main 按 baseUrl/ID 回退判定。 */
+  serverType?: PiProviderServerType;
   models: Array<{
     id: string;
     name?: string;
@@ -645,6 +650,8 @@ export type PiProviderProbeResult = {
   recommendedApi?: string;
   /** Successful API base URL, including a discovered /v1 prefix when required. */
   recommendedBaseUrl?: string;
+  /** 服务器类型（LM Studio native 端点 / vLLM /version 端点探测）。 */
+  serverType?: PiProviderServerType;
 };
 export type PiCompactionSettings = {
   reserveTokens: number;
