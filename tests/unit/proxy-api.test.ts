@@ -12,7 +12,7 @@ const settingsApiMock = (await import('../../electron/services/settings-api')).s
   getAll: ReturnType<typeof vi.fn>;
 };
 
-const { resolveProxy, detectProxy } = await import('../../electron/services/proxy-api');
+const { resolveProxy, detectProxy, ensureLoopbackProxyBypass } = await import('../../electron/services/proxy-api');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -44,5 +44,23 @@ describe('proxy resolution', () => {
     settingsApiMock.getAll.mockResolvedValue({ httpProxyMode: 'off', httpProxyUrl: 'http://127.0.0.1:7897' });
     expect(await resolveProxy()).toEqual({ source: 'off' });
     expect(await detectProxy()).toEqual({ mode: 'off', source: 'off' });
+  });
+});
+
+describe('loopback proxy bypass', () => {
+  it('adds loopback hosts to NO_PROXY, preserving existing entries', () => {
+    delete process.env.NO_PROXY;
+    delete process.env.no_proxy;
+    ensureLoopbackProxyBypass();
+    expect(process.env.NO_PROXY).toBe('127.0.0.1,localhost,::1');
+  });
+
+  it('is idempotent and merges with a user-provided NO_PROXY', () => {
+    process.env.NO_PROXY = 'example.com';
+    ensureLoopbackProxyBypass();
+    ensureLoopbackProxyBypass();
+    expect(process.env.NO_PROXY).toBe('example.com,127.0.0.1,localhost,::1');
+    delete process.env.NO_PROXY;
+    delete process.env.no_proxy;
   });
 });

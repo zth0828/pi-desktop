@@ -23,6 +23,29 @@ export function clearProxyEnvironment(): void {
   }
 }
 
+/**
+ * 本地回环地址强制绕过代理：pi 的 EnvHttpProxyAgent 默认不豁免 loopback，
+ * 未设 NO_PROXY 时探测/同步本地服务器（LM Studio/Ollama/vLLM 在 127.0.0.1）
+ * 的请求会被转发到代理并返回 502（E2E 之所以正常是因为测试显式设了
+ * NO_PROXY=127.0.0.1）。EnvHttpProxyAgent 每次请求读取 env，运行时补上即可。
+ */
+export function ensureLoopbackProxyBypass(): void {
+  const existing = process.env.NO_PROXY ?? process.env.no_proxy ?? '';
+  const parts = existing.split(',').map((item) => item.trim()).filter(Boolean);
+  let changed = false;
+  for (const item of ['127.0.0.1', 'localhost', '::1']) {
+    if (!parts.includes(item)) {
+      parts.push(item);
+      changed = true;
+    }
+  }
+  if (changed) {
+    const value = parts.join(',');
+    process.env.NO_PROXY = value;
+    process.env.no_proxy = value;
+  }
+}
+
 /** 按 Pi Desktop 设置解析当前应生效的代理 URL。 */
 export async function resolveProxy(): Promise<ResolvedProxy> {
   let mode: ProxyMode = 'auto';
@@ -70,6 +93,7 @@ export async function applyProxyToPi(): Promise<ProxyApplyResult> {
     };
     // 软件设置必须覆盖启动环境中的代理；关闭时也要清掉继承的环境变量。
     clearProxyEnvironment();
+    ensureLoopbackProxyBypass();
     mod.applyHttpProxySettings?.(resolved.url);
     mod.configureHttpDispatcher?.();
     return resolved.url
