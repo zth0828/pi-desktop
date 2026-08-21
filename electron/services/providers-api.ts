@@ -554,13 +554,28 @@ export const providersApi = {
     const advertisedEndpointTypes = new Set<string>();
     // 目录命中在哪个 base 上：/v1 下命中时把 baseUrl 顺带纠正，与协议验证的 resolvedBaseUrl 语义一致。
     let modelsBaseUrl: string | undefined;
+    // 模型目录请求失败原因（首个候选的失败原因即可）：界面在 models 为空时展示，
+    // 避免“探测后没有模型列表”却毫无提示（连接拒绝/超时/地址不对最常见）。
+    let catalogError: string | undefined;
+    const describeFetchError = (error: unknown): string => {
+      const cause = (error as { cause?: { code?: string } })?.cause;
+      if (cause?.code) return `${cause.code} (${error instanceof Error ? error.message : String(error)})`;
+      return error instanceof Error ? error.message : String(error);
+    };
     for (const candidateBase of openAiBases) {
       try {
         const response = await fetch(`${candidateBase}/models`, { headers, signal: AbortSignal.timeout(9000) });
-        if (!response.ok) continue;
+        if (!response.ok) {
+          catalogError ??= `HTTP ${response.status} at ${candidateBase}/models`;
+          continue;
+        }
         const json = await readJson(response);
         const rows = Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : [];
-        if (rows.length === 0) continue;
+        if (rows.length === 0) {
+          catalogError ??= `no models at ${candidateBase}/models`;
+          continue;
+        }
+        catalogError = undefined;
         modelsBaseUrl = candidateBase;
         for (const raw of rows) {
           if (!raw || typeof raw !== 'object') continue;
@@ -579,13 +594,16 @@ export const providersApi = {
           for (const endpointType of endpointTypes) advertisedEndpointTypes.add(String(endpointType));
         }
         break;
-      } catch { /* Try the next conventional OpenAI base URL. */ }
+      } catch (error) {
+        // Try the next conventional OpenAI base URL.
+        catalogError ??= `${describeFetchError(error)} at ${candidateBase}/models`;
+      }
     }
     // LM Studio's OpenAI-compatible /models currently omits loaded context metadata.
     // Its native endpoint exposes both the model maximum and the active instance value.
     let serverType: PiProviderServerType = 'generic';
+    const nativeBase = base.replace(/\/v1$/, '');
     try {
-      const nativeBase = base.replace(/\/v1$/, '');
       const response = await fetch(`${nativeBase}/api/v1/models`, {
         headers,
         signal: AbortSignal.timeout(4000),
@@ -610,7 +628,10 @@ export const providersApi = {
           if (!models.includes(id)) models.push(id);
         }
       }
-    } catch { /* Native metadata is optional and only available on LM Studio. */ }
+    } catch (error) {
+      // Native metadata is optional and only available on LM Studio.
+      catalogError ??= `${describeFetchError(error)} at ${nativeBase}/api/v1/models`;
+    }
     // vLLM 的 OpenAI 兼容层在根路径暴露 /version（vllm-<版本>）。Qwen3 等推理
     // 模型在 vLLM 上的思考控制走 chat_template_kwargs.enable_thinking（见
     // compatForOpenAi），与 LM Studio 的 reasoning_effort 不同，必须先识别。
@@ -737,6 +758,7 @@ export const providersApi = {
       // 协议验证得到的真实 base 优先；没验证时用目录命中的 base 纠正 /v1。
       recommendedBaseUrl: recommended?.resolvedBaseUrl ?? modelsBaseUrl,
       serverType,
+      ...(catalogError && models.length === 0 ? { catalogError } : {}),
     };
   },
 

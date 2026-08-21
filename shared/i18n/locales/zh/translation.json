@@ -431,7 +431,8 @@
     "current": "当前",
     "reasoningSupport": "支持推理",
     "reasoningHint": "第三方模型默认按支持推理处理，保证思考深度菜单可用；仅当供应商拒绝思考参数时才关闭。",
-    "probeSpec": "上下文 {{contextWindow}} · 最大输出 {{maxOutput}}"
+    "probeSpec": "上下文 {{contextWindow}} · 最大输出 {{maxOutput}}",
+    "probeCatalogFailed": "无法获取模型列表：{{error}}。请确认服务器已启动、地址与端口正确（本地 LM Studio 需先打开应用）。"
   },
   "sessions": {
     "title": "会话",

@@ -652,6 +652,8 @@ export type PiProviderProbeResult = {
   recommendedBaseUrl?: string;
   /** 服务器类型（LM Studio native 端点 / vLLM /version 端点探测）。 */
   serverType?: PiProviderServerType;
+  /** 模型目录请求失败原因（连接拒绝/超时/HTTP 错误等）；models 为空时用于界面提示。 */
+  catalogError?: string;
 };
 export type PiCompactionSettings = {
   reserveTokens: number;

@@ -460,6 +460,11 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       <p className="hint" data-testid="probe-list-hint">{t('models.probeListHint')}</p>
       {probeResult && (
         <div className="probe-results" data-testid="probe-results">
+          {probeResult.models.length === 0 && probeResult.catalogError && (
+            <p className="error-text" data-testid="probe-catalog-error">
+              {t('models.probeCatalogFailed', { error: probeResult.catalogError })}
+            </p>
+          )}
           {probeResult.protocols.length > 0
             && probeResult.protocols.every((protocol) => protocol.verified && !protocol.available) && (
             <p className="probe-rejected-hint" data-testid="probe-rejected-hint">
