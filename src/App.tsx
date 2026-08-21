@@ -292,7 +292,7 @@ export default function App() {
 
   return (
     <div className={`${isMac ? 'app-layout is-macos' : 'app-layout'}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-      {chrome}
+      {!isMac && chrome}
       {dragStrip}
       {/* 折叠/搜索悬浮层：macOS 常驻（红绿灯右侧）；Windows 仅侧栏收起时出现在内容区左上角
           （提供展开入口）。两平台同一 testid 同一结构。 */}

@@ -176,8 +176,8 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   await page.screenshot({ path: 'output/playwright/chat-chrome-refined.png', fullPage: false });
 
   const expandedWidth = (await sidebar.boundingBox())!.width;
-  const titlebarBox = await page.getByTestId('titlebar').boundingBox();
-  expect(titlebarBox).not.toBeNull();
+  const titlebarBox = isMac ? null : await page.getByTestId('titlebar').boundingBox();
+  if (!isMac) expect(titlebarBox).not.toBeNull();
   await page.getByTestId('sidebar-toggle').click();
   await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByTestId('sidebar-sessions')).toBeHidden();
