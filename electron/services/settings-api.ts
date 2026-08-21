@@ -3,6 +3,7 @@ import type {
   SettingsSnapshot,
 } from '@shared/host-api/contract';
 import { getElectronStore } from '../utils/electron-store';
+import { rebuildNativeMacMenu } from '../main/menu';
 
 export const settingsApi = {
   getAll: async (): Promise<SettingsSnapshot> => {
@@ -42,6 +43,13 @@ export const settingsApi = {
     const store = await getElectronStore();
     if (payload.value === undefined) store.delete(payload.key);
     else store.set(payload.key, payload.value);
+    // macOS 原生菜单文案跟随应用语言设置（与 Windows 自绘菜单 react-i18next
+    // 即时切换对齐）；重建是幂等的，非 darwin 下菜单函数内部直接忽略。
+    if (payload.key === 'language' && process.platform === 'darwin') {
+      void rebuildNativeMacMenu().catch((error) => {
+        console.error('[menu] failed to rebuild native menu on language change', error);
+      });
+    }
     return { success: true };
   },
 };

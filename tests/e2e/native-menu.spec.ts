@@ -1,7 +1,9 @@
 // macOS 原生系统菜单栏 E2E（dev/打包产物行为一致）：
-//   - 应用菜单标题为 Pi Desktop（dev 下 electron 直接启动默认为 Electron）
-//   - 业务菜单（New Chat / Collapse Sidebar / Search Chats）存在
+//   - 结构与 Windows/Linux 自绘菜单栏一致（八组 + 同样菜单项），应用菜单显示 Pi Desktop
+//   - 菜单文案跟随应用语言设置（seedSettings.language），而非系统 locale
+//     （fixture 强制 --lang=en-US，seed zh 仍应显示中文，验证不再中英混杂）
 //   - 点击菜单项能驱动 renderer 业务动作（折叠/展开侧边栏）
+//   - 切换语言后原生菜单即时重建为对应文案
 // Windows/Linux 使用自绘标题栏内菜单栏，本套件全部跳过。
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -89,11 +91,12 @@ function clickMenuLabel() {
 test.describe('macOS 原生系统菜单栏', () => {
   test.skip(process.platform !== 'darwin', '原生菜单栏仅 macOS');
 
-  test('应用菜单显示 Pi Desktop 与业务菜单；点击折叠/搜索驱动 renderer', async ({ launchElectronApp }) => {
+  test('菜单结构与 Windows 自绘菜单一致；文案跟随应用语言而非系统 locale', async ({ launchElectronApp }) => {
     const app = await launchElectronApp({
       withPi: true,
       agentDir,
-      seedSettings: { workspaceCwd: workspace },
+      // fixture 启动带 --lang=en-US（系统 locale 为英文）；seed zh 应仍显示中文
+      seedSettings: { workspaceCwd: workspace, language: 'zh' },
     });
     const page = await app.firstWindow();
     await expect(
@@ -104,29 +107,65 @@ test.describe('macOS 原生系统菜单栏', () => {
     const labels = await app.evaluate(collectMenuLabels());
     const joined = labels.filter(Boolean).join(' | ');
     expect(joined).toContain('Pi Desktop');
-    // 菜单文案跟随系统语言（role 项由 macOS 本地化；业务项我们按 locale 渲染）
-    const locale = await app.evaluate(({ app: mainApp }) => mainApp.getLocale());
-    const zh = locale.toLowerCase().startsWith('zh');
-    const fileMenu = zh ? '文件' : 'File';
-    const viewMenu = zh ? '视图' : 'View';
-    const newChat = zh ? '新建会话' : 'New Chat';
-    const collapseSidebar = zh ? '折叠侧边栏' : 'Collapse Sidebar';
-    const searchChats = zh ? '搜索会话' : 'Search Chats';
-    expect(labels).toContain(fileMenu);
-    expect(labels).toContain(viewMenu);
-    expect(joined).toContain(newChat);
-    expect(joined).toContain(collapseSidebar);
-    expect(joined).toContain(searchChats);
+
+    // 八组菜单与 Windows 自绘菜单一致（含应用菜单共九个顶层项）
+    for (const group of ['文件', '编辑', '选择', '查看', '转到', '运行', '终端', '帮助']) {
+      expect(labels).toContain(group);
+    }
+    // 菜单项与 Windows 自绘菜单一致
+    for (const item of ['新建会话', '关闭窗口', '复制', '粘贴', '折叠侧边栏', '会话搜索', '敬请期待']) {
+      expect(joined).toContain(item);
+    }
+    // 语言跟随应用设置：系统 locale 为英文时也不应出现 role 项自动本地化的英文
+    expect(labels).not.toContain('Edit');
+    expect(labels).not.toContain('Window');
 
     const sidebar = page.locator('.sidebar');
     await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeGreaterThan(0);
 
-    // Collapse Sidebar → 侧栏收起（label 随 locale，用与上面一致的变量）
-    expect(await app.evaluate(clickMenuLabel(), collapseSidebar)).toBe(true);
+    // Collapse Sidebar → 侧栏收起；再点一次 → 展开
+    expect(await app.evaluate(clickMenuLabel(), '折叠侧边栏')).toBe(true);
     await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(0);
-    // 再点一次 → 展开
-    expect(await app.evaluate(clickMenuLabel(), collapseSidebar)).toBe(true);
+    expect(await app.evaluate(clickMenuLabel(), '折叠侧边栏')).toBe(true);
     await expect.poll(async () => (await sidebar.boundingBox())?.width).toBeGreaterThan(100);
+    await app.close();
+  });
+
+  test('渲染层切换语言后原生菜单即时重建为对应文案', async ({ launchElectronApp }) => {
+    const app = await launchElectronApp({
+      withPi: true,
+      agentDir,
+      seedSettings: { workspaceCwd: workspace, language: 'zh' },
+    });
+    const page = await app.firstWindow();
+    await expect(
+      page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+    ).toBeVisible({ timeout: 30_000 });
+
+    // 与 Settings 页 changeLanguage 同一条链路：settings.set('language', ...)
+    const changed = await page.evaluate(async () => {
+      const bridge = (globalThis as unknown as {
+        pidesktop: { hostInvoke: (request: unknown) => Promise<{ ok: boolean }> };
+      }).pidesktop;
+      const response = await bridge.hostInvoke({
+        id: 'e2e-set-language',
+        module: 'settings',
+        action: 'set',
+        payload: { key: 'language', value: 'en' },
+      });
+      return response.ok;
+    });
+    expect(changed).toBe(true);
+
+    const labels = await app.evaluate(collectMenuLabels());
+    const joined = labels.filter(Boolean).join(' | ');
+    expect(joined).toContain('Pi Desktop');
+    for (const group of ['File', 'Edit', 'Selection', 'View', 'Go', 'Run', 'Terminal', 'Help']) {
+      expect(labels).toContain(group);
+    }
+    for (const item of ['New Chat', 'Close Window', 'Copy', 'Paste', 'Collapse Sidebar', 'Search Chats', 'Coming soon']) {
+      expect(joined).toContain(item);
+    }
     await app.close();
   });
 });
