@@ -198,6 +198,7 @@
       "review": "审核",
       "viewChanges": "查看更改",
       "showMore": "再显示 {{count}} 个文件",
+      "showLess": "收起",
       "openFile": "打开文件"
     },
     "workLog": {

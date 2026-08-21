@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { collectTurnChanges } from '../../lib/turn-changes';
 import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 
@@ -128,6 +128,11 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
         {hiddenCount > 0 && (
           <button className="turn-changes-more" data-testid="turn-changes-more" onClick={() => setShowAllFiles(true)}>
             {t('chat.turnChanges.showMore', { count: hiddenCount })}<ChevronDown size={14} />
+          </button>
+        )}
+        {showAllFiles && changes.files.length > 5 && (
+          <button className="turn-changes-more" data-testid="turn-changes-less" onClick={() => setShowAllFiles(false)}>
+            {t('chat.turnChanges.showLess')}<ChevronUp size={14} />
           </button>
         )}
       </div>

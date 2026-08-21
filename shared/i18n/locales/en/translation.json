@@ -198,6 +198,7 @@
       "review": "Review",
       "viewChanges": "View changes",
       "showMore": "Show {{count}} more files",
+      "showLess": "Show less",
       "openFile": "Open file"
     },
     "workLog": {
