@@ -149,11 +149,9 @@ test('顶部标题栏与会话名下方均无横线', async ({ launchElectronApp
   await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
 
-  // Windows/Linux 自绘标题栏：无 border-bottom；macOS 无自绘层（跳过）
-  if (process.platform !== 'darwin') {
-    await expect(page.getByTestId('titlebar')).toHaveCSS('border-bottom-style', 'none');
-    await expect(page.getByTestId('titlebar')).toHaveCSS('border-bottom-width', '0px');
-  }
+  // 全平台共用自绘标题栏：无 border-bottom；会话标题栏也无 border-bottom
+  await expect(page.getByTestId('titlebar')).toHaveCSS('border-bottom-style', 'none');
+  await expect(page.getByTestId('titlebar')).toHaveCSS('border-bottom-width', '0px');
   // 会话标题栏：无 border-bottom
   await expect(page.getByTestId('session-titlebar')).toHaveCSS('border-bottom-style', 'none');
   await expect(page.getByTestId('session-titlebar')).toHaveCSS('border-bottom-width', '0px');

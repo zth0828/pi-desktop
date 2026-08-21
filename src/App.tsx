@@ -202,12 +202,14 @@ export default function App() {
     </>
   );
 
-  // Windows/Linux frameless 顶部：Row 1 标题栏（logo + 菜单 + 折叠/搜索 + 窗口控件，
-  // 整行拖拽区，交互子元素显式 no-drag）。未就绪（onboarding）时同样渲染，
-  // 保证窗口可拖动、可最小化/关闭。侧边栏顶部只有全宽新会话按钮。
+  // 全平台共用自绘顶部：Row 1 标题栏（logo + 菜单 + 窗口控件，整行拖拽区，
+  // 交互子元素显式 no-drag）。平台差异只保留两处：macOS 用原生红绿灯
+  // （左侧预留占位、不渲染自绘窗口控件）；Windows/Linux 渲染最小化/最大化/关闭。
+  // 未就绪（onboarding）时同样渲染，保证窗口可拖动、可最小化/关闭。
   const chrome = (
     <div className="window-chrome" data-testid="window-chrome">
       <div className="titlebar" data-testid="titlebar">
+        {isMac && <div className="titlebar-traffic" aria-hidden="true" />}
         <img className="titlebar-logo" src={logoUrl} alt="" draggable={false} />
         {state === 'ready' && (
           <div className="menu-bar" role="menubar" aria-label={t('menu.label')} data-testid="menu-bar" ref={menuBarRef}>
@@ -247,35 +249,37 @@ export default function App() {
           </div>
         )}
         <div className="titlebar-spacer" />
-        <div className="window-controls" data-testid="window-controls">
-          <button
-            className="window-control"
-            data-testid="window-minimize"
-            title={t('menu.minimize')}
-            aria-label={t('menu.minimize')}
-            onClick={() => void hostApi.windows.minimize()}
-          >
-            <Minus size={14} />
-          </button>
-          <button
-            className="window-control"
-            data-testid="window-maximize"
-            title={maximized ? t('menu.restore') : t('menu.maximize')}
-            aria-label={maximized ? t('menu.restore') : t('menu.maximize')}
-            onClick={toggleMaximize}
-          >
-            {maximized ? <Copy size={12} /> : <Square size={12} />}
-          </button>
-          <button
-            className="window-control window-control-close"
-            data-testid="window-close"
-            title={t('menu.close')}
-            aria-label={t('menu.close')}
-            onClick={() => void hostApi.windows.close()}
-          >
-            <X size={14} />
-          </button>
-        </div>
+        {!isMac && (
+          <div className="window-controls" data-testid="window-controls">
+            <button
+              className="window-control"
+              data-testid="window-minimize"
+              title={t('menu.minimize')}
+              aria-label={t('menu.minimize')}
+              onClick={() => void hostApi.windows.minimize()}
+            >
+              <Minus size={14} />
+            </button>
+            <button
+              className="window-control"
+              data-testid="window-maximize"
+              title={maximized ? t('menu.restore') : t('menu.maximize')}
+              aria-label={maximized ? t('menu.restore') : t('menu.maximize')}
+              onClick={toggleMaximize}
+            >
+              {maximized ? <Copy size={12} /> : <Square size={12} />}
+            </button>
+            <button
+              className="window-control window-control-close"
+              data-testid="window-close"
+              title={t('menu.close')}
+              aria-label={t('menu.close')}
+              onClick={() => void hostApi.windows.close()}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -284,7 +288,7 @@ export default function App() {
     return (
       <>
         {dragStrip}
-        {!isMac && chrome}
+        {chrome}
         <Onboarding />
       </>
     );
@@ -292,28 +296,19 @@ export default function App() {
 
   return (
     <div className={`${isMac ? 'app-layout is-macos' : 'app-layout'}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-      {!isMac && chrome}
+      {chrome}
       {dragStrip}
-      {/* 折叠/搜索悬浮层：macOS 常驻（红绿灯右侧）；Windows 仅侧栏收起时出现在内容区左上角
-          （提供展开入口）。两平台同一 testid 同一结构。 */}
-      {(isMac || sidebarCollapsed) && (
-        <div
-          className={`app-window-controls${isMac ? '' : ' is-native-frame'}`}
-          data-testid="app-window-controls"
-        >
+      {/* 折叠/搜索悬浮层：仅侧栏收起时出现（内容区左上角，标题栏之下），提供展开入口。
+         全平台同一结构同一位置。 */}
+      {sidebarCollapsed && (
+        <div className="app-window-controls" data-testid="app-window-controls">
           {sidebarActions}
         </div>
       )}
       <nav className="sidebar">
-        {isMac ? (
-          /* macOS：新会话按钮单独一行（折叠/搜索在红绿灯右侧悬浮层常驻） */
-          <button className="new-chat" data-testid="new-chat" onClick={newChat}>
-            <MessageSquarePlus size={16} />
-            <span>{t('sidebar.newChat')}</span>
-          </button>
-        ) : !sidebarCollapsed && (
-          /* Windows：侧边栏顶部一行 = 新会话按钮（与侧边栏同宽）+ 折叠/搜索（同行靠右）。
-             折叠时整行随侧栏隐藏（DOM 移除），展开入口由 is-native-frame 悬浮层提供 */
+        {/* 侧边栏顶部一行 = 新会话按钮（与侧边栏同宽）+ 折叠/搜索（同行靠右），全平台共用。
+           折叠时整行随侧栏隐藏（DOM 移除），展开入口由悬浮层提供 */}
+        {!sidebarCollapsed && (
           <div className="sidebar-head">
             <button className="new-chat" data-testid="new-chat" onClick={newChat}>
               <MessageSquarePlus size={16} />

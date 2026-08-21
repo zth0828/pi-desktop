@@ -229,11 +229,13 @@ button.danger-outline {
 .app-layout {
   display: flex;
   height: 100vh;
+  /* Row 1 自绘标题栏高度：全平台统一基线（mac 原生红绿灯悬浮于该行内，不额外占高） */
+  padding-top: var(--chrome-row1);
 }
 
-/* Windows/Linux frameless 自绘顶部（固定悬浮层，不参与文档流）：
-   Row 1 标题栏（logo + 菜单 + 窗口控件，整行拖拽区）+ Row 2 工具行
-   （通栏固定，侧栏展开/折叠不改变其位置）。macOS 不渲染此层。 */
+/* 全平台共用自绘顶部（固定悬浮层，不参与文档流）：
+   Row 1 标题栏（logo + 菜单 + 窗口控件，整行拖拽区）。macOS 用原生红绿灯
+   （左侧占位 .titlebar-traffic），不渲染自绘窗口控件。 */
 .window-chrome {
   position: fixed;
   top: 0;
@@ -260,6 +262,13 @@ button.danger-outline {
   margin: 0 10px 0 12px;
   flex: none;
   border-radius: 5px;
+}
+
+/* macOS 原生红绿灯占位（hiddenInset 悬浮于标题栏内）：左侧预留宽度避免 logo
+   与红绿灯重叠。仅 mac 渲染；Windows/Linux 标题栏从最左开始。 */
+.titlebar-traffic {
+  width: 78px;
+  flex: none;
 }
 
 .menu-bar {
@@ -352,32 +361,24 @@ button.danger-outline {
   top: 0;
   left: 0;
   right: 0;
-  height: 54px;
+  height: var(--chrome-row1);
   z-index: 100;
   -webkit-app-region: drag;
 }
 
-/* macOS 悬浮控件层（hiddenInset 红绿灯右侧）常驻：折叠/搜索。
-   Windows/Linux 仅侧栏收起时以 is-native-frame 形式出现在内容区左上角。 */
+/* 侧栏收起时：折叠/搜索悬浮层出现在内容区左上角（标题栏之下），提供展开入口。
+   全平台同一形态。z-index 高于 window-chrome(130) 与 session-titlebar(101)，
+   避免被自绘标题栏盖住。 */
 .app-window-controls {
   position: fixed;
-  top: 0;
-  left: 146px;
-  z-index: 102;
+  left: 8px;
+  top: calc(var(--chrome-row1) + 6px);
+  z-index: 132;
   display: flex;
-  height: 54px;
+  height: 40px;
   align-items: center;
   gap: 2px;
   -webkit-app-region: no-drag;
-}
-
-/* Windows/Linux 侧栏收起时：悬浮层出现在内容区左上角（标题栏之下），提供展开入口。
-   z-index 高于 window-chrome(130) 与 session-titlebar(101)，避免被自绘标题栏盖住。 */
-.app-window-controls.is-native-frame {
-  left: 8px;
-  top: calc(var(--chrome-row1) + 6px);
-  height: 40px;
-  z-index: 132;
 }
 
 /* Electron 的拖拽层覆盖整个标题高度；交互控件必须明确声明可点击。 */
@@ -392,23 +393,10 @@ button.danger-outline {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 22px 10px 10px;
+  /* 标题栏之下 10px，全平台统一 */
+  padding: 10px 10px 10px;
   background: var(--bg);
   transition: width 160ms ease, padding 160ms ease;
-}
-
-.app-layout.is-macos .sidebar {
-  padding-top: 66px;
-}
-
-/* Windows/Linux：顶部一行（Row 1 标题栏）由固定悬浮层承担，内容区整体下移；
-   侧边栏顶部是「新会话 + 折叠/搜索」同一行（sidebar-head） */
-.app-layout:not(.is-macos) {
-  padding-top: var(--chrome-row1);
-}
-
-.app-layout:not(.is-macos) .sidebar {
-  padding-top: 10px;
 }
 
 .sidebar-title {
@@ -417,31 +405,14 @@ button.danger-outline {
   padding: 6px 10px 12px;
 }
 
-/* Windows/Linux 侧边栏顶部一行：新会话按钮（与侧边栏同宽，flex:1）+
-   折叠/搜索（同行靠右）。整行轻量透明、hover 高亮，视觉统一。
+/* 侧边栏顶部一行：新会话按钮（与侧边栏同宽，flex:1）+ 折叠/搜索（同行靠右）。
+   整行轻量透明、hover 高亮，视觉统一。全平台共用。
    折叠时整行随侧栏隐藏。 */
 .sidebar-head {
   display: flex;
   align-items: center;
   gap: 2px;
   margin: 0 6px 10px;
-}
-
-.sidebar-head .new-chat {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  border: none;
-  background: transparent;
-  border-radius: 8px;
-  padding: 6px 8px;
-  justify-content: flex-start;
-  color: var(--text-secondary);
-}
-
-.sidebar-head .new-chat:hover {
-  background: var(--bg-hover);
-  color: var(--text);
 }
 
 .sidebar-head .icon-button {
@@ -469,14 +440,6 @@ button.danger-outline {
   display: none;
 }
 
-.app-layout.is-macos.sidebar-collapsed .session-titlebar {
-  padding-left: 104px;
-}
-
-.app-layout.is-macos.sidebar-collapsed .page {
-  padding-top: 62px;
-}
-
 .drag-region {
   -webkit-app-region: drag;
 }
@@ -485,16 +448,21 @@ button.danger-outline {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: 0 4px 10px;
-  padding: 8px 12px;
-  border-radius: 10px;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+  margin: 0;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
   font-size: 13.5px;
-  border: 1px solid var(--border);
-  background: var(--bg-raised);
+  color: var(--text-secondary);
 }
 
 .new-chat:hover {
   background: var(--bg-hover);
+  color: var(--text);
 }
 
 .message.search-target {
