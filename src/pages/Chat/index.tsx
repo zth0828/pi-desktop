@@ -14,7 +14,7 @@ import { PaneLayout } from '../../components/PaneLayout';
 import { ExtensionUiDialog } from '../../components/ExtensionUiDialog';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
-import { MessageNavRail, type RailAnchor } from './MessageNavRail';
+import { MessageNavRail, truncateRailText, type RailAnchor } from './MessageNavRail';
 import { StatusBar } from './StatusBar';
 import { ReviewPanel } from './ReviewPanel';
 import { TreeDialog } from './TreeDialog';
@@ -231,14 +231,16 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
         id: `chat-msg-${i}`,
         n: (n += 1),
         // 附件信封（<attachments>…）不属于问题文字，rail 悬浮预览里同样不展示
-        question: stripAttachmentEnvelope(
-          m.content
-            .filter((block) => block.type === 'text')
-            .map((block) => block.text ?? '')
-            .join(' '),
-        )
-          .replace(/\s+/g, ' ')
-          .trim(),
+        question: truncateRailText(
+          stripAttachmentEnvelope(
+            m.content
+              .filter((block) => block.type === 'text')
+              .map((block) => block.text ?? '')
+              .join(' '),
+          )
+            .replace(/\s+/g, ' ')
+            .trim(),
+        ),
       }] : [],
     );
   }, [displayMessages]);
@@ -254,7 +256,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim();
-      return [{ id: `chat-msg-${index}`, n: (n += 1), summary }];
+      return [{ id: `chat-msg-${index}`, n: (n += 1), summary: truncateRailText(summary) }];
     });
   }, [displayMessages]);
 

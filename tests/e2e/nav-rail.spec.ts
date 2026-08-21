@@ -67,10 +67,12 @@ test('rail 圆点 = user 消息数；悬浮显示原问题，点击跳转并高�
     page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
   ).toBeVisible({ timeout: 30_000 });
 
-  // 8 轮对话，保证消息列表溢出可滚动
+  // 8 轮对话，保证消息列表溢出可滚动（第 2 轮使用超长问题验证 tooltip 截断）
   const rounds = 8;
+  const longQuestion = `Say PONG 2 ${'long '.repeat(60)}`;
   for (let i = 1; i <= rounds; i++) {
-    await page.getByTestId('chat-input').fill(`Say PONG ${i}`);
+    const question = i === 2 ? longQuestion : `Say PONG ${i}`;
+    await page.getByTestId('chat-input').fill(question);
     await page.getByTestId('chat-send').click();
     await expect(page.getByTestId('message-user')).toHaveCount(i, { timeout: 30_000 });
     await expect(page.getByTestId('message-assistant')).toHaveCount(i, { timeout: 30_000 });
@@ -79,6 +81,14 @@ test('rail 圆点 = user 消息数；悬浮显示原问题，点击跳转并高�
   const rail = page.getByTestId('msg-rail');
   await expect(rail).toBeVisible();
   await expect(rail.locator('.msg-rail-dot')).toHaveCount(rounds);
+
+  // 长问题 tooltip 截断在 120 字符并追加省略号
+  const secondDot = page.getByTestId('msg-rail-dot-chat-msg-2');
+  await secondDot.hover();
+  await expect(secondDot.getByTestId('msg-rail-tooltip')).toBeVisible();
+  const secondTooltip = await secondDot.getByTestId('msg-rail-tooltip').textContent();
+  expect(Array.from(secondTooltip ?? '')).toHaveLength(121);
+  expect(secondTooltip?.endsWith('…')).toBe(true);
 
   const thirdDot = page.getByTestId('msg-rail-dot-chat-msg-4');
   await thirdDot.hover();

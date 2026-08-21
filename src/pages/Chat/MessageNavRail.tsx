@@ -3,6 +3,8 @@
 import { useEffect, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 
+export { truncateRailText } from '../../lib/nav-rail';
+
 export type RailAnchor = {
   /** 对应消息的稳定 DOM id。 */
   id: string;

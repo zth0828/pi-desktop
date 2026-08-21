@@ -1158,6 +1158,10 @@ button.danger-outline {
   text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  overflow: hidden;
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%) translateX(4px);
@@ -1166,7 +1170,9 @@ button.danger-outline {
 }
 
 .msg-rail-dot:hover .msg-rail-tooltip,
-.msg-rail-dot:focus-visible .msg-rail-tooltip {
+.msg-rail-dot:focus-visible .msg-rail-tooltip,
+.compaction-rail-dot:hover .msg-rail-tooltip,
+.compaction-rail-dot:focus-visible .msg-rail-tooltip {
   opacity: 1;
   transform: translateY(-50%) translateX(0);
 }
