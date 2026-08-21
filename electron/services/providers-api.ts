@@ -592,6 +592,9 @@ export const providersApi = {
       });
       if (response.ok) {
         serverType = 'lm-studio';
+        // 原生端点命中说明 OpenAI 兼容端点必然在 /v1 下；目录循环没命中时
+        // （超时/瞬时不可达）兜底纠正推荐 base，否则保存后请求会打到根路径。
+        modelsBaseUrl ??= `${nativeBase}/v1`;
         const json = await readJson(response);
         const rows = Array.isArray(json.models) ? json.models : Array.isArray(json.data) ? json.data : [];
         for (const raw of rows) {
