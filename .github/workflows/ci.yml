@@ -44,11 +44,21 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      # @ 文件补全走 fd（尊重 .gitignore）；pi 的按需下载在隔离 E2E 环境不稳定，
-      # 直接用系统 fd 保证补全路径确定性。
-      - run: brew install fd
+      # @ 文件补全走 fd（尊重 .gitignore），grep 工具走 rg；pi 的按需下载在隔离 E2E
+      # 环境不稳定，直接用系统 fd/rg 保证路径确定性。
+      - run: brew install fd ripgrep
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:e2e
+      # 失败时留存 Playwright error-context 与截图，供跨平台问题排查
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results-macOS
+          path: |
+            test-results/
+            output/playwright/
+          if-no-files-found: ignore
+          retention-days: 7
 
   electron-e2e-windows:
     name: Electron E2E (Windows)
@@ -60,7 +70,19 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      # 同 macOS：@ 补全走系统 fd，避免 pi 按需下载在隔离环境不稳定。
-      - run: choco install fd -y
+      # 同 macOS：@ 补全走系统 fd、grep 走系统 rg，避免 pi 按需下载在隔离环境不稳定。
+      - run: choco install fd ripgrep -y
+      # runner 默认分辨率可能是 1024x768，太小会触发窗口的小屏适配并干扰布局断言
+      - run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+        continue-on-error: true
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results-Windows
+          path: |
+            test-results/
+            output/playwright/
+          if-no-files-found: ignore
+          retention-days: 7

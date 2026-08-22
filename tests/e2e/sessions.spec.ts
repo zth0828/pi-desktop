@@ -58,7 +58,8 @@ test.beforeEach(async () => {
 });
 
 test.afterEach(async () => {
-  await rm(agentDir, { recursive: true, force: true });
+  // Windows 上进程退出后文件句柄释放有延迟，rm 加重试避免 ENOTEMPTY/EBUSY 抖动
+  await rm(agentDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
 });
 
 test.afterAll(async () => {

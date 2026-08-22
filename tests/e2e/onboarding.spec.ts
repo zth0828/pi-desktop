@@ -134,7 +134,7 @@ test('场景4：npm 安装但版本过低 → 阻断升级页', async ({ launchE
       npmRoot: fake.npmRoot,
     });
     const page = await app.firstWindow();
-    await expect(page.getByRole('heading', { name: 'pi is too old' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'pi is too old' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/v0\.82\.0/)).toBeVisible();
   } finally {
     await fake.cleanup();
@@ -149,7 +149,7 @@ test('场景5：npm 安装且版本达标 → 进入主界面', async ({ launchE
       npmRoot: fake.npmRoot,
     });
     const page = await app.firstWindow();
-    await expect(page.getByTestId('nav-chat')).toBeVisible();
+    await expect(page.getByTestId('nav-chat')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: 'Choose folder' })).toBeVisible();
   } finally {
     await fake.cleanup();

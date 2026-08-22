@@ -162,8 +162,13 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
   const panel = page.getByTestId('review-panel');
   await expect(panel).toBeVisible();
 
-  // 评审态下标题栏开关同样能收起面板
-  await page.getByTestId('workspace-toggle').click();
+  // 评审态下标题栏开关同样能收起面板；窄窗口回退 overlay 时面板悬浮层会盖住标题栏按钮，
+  // 此时走面板自身的关闭按钮（两者都是「评审态可收起」的合法路径）
+  if ((await panel.getAttribute('data-mode')) === 'overlay') {
+    await panel.getByTestId('workspace-close').click();
+  } else {
+    await page.getByTestId('workspace-toggle').click();
+  }
   await expect(panel).toBeHidden();
   await openReview(page);
   await expect(panel).toBeVisible();
@@ -563,6 +568,14 @@ test('工作台展开模式：默认 docked 窗口向右扩大 + 窄窗口回退
   const initialChatBox = await page.locator('.chat-column').boundingBox();
   expect(initialChatBox).not.toBeNull();
   const initialWindowWidth = await getWindowWidth();
+  // 展开前量出屏幕右缘剩余空间：扩窗会被后端 clamp 到该值（CI 小分辨率屏幕上必然发生），
+  // 断言用 clamp 后的期望而非无条件等于面板宽。
+  const headroom = await app.evaluate(({ BrowserWindow, screen }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    const bounds = win.getBounds();
+    const area = screen.getDisplayMatching(bounds).workArea;
+    return Math.max(0, area.x + area.width - (bounds.x + bounds.width));
+  });
 
   await page.getByTestId('workspace-toggle').click();
   const panel = page.getByTestId('review-panel');
@@ -570,13 +583,13 @@ test('工作台展开模式：默认 docked 窗口向右扩大 + 窄窗口回退
   await expect(panel).toHaveAttribute('data-mode', 'docked');
   await expect(panel).toHaveAttribute('data-mode-preference', 'docked');
 
-  await expect.poll(getWindowWidth).toBeGreaterThan(initialWindowWidth + 100);
-  // 加宽量 == 面板像素宽（窗口加宽动画与面板滑入动画结束后断言）
+  await expect.poll(getWindowWidth).toBeGreaterThan(initialWindowWidth + Math.min(100, Math.max(0, headroom - 4)));
+  // 加宽量 == min(面板像素宽, 右缘剩余空间)（窗口加宽动画与面板滑入动画结束后断言）
   await expect.poll(async () => {
     const box = await panel.boundingBox();
     const currentWindowWidth = await getWindowWidth();
     const applied = currentWindowWidth - initialWindowWidth;
-    return box ? Math.abs(box.width - applied) : Number.POSITIVE_INFINITY;
+    return box ? Math.abs(applied - Math.min(box.width, headroom)) : Number.POSITIVE_INFINITY;
   }).toBeLessThan(4);
   // 聊天列自适应占满左侧区域，保证舒适宽度
   const dockedChatBox = await page.locator('.chat-column').boundingBox();

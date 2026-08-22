@@ -265,6 +265,9 @@ test('多窗口：焦点按会话窗口判定（B 窗口完成弹、A 窗口完�
     // 独立窗口（会话 ALPHA）发起慢速 run，随后把主窗口拉到前台：
     // run 完成时 ALPHA 窗口失焦 → unfocused 档应弹通知（核心修复点）。
     // 跨窗口改 OS 焦点只能走 app 自身 focus 路径（CDP 输入事件不改变窗口叠层）。
+    // 快照当前日志条数：之前的 run（如窗口未获 OS 焦点的环境）可能已写通知，
+    // 只断言本次 SLOW_END run 之后新增的条目。
+    const entriesBefore = (await readEntries(logPath)).length;
     await detached.getByTestId('chat-input').fill('Say SLOW_END B-notify');
     await detached.getByTestId('chat-send').click();
     const betaPath = await sessionPathOf(page, 'main BETA');
@@ -278,11 +281,11 @@ test('多窗口：焦点按会话窗口判定（B 窗口完成弹、A 窗口完�
       timeout: 30_000,
     });
     await expect
-      .poll(async () => (await readEntries(logPath)).some((entry) => entry.sessionPath === alphaPath), {
+      .poll(async () => (await readEntries(logPath)).slice(entriesBefore).some((entry) => entry.sessionPath === alphaPath), {
         timeout: 10_000,
       })
       .toBe(true);
-    const bEntry = (await readEntries(logPath)).find((entry) => entry.sessionPath === alphaPath);
+    const bEntry = (await readEntries(logPath)).slice(entriesBefore).find((entry) => entry.sessionPath === alphaPath);
     expect(bEntry?.kind).toBe('runCompleted');
     expect(bEntry?.body).toContain('chunk');
 

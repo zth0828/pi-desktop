@@ -191,7 +191,11 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
 
   const composerBox = await page.locator('.chat-input-card').boundingBox();
   expect(composerBox).not.toBeNull();
-  expect(composerBox!.width).toBeGreaterThan(820);
+  // 聊天列有 960px 上限，composer 填满聊天列（留 padding 容差）；
+  // 断言相对宽度而非绝对像素，兼容 CI 小分辨率屏幕。
+  const chatColumnBox = await page.locator('.chat-column').boundingBox();
+  expect(chatColumnBox).not.toBeNull();
+  expect(composerBox!.width).toBeGreaterThan(chatColumnBox!.width - 80);
   expect(composerBox!.height).toBeGreaterThanOrEqual(110);
   await page.screenshot({ path: 'output/playwright/chat-chrome-refined.png', fullPage: false });
 
@@ -622,6 +626,8 @@ test('命令模式：上下文开关切到入上下文、全角 ！ 前缀兼容
   const card = page.getByTestId('message-bash').last();
   await expect(card.getByTestId('bash-command')).toContainText('echo pi-desktop-command-in-context', { timeout: 15_000 });
   await expect(card).not.toContainText(/不入上下文|excluded from context/);
+  // bash 一次一个：等第一条命令退出再发第二条，避免慢平台上并发 executeBash 互斥导致丢卡
+  await expect(card.getByTestId('bash-exit-code')).toBeVisible({ timeout: 30_000 });
 
   // 全角 ！ 前缀（中文输入法）直接识别为 bash 命令：单 ！ 入上下文，无徽标
   await page.getByTestId('chat-input').fill('！echo pi-desktop-fullwidth-bang');
@@ -656,10 +662,10 @@ test('bash 执行中可单独停止：流式卡停止按钮取消命令', async 
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  // 命令模式跑慢命令，留出停止窗口
+  // 命令模式跑慢命令，留出停止窗口（先 echo 一行再 sleep，保证取消时已有输出）
   await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-command-mode').click();
-  await page.getByTestId('chat-input').fill("bash -c 'for i in $(seq 1 200); do echo $i; sleep 0.2; done'");
+  await page.getByTestId('chat-input').fill("bash -c 'echo pi-desktop-stop-me; sleep 30'");
   await page.getByTestId('chat-send').click();
 
   // 流式卡出现停止按钮
