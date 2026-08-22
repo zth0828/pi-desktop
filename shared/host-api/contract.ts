@@ -721,6 +721,14 @@ export type PiRetrySettingsPayload = Partial<PiRetrySettingsResult>;
 /** 新会话默认思考深度（pi settings.defaultThinkingLevel；null = 未设置）。 */
 export type PiDefaultThinkingResult = { level: string | null };
 
+/** 新会话默认启用工具（pi settings.defaultTools；未配置时 pi 回退 read/bash/edit/write）。 */
+export type PiDefaultToolsResult = { tools: string[] };
+
+/** pi 内置工具全集（设置页工具开关枚举；顺序即展示顺序）。 */
+export const PI_BUILTIN_TOOLS = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls'] as const;
+/** pi 未配置 defaultTools 时的默认工具列表（与 pi SDK 的 defaultActiveToolNames 一致）。 */
+export const PI_DEFAULT_TOOLS = ['read', 'bash', 'edit', 'write'] as const;
+
 // —— piRuntime 命令补全 ——
 
 export type PiCommandRow = { name: string; description?: string; source: string };
@@ -1092,6 +1100,9 @@ export type HostApiContract = {
     /** 新会话默认思考深度（pi settings.defaultThinkingLevel）。 */
     getDefaultThinking: () => PiDefaultThinkingResult;
     setDefaultThinking: (payload: { level: string }) => HostSuccess;
+    /** 新会话默认启用工具（pi settings.defaultTools；未配置返回 pi 内置默认列表）。 */
+    getDefaultTools: () => PiDefaultToolsResult;
+    setDefaultTools: (payload: { tools: string[] }) => HostSuccess;
   };
   piSessions: {
     /** 当前 workspace cwd 的会话列表（modified 倒序）。runtime 未启动时回退 settings.workspaceCwd。 */

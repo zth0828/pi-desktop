@@ -167,6 +167,53 @@ test('Settings：默认思考深度与自动重试写回 pi settings.json', asyn
   await rmAgentDir(agentDir);
 });
 
+test('Settings：默认工具列表写回 pi settings.json（新会话生效）', async ({ launchElectronApp }) => {
+  const agentDir = await makeAgentDir();
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-settings').click();
+  const section = page.getByTestId('settings-agent-defaults');
+  await expect(section).toBeVisible();
+
+  // 未配置 defaultTools 时回退 pi 内置默认：核心四工具开启，grep/find/ls 关闭
+  await expect(section.getByTestId('tool-toggle-read')).toHaveClass(/active/);
+  await expect(section.getByTestId('tool-toggle-bash')).toHaveClass(/active/);
+  await expect(section.getByTestId('tool-toggle-edit')).toHaveClass(/active/);
+  await expect(section.getByTestId('tool-toggle-write')).toHaveClass(/active/);
+  await expect(section.getByTestId('tool-toggle-grep')).not.toHaveClass(/active/);
+  await expect(section.getByTestId('tool-toggle-find')).not.toHaveClass(/active/);
+  await expect(section.getByTestId('tool-toggle-ls')).not.toHaveClass(/active/);
+
+  // 启用 grep → settings.json.defaultTools 增量更新
+  await section.getByTestId('tool-toggle-grep').click();
+  await expect(section.getByTestId('tool-toggle-grep')).toHaveClass(/active/);
+  await expect(async () => {
+    const settings = JSON.parse(
+      await readFile(path.join(agentDir, 'settings.json'), 'utf8'),
+    ) as { defaultTools?: string[] };
+    expect(settings.defaultTools).toContain('grep');
+    expect(settings.defaultTools).toContain('read');
+  }).toPass({ timeout: 10_000 });
+
+  // 关闭 read → 列表移除 read（整表覆盖语义）
+  await section.getByTestId('tool-toggle-read').click();
+  await expect(section.getByTestId('tool-toggle-read')).not.toHaveClass(/active/);
+  await expect(async () => {
+    const settings = JSON.parse(
+      await readFile(path.join(agentDir, 'settings.json'), 'utf8'),
+    ) as { defaultTools?: string[] };
+    expect(settings.defaultTools).toContain('grep');
+    expect(settings.defaultTools).not.toContain('read');
+  }).toPass({ timeout: 10_000 });
+
+  await rmAgentDir(agentDir);
+});
+
 test('图片输入：附件入列 → 随消息发送 → 用户消息渲染图片', async ({ launchElectronApp }) => {
   const agentDir = await makeAgentDir();
   const app = await launchElectronApp({

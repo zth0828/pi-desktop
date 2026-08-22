@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderOpen, Monitor, Moon, Sun } from 'lucide-react';
-import { DEFAULT_DESKTOP_PROXY_URL, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
+import { DEFAULT_DESKTOP_PROXY_URL, PI_BUILTIN_TOOLS, PI_DEFAULT_TOOLS, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { workspaceErrorMessage } from '../lib/workspace-error';
@@ -50,6 +50,7 @@ export default function SettingsPage() {
   const [exportInfo, setExportInfo] = useState<PiSessionExportInfo>();
   const [trustEntries, setTrustEntries] = useState<PiTrustEntry[]>([]);
   const [defaultThinking, setDefaultThinking] = useState<string | null>(null);
+  const [defaultTools, setDefaultTools] = useState<string[]>([...PI_DEFAULT_TOOLS]);
   const [retry, setRetry] = useState({ enabled: true, maxRetries: 3, baseDelayMs: 2000 });
   const [proxyMode, setProxyMode] = useState<ProxyMode>('auto');
   const [proxyUrl, setProxyUrl] = useState(DEFAULT_DESKTOP_PROXY_URL);
@@ -78,6 +79,7 @@ export default function SettingsPage() {
     void hostApi.piSessions.getExportInfo().then(setExportInfo).catch(() => {});
     void hostApi.piTrust.list().then((r) => setTrustEntries(r.entries)).catch(() => {});
     void hostApi.providers.getDefaultThinking().then((r) => setDefaultThinking(r.level)).catch(() => {});
+    void hostApi.providers.getDefaultTools().then((r) => setDefaultTools(r.tools)).catch(() => {});
     void hostApi.providers.getRetry().then(setRetry).catch(() => {});
     void hostApi.settings.get('httpProxyMode').then((v) => {
       const mode: ProxyMode = v === 'off' ? 'off' : 'auto';
@@ -468,6 +470,33 @@ export default function SettingsPage() {
       <section className="settings-section" data-testid="settings-agent-defaults">
         <h2>{t('settings.agentDefaults.title')}</h2>
         <p className="settings-section-hint">{t('settings.agentDefaults.desc')}</p>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <div>{t('settings.tools.title')}</div>
+            <div className="settings-row-desc">{t('settings.tools.desc')}</div>
+          </div>
+          <div className="pill-group" data-testid="settings-default-tools">
+            {PI_BUILTIN_TOOLS.map((tool) => {
+              const on = defaultTools.includes(tool);
+              return (
+                <button
+                  key={tool}
+                  data-testid={`tool-toggle-${tool}`}
+                  className={on ? 'pill active' : 'pill'}
+                  onClick={() => {
+                    const next = on
+                      ? defaultTools.filter((name) => name !== tool)
+                      : [...defaultTools, tool];
+                    setDefaultTools(next);
+                    void hostApi.providers.setDefaultTools(next);
+                  }}
+                >
+                  {tool}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="settings-row">
           <div className="settings-row-label">
             <div>{t('settings.defaultThinking.title')}</div>

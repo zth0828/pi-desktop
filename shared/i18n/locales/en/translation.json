@@ -400,7 +400,7 @@
       "runningHint": "A command is still running",
       "stopBash": "Stop command",
       "planModeOn": "Plan mode is on (sent messages get /plan prefix)",
-    "skillRemove": "Remove skill"
+      "skillRemove": "Remove skill"
     },
     "errors": {
       "invalidKey": "API key issue: the key may be invalid, expired or revoked — update it in provider settings.",
@@ -773,6 +773,10 @@
     "agentDefaults": {
       "title": "Agent Defaults",
       "desc": "These native settings are written to ~/.pi/agent/settings.json and apply to new sessions."
+    },
+    "tools": {
+      "title": "Available tools",
+      "desc": "Built-in tools the model can call in new sessions. Changes apply to new sessions (the current session keeps the toolset from startup)."
     },
     "defaultThinking": {
       "title": "Default thinking level",

@@ -3,7 +3,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
+import { DEFAULT_CONTEXT_WINDOW, PI_DEFAULT_TOOLS } from '@shared/host-api/contract';
 import { matchModelProfile } from '@shared/model-profiles';
 import type {
   HostSuccess,
@@ -22,6 +22,7 @@ import type {
   PiRetrySettingsPayload,
   PiRetrySettingsResult,
   PiDefaultThinkingResult,
+  PiDefaultToolsResult,
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiAdapter, type PiModelRuntimeHandle } from './pi-adapter';
@@ -854,6 +855,25 @@ export const providersApi = {
       const handle = adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
       adapter.settings.setDefaultThinking(handle, payload.level);
       await adapter.settings.flush(handle);
+      return { success: true };
+    } catch (err) { return { success: false, error: err instanceof Error ? err.message : String(err) }; }
+  },
+
+  getDefaultTools: async (): Promise<PiDefaultToolsResult> => {
+    const adapter = await loadPiAdapter();
+    const handle = adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
+    const configured = adapter.settings.getDefaultTools(handle);
+    return { tools: configured ?? [...PI_DEFAULT_TOOLS] };
+  },
+
+  setDefaultTools: async (payload: { tools: string[] }): Promise<HostSuccess> => {
+    try {
+      const adapter = await loadPiAdapter();
+      // defaultTools 是整表覆盖语义：设置页按完整列表写回，未勾选的内置工具即被关闭
+      await adapter.settings.updateJson(adapter.paths.getAgentDir(), 'settings.json', (doc) => {
+        doc.defaultTools = payload.tools;
+      });
+      await reloadRuntimeSettings();
       return { success: true };
     } catch (err) { return { success: false, error: err instanceof Error ? err.message : String(err) }; }
   },

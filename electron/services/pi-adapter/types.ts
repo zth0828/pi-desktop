@@ -253,6 +253,7 @@ export type PiSettingsPort = {
   getRetry(handle: PiSettingsHandle): PiRetrySettingsResult;
   getDefaultModel(handle: PiSettingsHandle): PiDefaultModel | null;
   getDefaultThinking(handle: PiSettingsHandle): string | null;
+  getDefaultTools(handle: PiSettingsHandle): string[] | null;
   getBranchSummarySkipPrompt(handle: PiSettingsHandle): boolean;
   isProjectTrusted(handle: PiSettingsHandle): boolean;
   setDefaultModel(handle: PiSettingsHandle, model: PiDefaultModel): void;

@@ -131,6 +131,8 @@ function createHostApi(sessionPath?: string) {
       invoke('providers', 'setRetry', payload),
     getDefaultThinking: () => invoke('providers', 'getDefaultThinking'),
     setDefaultThinking: (level: string) => invoke('providers', 'setDefaultThinking', { level }),
+    getDefaultTools: () => invoke('providers', 'getDefaultTools'),
+    setDefaultTools: (tools: string[]) => invoke('providers', 'setDefaultTools', { tools }),
     getDefaultModel: () => invoke('providers', 'getDefaultModel'),
     setDefaultModel: (provider: string, id: string) =>
       invoke('providers', 'setDefaultModel', { provider, id }),

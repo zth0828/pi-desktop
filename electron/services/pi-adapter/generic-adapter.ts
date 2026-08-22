@@ -316,6 +316,7 @@ export function createGenericPiAdapter(input: AdapterInput): PiRuntimeAdapter {
       return provider && id ? { provider, id } : null;
     },
     getDefaultThinking: (handle) => getSettings(handle).getDefaultThinkingLevel() ?? null,
+    getDefaultTools: (handle) => getSettings(handle).getDefaultTools() ?? null,
     getBranchSummarySkipPrompt: (handle) => getSettings(handle).getBranchSummarySkipPrompt(),
     isProjectTrusted: (handle) => getSettings(handle).isProjectTrusted(),
     setDefaultModel: (handle, model) => getSettings(handle).setDefaultModelAndProvider(model.provider, model.id),
