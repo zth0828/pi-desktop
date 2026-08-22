@@ -1019,6 +1019,8 @@ export type HostApiContract = {
     /** 生成中调用按 payload.behavior 排队：默认 followUp（排队），'steer' = 当前轮插入。 */
     prompt: (payload: PiRuntimePromptPayload) => HostSuccess;
     abort: () => PiRuntimeAbortResult;
+    /** 只停止正在运行的 bash 命令，不影响消息回合/压缩等（pi TUI Esc 的分支语义）。 */
+    abortBash: () => HostSuccess;
     /** 移除一条排队消息（pi 仅 clearQueue 全清：main 侧快照→全清→按原顺序重排其余项）。 */
     queueRemove: (payload: PiRuntimeQueueItemPayload) => PiRuntimeQueueMutationResult;
     /** 在 pi 原生 steering/followUp 队列之间移动消息。 */

@@ -397,7 +397,8 @@
       "includeContext": "Excluded from context; click to include",
       "excludeContext": "In context; click to exclude",
       "exit": "Exit command mode",
-      "runningHint": "A command is still running"
+      "runningHint": "A command is still running",
+      "stopBash": "Stop command"
     },
     "errors": {
       "invalidKey": "API key issue: the key may be invalid, expired or revoked — update it in provider settings.",

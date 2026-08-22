@@ -1560,6 +1560,22 @@ button.danger-outline {
   color: var(--danger);
 }
 
+/* bash 流式卡：停止按钮（只停当前命令，不影响消息回合） */
+.bash-stop {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 5px;
+  background: var(--bg-hover);
+  color: var(--danger);
+  cursor: pointer;
+}
+.bash-stop:hover { background: var(--bg-active); }
+
 .bash-output {
   margin: 8px 0 0;
   font-size: 12px;
@@ -5310,6 +5326,21 @@ button.danger-outline {
   cursor: pointer;
 }
 .command-run.running .command-run-header { cursor: default; }
+.command-run-stop {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 5px;
+  background: var(--bg-hover);
+  color: var(--danger);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.command-run-stop:hover { background: var(--bg-active); }
 .command-run-name {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;

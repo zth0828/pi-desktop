@@ -1129,12 +1129,14 @@ export const piRuntimeApi = {
       session.clearQueue();
       session.clearAgentQueues();
     }
+    // bash 停止是独立动作：不重置回合状态，否则消息回合会被误标记为已停止（“整个停止”）
+    const bashAborted = session.isBashRunning;
     if (session.isBashRunning) session.abortBash();
     else if (session.isCompacting) session.abortCompaction();
     else if (active.summarizingBranch) session.abortBranchSummary();
     else if (session.isRetrying) session.abortRetry();
     else await session.abort();
-    if (active.running || session.isStreaming) {
+    if (!bashAborted && (active.running || session.isStreaming)) {
       active.running = false;
       noteRunEnded(active.instanceId);
       sendHostEvent('piRuntime', 'runtimeStateChanged', {
@@ -1144,6 +1146,14 @@ export const piRuntimeApi = {
       });
     }
     return { success: true, restoredMessages };
+  },
+
+  /** 只停止正在运行的 bash（bash 卡/命令面板的停止按钮），不碰消息回合与压缩等。 */
+  abortBash: async (_payload?: unknown, ctx?: HostActionContext) => {
+    const active = resolveRuntimeForContext(ctx);
+    if (!active) return { success: false, error: 'session not started' };
+    if (active.adapterRuntime.session.isBashRunning) active.adapterRuntime.session.abortBash();
+    return { success: true };
   },
 
   newSession: async (_payload?: unknown, ctx?: HostActionContext) => {

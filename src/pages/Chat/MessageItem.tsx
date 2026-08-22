@@ -1,6 +1,6 @@
 import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Copy, FileText, GitFork, Pencil } from 'lucide-react';
+import { Check, Copy, FileText, GitFork, Pencil, Square } from 'lucide-react';
 import { parseUserMessage } from '@shared/message-attachments';
 import { parseProviderError } from '../../lib/provider-error';
 import { Markdown } from '../../components/Markdown';
@@ -8,7 +8,7 @@ import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-
 import { formatDuration, tailLines } from '../../lib/tool-display';
 import { hostApi } from '../../lib/host-api';
 import type { ChatMessage, ContentBlock, TurnStats } from '../../stores/chat';
-import { usePaneChatStore } from './chat-store-context';
+import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
 
@@ -186,6 +186,7 @@ function MessageItemView({
   suppressTail,
 }: MessageItemProps) {
   const { t } = useTranslation();
+  const paneApi = usePaneHostApi();
   const forkFrom = usePaneChatStore((s) => s.forkFrom);
   const editMessage = usePaneChatStore((s) => s.editMessage);
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
@@ -349,6 +350,17 @@ function MessageItemView({
             >
               {t('chat.bash.exitCode', { code: rawBash.exitCode })}
             </span>
+          )}
+          {message.streaming && (
+            <button
+              className="bash-stop"
+              data-testid="bash-stop"
+              title={t('chat.command.stopBash')}
+              aria-label={t('chat.command.stopBash')}
+              onClick={() => void paneApi.piRuntime.abortBash()}
+            >
+              <Square size={11} />
+            </button>
           )}
         </div>
         {bashCollapsed && bashPreview!.hidden > 0 && (

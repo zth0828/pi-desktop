@@ -68,6 +68,7 @@ function createHostApi(sessionPath?: string) {
     prompt: (text: string, images?: unknown[], behavior?: 'steer' | 'followUp') =>
       invoke('piRuntime', 'prompt', { text, images, behavior }),
     abort: () => invoke('piRuntime', 'abort'),
+    abortBash: () => invoke('piRuntime', 'abortBash'),
     queueRemove: (kind: 'steering' | 'followUp', index: number) =>
       invoke('piRuntime', 'queueRemove', { kind, index }),
     queueMove: (kind: 'steering' | 'followUp', index: number, target: 'steering' | 'followUp') =>

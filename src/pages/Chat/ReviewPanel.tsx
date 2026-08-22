@@ -23,6 +23,7 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Square,
   SquareX,
   Terminal,
   WrapText,
@@ -365,6 +366,7 @@ type SelectedReviewItem = {
 /** 右侧「命令」面板：本会话 bash 执行列表（进行中 + 已落盘），与消息流同源。 */
 function CommandList() {
   const { t } = useTranslation();
+  const paneApi = usePaneHostApi();
   const bashDraft = usePaneChatStore((s) => s.bashDraft);
   const historyMessages = usePaneChatStore((s) => s.historyMessages);
   const [expanded, setExpanded] = useState<ChatMessage | null>(null);
@@ -380,6 +382,15 @@ function CommandList() {
             <span className="command-run-name">$ {bashDraft.command}</span>
             <span className="bash-badge running">{t('workspace.commandsRunning')}</span>
             {bashDraft.excludeFromContext && <span className="bash-badge">{t('chat.bash.excluded')}</span>}
+            <button
+              className="command-run-stop"
+              data-testid="command-run-stop"
+              title={t('chat.command.stopBash')}
+              aria-label={t('chat.command.stopBash')}
+              onClick={() => void paneApi.piRuntime.abortBash()}
+            >
+              <Square size={11} />
+            </button>
           </div>
           <pre className="command-run-output" data-testid="command-run-output">{bashDraft.output}<span className="cursor-blink">▍</span></pre>
         </div>
