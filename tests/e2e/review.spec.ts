@@ -168,13 +168,24 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
   await openReview(page);
   await expect(panel).toBeVisible();
 
-  // 文件清单：e2e-edit-target.txt，+1/-1
-  const fileRow = panel.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' });
-  await expect(fileRow).toBeVisible({ timeout: 30_000 });
-  await expect(fileRow.locator('.review-stat-add')).toHaveText('+1');
-  await expect(fileRow.locator('.review-stat-del')).toHaveText('-1');
+  // 本会话改动与工作区改动两分组均出现
+  const sessionGroup = panel.getByTestId('review-group-session');
+  const workspaceGroup = panel.getByTestId('review-group-workspace');
+  await expect(sessionGroup).toBeVisible({ timeout: 30_000 });
+  await expect(workspaceGroup).toBeVisible();
 
-  // 第一个文件默认选中，diff 活视图渲染（删除红 / 新增绿）
+  const sessionFile = sessionGroup.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' });
+  await expect(sessionFile).toBeVisible();
+  await expect(sessionFile.getByTestId('review-file-scope')).toHaveText(/会话|Session/);
+  await expect(sessionFile.getByTestId('revert-file')).toHaveCount(0);
+
+  const workspaceFile = workspaceGroup.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' });
+  await expect(workspaceFile).toBeVisible();
+  await expect(workspaceFile.locator('.review-stat-add')).toHaveText('+1');
+  await expect(workspaceFile.locator('.review-stat-del')).toHaveText('-1');
+
+  // 点击工作区文件，diff 活视图渲染（删除红 / 新增绿）
+  await workspaceFile.locator('.review-file-main').click();
   const diff = panel.getByTestId('review-diff');
   await expect(diff).toBeVisible();
   await expect(diff.locator('.diff-del')).toContainText('alpha');
@@ -183,12 +194,13 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
   await panel.getByTestId('review-toggle-mode').click();
   await expect(panel.getByTestId('diff-unified')).toBeVisible();
 
-  // 文件级回滚：确认对话框 → git apply -R → 磁盘复原、清单清空
-  await fileRow.getByTestId('revert-file').click();
+  // 文件级回滚：确认对话框 → git apply -R → 磁盘复原、工作区清单清空（会话历史记录保留）
+  await workspaceFile.getByTestId('revert-file').click();
   await expect(page.getByTestId('review-confirm')).toBeVisible();
   await page.getByTestId('review-confirm-ok').click();
 
-  await expect(panel.getByTestId('review-file')).toHaveCount(0, { timeout: 30_000 });
+  await expect(workspaceGroup.getByTestId('review-file')).toHaveCount(0, { timeout: 30_000 });
+  await expect(sessionGroup.getByTestId('review-file')).toHaveCount(1);
   const content = await readFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'utf-8');
   expect(content).toBe('alpha\ngamma\n');
 });
@@ -456,6 +468,41 @@ test('历史会话恢复后仍可预览工作区外的工具文件', async ({ la
   await restoredApp.close();
 });
 
+test('重新进入历史会话：评审面板仍能展示该会话的文件改动与 diff', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await runTool(page, 'USE_TOOL_EDIT history-diff');
+  await app.close();
+
+  const restoredApp = await launchElectronApp(launchOptions(repoWorkspace));
+  const restoredPage = await restoredApp.firstWindow();
+  await waitSessionReady(restoredPage);
+
+  await restoredPage.locator('.sidebar-session').filter({ hasText: 'USE_TOOL_EDIT history-diff' }).first().click();
+  await expect(restoredPage.getByTestId('turn-fold-toggle')).toBeVisible({ timeout: 30_000 });
+
+  await openReview(restoredPage);
+  const panel = restoredPage.getByTestId('review-panel');
+  await expect(panel).toBeVisible();
+
+  const sessionGroup = panel.getByTestId('review-group-session');
+  await expect(sessionGroup).toBeVisible();
+  const fileRow = sessionGroup.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' });
+  await expect(fileRow).toBeVisible();
+  await expect(fileRow.getByTestId('review-file-scope')).toHaveText(/会话|Session/);
+  await expect(fileRow.getByTestId('revert-file')).toHaveCount(0);
+
+  await fileRow.locator('.review-file-main').click();
+  const toolDiff = panel.getByTestId('review-tool-diff');
+  await expect(toolDiff).toBeVisible();
+  await expect(toolDiff.locator('.diff-del')).toContainText('alpha');
+  await expect(toolDiff.locator('.diff-add')).toContainText('beta');
+
+  await restoredApp.close();
+});
+
 test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文件删除', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions(repoWorkspace));
   const page = await app.firstWindow();
@@ -466,7 +513,8 @@ test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文�
 
   await openReview(page);
   const panel = page.getByTestId('review-panel');
-  const fileRow = panel.getByTestId('review-file').filter({ hasText: 'e2e-new-file.txt' });
+  const workspaceGroup = panel.getByTestId('review-group-workspace');
+  const fileRow = workspaceGroup.getByTestId('review-file').filter({ hasText: 'e2e-new-file.txt' });
   await expect(fileRow).toBeVisible({ timeout: 30_000 });
   await expect(fileRow.locator('.review-stat-add')).toHaveText('+1');
 
@@ -478,7 +526,7 @@ test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文�
   // 回滚 = 删除新文件
   await fileRow.getByTestId('revert-file').click();
   await page.getByTestId('review-confirm-ok').click();
-  await expect(panel.getByTestId('review-file')).toHaveCount(0, { timeout: 30_000 });
+  await expect(workspaceGroup.getByTestId('review-file').filter({ hasText: 'e2e-new-file.txt' })).toHaveCount(0, { timeout: 30_000 });
   expect(existsSync(path.join(repoWorkspace, 'e2e-new-file.txt'))).toBe(false);
 });
 
@@ -494,12 +542,13 @@ test('非 Git 目录：新增/修改/删除进入评审并可回滚', async ({ l
   await openReview(page);
   const panel = page.getByTestId('review-panel');
   await expect(panel.getByTestId('review-fallback')).toHaveCount(0);
-  await expect(panel.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' })).toBeVisible({ timeout: 30_000 });
-  await expect(panel.getByTestId('review-file').filter({ hasText: 'plain-new.txt' })).toBeVisible();
-  await expect(panel.getByTestId('review-file').filter({ hasText: 'delete-me.txt' })).toBeVisible();
+  const workspaceGroup = panel.getByTestId('review-group-workspace');
+  await expect(workspaceGroup.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' })).toBeVisible({ timeout: 30_000 });
+  await expect(workspaceGroup.getByTestId('review-file').filter({ hasText: 'plain-new.txt' })).toBeVisible();
+  await expect(workspaceGroup.getByTestId('review-file').filter({ hasText: 'delete-me.txt' })).toBeVisible();
 
   for (const name of ['e2e-edit-target.txt', 'plain-new.txt', 'delete-me.txt']) {
-    const row = panel.getByTestId('review-file').filter({ hasText: name });
+    const row = workspaceGroup.getByTestId('review-file').filter({ hasText: name });
     await row.getByTestId('revert-file').click();
     await page.getByTestId('review-confirm-ok').click();
     await expect(row).toHaveCount(0, { timeout: 15_000 });

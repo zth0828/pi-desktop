@@ -172,7 +172,8 @@ test('非 Git 目录：聚合编辑卡可回滚，Review 按钮打开完整评�
   await card.getByTestId('turn-changes-review').click();
   await expect(page.getByTestId('review-panel')).toBeVisible();
   await expect(page.getByTestId('review-fallback')).toHaveCount(0);
-  await expect(page.getByTestId('review-file')).toHaveCount(2);
+  await expect(page.getByTestId('review-group-workspace').getByTestId('review-file')).toHaveCount(2);
+  await expect(page.getByTestId('review-group-session').getByTestId('review-file')).toHaveCount(2);
 });
 
 test('六个改动初始显示五个，展开后显示完整清单与收起按钮，收起恢复五个，查看更改直达评审', async ({
@@ -213,7 +214,7 @@ test('六个改动初始显示五个，展开后显示完整清单与收起按�
   await expect(panel).toBeVisible();
   await expect(panel.getByTestId('workspace-review-tab')).toHaveAttribute('aria-selected', 'true');
   for (let index = 1; index <= 6; index += 1) {
-    await expect(panel.getByTestId('review-file').filter({ hasText: `generated-${index}.txt` })).toBeVisible();
+    await expect(panel.getByTestId('review-group-workspace').getByTestId('review-file').filter({ hasText: `generated-${index}.txt` })).toBeVisible();
   }
 });
 

@@ -40,6 +40,7 @@ import {
   hunkLineKind,
   mergeReviewFiles,
   parseUnifiedDiff,
+  sessionChangeFiles,
   type ParsedFileDiff,
 } from '../../lib/review-diff';
 import { parseDiffLines } from '../../lib/tool-display';
@@ -349,22 +350,30 @@ function FilePreview({ path }: { path: string }) {
   );
 }
 
+type SelectedReviewItem = {
+  group: 'session' | 'workspace';
+  path: string;
+};
+
 function ReviewWorkspace() {
   const { t } = useTranslation();
   const paneApi = usePaneHostApi();
   const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
   const cwd = usePaneChatStore((s) => s.cwd);
   const [summary, setSummary] = useState<ReviewSummaryResult | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<SelectedReviewItem | null>(null);
   const [diff, setDiff] = useState<ParsedFileDiff | null>(null);
   const [toolDiff, setToolDiff] = useState<string | null>(null);
   const [mode, setMode] = useState<'split' | 'unified'>('split');
   const [showFiles, setShowFiles] = useState(true);
+  const [sessionOpen, setSessionOpen] = useState(true);
+  const [workspaceOpen, setWorkspaceOpen] = useState(true);
   const [pendingRevert, setPendingRevert] = useState<PendingRevert | null>(null);
   const [revertError, setRevertError] = useState<string | null>(null);
 
+  const sessionFiles = useMemo(() => sessionChangeFiles(toolExecutions, cwd), [toolExecutions, cwd]);
   const toolFiles = useMemo(() => collectFallbackFiles(toolExecutions), [toolExecutions]);
-  const reviewFiles = useMemo(() => mergeReviewFiles(
+  const workspaceFiles = useMemo(() => mergeReviewFiles(
     cwd,
     Boolean(summary?.available),
     summary?.available ? summary.files : [],
@@ -392,26 +401,59 @@ function ReviewWorkspace() {
     setSummary(next);
     return next;
   }, [paneApi]);
-  const loadDiff = useCallback(async (path: string) => {
-    const fallback = toolFileFor(path);
-    if (!isBaselineFile(path)) {
+
+  const loadDiff = useCallback(async (item: SelectedReviewItem) => {
+    if (item.group === 'session') {
+      const sessionFile = sessionFiles.find((f) => f.path === item.path);
       setDiff(null);
-      setToolDiff(fallback?.diff ?? null);
+      setToolDiff(sessionFile?.diff ?? null);
       return;
     }
-    const result = await paneApi.review.getFileDiff(path).catch(() => null);
-    setDiff(result?.available && result.diff ? parseUnifiedDiff(result.diff) : null);
-    setToolDiff(null);
-  }, [isBaselineFile, toolFileFor, paneApi]);
+    if (summary?.available && summary.files.some((file) => file.path === item.path)) {
+      const result = await paneApi.review.getFileDiff(item.path).catch(() => null);
+      setDiff(result?.available && result.diff ? parseUnifiedDiff(result.diff) : null);
+      setToolDiff(null);
+    } else {
+      const fallback = toolFileFor(item.path);
+      setDiff(null);
+      setToolDiff(fallback?.diff ?? null);
+    }
+  }, [sessionFiles, summary, paneApi, toolFileFor]);
+
   useEffect(() => { void refreshSummary(); }, [refreshSummary]);
+
   useEffect(() => {
-    if (reviewFiles.length === 0) {
+    if (sessionFiles.length === 0 && workspaceFiles.length === 0) {
       setSelected(null);
       return;
     }
-    setSelected((current) => current && reviewFiles.some((file) => file.path === current) ? current : reviewFiles[0].path);
-  }, [reviewFiles]);
-  useEffect(() => { if (selected) void loadDiff(selected); }, [selected, loadDiff]);
+    setSelected((current) => {
+      if (current) {
+        if (current.group === 'session' && sessionFiles.some((f) => f.path === current.path)) {
+          return current;
+        }
+        if (current.group === 'workspace' && workspaceFiles.some((f) => f.path === current.path)) {
+          return current;
+        }
+      }
+      if (sessionFiles.length > 0) {
+        return { group: 'session', path: sessionFiles[0].path };
+      }
+      if (workspaceFiles.length > 0) {
+        return { group: 'workspace', path: workspaceFiles[0].path };
+      }
+      return null;
+    });
+  }, [sessionFiles, workspaceFiles]);
+
+  useEffect(() => {
+    if (selected) {
+      void loadDiff(selected);
+    } else {
+      setDiff(null);
+      setToolDiff(null);
+    }
+  }, [selected, loadDiff]);
 
   const confirmRevert = async () => {
     if (!pendingRevert) return;
@@ -429,9 +471,15 @@ function ReviewWorkspace() {
     if (selected) await loadDiff(selected);
   };
 
-  const selectedFile = reviewFiles.find((file) => file.path === selected);
-  const selectedIsBaseline = selected ? isBaselineFile(selected) : false;
-  const canRevertSelected = selectedIsBaseline && selectedFile?.status !== 'conflicted';
+  const selectedIsBaseline = selected?.group === 'workspace' && isBaselineFile(selected.path);
+  const selectedWorkspaceFile = selected?.group === 'workspace'
+    ? workspaceFiles.find((file) => file.path === selected.path)
+    : undefined;
+  const canRevertSelected = Boolean(selectedIsBaseline && selectedWorkspaceFile?.status !== 'conflicted');
+  const selectedSessionFile = selected?.group === 'session'
+    ? sessionFiles.find((file) => file.path === selected.path)
+    : undefined;
+
   return (
     <div className="review-workspace">
       <div className="review-toolbar">
@@ -444,36 +492,113 @@ function ReviewWorkspace() {
       <div className="review-body">
         {showFiles && (
           <div className="review-file-list" data-testid="review-file-list">
-            {reviewFiles.length === 0 && <div className="review-empty">{t('review.empty')}</div>}
-            {reviewFiles.map((file) => {
-              const baselineFile = isBaselineFile(file.path);
-              return (
-              <div className={`review-file${selected === file.path ? ' selected' : ''}`} data-testid="review-file" key={file.path}>
-                <button className="review-file-main" onClick={() => setSelected(file.path)}>
-                  <span className="review-file-name" title={file.path}>{file.path}</span>
-                  {!baselineFile && <span className="review-file-status" data-testid="review-file-status">{t('review.readOnly')}</span>}
-                  {file.status === 'conflicted' && <span className="review-file-status status-conflicted" data-testid="review-file-status">{t('review.status.conflicted')}</span>}
-                  <span className="review-file-stats"><span className="review-stat-add">+{file.added}</span><span className="review-stat-del">-{file.deleted}</span></span>
+            {sessionFiles.length === 0 && workspaceFiles.length === 0 && (
+              <div className="review-empty">{t('review.empty')}</div>
+            )}
+            {sessionFiles.length > 0 && (
+              <div className="review-group" data-testid="review-group-session">
+                <button
+                  className="review-group-header"
+                  data-testid="review-group-session-toggle"
+                  onClick={() => setSessionOpen((v) => !v)}
+                >
+                  {sessionOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                  <span className="review-group-title">{t('review.sessionChanges')}</span>
+                  <span className="review-group-count">{sessionFiles.length}</span>
                 </button>
-                {baselineFile && file.status !== 'conflicted' && <button className="review-revert-btn" data-testid="revert-file" onClick={() => setPendingRevert({ kind: 'file', path: file.path })}>{t('review.revertFile')}</button>}
+                {sessionOpen && sessionFiles.map((file) => (
+                  <div
+                    className={`review-file${selected?.group === 'session' && selected.path === file.path ? ' selected' : ''}`}
+                    data-testid="review-file"
+                    key={`session:${file.path}`}
+                  >
+                    <button
+                      className="review-file-main"
+                      onClick={() => setSelected({ group: 'session', path: file.path })}
+                    >
+                      <span className="review-file-name" title={file.path}>{file.path}</span>
+                      <span className="review-file-status" data-testid="review-file-scope">{t('review.sessionScope')}</span>
+                      <span className="review-file-stats">
+                        <span className="review-stat-add">+{file.added}</span>
+                        <span className="review-stat-del">-{file.deleted}</span>
+                      </span>
+                    </button>
+                  </div>
+                ))}
               </div>
-            )})}
+            )}
+            {workspaceFiles.length > 0 && (
+              <div className="review-group" data-testid="review-group-workspace">
+                <button
+                  className="review-group-header"
+                  data-testid="review-group-workspace-toggle"
+                  onClick={() => setWorkspaceOpen((v) => !v)}
+                >
+                  {workspaceOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                  <span className="review-group-title">{t('review.workspaceChanges')}</span>
+                  <span className="review-group-count">{workspaceFiles.length}</span>
+                </button>
+                {workspaceOpen && workspaceFiles.map((file) => {
+                  const baselineFile = isBaselineFile(file.path);
+                  return (
+                    <div
+                      className={`review-file${selected?.group === 'workspace' && selected.path === file.path ? ' selected' : ''}`}
+                      data-testid="review-file"
+                      key={`workspace:${file.path}`}
+                    >
+                      <button
+                        className="review-file-main"
+                        onClick={() => setSelected({ group: 'workspace', path: file.path })}
+                      >
+                        <span className="review-file-name" title={file.path}>{file.path}</span>
+                        {!baselineFile && <span className="review-file-status" data-testid="review-file-status">{t('review.readOnly')}</span>}
+                        {file.status === 'conflicted' && <span className="review-file-status status-conflicted" data-testid="review-file-status">{t('review.status.conflicted')}</span>}
+                        <span className="review-file-stats">
+                          <span className="review-stat-add">+{file.added}</span>
+                          <span className="review-stat-del">-{file.deleted}</span>
+                        </span>
+                      </button>
+                      {baselineFile && file.status !== 'conflicted' && (
+                        <button
+                          className="review-revert-btn"
+                          data-testid="revert-file"
+                          onClick={() => setPendingRevert({ kind: 'file', path: file.path })}
+                        >
+                          {t('review.revertFile')}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
         <div className="review-diff-pane">
           {selected && diff && (
             <>
               <div className="review-file-heading">
-                <FileCode2 size={15} /><span>{selected}</span>
+                <FileCode2 size={15} />
+                <span>{selected.path}</span>
+                <span className="review-file-status">{t('review.workspaceScope')}</span>
               </div>
               {mode === 'split'
-                ? <SplitDiff parsed={diff} onRevert={canRevertSelected ? (index) => setPendingRevert({ kind: 'hunk', path: selected, patch: buildHunkPatch(diff, index) }) : undefined} />
-                : <UnifiedDiff parsed={diff} onRevert={canRevertSelected ? (index) => setPendingRevert({ kind: 'hunk', path: selected, patch: buildHunkPatch(diff, index) }) : undefined} />}
+                ? <SplitDiff parsed={diff} onRevert={canRevertSelected ? (index) => setPendingRevert({ kind: 'hunk', path: selected.path, patch: buildHunkPatch(diff, index) }) : undefined} />
+                : <UnifiedDiff parsed={diff} onRevert={canRevertSelected ? (index) => setPendingRevert({ kind: 'hunk', path: selected.path, patch: buildHunkPatch(diff, index) }) : undefined} />}
             </>
           )}
           {selected && toolDiff && (
             <>
-              <div className="review-file-heading"><FileCode2 size={15} /><span>{selected}</span></div>
+              <div className="review-file-heading">
+                <FileCode2 size={15} />
+                <span>{selected.path}</span>
+                <span className="review-file-status">{t('review.sessionScope')}</span>
+                {selectedSessionFile && selectedSessionFile.editCount > 1 && (
+                  <span className="review-file-status">
+                    {t('review.editCount', { count: selectedSessionFile.editCount })}
+                  </span>
+                )}
+              </div>
               <pre className="diff-view review-tool-diff" data-testid="review-tool-diff">
                 {parseDiffLines(toolDiff).map((line, index) => (
                   <div key={index} className={`diff-line diff-${line.kind}`}>
@@ -485,7 +610,7 @@ function ReviewWorkspace() {
               </pre>
             </>
           )}
-          {selected && !diff && !toolDiff && <div className="review-empty">{t('review.noDiff', { path: selected })}</div>}
+          {selected && !diff && !toolDiff && <div className="review-empty">{t('review.noDiff', { path: selected.path })}</div>}
           {!selected && <div className="review-empty">{t('review.empty')}</div>}
         </div>
       </div>

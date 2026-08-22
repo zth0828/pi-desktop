@@ -10,6 +10,8 @@ import {
   buildSplitDiffRows,
   collectFallbackFiles,
   mergeReviewFiles,
+  normalizeDisplayPath,
+  sessionChangeFiles,
   hunkLineKind,
   parseUnifiedDiff,
 } from '@/lib/review-diff';
@@ -207,6 +209,89 @@ describe('collectFallbackFiles', () => {
       a: { toolName: 'edit', status: 'success', args: { file_path: 'fp.txt' } },
     });
     expect(files.map((f) => f.path)).toEqual(['fp.txt']);
+  });
+});
+
+describe('normalizeDisplayPath', () => {
+  it('规范化相对路径与 ./ 前缀', () => {
+    expect(normalizeDisplayPath('src/a.ts')).toBe('src/a.ts');
+    expect(normalizeDisplayPath('./src/a.ts')).toBe('src/a.ts');
+    expect(normalizeDisplayPath('src\\a.ts')).toBe('src/a.ts');
+  });
+
+  it('工作区内绝对路径转换为相对路径', () => {
+    expect(normalizeDisplayPath('/workspace/src/a.ts', '/workspace')).toBe('src/a.ts');
+    expect(normalizeDisplayPath('/workspace/src/a.ts', '/workspace/')).toBe('src/a.ts');
+    expect(normalizeDisplayPath('C:\\workspace\\src\\a.ts', 'C:/workspace')).toBe('src/a.ts');
+  });
+
+  it('工作区外绝对路径保持原样', () => {
+    expect(normalizeDisplayPath('/external/file.txt', '/workspace')).toBe('/external/file.txt');
+  });
+});
+
+describe('sessionChangeFiles', () => {
+  it('提取本会话 edit/write 文件并统计编辑次数与最新 diff', () => {
+    const files = sessionChangeFiles({
+      a: {
+        toolName: 'edit',
+        status: 'success',
+        args: { path: '/workspace/src/index.ts' },
+        result: { details: { diff: '-first\n+second' } },
+      },
+      b: { toolName: 'bash', status: 'success', args: { command: 'npm test' } },
+      c: { toolName: 'edit', status: 'error', args: { path: '/workspace/src/failed.ts' } },
+      d: {
+        toolName: 'write',
+        status: 'success',
+        args: { path: '/workspace/src/new.ts', content: 'const a = 1;\nconst b = 2;\n' },
+      },
+      e: {
+        toolName: 'edit',
+        status: 'success',
+        args: { path: '/workspace/src/index.ts' },
+        result: { details: { diff: '-second\n+third\n+fourth' } },
+      },
+      f: {
+        toolName: 'edit',
+        status: 'success',
+        args: { path: '/tmp/external.txt' },
+        result: { details: { diff: '-old\n+new' } },
+      },
+    }, '/workspace');
+
+    expect(files).toHaveLength(3);
+
+    expect(files[0]).toEqual({
+      path: '/tmp/external.txt',
+      diff: '-old\n+new',
+      added: 1,
+      deleted: 1,
+      editCount: 1,
+    });
+
+    expect(files[1]).toEqual({
+      path: 'src/index.ts',
+      diff: '-second\n+third\n+fourth',
+      added: 2,
+      deleted: 1,
+      editCount: 2,
+    });
+
+    expect(files[2]).toEqual({
+      path: 'src/new.ts',
+      diff: undefined,
+      added: 2,
+      deleted: 0,
+      editCount: 1,
+    });
+  });
+
+  it('空记录或无修改工具时返回空数组', () => {
+    expect(sessionChangeFiles({})).toEqual([]);
+    expect(sessionChangeFiles({
+      a: { toolName: 'read', status: 'success', args: { path: 'a.txt' } },
+    })).toEqual([]);
   });
 });
 

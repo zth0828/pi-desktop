@@ -114,6 +114,14 @@ export function buildHunkPatch(parsed: ParsedFileDiff, hunkIndex: number): strin
   return [...parsed.headerLines, hunk.header, ...hunk.lines].join('\n') + '\n';
 }
 
+export type ReviewSessionFile = {
+  path: string;
+  diff?: string;
+  added: number;
+  deleted: number;
+  editCount: number;
+};
+
 export type ReviewFallbackFile = {
   path: string;
   /** pi edit 工具 details.diff（私有格式，渲染用 tool-display.parseDiffLines） */
@@ -129,6 +137,79 @@ type ReviewListEntry = {
   deleted: number;
 };
 
+/** 规范化文件展示路径：相对 cwd 的文件去除前缀，外部绝对路径保持原样。 */
+export function normalizeDisplayPath(filePath: string, cwd?: string): string {
+  let normalized = filePath.replace(/\\/g, '/');
+  if (normalized.startsWith('./')) {
+    normalized = normalized.slice(2);
+  }
+  if (!cwd) return normalized;
+  const root = cwd.replace(/\\/g, '/').replace(/\/$/, '');
+  if (normalized === root) return '.';
+  if (normalized.startsWith(`${root}/`)) {
+    return normalized.slice(root.length + 1);
+  }
+  return normalized;
+}
+
+/**
+ * 提取本会话内所有 edit/write 工具修改过的文件（历史会话与实时会话均可用）。
+ * 路径按 cwd 规范化为工作区相对路径或外部绝对路径，同一文件记录多次编辑次数与最新 diff。
+ */
+export function sessionChangeFiles(
+  toolExecutions: Record<string, {
+    toolName: string;
+    status: string;
+    args?: unknown;
+    result?: unknown;
+  }>,
+  cwd?: string,
+): ReviewSessionFile[] {
+  const byPath = new Map<string, ReviewSessionFile>();
+  for (const ex of Object.values(toolExecutions)) {
+    if (ex.toolName !== 'edit' && ex.toolName !== 'write') continue;
+    if (ex.status !== 'success') continue;
+    const args = ex.args as Record<string, unknown> | undefined;
+    const rawPath =
+      (typeof args?.path === 'string' && args.path) ||
+      (typeof args?.file_path === 'string' && args.file_path) ||
+      '';
+    if (!rawPath) continue;
+    const displayPath = normalizeDisplayPath(rawPath, cwd);
+
+    const details =
+      ex.result && typeof ex.result === 'object'
+        ? (ex.result as { details?: unknown }).details
+        : undefined;
+    const diff =
+      details && typeof details === 'object' && typeof (details as { diff?: unknown }).diff === 'string'
+        ? (details as { diff: string }).diff
+        : undefined;
+
+    let added = 0;
+    let deleted = 0;
+    if (diff) {
+      for (const line of diff.split('\n')) {
+        if (/^\+\s*\d*/.test(line)) added += 1;
+        else if (/^-\s*\d*/.test(line)) deleted += 1;
+      }
+    } else if (ex.toolName === 'write' && typeof args?.content === 'string') {
+      const lines = args.content.split('\n');
+      added = args.content ? lines.length - (args.content.endsWith('\n') ? 1 : 0) : 0;
+    }
+
+    const existing = byPath.get(displayPath);
+    byPath.set(displayPath, {
+      path: displayPath,
+      diff: diff ?? existing?.diff,
+      added,
+      deleted,
+      editCount: (existing?.editCount ?? 0) + 1,
+    });
+  }
+  return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+}
+
 /**
  * baseline 负责工作区内的实时状态；工具记录只在 baseline 不可用时兜底，或补入
  * 工作区外的绝对路径。这样回滚后文件会从列表消失，同时跨目录改动不会丢失。
@@ -137,7 +218,7 @@ export function mergeReviewFiles(
   cwd: string | undefined,
   baselineAvailable: boolean,
   baselineFiles: ReviewListEntry[],
-  toolFiles: ReviewFallbackFile[],
+  toolFiles: (ReviewFallbackFile | ReviewSessionFile)[],
 ): ReviewListEntry[] {
   const root = cwd?.replace(/\\/g, '/').replace(/\/$/, '');
   const byPath = new Map<string, ReviewListEntry>();
