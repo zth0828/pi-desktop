@@ -1570,6 +1570,10 @@ button.danger-outline {
   color: var(--text-secondary);
 }
 
+/* 折叠态（data-expanded=false）提示可点击展开；流式态保持默认光标 */
+.bash-output[data-expanded='false'] { cursor: pointer; }
+.bash-output-more { cursor: pointer; }
+
 /* 工具卡片 */
 
 .tool-card {

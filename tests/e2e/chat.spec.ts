@@ -505,6 +505,57 @@ test('! bash 命令：本地执行并渲染输出卡片（!! 不入上下文）'
   await expect(excluded).toContainText(/不入上下文|excluded from context/);
 });
 
+test('! bash 长输出：默认折叠尾部预览，点击展开/收回', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 短输出：无折叠 UI，全文直出（回归）
+  await page.getByTestId('chat-input').fill('!echo pi-desktop-bash-short');
+  await page.getByTestId('chat-send').click();
+  const short = page.getByTestId('message-bash').last();
+  await expect(short.getByTestId('bash-output')).toContainText('pi-desktop-bash-short', { timeout: 15_000 });
+  await expect(short.getByTestId('bash-output')).toHaveAttribute('data-expanded', 'true');
+  await expect(short.getByTestId('bash-output-more')).toHaveCount(0);
+
+  // 长输出（seq 1 20）：默认只显示尾部 5 行（16..20），首行 1 不可见，提示更早 15 行
+  await page.getByTestId('chat-input').fill('!seq 1 20');
+  await page.getByTestId('chat-send').click();
+  const long = page.getByTestId('message-bash').last();
+  const output = long.getByTestId('bash-output');
+  await expect(output).toContainText('20', { timeout: 15_000 });
+  await expect(output).toHaveAttribute('data-expanded', 'false');
+  await expect.poll(() => output.textContent().then((text) => text?.startsWith('1\n') ?? false)).toBe(false);
+  await expect(long.getByTestId('bash-output-more')).toContainText('15');
+
+  // 点击输出区展开全文，再点收回
+  await output.click();
+  await expect(output).toHaveAttribute('data-expanded', 'true');
+  await expect.poll(() => output.textContent().then((text) => text?.startsWith('1\n') ?? false)).toBe(true);
+  await output.click();
+  await expect(output).toHaveAttribute('data-expanded', 'false');
+});
+
+test('! bash 流式窗口：执行中只见尾部预览，无展开交互', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 慢速命令保证落盘前有足够的流式窗口（50 行 × 0.1s ≈ 5s）
+  await page.getByTestId('chat-input').fill("!bash -c 'for i in $(seq 1 50); do echo $i; sleep 0.1; done'");
+  await page.getByTestId('chat-send').click();
+  const streaming = page.getByTestId('message-bash').last();
+  await expect(streaming).toBeVisible();
+  // 执行中（未落盘）：无 exit code、无展开提示、输出区标记 streaming
+  await expect(streaming.getByTestId('bash-exit-code')).toHaveCount(0, { timeout: 5_000 });
+  await expect(streaming.getByTestId('bash-output-more')).toHaveCount(0);
+  await expect(streaming.getByTestId('bash-output')).toHaveAttribute('data-expanded', 'streaming');
+  // 落盘后：转为非流式折叠态，可展开
+  await expect(streaming.getByTestId('bash-exit-code')).toContainText('0', { timeout: 20_000 });
+  await expect(streaming.getByTestId('bash-output')).toHaveAttribute('data-expanded', 'false');
+  await expect(streaming.getByTestId('bash-output-more')).toContainText('45');
+});
+
 test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当前轮插入', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

@@ -5,12 +5,15 @@ import { parseUserMessage } from '@shared/message-attachments';
 import { parseProviderError } from '../../lib/provider-error';
 import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
-import { formatDuration } from '../../lib/tool-display';
+import { formatDuration, tailLines } from '../../lib/tool-display';
 import { hostApi } from '../../lib/host-api';
 import type { ChatMessage, ContentBlock, TurnStats } from '../../stores/chat';
 import { usePaneChatStore } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
+
+/** bash 执行输出折叠预览的尾部行数（与工具卡 PREVIEW_LINES 同口径） */
+const BASH_PREVIEW_LINES = 5;
 
 /**
  * thinking 折叠块（Codex reasoningItem 范式）：流式中 "Thinking…"，
@@ -188,6 +191,7 @@ function MessageItemView({
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
   const [copied, setCopied] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
+  const [bashExpanded, setBashExpanded] = useState(false);
   if (message.role === 'user') {
     const rawText = message.content
       .filter((b) => b.type === 'text')
@@ -320,6 +324,16 @@ function MessageItemView({
       truncated?: boolean;
       excludeFromContext?: boolean;
     } | undefined;
+    // 落盘输出超过预览阈值时默认折叠为尾部 N 行，点击输出区/提示行展开；
+    // 流式草稿永远只看尾部预览（命令还在跑，展开没有意义），trimEnd 避免
+    // 尾随换行被 tailLines 计成一行（seq 输出每行都带 \n）。
+    const bashPreview = rawBash?.output ? tailLines(rawBash.output.trimEnd(), BASH_PREVIEW_LINES) : null;
+    const bashCollapsed = !message.streaming && bashPreview !== null && bashPreview.hidden > 0 && !bashExpanded;
+    // 流式草稿初始 output 为空时 bashPreview 为 null，?. 兜底；空串时下方 pre 不渲染
+    const bashVisible = bashCollapsed || message.streaming
+      ? bashPreview?.lines.join('\n') ?? rawBash?.output ?? ''
+      : rawBash!.output;
+    const bashExpandedAttr = message.streaming ? 'streaming' : bashCollapsed ? 'false' : 'true';
     return (
       <div className="message message-bash" data-testid="message-bash">
         <div className="bash-header">
@@ -337,8 +351,24 @@ function MessageItemView({
             </span>
           )}
         </div>
+        {bashCollapsed && bashPreview!.hidden > 0 && (
+          <div
+            className="tool-preview-more bash-output-more"
+            data-testid="bash-output-more"
+            onClick={() => setBashExpanded(true)}
+          >
+            {t('chat.tool.earlierLines', { count: bashPreview!.hidden })}
+          </div>
+        )}
         {rawBash?.output && (
-          <pre className="bash-output" data-testid="bash-output">{rawBash.output}</pre>
+          <pre
+            className="bash-output"
+            data-testid="bash-output"
+            data-expanded={bashExpandedAttr}
+            onClick={() => { if (!message.streaming) setBashExpanded((v) => !v); }}
+          >
+            {bashVisible}
+          </pre>
         )}
         {message.streaming && <span className="cursor-blink">▍</span>}
       </div>
