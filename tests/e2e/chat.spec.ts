@@ -626,24 +626,24 @@ test('命令模式：上下文开关切到入上下文、全角 ！ 前缀兼容
   await expect(full).not.toContainText(/不入上下文|excluded from context/);
 });
 
-test('命令模式：执行中发送按钮禁用，完成后恢复', async ({ launchElectronApp }) => {
+test('bash 执行中：普通消息发送不被阻塞，完成后命令正常落盘', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
   await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-command-mode').click();
-  await page.getByTestId('chat-input').fill("bash -c 'sleep 2; echo pi-desktop-bash-slow'");
+  await page.getByTestId('chat-input').fill("bash -c 'for i in $(seq 1 50); do echo $i; sleep 0.1; done'");
   await page.getByTestId('chat-send').click();
-  // pi 原生一次一个 bash：执行中发送按钮禁用并提示
-  await expect(page.getByTestId('chat-send')).toBeDisabled();
-  await expect(page.getByTestId('chat-send')).toHaveAttribute('title', /仍在执行|still running/);
-  // 完成后恢复可发送（先填入内容，空 composer 时发送按钮本就禁用）
+  // bash 执行中：输入内容后发送按钮保持可用（pi 允许 bash 运行中提交 prompt）
+  await page.getByTestId('chat-input').fill('ECHO_USER 普通消息不被 bash 阻塞');
+  await expect(page.getByTestId('chat-send')).toBeEnabled({ timeout: 10_000 });
+  await expect(page.getByTestId('chat-send')).not.toHaveAttribute('title', /仍在执行|still running/);
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('ECHO_USER 普通消息不被 bash 阻塞', { timeout: 30_000 });
+  // bash 完成后正常落盘
   const card = page.getByTestId('message-bash').last();
   await expect(card.getByTestId('bash-exit-code')).toContainText('0', { timeout: 20_000 });
-  await page.getByTestId('chat-input').fill('echo next');
-  await expect(page.getByTestId('chat-send')).toBeEnabled();
-  await expect(page.getByTestId('chat-send')).not.toHaveAttribute('title', /仍在执行|still running/);
 });
 
 test('bash 执行中可单独停止：流式卡停止按钮取消命令', async ({ launchElectronApp }) => {

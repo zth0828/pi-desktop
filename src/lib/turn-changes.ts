@@ -54,6 +54,8 @@ export function groupLogicalTurns(messages: ChatMessage[]): LogicalTurn[] {
       turns.push(current);
       return;
     }
+    // bashExecution 是独立执行消息，不属于对话回合：并入回合会被折叠隐藏
+    if (m.role === 'bashExecution') return;
     if (!current) return;
     current.endIndex = i;
     for (const b of m.content) {

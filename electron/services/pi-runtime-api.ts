@@ -105,6 +105,8 @@ export type ActiveRuntime = {
   trust: { autoTrustCwd?: string };
   /** 分支摘要进行中（navigateTree/fork 带 summarize 的等待窗口；pi 无事件，壳按调用区间跟踪）。 */
   summarizingBranch: boolean;
+  /** bash 完成时消息进 pending（流式中），需在回合结束（run.ended）补推快照带出。 */
+  pendingBashRefresh: boolean;
   unsubscribe: () => void;
   pendingPrompts: Array<{ requestId: string; phase: 'accepted' | 'started' }>;
 };
@@ -318,6 +320,31 @@ function historyMessages(session: PiSessionPort): { messages: unknown[]; entryId
       messages.push(message);
       entryIds.push(entry.type === 'message' && (entry.message as { role?: unknown }).role === 'user' ? (entry.id ?? null) : null);
     }
+  }
+  // 不入上下文的 bash（!! / 命令模式默认）被模型上下文转换过滤，只存在于完整消息
+  // 列表；按时间戳并回 history，否则并发回合后 displayMessages 走 history 丢失 bash 卡。
+  const sessionMsgs = (session.messages ?? []) as Array<{ role?: string; timestamp?: number }>;
+  const bashMsgs = sessionMsgs.filter((m) => m.role === 'bashExecution' && typeof m.timestamp === 'number');
+  // 已由模型上下文转换保留的 bash（入上下文的 ! 命令）按时间戳去重，只补缺失的
+  const seen = new Set<number>();
+  for (const m of messages) {
+    const t = (m as { timestamp?: number } | undefined)?.timestamp;
+    if (typeof t === 'number' && (m as { role?: string }).role === 'bashExecution') seen.add(t);
+  }
+  for (const bashMsg of bashMsgs) {
+    const ts = bashMsg.timestamp as number;
+    if (seen.has(ts)) continue;
+    seen.add(ts);
+    let insertAt = messages.length;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const t = (messages[i] as { timestamp?: number } | undefined)?.timestamp;
+      if (typeof t === 'number' && t <= ts) {
+        insertAt = i + 1;
+        break;
+      }
+    }
+    messages.splice(insertAt, 0, bashMsg);
+    entryIds.splice(insertAt, 0, null);
   }
   return { messages, entryIds };
 }
@@ -545,6 +572,11 @@ function bridgeSessionEvents(runtime: ActiveRuntime): void {
             runtime.pendingPrompts = runtime.pendingPrompts.filter((item) => item !== pending);
           }
         }
+        // 流式中完成的 bash：pending 消息已随 agent_end flush，补推一次全量带出
+        if (runtime.pendingBashRefresh) {
+          runtime.pendingBashRefresh = false;
+          sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(runtime));
+        }
         noteRunEnded(runtime.instanceId, mapped.willRetry);
         if (!mapped.willRetry) {
           runtime.running = false;
@@ -684,6 +716,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
     mcpStatus: null,
     trust,
     summarizingBranch: false,
+    pendingBashRefresh: false,
     unsubscribe: () => {},
     pendingPrompts: [],
   };
@@ -1300,11 +1333,13 @@ export const piRuntimeApi = {
           operations: eventResult?.operations,
         });
       }
-      // 流式中 pi 把 bash 消息延迟到 agent_end 落盘，此刻推全量会丢流式 partial；
-      // 流式场景的新消息由 run 结束后的状态刷新带出。
-      if (!session.isStreaming) {
-        sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));
-      }
+      // bash 完成：消息可能已落盘或刚进 pending（recordBashResult 时回合仍在跑）。
+      // 立即推快照会撞上 agent_end flush 的竞态窗口（快照缺 bash）；延迟一拍再推，
+      // 同时置 pendingBashRefresh 由 run.ended 兜底带出（标记残留无害，幂等）。
+      active.pendingBashRefresh = true;
+      setTimeout(() => {
+        if (!session.isStreaming) sendHostEvent('piRuntime', 'sessionReplaced', snapshotState(active));
+      }, 400);
       return { success: true };
     } catch (err) {
       return { success: false, error: toError(err) };

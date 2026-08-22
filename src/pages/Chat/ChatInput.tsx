@@ -650,6 +650,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const send = (behavior?: 'steer' | 'followUp') => {
     const text = value.trim();
     if (!text && attachments.length === 0) return;
+    // bash 一次一个：命令模式上一条未完成时不消费输入（按钮 title 已提示）
+    if (commandMode && bashing) return;
     const outgoingAttachments = attachments;
     const outgoing = outgoingAttachments.filter((attachment): attachment is StagedImage => attachment.kind === 'image');
     // plan 与 skill 前缀互斥：pi 只展开开头的单个 / 命令，同时存在时 plan 优先
@@ -1339,8 +1341,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 data-testid="chat-send"
                 className="send-button"
                 onClick={() => send()}
-                disabled={(!value.trim() && attachments.length === 0) || bashing}
-                title={bashing ? t('chat.command.runningHint') : sendWith === 'cmdEnter' ? t('chat.sendTipCmdEnter') : t('chat.sendTip')}
+                disabled={!value.trim() && attachments.length === 0}
+                title={commandMode && bashing ? t('chat.command.runningHint') : sendWith === 'cmdEnter' ? t('chat.sendTipCmdEnter') : t('chat.sendTip')}
               >
                 <ArrowUp size={15} />
               </button>

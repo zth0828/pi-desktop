@@ -723,6 +723,19 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               />
             ))}
             {logicalTurns.map(renderTurn)}
+            {/* 回合外的独立消息（bash 执行等，groupLogicalTurns 跳过不并入回合） */}
+            {displayMessages.slice((logicalTurns[logicalTurns.length - 1]?.endIndex ?? -1) + 1).map((message, i) => {
+              const index = (logicalTurns[logicalTurns.length - 1]?.endIndex ?? -1) + 1 + i;
+              return (
+                <MessageItem
+                  key={index}
+                  message={message}
+                  anchorId={`chat-msg-${index}`}
+                  highlighted={searchHighlightIndex === index}
+                  cacheMiss={cacheMisses.get(index)}
+                />
+              );
+            })}
             {bashDraft && (
               <MessageItem
                 message={{
