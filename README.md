@@ -1,8 +1,8 @@
 <div align="center">
   <img src="./resources/icon.png" width="128" height="128" alt="Pi Desktop logo">
   <h1>Pi Desktop</h1>
-  <p><strong>A desktop workbench for the pi coding agent.</strong></p>
-  <p>Chat, run tools, review code, manage sessions, and extend pi without leaving one focused app.</p>
+  <p><strong>The desktop workbench for agentic coding with pi.</strong></p>
+  <p>Stream the conversation, review every diff, run shell commands, and keep many sessions moving across split panes and separate windows.</p>
   <p>
     <a href="README.md">English</a> ·
     <a href="README.zh-CN.md">简体中文</a>
@@ -14,15 +14,23 @@
   </p>
 </div>
 
-Pi Desktop turns [pi](https://github.com/badlogic/pi-mono) into a native-feeling
-desktop workspace without replacing its runtime. Models, sessions, tools,
-skills, packages, extensions, and configuration still come from pi; the desktop
-app makes those capabilities easier to see, control, and use every day.
+Pi Desktop gives [pi](https://github.com/badlogic/pi-mono) a real home on your
+desktop: a streaming chat with plan mode, skills, and file attachments; a
+side-by-side workbench that previews files, reviews diffs hunk by hunk, and
+keeps a history of every shell command; sessions that behave like project
+work — searchable, forkable, and ready to split into panes or detach into
+their own windows; and a control surface for the whole model stack, from API
+keys and OAuth to local servers.
+
+Everything runs on your globally installed pi runtime. Sessions, credentials,
+skills, packages, and settings stay in pi's native locations and formats, so
+the work you do here remains fully compatible with the pi CLI and ecosystem.
 
 > [!IMPORTANT]
-> Pi Desktop does not bundle or fork pi. It loads the user's globally installed
-> pi SDK and uses pi's native configuration and session files. The project is
-> under active development; current downloads are unsigned preview builds.
+> Pi Desktop runs on the pi you already have: it loads your globally installed
+> pi SDK and keeps using pi's native configuration, credentials, and session
+> files — nothing is forked, replaced, or locked in. The project is under
+> active development; current downloads are unsigned preview builds.
 
 ![Pi Desktop streaming chat with rich Markdown output](./resources/screenshots/chat.png)
 
@@ -34,11 +42,18 @@ Ask pi to investigate a project, follow its streaming work, inspect tool calls,
 review the resulting files and diffs, then continue the same session. The
 conversation, workspace, and change review stay connected.
 
-### Native pi, with no second agent implementation
+### Built for parallel work
 
-Pi Desktop does not run its own LLM loop or invent a desktop-only session
-format. It adapts pi's SDK, events, settings, package manager, and extension
-system. Work created in the desktop app remains pi work.
+Split a window into panes, detach sessions into as many separate windows as
+you need, and keep every conversation moving at once. Streaming,
+notifications, and focus follow each session to the right window.
+
+### Pi-native to the core, zero lock-in
+
+Every session, setting, and credential the app touches stays in pi's native
+formats and locations. Pi Desktop adapts pi's SDK, events, package manager,
+and extension system directly, so you can move between the CLI and the desktop
+app without losing a thing.
 
 ### Bring your own model stack
 
@@ -63,13 +78,13 @@ actual installation and execution to pi.
 
 | Area | What is available |
 | --- | --- |
-| **Agent chat** | Streaming text and reasoning, tool-call progress, stop, queue and steer, slash commands, plan mode integration, rich Markdown, task lists, tables, code blocks, copy actions, file references, and image attachments |
-| **Workspace** | Expandable file browser; text, code, image, Markdown, PDF, DOCX, XLSX and CSV previews; open files in native apps; responsive docked or overlay layout |
+| **Agent chat** | Streaming text and reasoning, tool-call progress, stop, queue and steer, slash commands, a plan mode toggle, message editing and forking with attachments restored, bash command mode with context control, rich Markdown, task lists, tables, code blocks, copy actions, workspace file references, and image attachments |
+| **Workspace** | Expandable file browser; text, code, image, Markdown, PDF, DOCX, XLSX and CSV previews; open files in native apps; session bash run history; docked side-by-side or overlay layout with optional window expansion |
 | **Change review** | Git and non-Git change detection, staged/unstaged/untracked/conflict states, split or unified diff, per-file and per-hunk revert confirmation, and edited-file summaries after each turn |
-| **Sessions** | Project-grouped history, title/message search, rename, live-session indicators, switch, fork, branch tree, archive/restore, delete, context compaction, and standalone HTML export |
-| **Models** | Built-in and extension providers, API keys, OAuth, custom compatible endpoints, protocol probing, model discovery, context/output limits, token pricing, thinking levels, usage and cost details |
+| **Sessions** | Project-grouped history with group expand and collapse, title/message search, rename, live-session indicators, switch, fork, branch tree, archive/restore, delete, context compaction, and standalone HTML export |
+| **Models** | Built-in and extension providers, API keys, OAuth, custom compatible endpoints, protocol probing, model discovery, context/output limits, token pricing, thinking levels, usage and cost details, and a composer picker with provider grouping and per-provider search |
 | **pi ecosystem** | Read active Skills, browse the official package catalog, inspect package metadata and README files, install/update/remove packages, configure global/project MCP servers, and render supported extension dialogs/widgets/notifications |
-| **Desktop experience** | Light/dark/system themes, English/Chinese UI, session search shortcut, collapsible sidebar, notification policy, send-key and follow-up behavior, prevent-sleep support, and pi environment diagnostics |
+| **Desktop experience** | Light/dark/system themes, English/Chinese UI, split panes and detached session windows, session search shortcut, collapsible sidebar, notification policy, send-key and follow-up behavior, prevent-sleep support, version update notifications with mirror-accelerated downloads, and pi environment diagnostics |
 
 ## Product Tour
 
@@ -81,6 +96,22 @@ The right-hand workbench keeps source files and changes next to the conversation
 Tool activity folds into a readable turn log, while edited files remain visible
 for review or rollback.
 
+### Drive the session from the composer toolbar
+
+![Pi Desktop composer toolbar with workspace file reference tree](./resources/screenshots/composer.png)
+
+Plan mode, skills, workspace and git branch switching, and the model picker live in a
+persistent toolbar. The @ reference panel browses the workspace as a file tree and
+stages any file — not just images — as an attachment for the next message.
+
+### Run shell commands beside the conversation
+
+![Pi Desktop command mode and run history](./resources/screenshots/commands.png)
+
+Command mode runs bash straight from the composer, with a toggle to keep output out of
+the model context. A run can be stopped independently of the conversation turn, and the
+workspace Commands tab keeps every command with its output and exit code.
+
 ### Use the model stack that fits the project
 
 ![Pi Desktop providers and models](./resources/screenshots/models.png)
@@ -89,6 +120,11 @@ Credentials remain in pi's native storage. Pi Desktop adds a clear management
 surface for provider status, available models, context windows, output limits,
 and the active model.
 
+Switch models mid-session from the composer picker, which groups providers and
+searches within each group:
+
+![Pi Desktop composer model picker with provider groups](./resources/screenshots/model-menu.png)
+
 ### Treat sessions as durable project work
 
 ![Pi Desktop session management](./resources/screenshots/sessions.png)
@@ -96,6 +132,19 @@ and the active model.
 Sessions are not disposable chat tabs. Continue earlier work, fork an
 alternative approach, archive completed threads, or export a self-contained
 HTML record.
+
+### Multitask with split panes and separate windows
+
+![Pi Desktop window split into two session panes](./resources/screenshots/panes.png)
+
+Drag a session onto a pane edge to split the window and follow two conversations
+side by side, each with its own streaming state and workspace.
+
+![Pi Desktop sessions running in parallel in separate windows](./resources/screenshots/windows.png)
+
+Need more room? Detach as many sessions as you like into windows of their
+own — two, three, or more. Every window keeps streaming independently, and
+notification clicks jump straight back to the session that raised them.
 
 ### Grow capabilities through pi packages
 
