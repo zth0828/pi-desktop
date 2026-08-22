@@ -187,6 +187,19 @@ test('图片输入：附件入列 → 随消息发送 → 用户消息渲染图�
   await expect(page.getByTestId('staged-attachments').locator('img')).toHaveCount(1);
   await page.getByTestId('staged-image-preview').click();
   await expect(page.getByTestId('image-lightbox')).toBeVisible();
+  await expect(page.getByTestId('image-lightbox-zoom-in')).toBeVisible();
+  await expect(page.getByTestId('image-lightbox-zoom-out')).toBeVisible();
+  await expect(page.getByTestId('image-lightbox-zoom-fit')).toHaveText('100%');
+  await expect(page.getByTestId('image-lightbox-copy')).toBeVisible();
+  await expect(page.getByTestId('image-lightbox-save')).toBeVisible();
+  await expect(page.getByTestId('image-lightbox-close')).toBeVisible();
+
+  await page.getByTestId('image-lightbox-zoom-in').click();
+  await expect(page.getByTestId('image-lightbox-zoom-fit')).toHaveText('125%');
+  await page.getByTestId('image-lightbox-zoom-fit').click();
+  await expect(page.getByTestId('image-lightbox-zoom-fit')).toHaveText('100%');
+  await page.getByTestId('image-lightbox-copy').click();
+
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('image-lightbox')).toHaveCount(0);
 

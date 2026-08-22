@@ -25,6 +25,16 @@ export type ShellOpenPathWithPayload = {
 };
 export type ShellOpenPathPayload = { path: string };
 export type AppClipboardWritePayload = { text: string };
+export type AppClipboardImagePayload = {
+  /** Base64-encoded image data (without data: URL prefix) */
+  data: string;
+  mimeType?: string;
+};
+export type AppWriteBinaryFilePayload = {
+  path: string;
+  /** Base64-encoded binary file content */
+  data: string;
+};
 export type AppEditCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll';
 export type AppEditCommandPayload = {
   command: AppEditCommand;
@@ -548,6 +558,13 @@ export type DialogOpenPayload = {
 };
 export type DialogOpenResult = { canceled: boolean; filePaths: string[] };
 
+export type DialogSavePayload = {
+  title?: string;
+  defaultPath?: string;
+  filters?: Array<{ name: string; extensions: string[] }>;
+};
+export type DialogSaveResult = { canceled: boolean; filePath?: string };
+
 // —— windows：多窗口管理 ——
 
 export type WindowsOpenDetachedPayload = { sessionPath: string; cwd?: string };
@@ -956,6 +973,8 @@ export type HostApiContract = {
     name: () => string;
     platform: () => string;
     writeClipboard: (payload: AppClipboardWritePayload) => HostSuccess;
+    writeClipboardImage: (payload: AppClipboardImagePayload) => HostSuccess;
+    writeBinaryFile: (payload: AppWriteBinaryFilePayload) => HostSuccess;
     editCommand: (payload: AppEditCommandPayload) => HostSuccess;
   };
   shell: {
@@ -1159,6 +1178,7 @@ export type HostApiContract = {
   };
   dialog: {
     open: (payload: DialogOpenPayload) => DialogOpenResult;
+    save: (payload: DialogSavePayload) => DialogSaveResult;
   };
   windows: {
     /** 在独立窗口打开指定会话；同会话已有窗口则聚焦复用。 */

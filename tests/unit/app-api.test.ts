@@ -17,6 +17,17 @@ const focusedWindowMock = {
 
 let focusedWindow: typeof focusedWindowMock | null = focusedWindowMock;
 let clipboardText = '';
+let clipboardImage: unknown = null;
+const writtenFiles: Record<string, Buffer> = {};
+
+vi.mock('node:fs', () => ({
+  promises: {
+    writeFile: vi.fn(async (filePath: string, buffer: Buffer) => {
+      writtenFiles[filePath] = buffer;
+    }),
+  },
+  readFileSync: vi.fn(() => JSON.stringify({ version: '0.4.0' })),
+}));
 
 vi.mock('electron', () => ({
   app: {
@@ -28,6 +39,15 @@ vi.mock('electron', () => ({
     writeText: (text: string) => {
       clipboardText = text;
     },
+    writeImage: (image: unknown) => {
+      clipboardImage = image;
+    },
+  },
+  nativeImage: {
+    createFromBuffer: (buffer: Buffer) => ({
+      isEmpty: () => buffer.length === 0,
+      toDataURL: () => `data:image/png;base64,${buffer.toString('base64')}`,
+    }),
   },
   BrowserWindow: {
     getFocusedWindow: () => focusedWindow,
@@ -42,6 +62,8 @@ describe('appApi', () => {
     vi.clearAllMocks();
     focusedWindow = focusedWindowMock;
     clipboardText = '';
+    clipboardImage = null;
+    for (const key of Object.keys(writtenFiles)) delete writtenFiles[key];
   });
 
   it('reports app version, name, and platform', () => {
@@ -70,5 +92,25 @@ describe('appApi', () => {
     const res = appApi.editCommand({ command: 'undo' });
     expect(res.success).toBe(false);
     expect(res.error).toContain('No active window');
+  });
+
+  it('writes image to clipboard', () => {
+    const base64Data = Buffer.from('fake-image-bytes').toString('base64');
+    const res = appApi.writeClipboardImage({ data: base64Data, mimeType: 'image/png' });
+    expect(res.success).toBe(true);
+    expect(clipboardImage).not.toBeNull();
+  });
+
+  it('returns error when writing empty image to clipboard', () => {
+    const res = appApi.writeClipboardImage({ data: '', mimeType: 'image/png' });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Failed to create image from buffer');
+  });
+
+  it('writes binary file to disk', async () => {
+    const base64Data = Buffer.from('hello-binary').toString('base64');
+    const res = await appApi.writeBinaryFile({ path: '/tmp/test.png', data: base64Data });
+    expect(res.success).toBe(true);
+    expect(writtenFiles['/tmp/test.png']?.toString('utf8')).toBe('hello-binary');
   });
 });

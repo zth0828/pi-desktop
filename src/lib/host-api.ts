@@ -3,6 +3,8 @@
 import { invokeHost, scopedInvokeHost } from './host-api-client';
 import type {
   AppEditCommand,
+  DialogOpenPayload,
+  DialogSavePayload,
   HostApiAction,
   HostApiModule,
   HostApiPayloadArgs,
@@ -29,6 +31,10 @@ function createHostApi(sessionPath?: string) {
     name: () => invoke('app', 'name'),
     platform: () => invoke('app', 'platform'),
     writeClipboard: (text: string) => invoke('app', 'writeClipboard', { text }),
+    writeClipboardImage: (payload: { data: string; mimeType?: string }) =>
+      invoke('app', 'writeClipboardImage', payload),
+    writeBinaryFile: (payload: { path: string; data: string }) =>
+      invoke('app', 'writeBinaryFile', payload),
     editCommand: (command: AppEditCommand) => invoke('app', 'editCommand', { command }),
   },
   shell: {
@@ -230,8 +236,11 @@ function createHostApi(sessionPath?: string) {
     checkout: (cwd: string, branch: string) => invoke('git', 'checkout', { cwd, branch }),
   },
   dialog: {
+    open: (payload: DialogOpenPayload) => invoke('dialog', 'open', payload),
     openDirectory: (title?: string, defaultPath?: string) =>
       invoke('dialog', 'open', { title, defaultPath, properties: ['openDirectory', 'createDirectory'] }),
+    save: (payload: DialogSavePayload) => invoke('dialog', 'save', payload),
+    saveFile: (payload?: DialogSavePayload) => invoke('dialog', 'save', payload ?? {}),
   },
   windows: {
     openDetached: (payload: { sessionPath: string; cwd?: string }) =>

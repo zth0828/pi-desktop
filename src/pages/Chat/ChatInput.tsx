@@ -119,7 +119,7 @@ function lastAssistantText(messages: ChatMessage[]): string | null {
 
 export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const { t } = useTranslation();
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
   const [commands, setCommands] = useState<PiCommandRow[]>([]);
   const [selected, setSelected] = useState(0);
   const [atToken, setAtToken] = useState<AtToken | null>(null);
@@ -921,7 +921,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                   className="staged-image-preview"
                   data-testid="staged-image-preview"
                   aria-label={t('chat.imageAttachment', { index: index + 1, name: attachment.name })}
-                  onClick={() => setPreviewImage(attachment.previewUrl)}
+                  onClick={() => setPreviewImage({ url: attachment.previewUrl, name: attachment.name })}
                 >
                   <img src={attachment.previewUrl} alt={attachment.name} />
                   <span className="attachment-order">{index + 1}</span>
@@ -1291,7 +1291,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
           )}
         </div>
       </div>
-      {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
+      {previewImage && <ImageLightbox src={previewImage.url} name={previewImage.name} onClose={() => setPreviewImage(null)} />}
     </div>
   );
 }

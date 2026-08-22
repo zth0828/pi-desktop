@@ -311,6 +311,10 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await panel.getByTestId('workspace-files-tab').click();
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.png' }).click();
   await expect(panel.getByTestId('workspace-image-preview').locator('img')).toBeVisible();
+  await panel.getByTestId('workspace-image-preview').locator('img').click();
+  await expect(page.getByTestId('image-lightbox')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('image-lightbox')).toHaveCount(0);
   await expect(panel.getByTestId('workspace-file-tab')).toHaveCount(2);
   await expect(panel.getByTestId('workspace-close-all')).toBeVisible();
   await panel.getByTestId('workspace-close-all').click();

@@ -1,8 +1,13 @@
 // app 模块：壳自身信息与基础编辑命令。
-import { app, BrowserWindow, clipboard } from 'electron';
-import { readFileSync } from 'node:fs';
+import { app, BrowserWindow, clipboard, nativeImage } from 'electron';
+import { promises as fs, readFileSync } from 'node:fs';
 import path from 'node:path';
-import type { AppEditCommandPayload, HostSuccess } from '@shared/host-api/contract';
+import type {
+  AppClipboardImagePayload,
+  AppEditCommandPayload,
+  AppWriteBinaryFilePayload,
+  HostSuccess,
+} from '@shared/host-api/contract';
 
 function resolveAppVersion(): string {
   const version = app.getVersion();
@@ -26,6 +31,28 @@ export const appApi = {
   writeClipboard: (payload: { text: string }) => {
     clipboard.writeText(payload.text);
     return { success: true };
+  },
+  writeClipboardImage: (payload: AppClipboardImagePayload): HostSuccess => {
+    try {
+      const buffer = Buffer.from(payload.data, 'base64');
+      const image = nativeImage.createFromBuffer(buffer);
+      if (image.isEmpty()) {
+        return { success: false, error: 'Failed to create image from buffer' };
+      }
+      clipboard.writeImage(image);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  writeBinaryFile: async (payload: AppWriteBinaryFilePayload): Promise<HostSuccess> => {
+    try {
+      const buffer = Buffer.from(payload.data, 'base64');
+      await fs.writeFile(payload.path, buffer);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   },
   editCommand: (payload: AppEditCommandPayload): HostSuccess => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];

@@ -1355,32 +1355,87 @@ button.danger-outline {
   backdrop-filter: blur(14px);
   cursor: zoom-out;
   -webkit-app-region: no-drag;
+  overflow: auto;
+}
+
+.image-lightbox-body {
+  display: grid;
+  place-items: center;
+  max-width: 100%;
+  max-height: 100%;
+  cursor: zoom-out;
 }
 
 .image-lightbox img {
   max-width: min(100%, 1280px);
-  max-height: 100%;
+  max-height: calc(100vh - 100px);
   object-fit: contain;
   border-radius: 8px;
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-panel);
   cursor: default;
+  transform-origin: center center;
+  transition: transform 120ms ease;
 }
 
-.image-lightbox-close {
+.image-lightbox-toolbar {
   position: absolute;
   top: 18px;
   right: 18px;
-  z-index: 1;
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 7px;
-  color: var(--text);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
+  border-radius: 8px;
   box-shadow: var(--shadow-panel);
+  cursor: default;
+}
+
+.image-lightbox-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.image-lightbox-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.image-lightbox-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.image-lightbox-zoom-fit {
+  width: auto;
+  min-width: 44px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.image-lightbox-toolbar .toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.image-lightbox-close {
+  color: var(--text);
 }
 
 .message-assistant {
@@ -5021,6 +5076,7 @@ button.danger-outline {
 :root[data-theme='dark'] .workspace-code-token { color: var(--shiki-dark) !important; }
 .workspace-truncated { position: sticky; top: 0; padding: 6px 12px; background: var(--warning-soft); color: var(--text-secondary); font-size: 11px; }
 .workspace-image-preview { min-height: 100%; display: grid; place-items: center; padding: 20px; background: var(--bg-sunken); }
+.workspace-image-preview-button { background: none; border: none; padding: 0; margin: 0; cursor: zoom-in; display: grid; place-items: center; }
 .workspace-image-preview img { max-width: 100%; max-height: calc(100vh - 100px); object-fit: contain; }
 .workspace-rich-preview,
 .workspace-pdf-preview,

@@ -1,6 +1,11 @@
-// dialog 模块：系统对话框（目录/文件选择）。
+// dialog 模块：系统对话框（目录/文件选择与保存）。
 import { BrowserWindow, dialog } from 'electron';
-import type { DialogOpenPayload, DialogOpenResult } from '@shared/host-api/contract';
+import type {
+  DialogOpenPayload,
+  DialogOpenResult,
+  DialogSavePayload,
+  DialogSaveResult,
+} from '@shared/host-api/contract';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { getMainWindow } from '../main/window-manager';
 
@@ -20,5 +25,18 @@ export const dialogApi = {
       ? await dialog.showOpenDialog(win, options)
       : await dialog.showOpenDialog(options);
     return { canceled: result.canceled, filePaths: result.filePaths };
+  },
+  save: async (payload: DialogSavePayload, ctx?: HostActionContext): Promise<DialogSaveResult> => {
+    const win = (ctx && BrowserWindow.fromWebContents(ctx.sender)) || getMainWindow();
+    if (win && !win.isVisible()) win.show();
+    const options = {
+      title: payload.title,
+      defaultPath: payload.defaultPath,
+      filters: payload.filters,
+    };
+    const result = win
+      ? await dialog.showSaveDialog(win, options)
+      : await dialog.showSaveDialog(options);
+    return { canceled: result.canceled, filePath: result.filePath };
   },
 };

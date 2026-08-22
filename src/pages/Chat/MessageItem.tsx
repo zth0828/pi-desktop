@@ -188,7 +188,7 @@ function MessageItemView({
   const editMessage = usePaneChatStore((s) => s.editMessage);
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
   const [copied, setCopied] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
   if (message.role === 'user') {
     const rawText = message.content
       .filter((b) => b.type === 'text')
@@ -270,7 +270,7 @@ function MessageItemView({
             <div className="message-attachments" data-testid="message-attachments">
               {orderedAttachments.map((attachment) => attachment.kind === 'image' ? (
                 <div className="message-attachment message-image-attachment" data-testid="message-attachment" data-attachment-index={attachment.index} key={`${attachment.index}-${attachment.name}`}>
-                  <button className="message-image-button" onClick={() => setPreviewImage(attachment.url)} aria-label={t('chat.imageAttachment', { index: attachment.index, name: attachment.name })}>
+                  <button className="message-image-button" onClick={() => setPreviewImage({ url: attachment.url, name: attachment.name })} aria-label={t('chat.imageAttachment', { index: attachment.index, name: attachment.name })}>
                     <img className="message-image" data-testid="message-image" src={attachment.url} alt={attachment.name} />
                     <span className="attachment-order">{attachment.index}</span>
                   </button>
@@ -287,7 +287,7 @@ function MessageItemView({
           )}
           {parsed.text && <div className="message-bubble" data-testid="message-user-text">{parsed.text}</div>}
         </div>
-        {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
+        {previewImage && <ImageLightbox src={previewImage.url} name={previewImage.name} onClose={() => setPreviewImage(null)} />}
       </div>
     );
   }
