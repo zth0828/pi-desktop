@@ -58,6 +58,11 @@ describe('toolSummary', () => {
     expect(toolSummary('bash', { command: '  ' })).toBeNull();
   });
 
+  it('find/ls 按 path 出摘要（default 兜底）', () => {
+    expect(toolSummary('find', { pattern: '*.ts', path: 'src' })).toBe('src');
+    expect(toolSummary('ls', { path: '.' })).toBe('.');
+  });
+
   it('subagent：single 显示 agent 名，chain/parallel 显示模式与任务数', () => {
     expect(toolSummary('subagent', { agent: 'reviewer', task: 'check' })).toBe('reviewer');
     expect(toolSummary('subagent', { chain: [{ agent: 'a' }, { agent: 'b' }] })).toBe('chain ×2');

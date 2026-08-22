@@ -726,8 +726,10 @@ export type PiDefaultToolsResult = { tools: string[] };
 
 /** pi 内置工具全集（设置页工具开关枚举；顺序即展示顺序）。 */
 export const PI_BUILTIN_TOOLS = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls'] as const;
+/** 不可取消的核心工具（关闭后模型无法读写/执行，设置页开关锁定为开启）。 */
+export const PI_CORE_TOOLS = ['read', 'bash', 'edit', 'write'] as const;
 /** pi 未配置 defaultTools 时的默认工具列表（与 pi SDK 的 defaultActiveToolNames 一致）。 */
-export const PI_DEFAULT_TOOLS = ['read', 'bash', 'edit', 'write'] as const;
+export const PI_DEFAULT_TOOLS = PI_CORE_TOOLS;
 
 // —— piRuntime 命令补全 ——
 

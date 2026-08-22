@@ -100,7 +100,7 @@ export function ToolCallCard({
   // 动词化一行文案（Codex 范式）：进行/完成/中止三态成对，如
   // "Running command…" / "Ran $ ls in 1.2s" / "Stopped"；error 复用 done 模板（pill 标红）。
   const lineState = execution.interrupted ? 'stopped' : execution.status === 'running' ? 'running' : 'done';
-  const verbTool = ['bash', 'edit', 'write', 'read', 'grep'].includes(execution.toolName)
+  const verbTool = ['bash', 'edit', 'write', 'read', 'grep', 'find', 'ls'].includes(execution.toolName)
     ? execution.toolName
     : 'default';
   const line = t(`chat.tool.line.${verbTool}.${lineState}`, {

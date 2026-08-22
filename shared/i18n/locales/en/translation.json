@@ -193,6 +193,16 @@
           "done": "Searched {{summary}}{{durationPart}}",
           "stopped": "Stopped searching"
         },
+        "find": {
+          "running": "Finding {{summary}}…",
+          "done": "Found {{summary}}{{durationPart}}",
+          "stopped": "Stopped finding"
+        },
+        "ls": {
+          "running": "Listing {{summary}}…",
+          "done": "Listed {{summary}}{{durationPart}}",
+          "stopped": "Stopped listing"
+        },
         "default": {
           "running": "Running {{tool}}…",
           "done": "Ran {{tool}}{{durationPart}}",
@@ -776,7 +786,7 @@
     },
     "tools": {
       "title": "Available tools",
-      "desc": "Built-in tools the model can call in new sessions. Changes apply to new sessions (the current session keeps the toolset from startup)."
+      "desc": "Built-in tools the model can call in new sessions. Core tools (read/bash/edit/write) are always enabled; read-only search tools (grep/find/ls) can be toggled. Changes apply to new sessions (the current session keeps the toolset from startup)."
     },
     "defaultThinking": {
       "title": "Default thinking level",

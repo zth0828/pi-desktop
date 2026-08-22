@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderOpen, Monitor, Moon, Sun } from 'lucide-react';
-import { DEFAULT_DESKTOP_PROXY_URL, PI_BUILTIN_TOOLS, PI_DEFAULT_TOOLS, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
+import { DEFAULT_DESKTOP_PROXY_URL, PI_BUILTIN_TOOLS, PI_CORE_TOOLS, PI_DEFAULT_TOOLS, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { workspaceErrorMessage } from '../lib/workspace-error';
@@ -477,18 +477,27 @@ export default function SettingsPage() {
           </div>
           <div className="pill-group" data-testid="settings-default-tools">
             {PI_BUILTIN_TOOLS.map((tool) => {
-              const on = defaultTools.includes(tool);
+              const core = (PI_CORE_TOOLS as readonly string[]).includes(tool);
+              const on = core || defaultTools.includes(tool);
               return (
                 <button
                   key={tool}
                   data-testid={`tool-toggle-${tool}`}
                   className={on ? 'pill active' : 'pill'}
+                  disabled={core}
                   onClick={() => {
+                    // 核心工具 disabled 挡住点击，这里只处理只读检索工具的开/关
                     const next = on
                       ? defaultTools.filter((name) => name !== tool)
                       : [...defaultTools, tool];
-                    setDefaultTools(next);
-                    void hostApi.providers.setDefaultTools(next);
+                    // 写回始终包含核心四工具：settings.json 由其他入口（如 pi CLI）
+                    // 写入 read-only 模式时，壳 UI 仍保证核心工具可用
+                    const effective = [
+                      ...PI_CORE_TOOLS,
+                      ...next.filter((name) => !(PI_CORE_TOOLS as readonly string[]).includes(name)),
+                    ];
+                    setDefaultTools(effective);
+                    void hostApi.providers.setDefaultTools(effective);
                   }}
                 >
                   {tool}
