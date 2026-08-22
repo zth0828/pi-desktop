@@ -218,8 +218,12 @@ function createHostApi(sessionPath?: string) {
     apply: () => invoke('proxy', 'apply'),
   },
   notify: {
-    dispatch: (payload: { kind: 'runCompleted' | 'uiRequest'; title: string; body?: string }) =>
-      invoke('notify', 'dispatch', payload),
+    dispatch: (payload: {
+      kind: 'runCompleted' | 'uiRequest';
+      title: string;
+      body?: string;
+      sessionPath?: string;
+    }) => invoke('notify', 'dispatch', payload),
   },
   review: {
     getSummary: () => invoke('review', 'getSummary'),

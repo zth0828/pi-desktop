@@ -4,8 +4,9 @@
 import { appendFileSync } from 'node:fs';
 import { BrowserWindow, Notification } from 'electron';
 import type { HostSuccess, NotifyDispatchPayload } from '@shared/host-api/contract';
-import { getMainWindow } from '../main/window-manager';
-import { shouldNotify, type NotifyMode } from './notify-policy';
+import { getMainWindow, findWindowBySession } from '../main/window-manager';
+import { sendHostEventToWindow } from '../main/ipc/host-events';
+import { resolveNotifyFocused, shouldNotify, type NotifyMode } from './notify-policy';
 import { settingsApi } from './settings-api';
 
 export const notifyApi = {
@@ -15,10 +16,16 @@ export const notifyApi = {
     const uiRequestEnabled = payload.kind === 'uiRequest'
       ? ((await settingsApi.get({ key: 'notifyUiRequest' })) as boolean | undefined)
       : undefined;
-    // TODO：通知链路尚无会话上下文，焦点判定按「任一窗口聚焦」、点击聚焦落主窗口。
     const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
-    const anyFocused = windows.some((w) => w.isFocused());
-    if (!shouldNotify(mode, anyFocused, payload.kind, uiRequestEnabled)) {
+    // 会话已落盘时按「会话所在窗口是否聚焦」判定，避免其他窗口聚焦吞掉本会话的通知；
+    // 会话窗口已关（找不到）视为失焦不吞通知；sessionPath 缺省（in-memory）保持任一窗口口径。
+    const sessionWindow = payload.sessionPath ? findWindowBySession(payload.sessionPath) : null;
+    const focused = resolveNotifyFocused(
+      payload.sessionPath,
+      sessionWindow ? sessionWindow.isFocused() : null,
+      windows.some((w) => w.isFocused()),
+    );
+    if (!shouldNotify(mode, focused, payload.kind, uiRequestEnabled)) {
       return { success: true };
     }
 
@@ -35,9 +42,24 @@ export const notifyApi = {
     try {
       const notification = new Notification({ title: payload.title, body: payload.body ?? '' });
       notification.on('click', () => {
-        const target = getMainWindow() ?? windows.find((w) => !w.isDestroyed());
+        // 点击优先聚焦产生通知的会话所在窗口并激活对应面板（与 windows-api 的 focus 路径一致）；
+        // 会话未落盘/窗口已关时回退主窗口。
+        let target: BrowserWindow | null = null;
+        if (payload.sessionPath) {
+          const sessionWindow = findWindowBySession(payload.sessionPath);
+          if (sessionWindow) {
+            if (sessionWindow.isMinimized()) sessionWindow.restore();
+            sessionWindow.focus();
+            sendHostEventToWindow(sessionWindow, 'windows', 'focusSession', {
+              sessionPath: payload.sessionPath,
+            });
+            target = sessionWindow;
+          }
+        }
+        target ??= getMainWindow() ?? (windows.find((w) => !w.isDestroyed()) ?? null);
         if (target) {
-          target.show();
+          if (target.isMinimized()) target.restore();
+          if (!target.isVisible()) target.show();
           target.focus();
         }
       });

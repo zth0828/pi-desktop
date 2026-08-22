@@ -598,6 +598,8 @@ export type NotifyDispatchPayload = {
   /** 已在渲染层本地化的标题/正文 */
   title: string;
   body?: string;
+  /** 产生通知的会话文件路径：main 按它定位焦点判定与点击目标；in-memory 会话暂无文件，缺省回退窗口级判定 */
+  sessionPath?: string;
 };
 
 // —— providers：模型/供应商管理 ——

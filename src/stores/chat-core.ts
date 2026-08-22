@@ -49,8 +49,8 @@ export type HostEventSubscriber = <M extends HostEventModule, E extends HostEven
 
 /** 系统通知上报（web 侧传 lib/notify 的实现；文案含 i18n，故不进本模块） */
 export type ChatEventReporters = {
-  runCompleted: (summary: string) => void;
-  uiRequest: (title: string) => void;
+  runCompleted: (summary: string, sessionPath?: string) => void;
+  uiRequest: (title: string, sessionPath?: string) => void;
 };
 
 export type ChatStoreDeps = {
@@ -242,7 +242,7 @@ function bindInstanceEvents(
       if (req.generation !== s.generation) return; // 过期会话的请求丢弃（main 侧会兜底取消）
       store.setState({ uiRequests: [...s.uiRequests, req] });
       // 挂起的确认/输入请求也走系统通知（"需要确认/输入"类）
-      reporters?.uiRequest(req.title);
+      reporters?.uiRequest(req.title, s.boundSessionPath ?? undefined);
     }),
     onEvent('piRuntime', 'uiCancel', ({ requestId }) => {
       store.setState((s) => ({
@@ -670,7 +670,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
               .replace(/\s+/g, ' ')
               .trim()
               .slice(0, 120);
-            deps.reporters?.runCompleted(summary || get().cwd || '');
+            deps.reporters?.runCompleted(summary || get().cwd || '', get().boundSessionPath ?? undefined);
             break;
           }
           case 'assistant.partial': {
