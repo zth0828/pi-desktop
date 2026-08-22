@@ -857,6 +857,11 @@
     "close": "Close workspace panel",
     "closeAll": "Close all file previews",
     "closeFile": "Close {{name}}",
+    "mode": {
+      "auto": "Panel mode: Auto (dock when wide, overlay when narrow)",
+      "docked": "Panel mode: Docked (side by side)",
+      "overlay": "Panel mode: Overlay (slides over without squeezing)"
+    },
     "files": "Files",
     "showFiles": "Show file list",
     "hideFiles": "Hide file list",

@@ -230,7 +230,7 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   const app = await launchElectronApp(launchOptions(repoWorkspace));
   const page = await app.firstWindow();
   await waitSessionReady(page);
-  await page.setViewportSize({ width: 1440, height: 800 });
+  await page.setViewportSize({ width: 1600, height: 800 });
 
   await page.getByTestId('workspace-toggle').click();
   const panel = page.getByTestId('review-panel');
@@ -241,6 +241,12 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await expect(treeToggle).toHaveAttribute('aria-expanded', 'true');
   await expect(treeToggle.locator('span')).toHaveText(/\d+/);
   await page.screenshot({ path: 'output/playwright/workspace-tree-overlay.png', fullPage: false });
+
+  // Switch to docked mode so chat column and panel are side-by-side
+  const modeToggle = panel.getByTestId('workspace-mode-toggle');
+  await expect(modeToggle).toBeVisible();
+  await modeToggle.click();
+  await expect(panel).toHaveAttribute('data-mode', 'docked');
 
   // Long tool output must scroll inside the chat column and never push the panel beyond the viewport.
   await page.getByTestId('chat-input').fill('USE_TOOL_LONG now');
@@ -266,25 +272,9 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await expect.poll(async () => (await panel.boundingBox())!.width).toBeLessThan(initialWidth - 40);
   await expect.poll(async () => (await page.locator('.chat-column').boundingBox())!.width).toBeGreaterThan(initialChatWidth + 40);
 
-  // 过窄窗口自动切成覆盖层工作台，不要求用户手动拖宽（≥960px 时停靠并排）。
-  await page.setViewportSize({ width: 900, height: 800 });
-  await expect(handle).toBeHidden();
-  await expect.poll(async () => {
-    const panelWidth = (await panel.boundingBox())!.width;
-    const pageWidth = (await page.locator('.chat-page').boundingBox())!.width;
-    return Math.abs(panelWidth - pageWidth);
-  }).toBeLessThan(2);
-
-  // 拖出覆盖层断点后又回到停靠模式
-  await page.setViewportSize({ width: 1440, height: 800 });
-  await expect(handle).toBeVisible();
-  // 覆盖层期间宽度被钳到最小，拖宽后再继续树/预览断言
-  const dockedBox = await handle.boundingBox();
-  await page.mouse.move(dockedBox!.x + 4, dockedBox!.y + 100);
-  await page.mouse.down();
-  await page.mouse.move(dockedBox!.x - 300, dockedBox!.y + 100);
-  await page.mouse.up();
-  await expect.poll(async () => (await panel.boundingBox())!.width).toBeGreaterThan(500);
+  // Switch to overlay mode and verify overlay behavior
+  await modeToggle.click();
+  await expect(panel).toHaveAttribute('data-mode', 'overlay');
 
   await panel.getByTestId('workspace-directory').filter({ hasText: 'src' }).click();
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.ts' }).click();
@@ -556,4 +546,82 @@ test('非 Git 目录：新增/修改/删除进入评审并可回滚', async ({ l
   await expect(readFile(path.join(plainWorkspace, 'e2e-edit-target.txt'), 'utf8')).resolves.toBe('alpha\ngamma\n');
   expect(existsSync(path.join(plainWorkspace, 'plain-new.txt'))).toBe(false);
   await expect(readFile(path.join(plainWorkspace, 'delete-me.txt'), 'utf8')).resolves.toBe('remove me\n');
+});
+
+test('工作台展开模式：窄窗口 overlay 不挤压聊天列 + Esc/遮罩收起 + 模式切换与持久化', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 1. 窄/标准窗口（1200px）：自动进入 overlay 模式，聊天列宽度完全不受挤压
+  await page.setViewportSize({ width: 1200, height: 800 });
+  const initialChatBox = await page.locator('.chat-column').boundingBox();
+  expect(initialChatBox).not.toBeNull();
+
+  await page.getByTestId('workspace-toggle').click();
+  const panel = page.getByTestId('review-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel).toHaveAttribute('data-mode', 'overlay');
+  await expect(panel).toHaveAttribute('data-mode-preference', 'auto');
+
+  // 聊天列宽度和 x 坐标保持完全不变
+  const overlayChatBox = await page.locator('.chat-column').boundingBox();
+  expect(overlayChatBox).not.toBeNull();
+  expect(Math.abs(overlayChatBox!.width - initialChatBox!.width)).toBeLessThan(2);
+  expect(Math.abs(overlayChatBox!.x - initialChatBox!.x)).toBeLessThan(2);
+
+  // 2. overlay 下 Esc 键收起面板（先关树再关面板，若树已收起则直接关面板）
+  const treeToggle = panel.getByTestId('workspace-tree-toggle');
+  await expect(treeToggle).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Escape');
+  await expect(treeToggle).toHaveAttribute('aria-expanded', 'false');
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+
+  // 3. 点击遮罩收起面板
+  await page.getByTestId('workspace-toggle').click();
+  await expect(panel).toBeVisible();
+  const backdrop = page.getByTestId('workspace-backdrop');
+  await expect(backdrop).toBeVisible();
+  await backdrop.click({ position: { x: 50, y: 50 } });
+  await expect(panel).toBeHidden();
+
+  // 4. 模式切换按钮：auto -> docked -> overlay -> auto
+  await page.getByTestId('workspace-toggle').click();
+  await expect(panel).toBeVisible();
+  const modeToggle = panel.getByTestId('workspace-mode-toggle');
+  await expect(modeToggle).toBeVisible();
+
+  // 切换到 docked：聊天列收窄（并排布局）
+  await modeToggle.click();
+  await expect(panel).toHaveAttribute('data-mode', 'docked');
+  await expect(panel).toHaveAttribute('data-mode-preference', 'docked');
+  const dockedChatBox = await page.locator('.chat-column').boundingBox();
+  expect(dockedChatBox).not.toBeNull();
+  expect(dockedChatBox!.width).toBeLessThan(initialChatBox!.width - 50);
+
+  // 切换到 overlay：聊天列恢复
+  await modeToggle.click();
+  await expect(panel).toHaveAttribute('data-mode', 'overlay');
+  await expect(panel).toHaveAttribute('data-mode-preference', 'overlay');
+  const restoredChatBox = await page.locator('.chat-column').boundingBox();
+  expect(restoredChatBox).not.toBeNull();
+  expect(Math.abs(restoredChatBox!.width - initialChatBox!.width)).toBeLessThan(2);
+
+  // 5. 双击调整手柄可切换模式
+  const handle = panel.getByTestId('workspace-resize-handle');
+  await handle.dblclick();
+  await expect(panel).toHaveAttribute('data-mode-preference', 'auto');
+  await handle.dblclick();
+  await expect(panel).toHaveAttribute('data-mode-preference', 'docked');
+
+  // 6. 宽窗口（1800px）下 auto 模式自动选择 docked 并排
+  await handle.dblclick(); // overlay
+  await handle.dblclick(); // auto
+  await expect(panel).toHaveAttribute('data-mode-preference', 'auto');
+  await page.setViewportSize({ width: 1800, height: 800 });
+  await expect(panel).toHaveAttribute('data-mode', 'docked');
+  const wideChatBox = await page.locator('.chat-column').boundingBox();
+  expect(wideChatBox).not.toBeNull();
+  expect(wideChatBox!.width).toBeGreaterThanOrEqual(560);
 });

@@ -511,7 +511,10 @@ test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当
   await waitSessionReady(page);
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.getByTestId('workspace-toggle').click();
-  await expect(page.getByTestId('review-panel')).toBeVisible();
+  const panel = page.getByTestId('review-panel');
+  await expect(panel).toBeVisible();
+  await panel.getByTestId('workspace-mode-toggle').click();
+  await expect(panel).toHaveAttribute('data-mode', 'docked');
 
   await page.getByTestId('chat-input').fill('SLOW stream please');
   await page.getByTestId('chat-send').click();

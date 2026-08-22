@@ -29,6 +29,7 @@ export function ImageLightbox({ src, name, onClose }: ImageLightboxProps) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
+        event.stopPropagation();
         onCloseRef.current();
         return;
       }
