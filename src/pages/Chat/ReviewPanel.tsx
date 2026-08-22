@@ -644,6 +644,7 @@ export function ReviewPanel() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
+  const [userToggledInNarrow, setUserToggledInNarrow] = useState<boolean | null>(null);
   const [rootItemCount, setRootItemCount] = useState(0);
   const [panelWidth, setPanelWidth] = useState<number | undefined>(() => {
     const saved = Number(window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY));
@@ -655,6 +656,7 @@ export function ReviewPanel() {
     return 'auto';
   });
   const [containerWidth, setContainerWidth] = useState<number>(0);
+  const [panelClientWidth, setPanelClientWidth] = useState<number>(0);
   const [resizing, setResizing] = useState(false);
   const [dragState, setDragState] = useState<{ startX: number; initialWidth: number } | null>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -665,6 +667,7 @@ export function ReviewPanel() {
     setSelectedFile(null);
     setOpenFiles([]);
     setFileTreeOpen(true);
+    setUserToggledInNarrow(null);
   }, [cwd]);
 
   useEffect(() => {
@@ -679,6 +682,7 @@ export function ReviewPanel() {
     setOpenFiles((current) => (current.includes(path) ? current : [...current, path]));
     setTab(`file:${path}`);
     setFileTreeOpen(false);
+    setUserToggledInNarrow(false);
   }, [workspaceFileRequest]);
 
   useEffect(() => {
@@ -697,9 +701,52 @@ export function ReviewPanel() {
     return () => observer.disconnect();
   }, [open]);
 
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    setPanelClientWidth(el.clientWidth);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width || (entry.target as HTMLElement).clientWidth;
+        if (width > 0) {
+          setPanelClientWidth(width);
+        }
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [open]);
+
   const effectiveContainerWidth = containerWidth || availablePanelSpace(panelRef.current);
   const expectedPanelWidth = panelWidth ?? (tab === 'review' ? DEFAULT_PANEL_WIDTH_REVIEW : DEFAULT_PANEL_WIDTH_FILES);
   const effectiveMode = resolveEffectiveMode(modePreference, effectiveContainerWidth, expectedPanelWidth);
+
+  const isNarrowPanel = panelClientWidth > 0 && panelClientWidth < 480;
+  const effectiveTreeOpen = isNarrowPanel
+    ? (userToggledInNarrow ?? false)
+    : fileTreeOpen;
+
+  useEffect(() => {
+    if (!isNarrowPanel && userToggledInNarrow !== null) {
+      setUserToggledInNarrow(null);
+    }
+  }, [isNarrowPanel, userToggledInNarrow]);
+
+  const toggleFileTree = useCallback(() => {
+    if (isNarrowPanel) {
+      setUserToggledInNarrow(!effectiveTreeOpen);
+    } else {
+      setFileTreeOpen(!effectiveTreeOpen);
+    }
+  }, [isNarrowPanel, effectiveTreeOpen]);
+
+  const closeFileTree = useCallback(() => {
+    if (isNarrowPanel) {
+      setUserToggledInNarrow(false);
+    } else {
+      setFileTreeOpen(false);
+    }
+  }, [isNarrowPanel]);
 
   useEffect(() => {
     const container = getContainer(panelRef.current);
@@ -764,8 +811,8 @@ export function ReviewPanel() {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       if (document.querySelector('.image-lightbox, .extui-overlay, .session-search-overlay, .tree-overlay, .skill-view-overlay')) return;
-      if (fileTreeOpen) {
-        setFileTreeOpen(false);
+      if (effectiveTreeOpen) {
+        closeFileTree();
         event.preventDefault();
         event.stopPropagation();
         return;
@@ -778,13 +825,14 @@ export function ReviewPanel() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [fileTreeOpen, effectiveMode, close]);
+  }, [effectiveTreeOpen, closeFileTree, effectiveMode, close]);
 
   const chooseFile = (path: string) => {
     setSelectedFile(path);
     setOpenFiles((current) => current.includes(path) ? current : [...current, path]);
     setTab(`file:${path}`);
     setFileTreeOpen(false);
+    setUserToggledInNarrow(false);
   };
   const closeFile = (path: string) => {
     const index = openFiles.indexOf(path);
@@ -865,7 +913,7 @@ export function ReviewPanel() {
         />
         <div className="workspace-tabs">
           <div className="workspace-tabs-scroll" role="tablist">
-            <button className={`workspace-tab${tab === 'files' ? ' active' : ''}`} role="tab" aria-selected={tab === 'files'} data-testid="workspace-files-tab" onClick={() => { setWorkspaceOpen(true); setTab('files'); setFileTreeOpen(true); }}><Files size={14} />{t('workspace.files')}</button>
+            <button className={`workspace-tab${tab === 'files' ? ' active' : ''}`} role="tab" aria-selected={tab === 'files'} data-testid="workspace-files-tab" onClick={() => { setWorkspaceOpen(true); setTab('files'); setFileTreeOpen(true); setUserToggledInNarrow(null); }}><Files size={14} />{t('workspace.files')}</button>
             {openFiles.map((path) => (
               <div className={`workspace-file-tab${tab === `file:${path}` ? ' active' : ''}`} data-testid="workspace-file-tab" key={path} title={path}>
                 <button className="workspace-file-tab-main" role="tab" aria-selected={tab === `file:${path}`} onClick={() => { setWorkspaceOpen(true); setSelectedFile(path); setTab(`file:${path}`); }}>{titleFor(path)}</button>
@@ -876,7 +924,7 @@ export function ReviewPanel() {
           </div>
           <div className="workspace-tab-actions">
             {tab !== 'review' && (
-              <button className={`workspace-tree-trigger${fileTreeOpen ? ' active' : ''}`} data-testid="workspace-tree-toggle" aria-expanded={fileTreeOpen} title={fileTreeOpen ? t('workspace.hideFiles') : t('workspace.showFiles')} onClick={() => setFileTreeOpen((current) => !current)}>
+              <button className={`workspace-tree-trigger${effectiveTreeOpen ? ' active' : ''}`} data-testid="workspace-tree-toggle" aria-expanded={effectiveTreeOpen} title={effectiveTreeOpen ? t('workspace.hideFiles') : t('workspace.showFiles')} onClick={toggleFileTree}>
                 <Files size={15} />
                 {rootItemCount > 0 && <span aria-label={t('workspace.itemCount', { count: rootItemCount })}>{rootItemCount}</span>}
               </button>
@@ -895,8 +943,8 @@ export function ReviewPanel() {
           </div>
         </div>
         {tab === 'review' ? <ReviewWorkspace /> : (
-          <div className={`workspace-browser${fileTreeOpen ? ' tree-open' : ''}`}>
-            <button className="workspace-tree-backdrop" aria-label={t('workspace.hideFiles')} tabIndex={fileTreeOpen ? 0 : -1} onClick={() => setFileTreeOpen(false)} />
+          <div className={`workspace-browser${effectiveTreeOpen ? ' tree-open' : ''}`}>
+            <button className="workspace-tree-backdrop" aria-label={t('workspace.hideFiles')} tabIndex={effectiveTreeOpen ? 0 : -1} onClick={closeFileTree} />
             <FileExplorer selected={activeFile} onSelect={chooseFile} onRootCount={setRootItemCount} />
             <main className="workspace-preview" data-testid="workspace-preview">
               {activeFile ? <FilePreview path={activeFile} /> : <div className="workspace-empty">{t('workspace.selectFile')}</div>}

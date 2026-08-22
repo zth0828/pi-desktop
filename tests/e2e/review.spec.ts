@@ -625,3 +625,78 @@ test('工作台展开模式：窄窗口 overlay 不挤压聊天列 + Esc/遮罩�
   expect(wideChatBox).not.toBeNull();
   expect(wideChatBox!.width).toBeGreaterThanOrEqual(560);
 });
+
+test('文件区内部排版：目录树与预览并排无遮挡 + 空态可见 + 代码横向滚动 + 图片容器约束', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+  await page.setViewportSize({ width: 1600, height: 800 });
+
+  // 打开工作台
+  await page.getByTestId('workspace-toggle').click();
+  const panel = page.getByTestId('review-panel');
+  await expect(panel).toBeVisible();
+
+  // 1. 宽面板下：目录树与预览区并排，预览区左缘 >= 目录树右缘（无重叠遮挡）
+  const tree = panel.getByTestId('workspace-tree');
+  const preview = panel.getByTestId('workspace-preview');
+  await expect(tree).toBeVisible();
+  await expect(preview).toBeVisible();
+
+  const empty = panel.locator('.workspace-empty');
+  await expect(empty).toBeVisible();
+  await expect(empty).toContainText(/Select a file|选择文件/);
+
+  await expect.poll(async () => {
+    const treeBox = await tree.boundingBox();
+    const previewBox = await preview.boundingBox();
+    if (!treeBox || !previewBox) return false;
+    return previewBox.x >= treeBox.x + treeBox.width - 2;
+  }).toBe(true);
+
+  // 2. 空态文字完整位于预览区内，未被目录树覆盖
+  await expect.poll(async () => {
+    const treeBox = await tree.boundingBox();
+    const emptyBox = await empty.boundingBox();
+    if (!treeBox || !emptyBox) return false;
+    return emptyBox.x >= treeBox.x + treeBox.width - 2;
+  }).toBe(true);
+
+  // 3. 打开含超长行的代码文件
+  await panel.getByTestId('workspace-directory').filter({ hasText: 'src' }).click();
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.ts' }).click();
+  const textPreview = panel.getByTestId('workspace-text-preview');
+  await expect(textPreview).toBeVisible();
+
+  // 关闭自动换行后：代码容器出现横向可滚动能力且内容不裁切
+  const wrapBtn = panel.getByTestId('workspace-toggle-wrap');
+  await expect(wrapBtn).toHaveAttribute('aria-pressed', 'true');
+  await wrapBtn.click();
+  await expect(wrapBtn).toHaveAttribute('aria-pressed', 'false');
+  const isScrollableX = await panel.locator('.workspace-file-content').evaluate((el) => el.scrollWidth > el.clientWidth);
+  expect(isScrollableX).toBe(true);
+
+  // 开启自动换行后：行内换行生效
+  await wrapBtn.click();
+  await expect(wrapBtn).toHaveAttribute('aria-pressed', 'true');
+
+  // 4. 打开图片文件：图片高度受容器约束，不超过面板内容区
+  await panel.getByTestId('workspace-tree-toggle').click();
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.png' }).click();
+  const imgPreview = panel.getByTestId('workspace-image-preview');
+  await expect(imgPreview).toBeVisible();
+  const img = imgPreview.locator('img');
+  await expect(img).toBeVisible();
+  const imgBox = await img.boundingBox();
+  const contentBox = await panel.locator('.workspace-file-content').boundingBox();
+  expect(imgBox).not.toBeNull();
+  expect(contentBox).not.toBeNull();
+  expect(imgBox!.height).toBeLessThanOrEqual(contentBox!.height + 2);
+
+  // 5. 树展开/收起切换
+  const treeToggle = panel.getByTestId('workspace-tree-toggle');
+  await treeToggle.click();
+  await expect(tree).toBeVisible();
+  await treeToggle.click();
+  await expect(tree).toBeHidden();
+});
