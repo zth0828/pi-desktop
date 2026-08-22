@@ -398,7 +398,8 @@
       "excludeContext": "In context; click to exclude",
       "exit": "Exit command mode",
       "runningHint": "A command is still running",
-      "stopBash": "Stop command"
+      "stopBash": "Stop command",
+      "planModeOn": "Plan mode is on (sent messages get /plan prefix)"
     },
     "errors": {
       "invalidKey": "API key issue: the key may be invalid, expired or revoked — update it in provider settings.",

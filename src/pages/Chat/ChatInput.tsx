@@ -174,6 +174,12 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [switchingBranch, setSwitchingBranch] = useState(false);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false);
+  const skillMenuRef = useRef<HTMLDivElement>(null);
+  /** 计划模式：常驻切换，开启后发送带 /plan 前缀（默认直接执行）。 */
+  const [planMode, setPlanMode] = useState(false);
+  /** 工具栏「引用文件」手动打开的文件面板（无需先输入 @）。 */
+  const [filePanelManual, setFilePanelManual] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelMenuSection, setModelMenuSection] = useState<'models' | 'thinking' | null>(null);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
@@ -222,6 +228,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (composerMenuOpen && !composerMenuRef.current?.contains(target)) setComposerMenuOpen(false);
+      if (skillMenuOpen && !skillMenuRef.current?.contains(target)) setSkillMenuOpen(false);
       if (usageOpen && !usageControlRef.current?.contains(target)) setUsageOpen(false);
       if (modelMenuOpen && !modelMenuRef.current?.contains(target)) setModelMenuOpen(false);
       if (branchMenuOpen && !branchMenuRef.current?.contains(target)) setBranchMenuOpen(false);
@@ -229,6 +236,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setComposerMenuOpen(false);
+      setSkillMenuOpen(false);
       setUsageOpen(false);
       setModelMenuOpen(false);
       setBranchMenuOpen(false);
@@ -239,7 +247,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [composerMenuOpen, usageOpen, modelMenuOpen, branchMenuOpen]);
+  }, [composerMenuOpen, skillMenuOpen, usageOpen, modelMenuOpen, branchMenuOpen]);
 
   /** 命令执行的轻量确认（/name /copy /export /reload 等），5s 自动消失 */
   const showNotice = (text: string) => {
@@ -610,11 +618,11 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   // @ 文件补全：panel 打开时拉一次候选列表（cwd 下相对路径），本地模糊过滤
   const atActive = atToken !== null && !atSuppressed;
   useEffect(() => {
-    if (!atActive) return;
+    if (!atActive && !filePanelManual) return;
     void hostApi.piFiles.list(cwd).then((r) => setFileList(r.files)).catch(() => {});
-  }, [atActive, cwd]);
-  const fileMatches = atActive ? filterFiles(fileList, atToken.query) : [];
-  const filePanelOpen = fileMatches.length > 0;
+  }, [atActive, filePanelManual, cwd]);
+  const fileMatches = atActive ? filterFiles(fileList, atToken.query) : filterFiles(fileList, '');
+  const filePanelOpen = filePanelManual || (atActive && fileMatches.length > 0);
 
   useEffect(() => {
     const stopOnEscape = (event: globalThis.KeyboardEvent) => {
@@ -646,7 +654,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     if (!text && attachments.length === 0) return;
     const outgoingAttachments = attachments;
     const outgoing = outgoingAttachments.filter((attachment): attachment is StagedImage => attachment.kind === 'image');
-    const promptText = formatOrderedAttachmentPrompt(text, outgoingAttachments);
+    const promptText = (planMode ? '/plan ' : '') + formatOrderedAttachmentPrompt(text, outgoingAttachments);
     setValue('');
     setAttachments([]);
     // 命令模式：发送即 bash 执行（上下文策略由开关决定，默认不入上下文）；
@@ -740,10 +748,15 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
 
   /** 选中文件：把光标处的 @query 替换为 @相对路径（含空格走 @"..." 引用，对齐 pi-tui） */
   const pickFile = (relPath: string) => {
-    if (!atToken) return;
     const inserted = relPath.includes(' ') ? `@"${relPath}"` : `@${relPath}`;
-    setValue(value.slice(0, atToken.start) + inserted + ' ' + value.slice(atToken.end));
-    setAtToken(null);
+    if (filePanelManual) {
+      // 工具栏入口：追加到当前输入末尾，不替换已有内容
+      setValue((current) => `${current}${current && !current.endsWith(' ') ? ' ' : ''}${inserted} `);
+      setFilePanelManual(false);
+    } else if (atToken) {
+      setValue(value.slice(0, atToken.start) + inserted + ' ' + value.slice(atToken.end));
+      setAtToken(null);
+    }
     setAtSuppressed(true); // 插入后不再立刻弹面板，下次输入重置
     textareaRef.current?.focus();
   };
@@ -1009,15 +1022,25 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 <label className="composer-menu-item" data-testid="attach-image" htmlFor="chat-attach-input" title={t('chat.attachFile')}>
                   <Paperclip size={15} /><span>{t('chat.attachFile')}</span>
                 </label>
-                <button className="composer-menu-item" data-testid="composer-file-reference" onClick={() => { setValue((current) => `${current}${current && !current.endsWith(' ') ? ' ' : ''}@`); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><AtSign size={15} /><span>{t('chat.fileReference')}</span></button>
-                <div className="composer-menu-section"><Sparkles size={14} /><span>{t('chat.skills')}</span></div>
-                <div className="composer-skills-list">
-                  {skills.length === 0 ? <div className="composer-menu-hint">{t('chat.noSkills')}</div> : skills.map((skill) => <button className="composer-menu-item" data-testid={`composer-skill-${skill.name}`} key={skill.name} onClick={() => { setValue(`/skill:${skill.name} `); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Sparkles size={14} /><span>{skill.name}</span></button>)}
-                </div>
-                <button className="composer-menu-item" data-testid="composer-plan-mode" disabled={!planAvailable} title={!planAvailable ? t('chat.planModeUnavailable') : undefined} onClick={() => { setValue('/plan '); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Brain size={15} /><span>{t('chat.planMode')}</span></button>
-                <button className="composer-menu-item" data-testid="composer-command-mode" onClick={() => { setCommandMode(true); setAttachments([]); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Terminal size={15} /><span>{t('chat.command.run')}</span></button>
               </div>
             )}
+          </div>
+          <div className="composer-tools">
+            <button className="composer-tool" data-testid="composer-command-mode" title={t('chat.command.run')} onClick={() => { setCommandMode(true); setAttachments([]); setSkillMenuOpen(false); textareaRef.current?.focus(); }}><Terminal size={14} /></button>
+            <button className="composer-tool" data-testid="composer-file-reference" title={t('chat.fileReference')} onClick={() => { setComposerMenuOpen(false); setSkillMenuOpen(false); setFilePanelManual(true); textareaRef.current?.focus(); }}><AtSign size={14} /></button>
+            <div className="composer-tool-skill-wrap" ref={skillMenuRef}>
+              <button className={`composer-tool${skillMenuOpen ? ' active' : ''}`} data-testid="composer-skill-toggle" aria-expanded={skillMenuOpen} title={t('chat.skills')} onClick={() => setSkillMenuOpen((open) => !open)}><Sparkles size={14} /></button>
+              {skillMenuOpen && (
+                <div className="command-panel" data-testid="skill-panel">
+                  {skills.length === 0
+                    ? <div className="composer-menu-hint">{t('chat.noSkills')}</div>
+                    : skills.map((skill) => (
+                      <button key={skill.name} className="command-item" data-testid={`composer-skill-${skill.name}`} onMouseDown={(e) => { e.preventDefault(); setValue((current) => `/skill:${skill.name} ${current}`); setSkillMenuOpen(false); textareaRef.current?.focus(); }}><span className="command-name">/skill:{skill.name}</span></button>
+                    ))}
+                </div>
+              )}
+            </div>
+            <button className={`composer-tool${planMode ? ' active' : ''}`} data-testid="composer-plan-toggle" title={planMode ? t('chat.planModeOn') : t('chat.planMode')} aria-pressed={planMode} onClick={() => setPlanMode((on) => !on)}><Brain size={14} /></button>
           </div>
           <button
             className="context-chip workspace-chip"

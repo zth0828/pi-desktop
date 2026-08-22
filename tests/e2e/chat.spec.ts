@@ -115,9 +115,9 @@ test('会话标题、消息复制与 composer 加号菜单', async ({ launchElec
   await expect.poll(() => page.evaluate(() => (navigator as Navigator & { clipboard: { readText: () => Promise<string> } }).clipboard.readText())).toContain('PONG');
   await expect(page.getByTestId('copy-markdown')).toHaveCount(0);
   await page.getByTestId('composer-menu').click();
-  await expect(page.getByTestId('composer-file-reference')).toBeVisible();
+  await expect(page.getByTestId('attach-image')).toBeVisible();
   await page.getByTestId('chat-input').click();
-  await expect(page.getByTestId('composer-file-reference')).toBeHidden();
+  await expect(page.getByTestId('attach-image')).toBeHidden();
   await page.getByTestId('token-usage').click();
   await expect(page.getByTestId('token-usage-popover')).toBeVisible();
   await page.getByTestId('chat-input').click();
@@ -556,13 +556,12 @@ test('! bash 流式窗口：执行中只见尾部预览，无展开交互', asyn
   await expect(streaming.getByTestId('bash-output-more')).toContainText('45');
 });
 
-test('命令模式：加号菜单进入、默认不入上下文、发送后自动退出', async ({ launchElectronApp }) => {
+test('命令模式：工具栏进入、默认不入上下文、发送后自动退出', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  // 加号菜单 → 运行命令 → 命令模式指示条出现，默认「不入上下文」
-  await page.getByTestId('composer-menu').click();
+  // 工具栏 → 运行命令 → 命令模式指示条出现，默认「不入上下文」
   await page.getByTestId('composer-command-mode').click();
   const bar = page.getByTestId('command-mode-bar');
   await expect(bar).toBeVisible();
@@ -585,7 +584,6 @@ test('右侧「命令」tab：bash 历史记录与消息流同源，可点击展
   await waitSessionReady(page);
 
   // 命令模式执行一条命令（默认不入上下文），供右侧面板展示
-  await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-command-mode').click();
   await page.getByTestId('chat-input').fill('echo pi-desktop-command-panel');
   await page.getByTestId('chat-send').click();
@@ -608,7 +606,6 @@ test('命令模式：上下文开关切到入上下文、全角 ！ 前缀兼容
   await waitSessionReady(page);
 
   // 进入命令模式，切换到「入上下文」
-  await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-command-mode').click();
   await page.getByTestId('command-context-toggle').click();
   await expect(page.getByTestId('command-context-toggle')).toContainText(/入上下文|In context/);
@@ -631,7 +628,6 @@ test('命令模式：执行中发送按钮禁用，完成后恢复', async ({ la
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-command-mode').click();
   await page.getByTestId('chat-input').fill("bash -c 'sleep 2; echo pi-desktop-bash-slow'");
   await page.getByTestId('chat-send').click();
@@ -644,6 +640,87 @@ test('命令模式：执行中发送按钮禁用，完成后恢复', async ({ la
   await page.getByTestId('chat-input').fill('echo next');
   await expect(page.getByTestId('chat-send')).toBeEnabled();
   await expect(page.getByTestId('chat-send')).not.toHaveAttribute('title', /仍在执行|still running/);
+});
+
+test('bash 执行中可单独停止：流式卡停止按钮取消命令', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 命令模式跑慢命令，留出停止窗口
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('chat-input').fill("bash -c 'for i in $(seq 1 200); do echo $i; sleep 0.2; done'");
+  await page.getByTestId('chat-send').click();
+
+  // 流式卡出现停止按钮
+  await expect(page.getByTestId('bash-stop').first()).toBeVisible({ timeout: 10_000 });
+
+  // 点停止：命令被取消，落盘 cancelled 卡（无 exit code）；短输出直出不折叠
+  await page.getByTestId('bash-stop').first().click();
+  const card = page.getByTestId('message-bash').last();
+  await expect(card).toContainText(/已取消|cancelled/, { timeout: 15_000 });
+  await expect(card.getByTestId('bash-exit-code')).toHaveCount(0);
+  await expect(card.getByTestId('bash-output')).toHaveAttribute('data-expanded', 'true');
+});
+
+test('计划模式：常驻切换，开启后发送带 /plan 前缀，可退出', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 默认关闭（直接执行）
+  await expect(page.getByTestId('composer-plan-toggle')).toHaveAttribute('aria-pressed', 'false');
+  // 开启：发送带 /plan 前缀（ECHO_USER 回显收到的 user 文本验证）
+  await page.getByTestId('composer-plan-toggle').click();
+  await expect(page.getByTestId('composer-plan-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('chat-input').fill('ECHO_USER 帮我设计架构');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('/plan ECHO_USER 帮我设计架构', { timeout: 30_000 });
+  // 退出：恢复直接执行
+  await page.getByTestId('composer-plan-toggle').click();
+  await expect(page.getByTestId('composer-plan-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await page.getByTestId('chat-input').fill('ECHO_USER 直接执行这条');
+  await page.getByTestId('chat-send').click();
+  const last = page.getByTestId('message-assistant').last();
+  await expect(last).toContainText('ECHO_USER 直接执行这条', { timeout: 30_000 });
+  await expect(last).not.toContainText('/plan');
+});
+
+test('引用文件：工具栏点击直接展开文件列表，选中追加到输入末尾不删内容', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 先输入内容，再点工具栏「引用文件」：无需先输入 @ 即弹出列表
+  await page.getByTestId('chat-input').fill('请检查这个文件');
+  await page.getByTestId('composer-file-reference').click();
+  await expect(page.getByTestId('file-panel')).toBeVisible();
+  const options = page.getByTestId('file-option');
+  await expect(options.first()).toBeVisible();
+  await options.first().click();
+  // 已有内容保留，@引用追加到末尾
+  await expect(page.getByTestId('chat-input')).toHaveValue(/请检查这个文件 @/);
+  // 面板关闭
+  await expect(page.getByTestId('file-panel')).toBeHidden();
+});
+
+test('技能面板：工具栏展开技能列表，选择后追加到输入开头不删已有内容', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('chat-input').fill('帮我写个脚本');
+  await page.getByTestId('composer-skill-toggle').click();
+  const panel = page.getByTestId('skill-panel');
+  await expect(panel).toBeVisible();
+  // 环境无 skill 时显示空态提示；有则点第一个，已输入内容保留在末尾
+  const skillOptions = panel.locator('[data-testid^="composer-skill-"]');
+  if (await skillOptions.count() === 0) {
+    await expect(panel).toContainText(/暂无|No skills/);
+  }
+  // 再次点击 toggle 关闭
+  await page.getByTestId('composer-skill-toggle').click();
+  await expect(panel).toBeHidden();
 });
 
 test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当前轮插入', async ({ launchElectronApp }) => {

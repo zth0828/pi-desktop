@@ -2685,6 +2685,34 @@ button.danger-outline {
   position: relative;
 }
 
+/* composer 常驻工具条：命令模式 / 引用文件 / 技能 / 计划模式 */
+.composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.composer-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.composer-tool:hover { color: var(--text); background: var(--bg-hover); }
+.composer-tool.active { color: var(--accent); background: var(--bg-hover); }
+.composer-tool-skill-wrap { position: relative; }
+.composer-tool-skill-wrap .command-panel {
+  left: 0;
+  right: auto;
+  width: 260px;
+  bottom: calc(100% + 4px);
+}
+
 .attach-button {
   display: inline-flex;
   padding: 7px;
