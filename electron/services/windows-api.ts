@@ -1,8 +1,10 @@
 // windows 模块：多窗口管理。
 // 窗口创建/聚焦全部委托 window-manager（窗口↔会话绑定的单一注册表）。
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, screen } from 'electron';
 import type {
   WindowListEntry,
+  WindowsExpandRightPayload,
+  WindowsExpandRightResult,
   WindowsFocusPayload,
   WindowsOpenDetachedAtPayload,
   WindowsOpenDetachedPayload,
@@ -21,6 +23,11 @@ import type { HostActionContext } from '../main/ipc/host-contract';
 import { sendHostEventToWindow } from '../main/ipc/host-events';
 import { prewarmSessionRuntime } from './pi-runtime-api';
 import { timingMark } from '../utils/timing';
+import { computeRightExpansion, shouldRestoreExpansion } from '../utils/window-bounds';
+
+/** 每窗口的向右加宽状态：count 支持同窗口多面板各自展开工作台（只加宽一次，归零才缩回）。 */
+type ExpandRightState = { originalWidth: number; applied: number; count: number };
+const expandRightStates = new Map<number, ExpandRightState>();
 
 export const windowsApi = {
   /** frameless 自绘窗口控件：从发起调用的 webContents 反查窗口。 */
@@ -89,4 +96,37 @@ export const windowsApi = {
     setWindowSessions(ctx.sender.id, payload.sessionPaths, payload.activeSessionPath);
   },
   list: (): WindowListEntry[] => listWindows(),
+
+  expandRight: (payload: WindowsExpandRightPayload, ctx?: HostActionContext): WindowsExpandRightResult => {
+    const win = ctx ? BrowserWindow.fromWebContents(ctx.sender) : null;
+    if (!win || win.isDestroyed()) return { applied: 0 };
+    const existing = expandRightStates.get(win.id);
+    if (existing) {
+      existing.count += 1;
+      return { applied: 0 };
+    }
+    if (win.isMaximized() || win.isFullScreen()) return { applied: 0 };
+    const bounds = win.getBounds();
+    const applied = computeRightExpansion(bounds, screen.getDisplayMatching(bounds).workArea, payload.extraWidth);
+    if (applied <= 0) return { applied: 0 };
+    expandRightStates.set(win.id, { originalWidth: bounds.width, applied, count: 1 });
+    win.once('closed', () => expandRightStates.delete(win.id));
+    // macOS 第二参开启动画；Windows 忽略该参数
+    win.setBounds({ x: bounds.x, y: bounds.y, width: bounds.width + applied, height: bounds.height }, true);
+    return { applied };
+  },
+
+  restoreExpandRight: (_payload?: undefined, ctx?: HostActionContext): void => {
+    const win = ctx ? BrowserWindow.fromWebContents(ctx.sender) : null;
+    if (!win || win.isDestroyed()) return;
+    const state = expandRightStates.get(win.id);
+    if (!state) return;
+    state.count -= 1;
+    if (state.count > 0) return;
+    expandRightStates.delete(win.id);
+    if (win.isMaximized() || win.isFullScreen()) return;
+    const bounds = win.getBounds();
+    if (!shouldRestoreExpansion(bounds.width, state.originalWidth, state.applied)) return;
+    win.setBounds({ x: bounds.x, y: bounds.y, width: state.originalWidth, height: bounds.height }, true);
+  },
 };

@@ -3,6 +3,8 @@
 // 老设备、小分辨率虚拟机，Windows 上真实场景）时贴屏 -16，避免窗口超出屏幕、
 // 既拖不动也看不到全貌。min 尺寸随实际窗口收紧，避免硬下限把窗口撑出屏幕。
 export type WindowSize = { width: number; height: number };
+export type WindowBounds = { x: number; y: number; width: number; height: number };
+export type WorkArea = { x: number; y: number; width: number; height: number };
 
 const MAX_WIDTH = 1440;
 const MAX_HEIGHT = 900;
@@ -28,4 +30,15 @@ export function resolveMinSizeFor(size: WindowSize): WindowSize {
     width: Math.min(MIN_WIDTH, size.width),
     height: Math.min(MIN_HEIGHT, size.height),
   };
+}
+
+/** 窗口向右加宽的可用量：不超过所在显示器 workArea 右缘；extraWidth ≤ 0 或右缘无空间时为 0。 */
+export function computeRightExpansion(bounds: WindowBounds, workArea: WorkArea, extraWidth: number): number {
+  const available = Math.max(0, workArea.x + workArea.width - (bounds.x + bounds.width));
+  return Math.min(Math.max(0, Math.round(extraWidth)), available);
+}
+
+/** 展开后能否对称缩回：宽度仍是「原宽 + 加宽量」（±8px 容差）才恢复，否则视为用户手动改过尺寸。 */
+export function shouldRestoreExpansion(currentWidth: number, originalWidth: number, applied: number): boolean {
+  return Math.abs(currentWidth - (originalWidth + applied)) <= 8;
 }

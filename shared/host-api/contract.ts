@@ -585,6 +585,10 @@ export type WindowListEntry = {
   isMain: boolean;
   focused: boolean;
 };
+/** 工作台 docked 展开时请求窗口向右加宽的像素数。 */
+export type WindowsExpandRightPayload = { extraWidth: number };
+/** 实际加宽像素（受屏幕右缘可用空间约束，可能小于请求值；无空间/最大化时为 0）。 */
+export type WindowsExpandRightResult = { applied: number };
 
 // —— notify：macOS 系统通知（渲染层只上报事件，焦点判定与弹通知都在 main）——
 
@@ -1193,6 +1197,10 @@ export type HostApiContract = {
     setSessions: (payload: WindowsSetSessionsPayload) => void;
     /** 窗口↔会话绑定清单（调试/测试用）。 */
     list: () => WindowListEntry[];
+    /** 工作台 docked 展开：窗口向右加宽，让面板占新增宽度而不是挤压聊天列。 */
+    expandRight: (payload: WindowsExpandRightPayload) => WindowsExpandRightResult;
+    /** 收回 expandRight 的加宽；展开期间用户手动改过窗口宽度则不动作。 */
+    restoreExpandRight: () => void;
     /** frameless 自绘标题栏：最小化当前窗口。 */
     minimize: () => void;
     /** frameless 自绘标题栏：最大化/还原当前窗口。 */

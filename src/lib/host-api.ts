@@ -252,6 +252,8 @@ function createHostApi(sessionPath?: string) {
     setSessions: (payload: { sessionPaths: string[]; activeSessionPath?: string }) =>
       invoke('windows', 'setSessions', payload),
     list: () => invoke('windows', 'list'),
+    expandRight: (payload: { extraWidth: number }) => invoke('windows', 'expandRight', payload),
+    restoreExpandRight: () => invoke('windows', 'restoreExpandRight'),
     minimize: () => invoke('windows', 'minimize'),
     maximizeToggle: () => invoke('windows', 'maximizeToggle'),
     isMaximized: () => invoke('windows', 'isMaximized'),

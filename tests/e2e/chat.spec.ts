@@ -526,9 +526,13 @@ test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当
   const stopBox = await page.getByTestId('chat-stop').boundingBox();
   expect(stopBox?.width).toBe(30);
   expect(stopBox?.height).toBe(30);
-  const panelBox = await page.getByTestId('review-panel').boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect(Math.abs(panelBox!.x + panelBox!.width - 1200)).toBeLessThan(2);
+  // docked 展开会触发窗口向右加宽（动画进行中 boundingBox 含 transform/中间帧），
+  // 轮询到稳定后面板右缘与当前视口右缘对齐
+  await expect.poll(async () => {
+    const box = await page.getByTestId('review-panel').boundingBox();
+    const viewport = page.viewportSize();
+    return box && viewport ? Math.abs(box.x + box.width - viewport.width) : Number.POSITIVE_INFINITY;
+  }).toBeLessThan(2);
   expect(await page.locator('.chat-input-card').evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   await page.screenshot({ path: 'output/playwright/narrow-composer-workspace.png', fullPage: false });
 
