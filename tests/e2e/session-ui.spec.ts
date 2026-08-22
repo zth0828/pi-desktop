@@ -236,3 +236,96 @@ test('git 分支切换：新会话状态下可切换分支，发送消息后变�
     await rm(gitWorkspace, { recursive: true, force: true });
   }
 });
+
+test('标题栏内改名 → 标题立即更新', async ({ launchElectronApp }) => {
+  workspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-ui-workspace-'));
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page = await app.firstWindow();
+  await expect(
+    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  await page.getByTestId('chat-input').fill('Say PONG');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+  await expect(page.getByTestId('session-title-button')).toBeVisible({ timeout: 15_000 });
+
+  // 标题栏内改名：saveRename 用 setSessionName 返回值本地更新，立即生效
+  await page.getByTestId('session-title-button').click();
+  await page.getByTestId('session-titlebar').locator('input').fill('Titlebar Renamed Session');
+  await page.getByTestId('session-titlebar').locator('input').press('Enter');
+  await expect(page.getByTestId('session-title-button')).toContainText('Titlebar Renamed Session', { timeout: 5_000 });
+
+  await rm(workspace, { recursive: true, force: true });
+});
+
+test('侧栏会话改名 → 已打开面板的标题栏即时更新（事件驱动，不等轮询）', async ({ launchElectronApp }) => {
+  workspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-ui-workspace-'));
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page = await app.firstWindow();
+  await expect(
+    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  await page.getByTestId('chat-input').fill('sidebar rename target ALPHA');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+  await expect(page.getByTestId('session-title-button')).toContainText('sidebar rename target ALPHA', { timeout: 15_000 });
+
+  const row = page.locator('.sidebar-session-row').filter({ hasText: 'sidebar rename target ALPHA' });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  const sessionButton = row.locator('[data-testid^="sidebar-session-"]').first();
+  const sessionTestId = await sessionButton.getAttribute('data-testid');
+  const sessionId = sessionTestId?.replace('sidebar-session-', '');
+  expect(sessionId).toBeTruthy();
+
+  await row.click({ button: 'right' });
+  await page.getByRole('button', { name: 'Rename', exact: true }).click();
+  await page.getByTestId(`sidebar-session-rename-input-${sessionId}`).fill('Sidebar Event Renamed');
+  await page.getByTestId(`sidebar-session-rename-input-${sessionId}`).press('Enter');
+
+  // sessionsChanged(rename) 事件驱动刷新：远快于 30s 兜底轮询
+  await expect(page.getByTestId('session-title-button')).toContainText('Sidebar Event Renamed', { timeout: 3_000 });
+
+  await rm(workspace, { recursive: true, force: true });
+});
+
+test('流式中 /name 改名 → run 结束后标题更新（isStreaming 翻转刷新）', async ({ launchElectronApp }) => {
+  workspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-ui-workspace-'));
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page = await app.firstWindow();
+  await expect(
+    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  // SLOW_END：30 chunk × 100ms ≈ 3s 后自然结束（plain SLOW 是挂起窗口，不自然结束）
+  await page.getByTestId('chat-input').fill('SLOW_END stream rename');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 10_000 });
+
+  // 流式中执行 /name：pi 流中不推事件，标题栏本地也无更新（只有 notice）
+  await page.getByTestId('chat-input').fill('/name Stream Renamed Title');
+  await page.getByTestId('chat-input').press('Enter');
+  await expect(page.getByTestId('chat-notice')).toContainText('Stream Renamed Title', { timeout: 15_000 });
+  // 仍处于流式中（3s 窗口内完成改名），确保覆盖的是流中改名盲区
+  await expect(page.getByTestId('chat-stop')).toBeVisible();
+  await expect(page.getByTestId('session-title-button')).not.toContainText('Stream Renamed Title');
+
+  // run 结束后 isStreaming true→false 翻转触发一次刷新，标题拿到新名
+  await expect(page.getByTestId('status-bar')).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId('session-title-button')).toContainText('Stream Renamed Title', { timeout: 5_000 });
+
+  await rm(workspace, { recursive: true, force: true });
+});

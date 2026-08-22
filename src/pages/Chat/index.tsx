@@ -5,6 +5,7 @@ import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { cacheHitRate, summarizeUsage } from '../../lib/usage-stats';
 import { hostApi } from '../../lib/host-api';
+import { onHostEvent } from '../../lib/host-events';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
 import { workspaceErrorMessage } from '../../lib/workspace-error';
 import { timingMark } from '../../lib/timing';
@@ -39,17 +40,35 @@ function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
   const [name, setName] = useState('');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const isStreaming = usePaneChatStore((s) => s.isStreaming);
+  const wasStreaming = useRef(false);
   useEffect(() => {
     if (!started) return;
     const refresh = () => {
       void paneApi.piRuntime.getSessionInfo().then((info) => setName(info?.name ?? ''));
     };
     refresh();
-    // 每面板一条 1s 轮询（getSessionInfo 是 main 侧本地内存读取，
-    // 多面板下 N 条轮询开销可忽略，保留以跟随扩展/外部改名；非活跃面板降频暂不做）
-    const timer = window.setInterval(refresh, 1000);
-    return () => window.clearInterval(timer);
+    // 侧栏/其他窗口改名走 sessionsChanged(rename) 即时刷新；payload 无会话标识，
+    // rename 是低频操作直接刷新不过滤。onHostEvent 是窗口级订阅，多面板各自成对订阅。
+    const offRename = onHostEvent('piRuntime', 'sessionsChanged', ({ reason }) => {
+      if (reason === 'rename') refresh();
+    });
+    // 低频兜底：pi 侧自动命名等无事件通道的改名路径只能靠轮询发现。
+    // 原 1s 常驻轮询降为 30s——N 面板 N 条 1s 定时器是纯空转，30s 开销可忽略。
+    const timer = window.setInterval(refresh, 30_000);
+    return () => {
+      offRename();
+      window.clearInterval(timer);
+    };
   }, [started, sessionId, paneApi]);
+  useEffect(() => {
+    // 流式中改名（/name、自动命名）pi 不推事件（流中推全量会丢 partial），
+    // 流结束时状态已含新名：isStreaming true→false 翻转时刷新一次覆盖该盲区。
+    if (wasStreaming.current && !isStreaming) {
+      void paneApi.piRuntime.getSessionInfo().then((info) => setName(info?.name ?? ''));
+    }
+    wasStreaming.current = isStreaming;
+  }, [isStreaming, paneApi]);
   const displayName = name || (firstUserMessage
     ? sessionTitleFromQuestion(firstUserQuestion, t('chat.imageSessionTitle'))
     : '');
