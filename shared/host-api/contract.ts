@@ -764,6 +764,9 @@ export type PiSessionExportInfo = { directory: string; lastPath?: string };
 
 export type PiFileListPayload = { cwd: string };
 export type PiFileListResult = { files: string[] };
+/** 目录逐层浏览（手动文件面板）：列某目录的直接子项，目录/文件分开排序。 */
+export type PiFileListDirPayload = { cwd: string; dir?: string };
+export type PiFileListDirResult = { dir: string; dirs: string[]; files: string[] };
 
 // —— piSkills：技能列表 ——
 
@@ -1123,6 +1126,7 @@ export type HostApiContract = {
   piFiles: {
     /** @ 补全候选：cwd 下递归列文件（相对路径，排除 .git/node_modules，上限 200 条）。 */
     list: (payload: PiFileListPayload) => PiFileListResult;
+    listDir: (payload: PiFileListDirPayload) => PiFileListDirResult;
   };
   workspace: {
     listChildren: (payload: WorkspaceListPayload) => WorkspaceListResult;

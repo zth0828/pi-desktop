@@ -159,6 +159,7 @@ function createHostApi(sessionPath?: string) {
   },
   piFiles: {
     list: (cwd: string) => invoke('piFiles', 'list', { cwd }),
+    listDir: (cwd: string, dir?: string) => invoke('piFiles', 'listDir', { cwd, dir }),
   },
   piPackages: {
     list: () => invoke('piPackages', 'list'),

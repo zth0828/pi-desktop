@@ -4,9 +4,12 @@
 // Windows 上尤其常见）回退 node fs 递归——回退同样按 .gitignore 过滤，避免
 // 被忽略的文件泄漏进补全面板（逐层解析 .gitignore，深层规则覆盖浅层）。
 import { spawn } from 'node:child_process';
-import type { PiFileListPayload, PiFileListResult } from '@shared/host-api/contract';
+import { readdir } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
+import path from 'node:path';
+import type { PiFileListDirPayload, PiFileListDirResult, PiFileListPayload, PiFileListResult } from '@shared/host-api/contract';
 import { loadPiAdapter } from './pi-adapter';
-import { readIgnoreLevel, walkGitignoreAware } from '../utils/gitignore-walk';
+import { readIgnoreLevel, isIgnored, walkGitignoreAware, DEFAULT_EXCLUDED_DIRS, type IgnoreLevel } from '../utils/gitignore-walk';
 
 const MAX_FILES = 200;
 
@@ -71,5 +74,27 @@ export const filesApi = {
     const files: string[] = [];
     await walk(payload.cwd, files);
     return { files };
+  },
+
+  /** 逐层列目录：手动文件面板的树形浏览（不烧 pi quota，纯文件系统浏览）。 */
+  listDir: async (payload: PiFileListDirPayload): Promise<PiFileListDirResult> => {
+    const base = payload.cwd;
+    const rel = payload.dir ?? '';
+    const dirPath = path.join(base, rel);
+    const level = await readIgnoreLevel(base, rel, rel);
+    const levels: IgnoreLevel[] = level ? [level] : [];
+    const entries = await readdir(dirPath, { withFileTypes: true }).catch(() => [] as Dirent[]);
+    const dirs: string[] = [];
+    const files: string[] = [];
+    for (const entry of entries) {
+      if (entry.name.startsWith('.git') || DEFAULT_EXCLUDED_DIRS.has(entry.name)) continue;
+      const relEntry = rel ? `${rel}/${entry.name}` : entry.name;
+      if (isIgnored(levels, relEntry)) continue;
+      if (entry.isDirectory()) dirs.push(entry.name);
+      else if (entry.isFile()) files.push(entry.name);
+    }
+    dirs.sort((a, b) => a.localeCompare(b));
+    files.sort((a, b) => a.localeCompare(b));
+    return { dir: rel, dirs, files };
   },
 };

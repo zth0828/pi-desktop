@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, ChevronRight, CircleGauge, FileText, Folder, GitBranch, Paperclip, Plus, Square, Sparkles, Terminal, X } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
@@ -180,6 +180,10 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   /** 加号菜单「引用文件」手动打开的文件面板（无需先输入 @）。 */
   const [filePanelManual, setFilePanelManual] = useState(false);
+  /** 手动文件面板树：根层内容 + 已展开子目录内容（相对路径 key）+ 展开状态。 */
+  const [dirTree, setDirTree] = useState<{ dir: string; dirs: string[]; files: string[] } | null>(null);
+  const [dirContents, setDirContents] = useState<Record<string, { dirs: string[]; files: string[] }>>({});
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelMenuSection, setModelMenuSection] = useState<'models' | 'thinking' | null>(null);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
@@ -223,14 +227,23 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     return () => window.removeEventListener('resize', resize);
   }, []);
 
+  // @ 文件面板：手动浏览或 @ 输入补全任一打开即显示（派生值，先于下方 useEffect 声明）
+  const atActive = atToken !== null && !atSuppressed;
+  const filePanelOpen = filePanelManual || (atActive && filterFiles(fileList, atToken?.query ?? '').length > 0);
+
   useEffect(() => {
-    if (!composerMenuOpen && !usageOpen && !modelMenuOpen && !branchMenuOpen) return;
+    if (!composerMenuOpen && !usageOpen && !modelMenuOpen && !branchMenuOpen && !filePanelOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (composerMenuOpen && !composerMenuRef.current?.contains(target)) setComposerMenuOpen(false);
       if (usageOpen && !usageControlRef.current?.contains(target)) setUsageOpen(false);
       if (modelMenuOpen && !modelMenuRef.current?.contains(target)) setModelMenuOpen(false);
       if (branchMenuOpen && !branchMenuRef.current?.contains(target)) setBranchMenuOpen(false);
+      // 文件面板：点击面板外关闭（@ 补全或手动浏览均适用）
+      if (filePanelOpen && !filePanelRef.current?.contains(target)) {
+        setFilePanelManual(false);
+        setAtSuppressed(true);
+      }
     };
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -245,7 +258,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [composerMenuOpen, usageOpen, modelMenuOpen, branchMenuOpen]);
+  }, [composerMenuOpen, usageOpen, modelMenuOpen, branchMenuOpen, filePanelOpen]);
 
   /** 命令执行的轻量确认（/name /copy /export /reload 等），5s 自动消失 */
   const showNotice = (text: string) => {
@@ -614,13 +627,11 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   }, [panelOpen, query, selected]);
 
   // @ 文件补全：panel 打开时拉一次候选列表（cwd 下相对路径），本地模糊过滤
-  const atActive = atToken !== null && !atSuppressed;
   useEffect(() => {
     if (!atActive && !filePanelManual) return;
     void hostApi.piFiles.list(cwd).then((r) => setFileList(r.files)).catch(() => {});
   }, [atActive, filePanelManual, cwd]);
   const fileMatches = atActive ? filterFiles(fileList, atToken.query) : filterFiles(fileList, '');
-  const filePanelOpen = filePanelManual || (atActive && fileMatches.length > 0);
 
   useEffect(() => {
     const stopOnEscape = (event: globalThis.KeyboardEvent) => {
@@ -766,6 +777,55 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     textareaRef.current?.focus();
   };
 
+  /** 目录节点展开/收起：首展开时按需加载子目录内容。 */
+  const toggleDir = (name: string, parent: string) => {
+    const full = parent ? `${parent}/${name}` : name;
+    if (expandedDirs.has(full)) {
+      setExpandedDirs((prev) => { const next = new Set(prev); next.delete(full); return next; });
+      return;
+    }
+    setExpandedDirs((prev) => new Set(prev).add(full));
+    if (!dirContents[full]) {
+      void hostApi.piFiles.listDir(cwd, full).then((r) => {
+        setDirContents((prev) => ({ ...prev, [full]: r }));
+      }).catch(() => {});
+    }
+  };
+
+  /** 手动文件面板的树形渲染：目录可展开，文件可选中为附件。 */
+  const renderDirTree = (dir: string, content: { dirs: string[]; files: string[] }, depth: number): ReactNode[] => {
+    const nodes: ReactNode[] = [];
+    for (const name of content.dirs) {
+      const full = dir ? `${dir}/${name}` : name;
+      const open = expandedDirs.has(full);
+      nodes.push(
+        <button key={`d:${full}`} className="command-item file-dir" data-testid="file-dir" style={{ paddingLeft: 10 + depth * 14 }} onClick={() => toggleDir(name, dir)}>
+          <ChevronRight size={12} className={`file-dir-chevron${open ? ' open' : ''}`} />
+          <Folder size={13} />
+          <span className="command-name">{name}</span>
+        </button>,
+      );
+      const child = dirContents[full];
+      if (open && child) nodes.push(...renderDirTree(full, child, depth + 1));
+    }
+    for (const name of content.files) {
+      const full = dir ? `${dir}/${name}` : name;
+      nodes.push(
+        <button
+          key={`f:${full}`}
+          className="command-item"
+          data-testid="file-option"
+          style={{ paddingLeft: 10 + depth * 14 + 18 }}
+          onMouseDown={(e) => { e.preventDefault(); void pickFile(full); }}
+        >
+          <FileText size={13} />
+          <span className="command-name">{name}</span>
+        </button>,
+      );
+    }
+    return nodes;
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (panelOpen) {
       if (e.key === 'ArrowDown') {
@@ -807,6 +867,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       if (e.key === 'Escape') {
         e.preventDefault();
         setAtSuppressed(true);
+        setFilePanelManual(false);
         return;
       }
     }
@@ -927,19 +988,23 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       )}
       {filePanelOpen && (
         <div ref={filePanelRef} className="command-panel" data-testid="file-panel">
-          {fileMatches.map((file, i) => (
-            <button
-              key={file}
-              className={i === fileSelected ? 'command-item selected' : 'command-item'}
-              data-testid="file-option"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                pickFile(file);
-              }}
-            >
-              <span className="command-name">@{file}</span>
-            </button>
-          ))}
+          {filePanelManual ? (
+            dirTree ? renderDirTree('', dirTree, 0) : null
+          ) : (
+            fileMatches.map((file, i) => (
+              <button
+                key={file}
+                className={i === fileSelected ? 'command-item selected' : 'command-item'}
+                data-testid="file-option"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pickFile(file);
+                }}
+              >
+                <span className="command-name">@{file}</span>
+              </button>
+            ))
+          )}
         </div>
       )}
       <div className="chat-input-card">
@@ -1041,7 +1106,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 <label className="composer-menu-item" data-testid="attach-image" htmlFor="chat-attach-input" title={t('chat.attachFile')}>
                   <Paperclip size={15} /><span>{t('chat.attachFile')}</span>
                 </label>
-                <button className="composer-menu-item" data-testid="composer-file-reference" onClick={() => { setComposerMenuOpen(false); setFilePanelManual(true); textareaRef.current?.focus(); }}><AtSign size={15} /><span>{t('chat.fileReference')}</span></button>
+                <button className="composer-menu-item" data-testid="composer-file-reference" onClick={() => { setComposerMenuOpen(false); setFilePanelManual(true); void hostApi.piFiles.listDir(cwd).then((r) => setDirTree(r)).catch(() => setDirTree(null)); textareaRef.current?.focus(); }}><AtSign size={15} /><span>{t('chat.fileReference')}</span></button>
                 <div className="composer-menu-section"><Sparkles size={14} /><span>{t('chat.skills')}</span></div>
                 <div className="composer-skills-list">
                   {skills.length === 0 ? <div className="composer-menu-hint">{t('chat.noSkills')}</div> : skills.map((skill) => (

@@ -1,7 +1,7 @@
 // 聊天主链路 E2E（真 pi + mock provider，不烧 API quota）。
 // 覆盖：事件完整性（流式渲染）、工具卡片、中断语义、新会话。
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
@@ -31,6 +31,8 @@ test.beforeAll(async () => {
   workspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-workspace-'));
   // edit 工具 E2E 的目标文件（mock 会把 alpha → beta）
   await writeFile(path.join(workspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
+  await mkdir(path.join(workspace, 'nested-e2e'));
+  await writeFile(path.join(workspace, 'nested-e2e', 'deep-e2e.txt'), 'deep content\n');
   await writeFile(
     path.join(agentDir, 'models.json'),
     JSON.stringify({
@@ -691,23 +693,30 @@ test('计划模式：常驻切换，开启后发送带 /plan 前缀，可退出'
   await expect(last).not.toContainText('/plan');
 });
 
-test('引用文件：加号菜单直接展开列表，选中作为附件不写入输入框', async ({ launchElectronApp }) => {
+test('引用文件：目录树逐层展开，选中作为附件，点击面板外关闭', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  // 先输入内容，再经加号菜单「引用文件」：无需先输入 @ 即弹出列表
-  await page.getByTestId('chat-input').fill('请检查这个文件');
+  // 加号菜单「引用文件」：无需先输入 @ 即弹出目录树
   await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-file-reference').click();
   await expect(page.getByTestId('file-panel')).toBeVisible();
-  const options = page.getByTestId('file-option');
-  await expect(options.first()).toBeVisible();
-  await options.first().click();
-  // 引用作为附件（staged-file）暂存，输入框内容保持原样（不写 @path）
-  await expect(page.getByTestId('staged-file')).toBeVisible();
-  await expect(page.getByTestId('chat-input')).toHaveValue('请检查这个文件');
-  // 面板关闭
+  // 根层目录节点出现，展开后能看到深层文件
+  await expect(page.getByTestId('file-dir').filter({ hasText: 'nested-e2e' })).toBeVisible();
+  await page.getByTestId('file-dir').filter({ hasText: 'nested-e2e' }).click();
+  const deep = page.getByTestId('file-option').filter({ hasText: 'deep-e2e.txt' });
+  await expect(deep).toBeVisible();
+  // 选中深层文件 → 作为附件（staged-file）暂存
+  await deep.click();
+  await expect(page.getByTestId('staged-file')).toContainText('deep-e2e.txt');
+  await expect(page.getByTestId('file-panel')).toBeHidden();
+
+  // 再次打开，点击面板外部（输入框）关闭
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-file-reference').click();
+  await expect(page.getByTestId('file-panel')).toBeVisible();
+  await page.getByTestId('chat-input').click();
   await expect(page.getByTestId('file-panel')).toBeHidden();
 });
 
