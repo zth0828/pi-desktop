@@ -33,6 +33,9 @@ test.beforeAll(async () => {
   await writeFile(path.join(workspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
   await mkdir(path.join(workspace, 'nested-e2e'));
   await writeFile(path.join(workspace, 'nested-e2e', 'deep-e2e.txt'), 'deep content\n');
+  // 1x1 PNG + 假 docx：@ 文件选择应能作为图片/文件附件加入
+  await writeFile(path.join(workspace, 'e2e-image.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
+  await writeFile(path.join(workspace, 'e2e-doc.docx'), Buffer.from('PK\x03\x04fake docx content\x00\x01'));
   await writeFile(
     path.join(agentDir, 'models.json'),
     JSON.stringify({
@@ -720,6 +723,23 @@ test('引用文件：目录树逐层展开，选中作为附件，点击面板�
   await expect(page.getByTestId('file-panel')).toBeHidden();
 });
 
+test('@ 文件选择：图片与 docx 也能作为附件加入', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-file-reference').click();
+  // 图片 → staged-image 附件（可预览）
+  await page.getByTestId('file-option').filter({ hasText: 'e2e-image.png' }).click();
+  await expect(page.getByTestId('staged-image')).toBeVisible();
+  await expect(page.getByTestId('staged-image').locator('img')).toHaveAttribute('alt', 'e2e-image.png');
+  // docx（二进制）→ staged-file 引用附件
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-file-reference').click();
+  await page.getByTestId('file-option').filter({ hasText: 'e2e-doc.docx' }).click();
+  await expect(page.getByTestId('staged-file')).toContainText('e2e-doc.docx');
+});
 test('技能：加号菜单选择后以 badge 显示在输入框上方，不写入输入框', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

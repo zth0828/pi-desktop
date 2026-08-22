@@ -761,11 +761,37 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
 
   /** 选中文件：把光标处的 @query 替换为 @相对路径（含空格走 @"..." 引用，对齐 pi-tui） */
   const pickFile = async (relPath: string) => {
-    // 附件式引用：读文件内容暂存（不写入输入框），发送时按 <file> 块拼进 prompt
+    // 附件式引用：图片走 ImageContent 通道，文本走 <file> 块，二进制给引用提示
+    // （对齐 pi file-processor：图片转图片附件，其余文件加入引用）。
     const result = await hostApi.workspace.readFile(relPath).catch(() => null);
-    const text = result?.text;
-    if (text && !isProbablyBinary(text)) {
-      setAttachments((current) => [...current, { kind: 'file', name: relPath, text }]);
+    if (!result) {
+      if (filePanelManual) setFilePanelManual(false);
+      if (atToken) {
+        setValue(value.slice(0, atToken.start) + value.slice(atToken.end));
+        setAtToken(null);
+      }
+      setAtSuppressed(true);
+      textareaRef.current?.focus();
+      return;
+    }
+    if (result.kind === 'image' && result.data) {
+      const mediaType = result.mimeType ?? 'image/png';
+      const data = result.data;
+      setAttachments((current) => [...current, {
+        kind: 'image',
+        name: result.name,
+        data,
+        mediaType,
+        previewUrl: `data:${mediaType};base64,${data}`,
+      }]);
+    } else {
+      const text = result.text;
+      if (text && !isProbablyBinary(text)) {
+        setAttachments((current) => [...current, { kind: 'file', name: relPath, text }]);
+      } else {
+        // docx/pdf/二进制：内容无法内联，仍加入引用让模型知道文件存在
+        setAttachments((current) => [...current, { kind: 'file', name: relPath, text: `[binary attachment: ${result.name}, ${result.size} bytes]` }]);
+      }
     }
     if (filePanelManual) setFilePanelManual(false);
     if (atToken) {
