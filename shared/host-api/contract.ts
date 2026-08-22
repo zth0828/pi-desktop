@@ -162,6 +162,14 @@ export type VersionCheckSnapshot = {
   };
 };
 
+/** 待展示的版本更新通知（kind 区分 app 自身与 pi）。 */
+export type VersionCheckPendingNotice = {
+  current: string;
+  latest: string;
+  releaseUrl?: string;
+  kind: 'app' | 'pi';
+};
+
 export type AppUpdateDownloadResult = HostSuccess & {
   path?: string;
   assetName?: string;
@@ -1020,6 +1028,10 @@ export type HostApiContract = {
   versionCheck: {
     check: (payload?: { force?: boolean }) => VersionCheckSnapshot;
     getStatus: () => VersionCheckSnapshot;
+    /** 渲染层挂载时拉取待展示通知：推送可能先于订阅丢失，拉取兜底并标记已读。 */
+    getPendingNotice: () => VersionCheckPendingNotice | null;
+    /** 用户关闭/点击通知后标记该版本已读，重启不再弹。 */
+    dismissNotice: (payload: { kind: 'app' | 'pi'; latest: string }) => HostSuccess;
   };
   appUpdate: {
     download: () => AppUpdateDownloadResult;

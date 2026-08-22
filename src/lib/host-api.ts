@@ -53,6 +53,8 @@ function createHostApi(sessionPath?: string) {
   versionCheck: {
     check: (force?: boolean) => invoke('versionCheck', 'check', force ? { force } : undefined),
     getStatus: () => invoke('versionCheck', 'getStatus'),
+    getPendingNotice: () => invoke('versionCheck', 'getPendingNotice'),
+    dismissNotice: (payload: { kind: 'app' | 'pi'; latest: string }) => invoke('versionCheck', 'dismissNotice', payload),
   },
   appUpdate: {
     download: () => invoke('appUpdate', 'download'),

@@ -84,26 +84,27 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   if (!piDue && !appDue) return updateStatus({ pi: { ...piPrevious, current: (await piSystemApi.detect()).pi.version, updateAvailable: compare((await piSystemApi.detect()).pi.version, piPrevious.latest) }, app: { ...appPrevious, current: appApi.version(), updateAvailable: compare(appApi.version(), appPrevious.latest), downloadedPath: saved.appVersionCheckDownloadedPath } });
   if (piDue) await settingsApi.set({ key: 'piVersionCheckLastAttemptAt', value: now });
   if (appDue) await settingsApi.set({ key: 'appVersionCheckLastAttemptAt', value: now });
-  const [pi, appStatus] = await Promise.all([
-    piDue ? checkPi(piPrevious, now) : Promise.resolve(piPrevious),
-    appDue ? checkApp(appPrevious, now) : Promise.resolve(appPrevious),
-  ]);
-  if (appStatus.updateAvailable && appStatus.latest && appStatus.latest !== saved.appVersionCheckNoticedLatest) {
-    sendHostEvent('versionCheck', 'updateAvailable', {
-      current: ('current' in appStatus && typeof appStatus.current === 'string') ? appStatus.current : appApi.version(),
-      latest: appStatus.latest,
-      releaseUrl: appStatus.releaseUrl,
-      kind: 'app',
-    });
-    await settingsApi.set({ key: 'appVersionCheckNoticedLatest', value: appStatus.latest });
-  }
+  // app 检查一完成就发通知，不等 pi 检查（npm 网络探测慢时不拖住 app 更新提示）。
+  // 推送是尽力送达：渲染层可能尚未订阅，已读标记移到 getPendingNotice/dismissNotice。
+  const appStatusPromise = (appDue ? checkApp(appPrevious, now) : Promise.resolve(appPrevious)).then((appResult) => {
+    if (appResult.updateAvailable && appResult.latest && appResult.latest !== saved.appVersionCheckNoticedLatest) {
+      sendHostEvent('versionCheck', 'updateAvailable', {
+        current: ('current' in appResult && typeof appResult.current === 'string') ? appResult.current : appApi.version(),
+        latest: appResult.latest,
+        releaseUrl: appResult.releaseUrl,
+        kind: 'app',
+      });
+    }
+    return appResult;
+  });
+  const pi = await (piDue ? checkPi(piPrevious, now) : Promise.resolve(piPrevious));
+  const appStatus = await appStatusPromise;
   if (pi.updateAvailable && pi.latest && pi.latest !== saved.piVersionCheckNoticedLatest) {
     sendHostEvent('versionCheck', 'updateAvailable', {
       current: pi.current ?? '',
       latest: pi.latest,
       kind: 'pi',
     });
-    await settingsApi.set({ key: 'piVersionCheckNoticedLatest', value: pi.latest });
   }
   return updateStatus({ pi, app: { ...appStatus, downloadedPath: saved.appVersionCheckDownloadedPath } });
 }
@@ -120,6 +121,36 @@ export const versionCheckApi = {
       pi: { current: currentPi, latest: saved.piVersionCheckLatest, updateAvailable: compare(currentPi, saved.piVersionCheckLatest), lastAttemptAt: saved.piVersionCheckLastAttemptAt, lastSuccessAt: saved.piVersionCheckLastSuccessAt, error: saved.piVersionCheckError },
       app: { current: appApi.version(), latest: saved.appVersionCheckLatest, updateAvailable: compare(appApi.version(), saved.appVersionCheckLatest), lastAttemptAt: saved.appVersionCheckLastAttemptAt, lastSuccessAt: saved.appVersionCheckLastSuccessAt, error: saved.appVersionCheckError, releaseUrl: saved.appVersionCheckReleaseUrl, assetName: saved.appVersionCheckAssetName, downloadedPath: saved.appVersionCheckDownloadedPath },
     });
+  },
+  // 已读只在用户关闭/点击通知时写（dismissNotice）；拉取不写——组件挂载竞争可能丢弃
+  // 首次拉取结果，写已读会让通知永久丢失。重启后未关闭的通知重弹是符合预期的。
+  getPendingNotice: async () => {
+    const saved = await settingsApi.getAll();
+    const appCurrent = appApi.version();
+    if (saved.appVersionCheckLatest
+      && compare(appCurrent, saved.appVersionCheckLatest)
+      && saved.appVersionCheckNoticedLatest !== saved.appVersionCheckLatest) {
+      return {
+        current: appCurrent,
+        latest: saved.appVersionCheckLatest,
+        releaseUrl: saved.appVersionCheckReleaseUrl,
+        kind: 'app' as const,
+      };
+    }
+    const piCurrent = (await piSystemApi.detect()).pi.version;
+    if (saved.piVersionCheckLatest
+      && compare(piCurrent, saved.piVersionCheckLatest)
+      && saved.piVersionCheckNoticedLatest !== saved.piVersionCheckLatest) {
+      return { current: piCurrent ?? '', latest: saved.piVersionCheckLatest, kind: 'pi' as const };
+    }
+    return null;
+  },
+  dismissNotice: async (payload: { kind: 'app' | 'pi'; latest: string }) => {
+    await settingsApi.set({
+      key: payload.kind === 'app' ? 'appVersionCheckNoticedLatest' : 'piVersionCheckNoticedLatest',
+      value: payload.latest,
+    });
+    return { success: true };
   },
 };
 

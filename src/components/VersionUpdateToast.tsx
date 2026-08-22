@@ -18,11 +18,29 @@ export function VersionUpdateToast({ onNavigate }: { onNavigate: (page: AppPageI
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    let disposed = false;
+    // 挂载时拉取待展示通知：启动检查完成时渲染层可能尚未订阅，推送会丢，拉取兜底
+    void hostApi.versionCheck.getPendingNotice().then((notice) => {
+      if (!disposed && notice) setInfo((current) => current ?? notice);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
     return onHostEvent('versionCheck', 'updateAvailable', (eventPayload) => {
-      setInfo(eventPayload);
+      setInfo((current) =>
+        current && current.kind === eventPayload.kind && current.latest === eventPayload.latest ? current : eventPayload);
       setDismissed(false);
     });
   }, []);
+
+  // 关闭/点击行动都视为已读：标记后重启不再弹同版本
+  const dismiss = () => {
+    setDismissed(true);
+    if (info) void hostApi.versionCheck.dismissNotice({ kind: info.kind, latest: info.latest });
+  };
 
   if (!info || dismissed) return null;
 
@@ -46,7 +64,7 @@ export function VersionUpdateToast({ onNavigate }: { onNavigate: (page: AppPageI
           data-testid="version-update-dismiss"
           title={t('versionUpdate.dismiss')}
           aria-label={t('versionUpdate.dismiss')}
-          onClick={() => setDismissed(true)}
+          onClick={dismiss}
         >
           <X size={14} />
         </button>
@@ -64,7 +82,7 @@ export function VersionUpdateToast({ onNavigate }: { onNavigate: (page: AppPageI
           data-testid="version-update-action"
           onClick={() => {
             onNavigate('settings');
-            setDismissed(true);
+            dismiss();
           }}
         >
           {t(info.kind === 'app' ? 'versionUpdate.download' : 'versionUpdate.upgradePi')}

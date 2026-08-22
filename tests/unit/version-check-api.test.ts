@@ -50,7 +50,7 @@ describe('version-check-api', () => {
     vi.clearAllMocks();
   });
 
-  it('notifies when a new app version is found and records noticed tag', async () => {
+  it('notifies when a new app version is found without marking noticed at send time', async () => {
     settingsApiMock.getAll.mockResolvedValue({});
     hostFetchMock.hostFetch.mockResolvedValue(new Response(JSON.stringify({
       tag_name: 'v0.5.0',
@@ -73,6 +73,38 @@ describe('version-check-api', () => {
         releaseUrl: 'https://github.com/zth0828/pi-desktop/releases/tag/v0.5.0',
       }),
     );
+    // 发送不标记已读：推送可能先于渲染层订阅丢失，已读只在交付（拉取/关闭）时写
+    expect(settingsApiMock.set).not.toHaveBeenCalledWith({
+      key: 'appVersionCheckNoticedLatest',
+      value: 'v0.5.0',
+    });
+  });
+
+  it('delivers pending notice on pull without marking noticed', async () => {
+    settingsApiMock.getAll.mockResolvedValue({
+      appVersionCheckLatest: 'v0.5.0',
+      appVersionCheckReleaseUrl: 'https://github.com/zth0828/pi-desktop/releases/tag/v0.5.0',
+    });
+
+    const notice = await versionCheckApi.getPendingNotice();
+    expect(notice).toMatchObject({ kind: 'app', latest: 'v0.5.0', current: '0.4.0' });
+    // 拉取不写已读（挂载竞争会丢弃首次拉取结果）；已读只由 dismissNotice 写
+    expect(settingsApiMock.set).not.toHaveBeenCalledWith({
+      key: 'appVersionCheckNoticedLatest',
+      value: 'v0.5.0',
+    });
+
+    // 已读（用户关闭过）后不再补弹
+    settingsApiMock.getAll.mockResolvedValue({
+      appVersionCheckLatest: 'v0.5.0',
+      appVersionCheckNoticedLatest: 'v0.5.0',
+      piVersionCheckNoticedLatest: '0.84.2',
+    });
+    expect(await versionCheckApi.getPendingNotice()).toBeNull();
+  });
+
+  it('dismissNotice records the noticed tag for restart persistence', async () => {
+    await versionCheckApi.dismissNotice({ kind: 'app', latest: 'v0.5.0' });
     expect(settingsApiMock.set).toHaveBeenCalledWith({
       key: 'appVersionCheckNoticedLatest',
       value: 'v0.5.0',
