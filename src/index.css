@@ -2278,6 +2278,49 @@ button.danger-outline {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), 0 3px 14px rgba(0,0,0,.06);
 }
 
+/* 命令模式输入态：composer 顶部的模式指示条 */
+.command-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+}
+.command-mode-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.command-context-toggle {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.command-context-toggle:hover { color: var(--text); }
+.command-context-toggle.in-context {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.command-mode-exit {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.command-mode-exit:hover { color: var(--text); }
+
 .context-chip {
   display: inline-flex;
   align-items: center;

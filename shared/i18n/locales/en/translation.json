@@ -389,6 +389,16 @@
       "cancelled": "cancelled",
       "exitCode": "exit {{code}}"
     },
+    "command": {
+      "run": "Run command",
+      "mode": "Command mode",
+      "placeholder": "Type a bash command, Enter to run",
+      "inContext": "In context",
+      "includeContext": "Excluded from context; click to include",
+      "excludeContext": "In context; click to exclude",
+      "exit": "Exit command mode",
+      "runningHint": "A command is still running"
+    },
     "errors": {
       "invalidKey": "API key issue: the key may be invalid, expired or revoked — update it in provider settings.",
       "wrongModel": "Model issue: the selected model is not available for this account — pick another model.",

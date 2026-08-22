@@ -556,6 +556,73 @@ test('! bash 流式窗口：执行中只见尾部预览，无展开交互', asyn
   await expect(streaming.getByTestId('bash-output-more')).toContainText('45');
 });
 
+test('命令模式：加号菜单进入、默认不入上下文、发送后自动退出', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 加号菜单 → 运行命令 → 命令模式指示条出现，默认「不入上下文」
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  const bar = page.getByTestId('command-mode-bar');
+  await expect(bar).toBeVisible();
+  await expect(page.getByTestId('command-context-toggle')).toContainText(/不入上下文|excluded from context/);
+
+  // 不带 ! 前缀直接输入命令并发送
+  await page.getByTestId('chat-input').fill('echo pi-desktop-command-mode');
+  await page.getByTestId('chat-send').click();
+
+  // 消息流卡片出现且带「不入上下文」徽标；发送后命令模式自动退出
+  const card = page.getByTestId('message-bash').last();
+  await expect(card.getByTestId('bash-command')).toContainText('echo pi-desktop-command-mode', { timeout: 15_000 });
+  await expect(card).toContainText(/不入上下文|excluded from context/);
+  await expect(bar).toBeHidden();
+});
+
+test('命令模式：上下文开关切到入上下文、全角 ！ 前缀兼容', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 进入命令模式，切换到「入上下文」
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('command-context-toggle').click();
+  await expect(page.getByTestId('command-context-toggle')).toContainText(/入上下文|In context/);
+  await page.getByTestId('chat-input').fill('echo pi-desktop-command-in-context');
+  await page.getByTestId('chat-send').click();
+  const card = page.getByTestId('message-bash').last();
+  await expect(card.getByTestId('bash-command')).toContainText('echo pi-desktop-command-in-context', { timeout: 15_000 });
+  await expect(card).not.toContainText(/不入上下文|excluded from context/);
+
+  // 全角 ！ 前缀（中文输入法）直接识别为 bash 命令：单 ！ 入上下文，无徽标
+  await page.getByTestId('chat-input').fill('！echo pi-desktop-fullwidth-bang');
+  await page.getByTestId('chat-send').click();
+  const full = page.getByTestId('message-bash').last();
+  await expect(full.getByTestId('bash-command')).toContainText('echo pi-desktop-fullwidth-bang', { timeout: 15_000 });
+  await expect(full).not.toContainText(/不入上下文|excluded from context/);
+});
+
+test('命令模式：执行中发送按钮禁用，完成后恢复', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('chat-input').fill("bash -c 'sleep 2; echo pi-desktop-bash-slow'");
+  await page.getByTestId('chat-send').click();
+  // pi 原生一次一个 bash：执行中发送按钮禁用并提示
+  await expect(page.getByTestId('chat-send')).toBeDisabled();
+  await expect(page.getByTestId('chat-send')).toHaveAttribute('title', /仍在执行|still running/);
+  // 完成后恢复可发送（先填入内容，空 composer 时发送按钮本就禁用）
+  const card = page.getByTestId('message-bash').last();
+  await expect(card.getByTestId('bash-exit-code')).toContainText('0', { timeout: 20_000 });
+  await page.getByTestId('chat-input').fill('echo next');
+  await expect(page.getByTestId('chat-send')).toBeEnabled();
+  await expect(page.getByTestId('chat-send')).not.toHaveAttribute('title', /仍在执行|still running/);
+});
+
 test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当前轮插入', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

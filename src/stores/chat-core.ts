@@ -93,6 +93,10 @@ export type ChatState = {
   /** 面板级 composer 草稿，跨 ChatPane 重挂载保留，发送后显式清空。 */
   composerText: string;
   composerAttachments: ComposerAttachment[];
+  /** 面板级命令模式输入态：开启后发送走 bash 执行而非普通消息。 */
+  commandMode: boolean;
+  /** 命令模式下执行结果的上下文策略：true = 不入上下文（默认，测试命令用）。 */
+  commandExcludeFromContext: boolean;
   toolExecutions: Record<string, ToolExecution>;
   compaction: { reason: CompactionReason } | null;
   /** 最近一次压缩结果，供状态栏展示压缩前后与摘要请求用量。 */
@@ -145,6 +149,8 @@ export type ChatState = {
   openWorkspaceFile: (path: string) => void;
   setComposerText: (text: string) => void;
   setComposerAttachments: (attachments: ComposerAttachment[]) => void;
+  setCommandMode: (mode: boolean) => void;
+  setCommandExcludeFromContext: (excluded: boolean) => void;
   clearInputDraft: () => void;
   /** 消息级 fork：从指定 user 消息分叉新会话（sessionReplaced 事件负责刷新列表） */
   forkFrom: (entryId: string) => Promise<void>;
@@ -282,6 +288,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       historyMessages: [],
       composerText: '',
       composerAttachments: [],
+      commandMode: false,
+      commandExcludeFromContext: true,
       toolExecutions: {},
       compaction: null,
       lastCompaction: null,
@@ -425,6 +433,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
 
       setComposerText: (text) => set({ composerText: text }),
       setComposerAttachments: (attachments) => set({ composerAttachments: attachments }),
+      setCommandMode: (mode) => set({ commandMode: mode }),
+      setCommandExcludeFromContext: (excluded) => set({ commandExcludeFromContext: excluded }),
       clearInputDraft: () => set({ inputDraft: null }),
 
       openWorkspaceFile: (rawPath) => {

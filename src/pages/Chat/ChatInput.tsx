@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, ChevronRight, CircleGauge, FileText, Folder, GitBranch, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
+import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, ChevronRight, CircleGauge, FileText, Folder, GitBranch, Paperclip, Plus, Square, Sparkles, Terminal, X } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
   PiCommandRow,
@@ -136,6 +136,10 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const runtimeContextUsage = usePaneChatStore((s) => s.contextUsage);
   const retrying = usePaneChatStore((s) => s.retry !== null);
   const bashing = usePaneChatStore((s) => s.bashDraft !== null);
+  const commandMode = usePaneChatStore((s) => s.commandMode);
+  const commandExcludeFromContext = usePaneChatStore((s) => s.commandExcludeFromContext);
+  const setCommandMode = usePaneChatStore((s) => s.setCommandMode);
+  const setCommandExcludeFromContext = usePaneChatStore((s) => s.setCommandExcludeFromContext);
   const started = usePaneChatStore((s) => s.started);
   const prompt = usePaneChatStore((s) => s.prompt);
   const runBash = usePaneChatStore((s) => s.runBash);
@@ -645,9 +649,17 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     const promptText = formatOrderedAttachmentPrompt(text, outgoingAttachments);
     setValue('');
     setAttachments([]);
-    // `!` bash 命令模式（pi TUI：`!cmd` 执行并入上下文，`!!cmd` 执行但不入上下文）
-    if (text.startsWith('!') && outgoingAttachments.length === 0) {
-      const isExcluded = text.startsWith('!!');
+    // 命令模式：发送即 bash 执行（上下文策略由开关决定，默认不入上下文）；
+    // 发送后退出命令模式，避免下一条普通消息被误当成命令。
+    if (commandMode) {
+      setCommandMode(false);
+      if (text && !bashing) void runBash(text, commandExcludeFromContext);
+      return;
+    }
+    // `!` bash 命令模式（pi TUI：`!cmd` 执行并入上下文，`!!cmd` 执行但不入上下文）；
+    // 兼容中文输入法的全角 `！` 前缀。
+    if ((text.startsWith('!') || text.startsWith('！')) && outgoingAttachments.length === 0) {
+      const isExcluded = text.startsWith('!!') || text.startsWith('！！');
       const command = (isExcluded ? text.slice(2) : text.slice(1)).trim();
       if (command) void runBash(command, isExcluded);
       return;
@@ -950,12 +962,26 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
             ))}
           </div>
         )}
+        {commandMode && (
+          <div className="command-mode-bar" data-testid="command-mode-bar">
+            <span className="command-mode-label"><Terminal size={13} />{t('chat.command.mode')}</span>
+            <button
+              className={`command-context-toggle${commandExcludeFromContext ? '' : ' in-context'}`}
+              data-testid="command-context-toggle"
+              title={commandExcludeFromContext ? t('chat.command.includeContext') : t('chat.command.excludeContext')}
+              onClick={() => setCommandExcludeFromContext(!commandExcludeFromContext)}
+            >
+              {commandExcludeFromContext ? t('chat.bash.excluded') : t('chat.command.inContext')}
+            </button>
+            <button className="command-mode-exit" data-testid="command-mode-exit" aria-label={t('chat.command.exit')} title={t('chat.command.exit')} onClick={() => setCommandMode(false)}><X size={13} /></button>
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           data-testid="chat-input"
           className={`${composerScrollable ? 'is-scrollable' : ''}${composerScrollbarActive ? ' scrollbar-active' : ''}`}
           value={value}
-          placeholder={sendWith === 'cmdEnter' ? t('chat.placeholderCmdEnter') : t('chat.placeholder')}
+          placeholder={commandMode ? t('chat.command.placeholder') : sendWith === 'cmdEnter' ? t('chat.placeholderCmdEnter') : t('chat.placeholder')}
           onChange={(e) => {
             setValue(e.target.value);
             setSelected(0);
@@ -989,6 +1015,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                   {skills.length === 0 ? <div className="composer-menu-hint">{t('chat.noSkills')}</div> : skills.map((skill) => <button className="composer-menu-item" data-testid={`composer-skill-${skill.name}`} key={skill.name} onClick={() => { setValue(`/skill:${skill.name} `); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Sparkles size={14} /><span>{skill.name}</span></button>)}
                 </div>
                 <button className="composer-menu-item" data-testid="composer-plan-mode" disabled={!planAvailable} title={!planAvailable ? t('chat.planModeUnavailable') : undefined} onClick={() => { setValue('/plan '); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Brain size={15} /><span>{t('chat.planMode')}</span></button>
+                <button className="composer-menu-item" data-testid="composer-command-mode" onClick={() => { setCommandMode(true); setAttachments([]); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Terminal size={15} /><span>{t('chat.command.run')}</span></button>
               </div>
             )}
           </div>
@@ -1271,8 +1298,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 data-testid="chat-send"
                 className="send-button"
                 onClick={() => send()}
-                disabled={!value.trim() && attachments.length === 0}
-                title={sendWith === 'cmdEnter' ? t('chat.sendTipCmdEnter') : t('chat.sendTip')}
+                disabled={(!value.trim() && attachments.length === 0) || bashing}
+                title={bashing ? t('chat.command.runningHint') : sendWith === 'cmdEnter' ? t('chat.sendTipCmdEnter') : t('chat.sendTip')}
               >
                 <ArrowUp size={15} />
               </button>

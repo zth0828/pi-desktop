@@ -389,6 +389,16 @@
       "cancelled": "已取消",
       "exitCode": "退出码 {{code}}"
     },
+    "command": {
+      "run": "运行命令",
+      "mode": "命令模式",
+      "placeholder": "输入 bash 命令，Enter 执行",
+      "inContext": "入上下文",
+      "includeContext": "当前不入上下文，点击改为入上下文",
+      "excludeContext": "当前入上下文，点击改为不入上下文",
+      "exit": "退出命令模式",
+      "runningHint": "上一条命令仍在执行"
+    },
     "errors": {
       "invalidKey": "这是 API Key 问题：密钥可能无效、已过期或被禁用，请在供应商设置里更换。",
       "wrongModel": "这是模型配置问题：所选模型在当前账号可用渠道里不存在，请换一个模型。",
