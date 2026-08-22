@@ -62,6 +62,22 @@ export function toolSummary(toolName: string, args: unknown): string | null {
   }
 }
 
+/** 工具卡「在工作台预览」入口的文件路径：按工具显式分派，未列出的工具不出入口。
+ *  read/edit/write 取 args.path（兼容 file_path 别名）；grep 取 args.path，
+ *  缺省（搜索整个 cwd）时没有具体文件可预览。grep 的 pattern 是正则，不能当路径。 */
+export function previewPathFor(toolName: string, args: unknown): string | null {
+  if (!args || typeof args !== 'object') return null;
+  const a = args as Record<string, unknown>;
+  if (toolName === 'read' || toolName === 'edit' || toolName === 'write') {
+    const p = a.path ?? a.file_path;
+    return typeof p === 'string' && p.trim() ? p : null;
+  }
+  if (toolName === 'grep') {
+    return typeof a.path === 'string' && a.path.trim() ? a.path : null;
+  }
+  return null;
+}
+
 /** 折叠态输出预览：只留尾部 maxLines 行，hidden 为被裁掉的行数（pi bash 折叠态口径） */
 export function tailLines(text: string, maxLines = 5): { lines: string[]; hidden: number } {
   const lines = text.split('\n');

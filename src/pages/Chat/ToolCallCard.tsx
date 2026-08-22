@@ -7,6 +7,7 @@ import {
   extractResultText,
   formatDuration,
   parseDiffLines,
+  previewPathFor,
   resultDetails,
   tailLines,
   toolSummary,
@@ -118,7 +119,7 @@ export function ToolCallCard({
     : null;
   const writeTotalLines = writeTail ? writeTail.lines.length + writeTail.hidden : 0;
   const preview = !expanded && !diff && writeContent === null && outputText ? tailLines(outputText, PREVIEW_LINES) : null;
-  const previewPath = ['read', 'edit', 'write'].includes(execution.toolName) ? summary : null;
+  const previewPath = previewPathFor(execution.toolName, execution.args);
 
   return (
     <div className={`tool-card tool-${execution.status}`} data-testid="tool-card">

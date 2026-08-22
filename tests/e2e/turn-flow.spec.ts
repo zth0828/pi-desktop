@@ -49,6 +49,13 @@ test.beforeAll(async () => {
   await writeFile(path.join(plainWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
   await writeFile(path.join(foldWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
 
+  // 显式启用 grep/find/ls：pi 运行时默认只激活 read/bash/edit/write，
+  // 不配置 defaultTools 时 mock 的 grep tool_call 会返回 "Tool grep not found"
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultTools: ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls'] }),
+  );
+
   await writeFile(
     path.join(agentDir, 'models.json'),
     JSON.stringify({
@@ -364,4 +371,35 @@ test('展开本轮过程会显示完整工具输出，工具卡仍可单独收�
   const preview = page.getByTestId('turn-fold-content').locator('.tool-card-preview pre');
   await expect(preview).toContainText('line-12');
   await expect(preview).not.toContainText('line-01');
+});
+
+test('grep 工具卡：args.path 出「在工作台预览」入口并直达文件预览', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendPrompt(page, 'USE_TOOL_GREP now');
+  await waitToolsDone(page, 1);
+
+  const card = page.getByTestId('tool-card').last();
+  await expect(card.getByTestId('tool-preview-file')).toBeVisible();
+  await card.getByTestId('tool-preview-file').click();
+  await expect(
+    page.getByTestId('workspace-file-tab').filter({ hasText: 'e2e-edit-target.txt' }),
+  ).toBeVisible();
+  await expect(page.getByTestId('workspace-preview')).toContainText('alpha');
+  await app.close();
+});
+
+test('grep 无 path 参数（搜索整个 cwd）：工具卡不出文件预览入口', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendPrompt(page, 'USE_TOOL_GREP_NOPATH now');
+  await waitToolsDone(page, 1);
+
+  const card = page.getByTestId('tool-card').last();
+  await expect(card.getByTestId('tool-preview-file')).toHaveCount(0);
+  await app.close();
 });

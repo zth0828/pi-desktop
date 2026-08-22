@@ -3,6 +3,7 @@
 //   "USE_TOOL_LS" → 第一轮返回 tool_call(bash: ls)，之后回显工具结果
 //   "USE_TOOL_EDIT" / "update the release status" → 第一轮返回 tool_call(edit: alpha→beta)
 //   "USE_TOOL_WRITE" → 第一轮返回 tool_call(write: 新建 e2e-new-file.txt)
+//   "USE_TOOL_GREP" → 第一轮返回 tool_call(grep: pattern+path)；"USE_TOOL_GREP_NOPATH" → grep 无 path
 //   "USE_TOOL_READ_IMAGE" → 第一轮返回 tool_call(read: preview.png)
 //   "USE_TOOL_EDIT_WRITE" → 第一轮返回两个并行 tool_call（edit + write 各一）
 //   "USE_TOOL_WRITE_SIX" → 第一轮返回六个并行 write tool_call（改动卡折叠）
@@ -92,7 +93,7 @@ const server = http.createServer((req, res) => {
     const wantsTool = !hasToolResult && (
       lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") || lastUser.includes("update the release status") ||
       lastUser.includes("USE_TOOL_LONG") || lastUser.includes("USE_TOOL_LINES") ||
-      lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_READ_EXTERNAL_HISTORY") || lastUser.includes("USE_TOOL_EDIT_WRITE") || lastUser.includes("USE_TOOL_WRITE_SIX") ||
+      lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_GREP") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_READ_EXTERNAL_HISTORY") || lastUser.includes("USE_TOOL_EDIT_WRITE") || lastUser.includes("USE_TOOL_WRITE_SIX") ||
       lastUser.includes("USE_TOOL_FOREGROUND_SERVER") ||
       lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
     );
@@ -292,6 +293,14 @@ const server = http.createServer((req, res) => {
       } else if (lastUser.includes("USE_TOOL_READ_IMAGE")) {
         toolName = "read";
         args = JSON.stringify({ path: "preview.png" });
+      } else if (lastUser.includes("USE_TOOL_GREP_NOPATH")) {
+        // 无 path 的 grep（搜索整个 cwd）：必须排在 USE_TOOL_GREP 之前，
+        // 否则 NOPATH 串会被 GREP 分支命中
+        toolName = "grep";
+        args = JSON.stringify({ pattern: "alpha" });
+      } else if (lastUser.includes("USE_TOOL_GREP")) {
+        toolName = "grep";
+        args = JSON.stringify({ pattern: "alpha", path: "e2e-edit-target.txt" });
       } else if (lastUser.includes("MCP_CALL")) {
         toolName = "mcp";
         args = JSON.stringify({ tool: "mockmcp_ping", args: { message: "hello" } });

@@ -5,6 +5,7 @@ import {
   extractResultText,
   formatDuration,
   parseDiffLines,
+  previewPathFor,
   resultDetails,
   tailLines,
   toolSummary,
@@ -76,6 +77,29 @@ describe('toolSummary', () => {
     expect(toolSummary('web_search', { query: 'pi agent' })).toBe('pi agent');
     expect(toolSummary('fetch', { url: 'https://pi.dev' })).toBe('https://pi.dev');
     expect(toolSummary('custom_thing', { foo: 1 })).toBeNull();
+  });
+});
+
+describe('previewPathFor', () => {
+  it('read/edit/write 取 args.path（兼容 file_path 别名）', () => {
+    expect(previewPathFor('edit', { path: 'src/a.ts' })).toBe('src/a.ts');
+    expect(previewPathFor('write', { file_path: '/tmp/b.txt' })).toBe('/tmp/b.txt');
+    expect(previewPathFor('read', { path: '  ' })).toBeNull();
+    expect(previewPathFor('read', {})).toBeNull();
+  });
+
+  it('grep：args.path 有值出入口，缺省（搜索整个 cwd）不出', () => {
+    expect(previewPathFor('grep', { pattern: 'alpha', path: 'e2e-edit-target.txt' })).toBe('e2e-edit-target.txt');
+    expect(previewPathFor('grep', { pattern: 'alpha' })).toBeNull();
+    expect(previewPathFor('grep', { pattern: 'alpha', path: '' })).toBeNull();
+  });
+
+  it('其他工具（bash/mcp/subagent）不出入口，args 缺失返回 null', () => {
+    expect(previewPathFor('bash', { command: 'ls' })).toBeNull();
+    expect(previewPathFor('mcp', { tool: 'mockmcp_ping', args: {} })).toBeNull();
+    expect(previewPathFor('subagent', { agent: 'a', task: 't' })).toBeNull();
+    expect(previewPathFor('grep', undefined)).toBeNull();
+    expect(previewPathFor('read', 'not-object')).toBeNull();
   });
 });
 
