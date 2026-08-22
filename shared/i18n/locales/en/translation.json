@@ -391,6 +391,8 @@
     "modelMenu": {
       "model": "Model",
       "empty": "No models available",
+      "search": "Search models…",
+      "noResults": "No matching models",
       "expandProvider": "Expand {{provider}}",
       "collapseProvider": "Collapse {{provider}}"
     },

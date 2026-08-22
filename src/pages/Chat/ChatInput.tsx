@@ -187,6 +187,8 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelMenuSection, setModelMenuSection] = useState<'models' | 'thinking' | null>(null);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
+  /** 每个供应商组独立的搜索词（key = 组标签）；仅模型数 > 5 的组渲染搜索框。 */
+  const [modelQueries, setModelQueries] = useState<Record<string, string>>({});
   const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
   const [composerScrollable, setComposerScrollable] = useState(false);
   const [composerScrollbarActive, setComposerScrollbarActive] = useState(false);
@@ -439,8 +441,61 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       setCollapsedProviders(initialCollapsed);
     } else {
       setModelMenuSection(null);
+      setModelQueries({});
     }
   }, [modelMenuOpen]);
+
+  /** 组内搜索：名称 / id 命中即保留（供应商已由分组确定，不参与匹配） */
+  const groupVisibleModels = (provider: string, providerModels: PiModelRow[]) => {
+    const needle = (modelQueries[provider] ?? '').trim().toLowerCase();
+    if (!needle) return providerModels;
+    return providerModels.filter(
+      (m) => modelDisplayName(m).toLowerCase().includes(needle) || m.id.toLowerCase().includes(needle),
+    );
+  };
+
+  const renderModelOption = (m: PiModelRow) => {
+    const value = `${m.provider}/${m.id}`;
+    return (
+      <button
+        key={value}
+        type="button"
+        className="model-option"
+        data-testid="model-option"
+        data-value={value}
+        title={value}
+        onClick={() => { setModelMenuOpen(false); applyModelSelection(value); }}
+      >
+        <span>{modelDisplayName(m)}</span>
+        {value === modelKey && <Check size={14} />}
+      </button>
+    );
+  };
+
+  const renderModelSearch = (provider: string, providerModels: PiModelRow[]) => {
+    if (providerModels.length <= 5) return null;
+    const visible = groupVisibleModels(provider, providerModels);
+    return (
+      <div className="model-search">
+        <input
+          className="model-search-input"
+          data-testid="model-search"
+          data-value={provider}
+          placeholder={t('chat.modelMenu.search')}
+          value={modelQueries[provider] ?? ''}
+          onChange={(e) => setModelQueries((prev) => ({ ...prev, [provider]: e.target.value }))}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            const first = visible[0];
+            if (first) {
+              setModelMenuOpen(false);
+              applyModelSelection(`${first.provider}/${first.id}`);
+            }
+          }}
+        />
+      </div>
+    );
+  };
 
   const toggleProviderCollapse = (provider: string) => {
     setCollapsedProviders((prev) => {
@@ -1230,6 +1285,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 data-value={modelKey}
                 aria-label={t('chat.model')}
                 aria-expanded={modelMenuOpen}
+                title={selectedModel ? `${selectedModel.provider}/${selectedModel.id}` : undefined}
                 onClick={() => setModelMenuOpen((open) => !open)}
               >
                 <span className="model-menu-trigger-name">
@@ -1248,28 +1304,21 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                     <div className="model-submenu" data-testid="model-submenu">
                       {models.length === 0 && <div className="composer-menu-hint">{t('chat.modelMenu.empty')}</div>}
                       {modelGroups.size === 1
-                        ? [...modelGroups.entries()].map(([provider, providerModels]) => (
-                            <div key={provider} className="model-group-items" data-testid="model-group-items">
-                              {providerModels.map((m) => {
-                                const value = `${m.provider}/${m.id}`;
-                                return (
-                                  <button
-                                    key={value}
-                                    type="button"
-                                    className="model-option"
-                                    data-testid="model-option"
-                                    data-value={value}
-                                    onClick={() => { setModelMenuOpen(false); applyModelSelection(value); }}
-                                  >
-                                    <span>{modelDisplayName(m)}</span>
-                                    {value === modelKey && <Check size={14} />}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ))
+                        ? [...modelGroups.entries()].map(([provider, providerModels]) => {
+                            const visible = groupVisibleModels(provider, providerModels);
+                            return (
+                              <div key={provider} className="model-group-items" data-testid="model-group-items">
+                                {renderModelSearch(provider, providerModels)}
+                                {visible.length === 0 && (
+                                  <div className="composer-menu-hint" data-testid="model-search-empty">{t('chat.modelMenu.noResults')}</div>
+                                )}
+                                {visible.map(renderModelOption)}
+                              </div>
+                            );
+                          })
                         : [...modelGroups.entries()].map(([provider, providerModels]) => {
                             const isCollapsed = collapsedProviders.has(provider);
+                            const visible = groupVisibleModels(provider, providerModels);
                             return (
                               <div key={provider} className="model-group">
                                 <button
@@ -1289,22 +1338,11 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                                 </button>
                                 {!isCollapsed && (
                                   <div className="model-group-items" data-testid="model-group-items">
-                                    {providerModels.map((m) => {
-                                      const value = `${m.provider}/${m.id}`;
-                                      return (
-                                        <button
-                                          key={value}
-                                          type="button"
-                                          className="model-option"
-                                          data-testid="model-option"
-                                          data-value={value}
-                                          onClick={() => { setModelMenuOpen(false); applyModelSelection(value); }}
-                                        >
-                                          <span>{modelDisplayName(m)}</span>
-                                          {value === modelKey && <Check size={14} />}
-                                        </button>
-                                      );
-                                    })}
+                                    {renderModelSearch(provider, providerModels)}
+                                    {visible.length === 0 && (
+                                      <div className="composer-menu-hint" data-testid="model-search-empty">{t('chat.modelMenu.noResults')}</div>
+                                    )}
+                                    {visible.map(renderModelOption)}
                                   </div>
                                 )}
                               </div>

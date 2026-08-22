@@ -491,6 +491,8 @@ test('聊天页模型菜单按供应商分组与折叠展开', async ({ launchEl
   await expect(modelMenu).toHaveClass(/with-submenu/);
   const submenu = page.getByTestId('model-submenu');
   await expect(submenu).toBeVisible();
+  // 各组模型数均 ≤5：不渲染搜索框
+  await expect(submenu.getByTestId('model-search')).toHaveCount(0);
 
   // 当前默认模型为 mock/mock-1 -> mock 组默认展开，包含 2 个模型选项
   const mockToggle = page.locator('[data-testid="model-group-toggle"][data-value="mock"]');
@@ -585,6 +587,8 @@ test('单供应商场景：组头不渲染，列表直接平铺', async ({ launc
   await expect(submenu).toBeVisible();
   // 单供应商下不渲染折叠头
   await expect(submenu.getByTestId('model-group-toggle')).toHaveCount(0);
+  // 2 个模型（≤5）：不渲染搜索框
+  await expect(submenu.getByTestId('model-search')).toHaveCount(0);
   // 模型列表直接可见
   await expect(submenu.getByTestId('model-option')).toHaveCount(2);
   await expect(submenu.getByTestId('model-option')).toHaveText(['Mock Single 1', 'Mock Single 2']);
@@ -605,6 +609,122 @@ test('Models 页标识扩展供应商并展示 pi 模型协议与费率', async 
   await expect(page.getByTestId('refresh-models')).toBeVisible();
   await page.getByTestId('provider-model-extension-models-extension-1').scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'output/playwright/models-extension-provider.png', fullPage: false });
+});
+
+test('聊天页模型菜单：供应商模型超过 5 个时组内显示搜索并可过滤选择', async ({ launchElectronApp }) => {
+  // mock 供应商 6 个模型（>5 → 组内搜索框）；扩展供应商 1 个（≤5 → 无搜索框）
+  const manyModels = ['alpha-1', 'alpha-2', 'alpha-3', 'beta-1', 'beta-2', 'beta-3'].map((id) => ({
+    id,
+    name: `Search ${id}`,
+    reasoning: false,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128000,
+    maxTokens: 4096,
+  }));
+  await writeFile(
+    path.join(agentDir, 'models.json'),
+    JSON.stringify({
+      providers: {
+        mock: {
+          baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+          api: 'openai-completions',
+          apiKey: 'mock-key',
+          models: manyModels,
+        },
+      },
+    }),
+  );
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'alpha-1' }),
+  );
+
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  await selector.click();
+  await page.getByTestId('model-menu-models').click();
+  const submenu = page.getByTestId('model-submenu');
+  await expect(submenu).toBeVisible();
+
+  // 当前模型所在 mock 组默认展开：6 个选项 + 组内搜索框
+  const mockGroup = page.locator('.model-group', { has: page.locator('[data-testid="model-group-toggle"][data-value="mock"]') });
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(6);
+  const search = mockGroup.getByTestId('model-search');
+  await expect(search).toBeVisible();
+
+  // 扩展供应商组（1 个模型）展开后无搜索框
+  const extensionToggle = page.locator('[data-testid="model-group-toggle"][data-value="extension-models"]');
+  await extensionToggle.click();
+  const extensionGroup = page.locator('.model-group', { has: page.locator('[data-testid="model-group-toggle"][data-value="extension-models"]') });
+  await expect(extensionGroup.getByTestId('model-option')).toHaveCount(1);
+  await expect(extensionGroup.getByTestId('model-search')).toHaveCount(0);
+
+  // 组内过滤：只影响本组，数量徽标仍显示总数
+  await search.fill('beta');
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(3);
+  await expect(mockGroup.locator('.model-group-count')).toHaveText('6');
+
+  // 无匹配：组内提示
+  await search.fill('zzz-no-match');
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(0);
+  await expect(mockGroup.getByTestId('model-search-empty')).toBeVisible();
+
+  // 回车选中首个命中项，菜单关闭
+  await search.fill('beta-2');
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(1);
+  await search.press('Enter');
+  await expect(page.getByTestId('model-menu')).not.toBeVisible();
+  await expect(selector).toHaveAttribute('data-value', 'mock/beta-2');
+});
+
+test('聊天页模型菜单：单供应商超过 5 个模型时平铺列表也显示搜索', async ({ launchElectronApp }) => {
+  const manyModels = ['flat-1', 'flat-2', 'flat-3', 'flat-4', 'flat-5', 'flat-6'].map((id) => ({
+    id,
+    name: `Flat ${id}`,
+    reasoning: false,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128000,
+    maxTokens: 4096,
+  }));
+  await writeFile(
+    path.join(agentDir, 'models.json'),
+    JSON.stringify({
+      providers: {
+        mock: {
+          baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+          api: 'openai-completions',
+          apiKey: 'mock-key',
+          models: manyModels,
+        },
+      },
+    }),
+  );
+  await rm(path.join(agentDir, 'extensions'), { recursive: true, force: true });
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'flat-1' }),
+  );
+
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  await selector.click();
+  await page.getByTestId('model-menu-models').click();
+  const submenu = page.getByTestId('model-submenu');
+  await expect(submenu).toBeVisible();
+
+  await expect(submenu.getByTestId('model-search')).toBeVisible();
+  await expect(submenu.getByTestId('model-option')).toHaveCount(6);
+  await submenu.getByTestId('model-search').fill('flat-5');
+  await expect(submenu.getByTestId('model-option')).toHaveCount(1);
+  await expect(submenu.getByTestId('model-option')).toHaveText(['Flat flat-5']);
 });
 
 test('LM Studio：自动发现模型并同步视觉能力与真实上下文', async ({ launchElectronApp }) => {

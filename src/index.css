@@ -2581,11 +2581,34 @@ button.danger-outline {
 }
 
 .model-submenu {
-  width: 216px;
+  width: 300px;
   max-height: min(360px, calc(100vh - 180px));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
+}
+
+.model-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 2px 2px 6px;
+  background: var(--bg-raised);
+}
+
+.model-search-input {
+  width: 100%;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.model-search-input:focus {
+  outline: none;
+  border-color: var(--accent, var(--border));
 }
 
 .model-group {

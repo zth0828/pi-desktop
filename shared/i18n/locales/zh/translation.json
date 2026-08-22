@@ -391,6 +391,8 @@
     "modelMenu": {
       "model": "模型",
       "empty": "暂无可用模型",
+      "search": "搜索模型…",
+      "noResults": "无匹配模型",
       "expandProvider": "展开 {{provider}}",
       "collapseProvider": "折叠 {{provider}}"
     },
