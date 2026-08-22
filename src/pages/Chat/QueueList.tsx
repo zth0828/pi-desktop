@@ -37,11 +37,11 @@ export function QueueList() {
               <button
                 className="queue-item-action queue-item-mode"
                 data-testid={`queue-mode-${kind}-${index}`}
-                title={t(`chat.queue.${kind === 'steering' ? 'sendTip' : 'steerTip'}`)}
+                title={t(`chat.queue.${kind === 'followUp' ? 'sendNowTip' : 'sendTip'}`)}
                 onClick={() => void queueMove(kind, index, kind === 'steering' ? 'followUp' : 'steering')}
               >
-                {kind === 'steering' ? <Send size={13} /> : <Zap size={13} />}
-                {t(`chat.queue.${kind === 'steering' ? 'send' : 'steer'}`)}
+                {kind === 'followUp' ? <Send size={13} /> : <Zap size={13} />}
+                {t(`chat.queue.${kind === 'followUp' ? 'sendNow' : 'send'}`)}
               </button>
               <button
                 className="queue-item-action queue-item-edit"
