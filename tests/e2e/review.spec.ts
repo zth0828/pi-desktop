@@ -545,24 +545,17 @@ test('非 Git 目录：新增/修改/删除进入评审并可回滚', async ({ l
   await expect(readFile(path.join(plainWorkspace, 'delete-me.txt'), 'utf8')).resolves.toBe('remove me\n');
 });
 
-test('工作台展开模式：默认 docked 窗口向右扩大 + 窄窗口回退 overlay + 模式切换与持久化', async ({ launchElectronApp }) => {
+test('工作台展开模式：默认 docked 向右弹开 + 窄窗口回退 overlay + 模式切换与持久化', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions(repoWorkspace));
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  const getWindowWidth = () =>
-    app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds().width);
-  // 窗口移到所在显示器左缘，保证右侧有充足扩展空间（宽度断言才有确定性）
-  await app.evaluate(({ BrowserWindow, screen }) => {
-    const win = BrowserWindow.getAllWindows()[0];
-    const area = screen.getDisplayMatching(win.getBounds()).workArea;
-    win.setBounds({ x: area.x, y: area.y + 40, width: 1440, height: 800 });
-  });
-
-  // 1. 默认 docked：窗口向右加宽 ≈ 面板宽，聊天列保持展开前像素宽
+  // 1. 标准窗口（1440px）：默认 docked，预览区从右侧弹开与聊天列并排，
+  //    OS 窗口尺寸不变，聊天列收窄但不低于舒适下限
+  await page.setViewportSize({ width: 1440, height: 800 });
   const initialChatBox = await page.locator('.chat-column').boundingBox();
   expect(initialChatBox).not.toBeNull();
-  const initialWindowWidth = await getWindowWidth();
+  const initialWindowWidth = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds().width);
 
   await page.getByTestId('workspace-toggle').click();
   const panel = page.getByTestId('review-panel');
@@ -570,17 +563,17 @@ test('工作台展开模式：默认 docked 窗口向右扩大 + 窄窗口回退
   await expect(panel).toHaveAttribute('data-mode', 'docked');
   await expect(panel).toHaveAttribute('data-mode-preference', 'docked');
 
-  await expect.poll(getWindowWidth).toBeGreaterThan(initialWindowWidth + 100);
-  const appliedWidth = (await getWindowWidth()) - initialWindowWidth;
-  // 加宽量 == 面板像素宽（窗口加宽动画与面板滑入动画结束后断言）
-  await expect.poll(async () => {
-    const box = await panel.boundingBox();
-    return box ? Math.abs(box.width - appliedWidth) : Number.POSITIVE_INFINITY;
-  }).toBeLessThan(4);
-  // 聊天列不被压缩：docked 解除 max-width 上限后只会更宽，不会比展开前窄
   const dockedChatBox = await page.locator('.chat-column').boundingBox();
   expect(dockedChatBox).not.toBeNull();
-  expect(dockedChatBox!.width).toBeGreaterThanOrEqual(initialChatBox!.width - 2);
+  expect(dockedChatBox!.width).toBeLessThan(initialChatBox!.width - 50);
+  expect(dockedChatBox!.width).toBeGreaterThanOrEqual(560 - 2);
+  // 面板右缘贴窗口右缘（向右弹开）；滑入动画的 transform 影响 boundingBox，轮询到动画结束
+  await expect.poll(async () => {
+    const box = await panel.boundingBox();
+    return box ? Math.abs(box.x + box.width - 1440) : Number.POSITIVE_INFINITY;
+  }).toBeLessThan(2);
+  // OS 窗口不被改动：扩的是应用内预览区，不是窗口
+  expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds().width)).toBe(initialWindowWidth);
 
   // 2. docked 下 Esc 只收目录树，不收面板
   const treeToggle = panel.getByTestId('workspace-tree-toggle');
@@ -590,8 +583,7 @@ test('工作台展开模式：默认 docked 窗口向右扩大 + 窄窗口回退
   await page.keyboard.press('Escape');
   await expect(panel).toBeVisible();
 
-  // 3. 超窄窗口：显式 docked 也回退 overlay，避免面板被压成细条；
-  //    宽度被外部改变后扩窗状态按「用户改过尺寸」放弃缩回
+  // 3. 超窄窗口：显式 docked 也回退 overlay，避免面板被压成细条
   await page.setViewportSize({ width: 700, height: 800 });
   await expect(panel).toHaveAttribute('data-mode', 'overlay');
   await expect(panel).toHaveAttribute('data-mode-preference', 'docked');
@@ -602,11 +594,10 @@ test('工作台展开模式：默认 docked 窗口向右扩大 + 窄窗口回退
   const modeToggle = panel.getByTestId('workspace-mode-toggle');
   await expect(modeToggle).toBeVisible();
 
-  // 切换到 overlay：窗口缩回原宽，聊天列恢复，遮罩出现，点遮罩收面板
+  // 切换到 overlay：聊天列恢复原宽，遮罩出现，点遮罩收面板
   await modeToggle.click();
   await expect(panel).toHaveAttribute('data-mode', 'overlay');
   await expect(panel).toHaveAttribute('data-mode-preference', 'overlay');
-  await expect.poll(getWindowWidth).toBe(initialWindowWidth);
   const overlayChatBox = await page.locator('.chat-column').boundingBox();
   expect(overlayChatBox).not.toBeNull();
   expect(Math.abs(overlayChatBox!.width - initialChatBox!.width)).toBeLessThan(2);

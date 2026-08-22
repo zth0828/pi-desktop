@@ -761,21 +761,6 @@ export function ReviewPanel() {
     };
   }, [open, effectiveMode]);
 
-  // docked 展开时把 OS 窗口向右加宽出面板宽度，聊天列保持展开前像素宽；
-  // cleanup 覆盖关闭面板 / 切 overlay / 组件卸载三条退出路径（overlay 悬浮不占布局，不扩窗）。
-  useEffect(() => {
-    if (!open || effectiveMode !== 'docked') return;
-    const width = panelRef.current?.clientWidth ?? expectedPanelWidth;
-    // 钉住面板像素宽：窗口加宽后容器变宽，CSS 百分比规则会把面板继续撑宽吃掉新增空间
-    if (panelWidth === undefined) setPanelWidth(width);
-    void hostApi.windows.expandRight({ extraWidth: width }).catch(() => {});
-    return () => {
-      void hostApi.windows.restoreExpandRight().catch(() => {});
-    };
-    // panelWidth/expectedPanelWidth 只是展开时刻的快照，变化不应重跑（重跑会先触发缩回）
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, effectiveMode]);
-
   useEffect(() => {
     if (panelWidth !== undefined) {
       const clamped = clampPanelWidth(panelWidth, effectiveContainerWidth, effectiveMode);
