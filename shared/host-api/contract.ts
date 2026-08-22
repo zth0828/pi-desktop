@@ -633,6 +633,7 @@ export type PiProviderAddCustomPayload = {
     reasoning?: boolean;
     contextWindow?: number;
     maxTokens?: number;
+    thinkingLevelMap?: Record<string, string | null>;
   }>;
 };
 export type PiProviderProbePayload = {
@@ -662,7 +663,12 @@ export type PiProviderProbeProtocol = {
 };
 export type PiProviderProbeResult = {
   models: string[];
-  modelDetails?: Array<{ id: string; contextWindow?: number }>;
+  modelDetails?: Array<{
+    id: string;
+    contextWindow?: number;
+    maxTokens?: number;
+    thinkingLevelMap?: Record<string, string | null>;
+  }>;
   protocols: PiProviderProbeProtocol[];
   recommendedApi?: string;
   /** Successful API base URL, including a discovered /v1 prefix when required. */

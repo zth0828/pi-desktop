@@ -387,9 +387,11 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const cacheStatsAvailable = usageTotals.cacheRead + usageTotals.cacheWrite > 0;
   const selectedModel = models.find((candidate) => `${candidate.provider}/${candidate.id}` === modelKey);
   const reasoning = Boolean(model?.reasoning ?? selectedModel?.reasoning);
-  const effectiveThinkingLevels = availableThinkingLevels.length > 1
+  const hasCustomLevels = availableThinkingLevels.length > 1
+    || (availableThinkingLevels.length === 1 && availableThinkingLevels[0] !== 'off');
+  const effectiveThinkingLevels = hasCustomLevels
     ? availableThinkingLevels
-    : reasoning ? ['off', 'minimal', 'low', 'medium', 'high'] : availableThinkingLevels;
+    : reasoning ? ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] : availableThinkingLevels;
   const planAvailable = commands.some((command) => /(^|[-_])plan([-_]|$)/i.test(command.name));
   // 模型下拉按供应商分组（optgroup），供应商顺序保持 listModels 的首现顺序
   const modelGroups = new Map<string, PiModelRow[]>();

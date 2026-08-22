@@ -139,7 +139,7 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
     if (!activeStore || !runtime?.model || runtime.model.provider !== provider.id || runtime.model.id !== modelId) return;
     const levels = runtime.availableThinkingLevels.length > 0
       ? runtime.availableThinkingLevels
-      : reasoning ? ['off', 'minimal', 'low', 'medium', 'high'] : [];
+      : reasoning ? ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] : [];
     activeStore.getState().applyModelUpdate({
 
       success: true,
@@ -378,10 +378,8 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
   };
 
   const submit = async () => {
-    const detectedContexts = new Map(
-      (probeResult?.modelDetails ?? [])
-        .filter((model) => model.contextWindow && model.contextWindow > 0)
-        .map((model) => [model.id, model.contextWindow as number]),
+    const detectedDetails = new Map(
+      (probeResult?.modelDetails ?? []).map((model) => [model.id, model]),
     );
     const models = modelIds
       .split(',')
@@ -389,11 +387,13 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       .filter(Boolean)
       .map((mid) => {
         // 上下文与最大输出自动管理：探测值优先，探测不到用前缀规格表。
+        const detail = detectedDetails.get(mid);
         const profile = matchModelProfile(mid);
         return {
           id: mid,
-          contextWindow: detectedContexts.get(mid) ?? profile.contextWindow,
-          ...(profile.maxTokens ? { maxTokens: profile.maxTokens } : {}),
+          contextWindow: (detail?.contextWindow && detail.contextWindow > 0) ? detail.contextWindow : profile.contextWindow,
+          ...(detail?.maxTokens ? { maxTokens: detail.maxTokens } : profile.maxTokens ? { maxTokens: profile.maxTokens } : {}),
+          ...(detail?.thinkingLevelMap ? { thinkingLevelMap: detail.thinkingLevelMap } : {}),
         };
       });
     const result = await hostApi.providers.addCustom({

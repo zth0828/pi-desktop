@@ -443,11 +443,12 @@ export const providersApi = {
         // 用户可在 Models 页逐模型关闭。
         models: payload.models.map((m) => {
           const profile = matchModelProfile(m.id);
+          const tlm = m.thinkingLevelMap ?? (lmStudio && (m.reasoning ?? true) && thinkingMap ? thinkingMap : undefined);
           return {
             id: m.id,
             name: m.name ?? m.id,
             reasoning: m.reasoning ?? true,
-            ...(lmStudio && (m.reasoning ?? true) && thinkingMap ? { thinkingLevelMap: thinkingMap } : {}),
+            ...(tlm ? { thinkingLevelMap: tlm } : {}),
             input: ['text'],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             contextWindow: m.contextWindow ?? profile.contextWindow,
@@ -587,7 +588,27 @@ export const providersApi = {
             row.contextWindow ?? row.context_window ?? row.context_length
               ?? row.max_context_length ?? row.max_model_len ?? 0,
           );
-          if (contextWindow > 0) modelDetails.push({ id, contextWindow });
+          const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities)
+            ? row.capabilities as Record<string, unknown>
+            : undefined;
+          const rawTlm = row.thinkingLevelMap ?? row.thinking_level_map
+            ?? capabilities?.thinkingLevelMap ?? capabilities?.thinking_level_map;
+          const tlmObj = rawTlm && typeof rawTlm === 'object' && !Array.isArray(rawTlm)
+            ? rawTlm as Record<string, unknown>
+            : undefined;
+          const thinkingLevelMap = tlmObj
+            ? Object.fromEntries(
+                Object.entries(tlmObj).filter(
+                  ([, v]) => v === null || typeof v === 'string',
+                ),
+              ) as Record<string, string | null>
+            : undefined;
+          const detail: { id: string; contextWindow?: number; thinkingLevelMap?: Record<string, string | null> } = { id };
+          if (contextWindow > 0) detail.contextWindow = contextWindow;
+          if (thinkingLevelMap && Object.keys(thinkingLevelMap).length > 0) detail.thinkingLevelMap = thinkingLevelMap;
+          if (contextWindow > 0 || (thinkingLevelMap && Object.keys(thinkingLevelMap).length > 0)) {
+            modelDetails.push(detail);
+          }
           const endpointTypes = Array.isArray(row.supported_endpoint_types)
             ? row.supported_endpoint_types
             : [];

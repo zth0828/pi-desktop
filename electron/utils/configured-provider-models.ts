@@ -17,6 +17,8 @@ export type ProviderModelSyncResult = {
   changed: boolean;
 };
 
+export type ThinkingLevelMap = Record<string, string | null>;
+
 type DetectedModel = {
   id: string;
   name?: string;
@@ -24,12 +26,25 @@ type DetectedModel = {
   input?: Array<'text' | 'image'>;
   contextWindow?: number;
   maxTokens?: number;
+  thinkingLevelMap?: ThinkingLevelMap;
 };
 
 function record(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as JsonRecord
     : null;
+}
+
+function parseThinkingLevelMap(value: unknown): ThinkingLevelMap | undefined {
+  const obj = record(value);
+  if (!obj) return undefined;
+  const result: ThinkingLevelMap = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === null || typeof val === 'string') {
+      result[key] = val;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function positiveNumber(...values: unknown[]): number | undefined {
@@ -102,10 +117,14 @@ export function parseProviderModelDirectory(payload: unknown, api: string): Dete
       : capabilities?.reasoning === true || record(capabilities?.reasoning) !== null
         ? true
         : undefined;
+    const rawThinkingLevelMap = row.thinkingLevelMap ?? row.thinking_level_map
+      ?? capabilities?.thinkingLevelMap ?? capabilities?.thinking_level_map;
+    const thinkingLevelMap = parseThinkingLevelMap(rawThinkingLevelMap);
     detected.push({
       id,
       ...(displayName ? { name: displayName } : {}),
       ...(reasoning === undefined ? {} : { reasoning }),
+      ...(thinkingLevelMap ? { thinkingLevelMap } : {}),
       ...(input?.length ? { input } : vision ? { input: ['text', 'image'] } : {}),
       ...(positiveNumber(row.contextWindow, row.context_window, row.context_length, row.max_context_length, row.max_model_len)
         ? { contextWindow: positiveNumber(row.contextWindow, row.context_window, row.context_length, row.max_context_length, row.max_model_len) }
@@ -141,6 +160,7 @@ export function mergeDiscoveredProviderModels(existing: unknown[], detected: Det
       // 第三方目录普遍不上报推理能力：缺省按支持处理，让思考深度可用；
       // 供应商拒绝思考参数时用户可在 Models 页逐模型关闭（写入后不被发现流程覆盖）。
       reasoning: model.reasoning ?? (typeof template.reasoning === 'boolean' ? template.reasoning : true),
+      ...(model.thinkingLevelMap ? { thinkingLevelMap: model.thinkingLevelMap } : {}),
       input: model.input ?? (Array.isArray(template.input) ? template.input : ['text']),
       cost: record(template.cost) ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: model.contextWindow

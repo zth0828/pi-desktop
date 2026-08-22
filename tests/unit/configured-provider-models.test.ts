@@ -27,22 +27,51 @@ describe('configured provider model discovery', () => {
     }]);
   });
 
+  it('parses thinkingLevelMap from model directory or capabilities', () => {
+    expect(parseProviderModelDirectory({
+      data: [
+        {
+          id: 'model-with-map',
+          thinkingLevelMap: { off: null, xhigh: 'xhigh', max: 'max' },
+        },
+        {
+          id: 'model-with-snake-case',
+          capabilities: { thinking_level_map: { off: 'none', low: 'low' } },
+        },
+      ],
+    }, 'openai-completions')).toEqual([
+      {
+        id: 'model-with-map',
+        thinkingLevelMap: { off: null, xhigh: 'xhigh', max: 'max' },
+      },
+      {
+        id: 'model-with-snake-case',
+        thinkingLevelMap: { off: 'none', low: 'low' },
+      },
+    ]);
+  });
+
   it('preserves manual definitions and uses their provider defaults for new ids', () => {
     const existing = [{
       id: 'manual',
       name: 'Manual',
       reasoning: true,
+      thinkingLevelMap: { off: null, max: 'max' },
       input: ['text'],
       contextWindow: 400000,
       maxTokens: 32768,
       cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
     }];
-    expect(mergeDiscoveredProviderModels(existing, [{ id: 'new-model' }, { id: 'manual' }]))
+    expect(mergeDiscoveredProviderModels(existing, [
+      { id: 'new-model', thinkingLevelMap: { off: 'none' } },
+      { id: 'manual', thinkingLevelMap: { off: 'overwritten-attempt' } },
+    ]))
       .toEqual([
         {
           id: 'new-model',
           name: 'new-model',
           reasoning: true,
+          thinkingLevelMap: { off: 'none' },
           input: ['text'],
           contextWindow: 400000,
           maxTokens: 32768,

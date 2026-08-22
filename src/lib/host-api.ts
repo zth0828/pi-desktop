@@ -103,7 +103,14 @@ function createHostApi(sessionPath?: string) {
       api: string;
       apiKey?: string;
       serverType?: 'lm-studio' | 'vllm' | 'generic';
-      models: Array<{ id: string; name?: string }>;
+      models: Array<{
+        id: string;
+        name?: string;
+        reasoning?: boolean;
+        contextWindow?: number;
+        maxTokens?: number;
+        thinkingLevelMap?: Record<string, string | null>;
+      }>;
     }) => invoke('providers', 'addCustom', payload),
     setModelReasoning: (providerId: string, modelId: string, reasoning: boolean) =>
       invoke('providers', 'setModelReasoning', { providerId, modelId, reasoning }),

@@ -459,7 +459,7 @@ test('Models 页：推理开关恢复自定义模型的思考深度', async ({ l
   const thinkingRow = page.getByTestId('model-menu-thinking');
   await expect(thinkingRow).toBeVisible({ timeout: 15_000 });
   await thinkingRow.click();
-  await expect(page.getByTestId('thinking-option')).toHaveCount(5);
+  await expect(page.getByTestId('thinking-option')).toHaveCount(7);
   await page.locator('[data-testid="thinking-option"][data-value="high"]').click();
 
   await selector.click();
@@ -752,3 +752,88 @@ test('模型切换只更新当前模型参数，会话累计 usage 保持不变'
   await expect(page.getByTestId('usage-context-window')).toContainText('200,000');
   await expect(inputTotal.locator('strong')).toHaveText(before ?? '');
 });
+
+test('思考深度档位：逐模型可用档支持 xhigh/max 且在模型切换时正确刷新与 clamp', async ({
+  launchElectronApp,
+}) => {
+  await writeFile(
+    path.join(agentDir, 'models.json'),
+    JSON.stringify({
+      providers: {
+        mock: {
+          baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+          api: 'openai-completions',
+          apiKey: 'mock-key',
+          models: [
+            {
+              id: 'mock-custom-thinking',
+              name: 'Mock Custom Thinking',
+              reasoning: true,
+              thinkingLevelMap: { off: null, xhigh: 'xhigh', max: 'max' },
+              input: ['text'],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 128000,
+              maxTokens: 4096,
+            },
+            {
+              id: 'mock-default-thinking',
+              name: 'Mock Default Thinking',
+              reasoning: true,
+              input: ['text'],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 128000,
+              maxTokens: 4096,
+            },
+          ],
+        },
+      },
+    }),
+  );
+  await rm(path.join(agentDir, 'extensions'), { recursive: true, force: true });
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'mock-custom-thinking' }),
+  );
+
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+
+  // 1. mock-custom-thinking 声明 off: null, xhigh: 'xhigh', max: 'max'
+  // 思考菜单应出现 6 档（无 "关闭" / off），含 "Very high" / "Maximum"
+  await selector.click();
+  const thinkingRow = page.getByTestId('model-menu-thinking');
+  await expect(thinkingRow).toBeVisible({ timeout: 15_000 });
+  await thinkingRow.click();
+  const options = page.getByTestId('thinking-option');
+  await expect(options).toHaveCount(6);
+  await expect(page.locator('[data-testid="thinking-option"][data-value="off"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="thinking-option"][data-value="xhigh"]')).toBeVisible();
+  await expect(page.locator('[data-testid="thinking-option"][data-value="max"]')).toBeVisible();
+
+  // 2. 选择 max 档位，trigger 与 menu 同步显示 Maximum
+  await page.locator('[data-testid="thinking-option"][data-value="max"]').click();
+  await selector.click();
+  await expect(page.getByTestId('model-menu-thinking')).toContainText('Maximum', { timeout: 15_000 });
+  await expect(page.getByTestId('model-trigger-thinking')).toContainText('Maximum');
+
+  // 3. 切换为 mock-default-thinking（不带 map 的 reasoning 模型）
+  // 菜单应刷新为 5 档（off–high），且 pi 将超出范围的 max 自动 clamp 到 high
+  await page.getByTestId('model-menu-models').click();
+  await page.locator('[data-testid="model-option"][data-value="mock/mock-default-thinking"]').click();
+
+  // 验证 trigger 文案被 clamp 为 High
+  await expect(page.getByTestId('model-trigger-thinking')).toContainText('High', { timeout: 15_000 });
+
+  // 打开思考菜单，确认显示 5 档（包含 off，不含 xhigh/max）
+  await selector.click();
+  await expect(page.getByTestId('model-menu-thinking')).toContainText('High');
+  await page.getByTestId('model-menu-thinking').click();
+  await expect(page.getByTestId('thinking-option')).toHaveCount(5);
+  await expect(page.locator('[data-testid="thinking-option"][data-value="off"]')).toBeVisible();
+  await expect(page.locator('[data-testid="thinking-option"][data-value="xhigh"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="thinking-option"][data-value="max"]')).toHaveCount(0);
+});
+
