@@ -2950,6 +2950,10 @@ button.danger-outline {
 }
 
 .settings-section-hint { margin: -8px 0 14px; color: var(--text-tertiary); font-size: 12px; line-height: 1.5; }
+/* 末尾提示段不需要 -8px 上拉（compaction 推荐文案、trust 空态、安装失败提示等），改用紧凑间距 */
+.settings-section-hint:last-child { margin-top: 0; margin-bottom: 4px; }
+/* 末尾提示段跟在最后一行设置后时，最后一行不再画分隔线（compaction 区块的推荐文案在输入行下方） */
+.settings-section > .settings-row:last-of-type { border-bottom: none; }
 .settings-number { width: 140px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-raised); color: var(--text); text-align: right; }
 .settings-proxy-url { width: 260px; text-align: left; font-family: var(--font-mono); font-size: 12px; }
 .settings-proxy-error { margin-left: 8px; color: var(--danger, #e5484d); }

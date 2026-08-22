@@ -646,16 +646,19 @@ export default function SettingsPage() {
           <div className="settings-row-label">
             <div>Pi Desktop</div>
             <div className="settings-row-desc">{t('settings.version.current', { version: appVersion })}</div>
-            <div className="settings-row-desc">{versionStatus?.app.latest ? t(versionStatus.app.updateAvailable ? 'settings.version.updateAvailable' : 'settings.version.upToDate', { version: versionStatus.app.latest.replace(/^v/, '') }) : t('settings.version.notChecked')}</div>
+            {versionStatus?.app.error ? (
+              <div className="error-text" data-testid="settings-app-check-error">
+                {t('settings.version.checkFailed')}
+                <div className="settings-row-desc">{t('settings.version.downloadFailedHint')}</div>
+              </div>
+            ) : (
+              <div className="settings-row-desc">
+                {versionStatus?.app.latest ? t(versionStatus.app.updateAvailable ? 'settings.version.updateAvailable' : 'settings.version.upToDate', { version: versionStatus.app.latest.replace(/^v/, '') }) : t('settings.version.notChecked')}
+              </div>
+            )}
             {versionStatus?.app.downloadedPath && (
               <div className="settings-row-desc text-accent" data-testid="settings-app-downloaded-status">
                 {t('versionInstall.waitingInstall')}
-              </div>
-            )}
-            {versionStatus?.app.error && (
-              <div className="error-text">
-                {t('settings.version.checkFailed')}
-                <div className="settings-section-hint">{t('settings.version.downloadFailedHint')}</div>
               </div>
             )}
           </div>
