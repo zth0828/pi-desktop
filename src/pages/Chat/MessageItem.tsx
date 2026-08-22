@@ -35,12 +35,11 @@ function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: stri
     <details
       className={`thinking-block${active ? ' streaming' : ''}`}
       open={isOpen}
-      onToggle={(e) => {
-        const target = e.currentTarget as HTMLDetailsElement;
-        setUserToggled(target.open);
-      }}
     >
-      <summary>
+      {/* 受控 details：拦截 summary 原生开关，open 只由状态驱动。不能监听 toggle
+          事件推断用户意图——React 程序性改写 open 属性同样触发 toggle，会把流式
+          期间的自动展开误记为用户手动展开，导致思考块在流式推进/结束后偶发不折叠 */}
+      <summary onClick={(e) => { e.preventDefault(); setUserToggled(!isOpen); }}>
         {active
           ? t('chat.thinkingStreaming')
           : !expanded && hiddenThinkingLabel

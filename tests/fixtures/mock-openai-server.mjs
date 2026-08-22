@@ -339,6 +339,34 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // SLOW_REASONING：慢速 reasoning_content（6 段）→ 慢速正文（20 段），
+    // 给「流式中思考块自动折叠」断言留出可观测窗口；须放在 SLOW 分支之前
+    if (lastUser.includes("SLOW_REASONING")) {
+      const thought = "THOUGHT: slow streaming reasoning. ";
+      const text = "FINAL: slow reasoning done";
+      send({ role: "assistant", reasoning_content: "" });
+      let i = 0;
+      const timer = setInterval(() => {
+        if (res.writableEnded || res.destroyed) {
+          clearInterval(timer);
+          return;
+        }
+        i++;
+        if (i <= 6) {
+          send({ reasoning_content: thought });
+        } else if (i <= 26) {
+          send({ content: text[i - 7] ?? "" });
+        } else {
+          clearInterval(timer);
+          send({}, "stop", { prompt_tokens: 10, completion_tokens: 26, total_tokens: 36 });
+          res.write("data: [DONE]\n\n");
+          res.end();
+        }
+      }, 100);
+      res.on("close", () => clearInterval(timer));
+      return;
+    }
+
     // SLOW_ECHO：慢速回显（须放在 SLOW 分支之前，否则被 "SLOW" 前缀命中）
     if (lastUser.includes("SLOW_ECHO")) {
       const text = ("ECHO:" + lastUser.slice(0, 160)).replace(/\\/g, " ").replace(/"/g, "'");

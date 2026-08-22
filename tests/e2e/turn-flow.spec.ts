@@ -308,6 +308,38 @@ test('thinking 与最终文本在同一消息时，折叠只保留最终答复',
   await expect(restoredPage.locator('.thinking-block pre')).toContainText('THOUGHT: inspect the request');
 });
 
+test('流式中思考块随进度自动折叠：思考流式时展开，正文开始后折叠，回合结束整体收起', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions(foldWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendPrompt(page, 'SLOW_REASONING');
+  const thinking = page.locator('details.thinking-block');
+
+  // 思考流式期间：块展开且带 streaming 标记
+  await expect(thinking).toBeVisible({ timeout: 30_000 });
+  await expect(thinking).toHaveClass(/streaming/);
+  await expect(thinking).toHaveJSProperty('open', true);
+
+  // 正文开始流式后：思考不再是活动块，应自动折叠（回归：程序性 open 变化
+  // 触发的 toggle 事件曾把自动展开误记为用户手动展开，导致块停在展开态）
+  const streamingReply = page.getByTestId('message-assistant').filter({ hasText: 'FINAL:' });
+  await expect(streamingReply).toBeVisible({ timeout: 15_000 });
+  await expect(thinking).not.toHaveClass(/streaming/);
+  await expect(thinking).toHaveJSProperty('open', false);
+
+  // 回合结束：整轮折叠，思考块不再直接出现在消息流里
+  await expect(page.getByTestId('turn-fold-toggle')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('.thinking-block')).toHaveCount(0);
+
+  // 展开回合与阶段后思考内容仍可查看（折叠不丢内容）
+  await page.getByTestId('turn-fold-toggle').click();
+  await page.getByTestId('process-stage-toggle').click();
+  await expect(page.locator('.thinking-block pre')).toContainText('THOUGHT: slow streaming reasoning');
+});
+
 test('展开本轮过程会显示完整工具输出，工具卡仍可单独收起', async ({
   launchElectronApp,
 }) => {
