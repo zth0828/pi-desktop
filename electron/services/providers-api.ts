@@ -408,7 +408,21 @@ export const providersApi = {
     const { adapter, runtime } = await getModelRuntime(ctx);
     try {
       await adapter.providers.login(runtime, payload.providerId, 'oauth', {
-        prompt: async () => '',
+        // pi 的 OAuth 流程（OpenRouter/Anthropic 等）把「手动粘贴授权码」prompt 与
+        // 浏览器回环回调竞争：浏览器完成后 pi 会 abort prompt 请求携带的 signal。
+        // 这里必须保持 pending 直到 signal abort——立即返回空串会触发 pi 的
+        // cancelWait 提前关掉回环服务器，整个登录以 "Missing authorization code" 失败。
+        prompt: (request) =>
+          new Promise<string>((_resolve, reject) => {
+            const signal = (request as { signal?: AbortSignal } | undefined)?.signal;
+            if (!signal) {
+              reject(new Error('OAuth prompt requires user input, which is not supported yet'));
+              return;
+            }
+            const cancel = () => reject(new Error('Login cancelled'));
+            if (signal.aborted) cancel();
+            else signal.addEventListener('abort', cancel, { once: true });
+          }),
         notify: (event) => {
           sendHostEvent('providers', 'oauthProgress', {
             providerId: payload.providerId,

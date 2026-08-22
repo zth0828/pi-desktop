@@ -242,7 +242,7 @@ export type PiProviderPort = {
   getAvailable(runtime: PiModelRuntimeHandle): Promise<PiModelDescriptor[]>;
   getModel(runtime: PiModelRuntimeHandle, provider: string, id: string): PiModelHandle | null;
   getAuth(runtime: PiModelRuntimeHandle, providerOrModel: string | PiModelHandle): Promise<PiAuthResolution | null>;
-  login(runtime: PiModelRuntimeHandle, provider: string, method: 'api_key' | 'oauth', callbacks: { prompt: () => Promise<string>; notify: (event: unknown) => void }): Promise<void>;
+  login(runtime: PiModelRuntimeHandle, provider: string, method: 'api_key' | 'oauth', callbacks: { prompt: (request: unknown) => Promise<string>; notify: (event: unknown) => void }): Promise<void>;
   logout(runtime: PiModelRuntimeHandle, provider: string): Promise<void>;
   refresh(runtime: PiModelRuntimeHandle, input: { allowNetwork: boolean; force?: boolean; signal?: AbortSignal }): Promise<{ aborted?: boolean; errors: Map<string, Error> }>;
 };

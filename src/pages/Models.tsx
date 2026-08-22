@@ -89,7 +89,8 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
     setBusy(true);
     const result = await hostApi.providers.startOAuth(provider.id);
     setBusy(false);
-    if (!result.success) setMessage(result.error);
+    if (result.success) onChanged();
+    else setMessage(result.error);
   };
 
   const remove = async () => {
