@@ -4949,6 +4949,7 @@ button.danger-outline {
   width: min(var(--workspace-panel-width, clamp(760px, 72%, 1180px)), calc(100% - 560px));
   min-width: min(620px, calc(100% - 560px));
   z-index: 100;
+  animation: workspace-panel-slide 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .workspace-panel.docked.review-active {
@@ -4963,7 +4964,7 @@ button.danger-outline {
   max-width: 100%;
   box-shadow: -8px 0 28px rgba(0, 0, 0, 0.22);
   z-index: 110;
-  animation: workspace-overlay-slide 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: workspace-panel-slide 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .workspace-panel.overlay.review-active {
@@ -4984,7 +4985,7 @@ button.danger-outline {
   animation: workspace-backdrop-fade 180ms ease;
 }
 
-@keyframes workspace-overlay-slide {
+@keyframes workspace-panel-slide {
   from {
     transform: translateX(100%);
   }

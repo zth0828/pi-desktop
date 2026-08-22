@@ -513,8 +513,9 @@ test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当
   await page.getByTestId('workspace-toggle').click();
   const panel = page.getByTestId('review-panel');
   await expect(panel).toBeVisible();
-  await panel.getByTestId('workspace-mode-toggle').click();
+  // 默认即 docked（向右弹开并排），无需手动切换
   await expect(panel).toHaveAttribute('data-mode', 'docked');
+  await expect(panel).toHaveAttribute('data-mode-preference', 'docked');
 
   await page.getByTestId('chat-input').fill('SLOW stream please');
   await page.getByTestId('chat-send').click();

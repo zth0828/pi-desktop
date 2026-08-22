@@ -653,7 +653,8 @@ export function ReviewPanel() {
   const [modePreference, setModePreference] = useState<WorkspacePanelModePreference>(() => {
     const saved = window.localStorage.getItem(WORKSPACE_PANEL_MODE_KEY);
     if (saved === 'docked' || saved === 'overlay' || saved === 'auto') return saved;
-    return 'auto';
+    // 默认 docked：面板向右弹开与聊天列并排；仅超窄容器回退 overlay
+    return 'docked';
   });
   const [containerWidth, setContainerWidth] = useState<number>(0);
   const [panelClientWidth, setPanelClientWidth] = useState<number>(0);

@@ -9,9 +9,15 @@ import {
 } from '@/lib/workspace-panel-mode';
 
 describe('resolveEffectiveMode', () => {
-  it('explicit docked preference returns docked', () => {
-    expect(resolveEffectiveMode('docked', 500, 760)).toBe('docked');
+  it('explicit docked preference returns docked when minimums fit', () => {
     expect(resolveEffectiveMode('docked', 1600, 760)).toBe('docked');
+    // 恰好在下限：560 聊天列 + 320 面板 = 880
+    expect(resolveEffectiveMode('docked', CHAT_COLUMN_MIN + 320, 760)).toBe('docked');
+  });
+
+  it('explicit docked falls back to overlay when container cannot fit chat minimum plus panel floor', () => {
+    expect(resolveEffectiveMode('docked', CHAT_COLUMN_MIN + 320 - 1, 760)).toBe('overlay');
+    expect(resolveEffectiveMode('docked', 500, 760)).toBe('overlay');
   });
 
   it('explicit overlay preference returns overlay', () => {
