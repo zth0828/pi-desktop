@@ -240,6 +240,19 @@ async function resolveStandaloneCwd(): Promise<string> {
   return workspace ?? os.homedir();
 }
 
+/** 全局或项目 settings.json 里是否已显式写过 compaction（区分 pi 默认值与用户自配）。 */
+function hasExplicitCompaction(agentDir: string, cwd: string): boolean {
+  for (const file of [path.join(agentDir, 'settings.json'), path.join(cwd, '.pi', 'settings.json')]) {
+    try {
+      const doc = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+      if (doc.compaction != null) return true;
+    } catch {
+      // 文件不存在或解析失败：按未显式配置处理
+    }
+  }
+  return false;
+}
+
 export const providersApi = {
   list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiProviderListResult> => {
     const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
@@ -787,8 +800,10 @@ export const providersApi = {
   getCompaction: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiCompactionSettings> => {
     const active = resolveRuntimeForContext(ctx);
     const adapter = await loadPiAdapter();
-    const handle = active?.settingsHandle ?? adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
-    return adapter.settings.getCompaction(handle);
+    const cwd = active?.cwd ?? (await resolveStandaloneCwd());
+    const agentDir = adapter.paths.getAgentDir();
+    const handle = active?.settingsHandle ?? adapter.settings.open({ cwd, agentDir });
+    return { ...adapter.settings.getCompaction(handle), configured: hasExplicitCompaction(agentDir, cwd) };
   },
 
   setCompaction: async (payload: { reserveTokens?: number; keepRecentTokens?: number; enabled?: boolean }): Promise<HostSuccess> => {

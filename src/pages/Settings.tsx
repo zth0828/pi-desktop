@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderOpen, Monitor, Moon, Sun } from 'lucide-react';
-import { DEFAULT_DESKTOP_PROXY_URL, PI_BUILTIN_TOOLS, PI_CORE_TOOLS, PI_DEFAULT_TOOLS, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
+import { DEFAULT_DESKTOP_PROXY_URL, PI_BUILTIN_TOOLS, PI_CORE_TOOLS, PI_DEFAULT_TOOLS, type PiCompactionSettings, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { workspaceErrorMessage } from '../lib/workspace-error';
@@ -45,8 +45,9 @@ export default function SettingsPage() {
   const [sendWith, setSendWith] = useState<SendWith>('enter');
   const [preventSleep, setPreventSleep] = useState(false);
   const [notifyUiRequest, setNotifyUiRequest] = useState(true);
-  const [compaction, setCompaction] = useState({ reserveTokens: 16384, keepRecentTokens: 20000, enabled: true });
+  const [compaction, setCompaction] = useState<PiCompactionSettings>({ reserveTokens: 16384, keepRecentTokens: 20000, enabled: true });
   const [modelWindow, setModelWindow] = useState<number>();
+  const modelWindowRef = useRef<number | undefined>(undefined);
   const [exportInfo, setExportInfo] = useState<PiSessionExportInfo>();
   const [trustEntries, setTrustEntries] = useState<PiTrustEntry[]>([]);
   const [defaultThinking, setDefaultThinking] = useState<string | null>(null);
@@ -72,9 +73,31 @@ export default function SettingsPage() {
     void hostApi.settings.get('sendWith').then((v) => setSendWith(v === 'cmdEnter' ? 'cmdEnter' : 'enter'));
     void hostApi.settings.get('preventSleep').then((v) => setPreventSleep(v === true));
     void hostApi.settings.get('notifyUiRequest').then((v) => setNotifyUiRequest(v !== false));
-    void hostApi.providers.getCompaction().then(setCompaction).catch(() => {});
+    let compactionLoaded: PiCompactionSettings | undefined;
+    const applyRecommendedCompaction = () => {
+      // 未显式配置过 compaction 时，按当前模型窗口套用推荐值
+      // （保留最近上下文 ≈ 窗口 25%），让输入框与下方推荐文案一致。
+      if (!compactionLoaded || compactionLoaded.configured) return;
+      const windowSize = modelWindowRef.current;
+      if (!windowSize) return;
+      const recommendedKeep = Math.round(windowSize * 0.25);
+      if (recommendedKeep === compactionLoaded.keepRecentTokens) return;
+      compactionLoaded = { ...compactionLoaded, keepRecentTokens: recommendedKeep };
+      setCompaction(compactionLoaded);
+      void hostApi.providers.setCompaction({ keepRecentTokens: recommendedKeep }).catch(() => {});
+    };
+    const setModelWindowFrom = (windowSize: number) => {
+      modelWindowRef.current = windowSize;
+      setModelWindow(windowSize);
+      applyRecommendedCompaction();
+    };
+    void hostApi.providers.getCompaction().then((s) => {
+      compactionLoaded = s;
+      setCompaction(s);
+      applyRecommendedCompaction();
+    }).catch(() => {});
     void hostApi.piRuntime.getUsage().then((usage) => {
-      if (usage?.model?.contextWindow) setModelWindow(usage.model.contextWindow);
+      if (usage?.model?.contextWindow) setModelWindowFrom(usage.model.contextWindow);
     }).catch(() => {});
     void hostApi.piSessions.getExportInfo().then(setExportInfo).catch(() => {});
     void hostApi.piTrust.list().then((r) => setTrustEntries(r.entries)).catch(() => {});
@@ -102,7 +125,7 @@ export default function SettingsPage() {
     });
     void Promise.all([hostApi.providers.listModels(), hostApi.providers.getDefaultModel()]).then(([available, current]) => {
       const model = current.model ? available.models.find((candidate) => candidate.provider === current.model?.provider && candidate.id === current.model?.id) : undefined;
-      if (model?.contextWindow) setModelWindow((previous) => previous ?? model.contextWindow);
+      if (model?.contextWindow && modelWindowRef.current === undefined) setModelWindowFrom(model.contextWindow);
     }).catch(() => {});
     return () => {
       offTrustChanged();

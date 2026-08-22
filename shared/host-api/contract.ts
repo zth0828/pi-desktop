@@ -705,6 +705,8 @@ export type PiCompactionSettings = {
   reserveTokens: number;
   keepRecentTokens: number;
   enabled: boolean;
+  /** settings.json 中是否已显式写入 compaction（未写入时取 pi 默认值，UI 可按模型窗口套用推荐值）。 */
+  configured?: boolean;
 };
 export type PiOAuthProgressEvent = {
   providerId: string;

@@ -52,6 +52,8 @@ test.beforeAll(async () => {
       },
     }),
   );
+  // 默认模型用于解析设置页的模型窗口（compaction 推荐值依赖它）
+  await writeFile(path.join(agentDir, 'settings.json'), JSON.stringify({ defaultProvider: 'mock', defaultModel: 'mock-1' }));
 });
 
 test.afterAll(async () => {
@@ -98,7 +100,15 @@ test('设置页：Agent 与代理设置渲染 + 切换后落盘 config.json', as
   await expect(page.getByTestId('settings-compaction-enabled')).toBeVisible();
   await expect(page.getByTestId('compaction-enabled-on')).toHaveClass(/active/);
   await expect(page.getByTestId('compaction-reserve')).toHaveValue('16384');
-  await expect(page.getByTestId('compaction-keep-recent')).toHaveValue('20000');
+  // 未显式配置过 compaction 时按模型窗口（mock-1 = 128000）套用推荐保留值：128000 × 25% = 32000
+  await expect(page.getByTestId('compaction-keep-recent')).toHaveValue('32000');
+  // 推荐值写回 pi settings.json（供新会话生效）
+  await expect
+    .poll(async () => {
+      const settings = JSON.parse(await readFile(path.join(agentDir, 'settings.json'), 'utf8')) as Record<string, unknown>;
+      return (settings.compaction as Record<string, unknown> | undefined)?.keepRecentTokens;
+    }, { timeout: 10_000 })
+    .toBe(32000);
   await expect(page.getByTestId('settings-proxy')).toBeVisible();
   await expect(page.getByTestId('proxy-mode-auto')).toHaveClass(/active/);
   await expect(page.getByTestId('proxy-mode-manual')).toHaveCount(0);
