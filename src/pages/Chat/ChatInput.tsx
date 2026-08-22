@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, FileText, Folder, GitBranch, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
+import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, ChevronRight, CircleGauge, FileText, Folder, GitBranch, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
   PiCommandRow,
@@ -172,6 +172,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelMenuSection, setModelMenuSection] = useState<'models' | 'thinking' | null>(null);
+  const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
   const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
   const [composerScrollable, setComposerScrollable] = useState(false);
   const [composerScrollbarActive, setComposerScrollbarActive] = useState(false);
@@ -398,6 +399,35 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     if (group) group.push(m);
     else modelGroups.set(label, [m]);
   }
+
+  useEffect(() => {
+    if (modelMenuOpen) {
+      const currentGroup = selectedModel
+        ? (selectedModel.providerLabel ?? selectedModel.provider)
+        : (model ? model.provider : null);
+      const initialCollapsed = new Set<string>();
+      for (const provider of modelGroups.keys()) {
+        if (provider !== currentGroup) {
+          initialCollapsed.add(provider);
+        }
+      }
+      setCollapsedProviders(initialCollapsed);
+    } else {
+      setModelMenuSection(null);
+    }
+  }, [modelMenuOpen]);
+
+  const toggleProviderCollapse = (provider: string) => {
+    setCollapsedProviders((prev) => {
+      const next = new Set(prev);
+      if (next.has(provider)) {
+        next.delete(provider);
+      } else {
+        next.add(provider);
+      }
+      return next;
+    });
+  };
   const contextWindow = model?.contextWindow ?? selectedModel?.contextWindow
     ?? (contextUsage?.contextWindow && contextUsage.contextWindow > 0 ? contextUsage.contextWindow : DEFAULT_CONTEXT_WINDOW);
   // pi 在压缩后可能明确返回 tokens=null：这表示暂时未知，不应伪装成 0%。
@@ -1050,30 +1080,73 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                 <ChevronDown size={13} />
               </button>
               {modelMenuOpen && (
-                <div className="model-menu" data-testid="model-menu" role="menu">
+                <div className={`model-menu${modelMenuSection ? ' with-submenu' : ''}`} data-testid="model-menu" role="menu">
                   {modelMenuSection === 'models' && (
                     <div className="model-submenu" data-testid="model-submenu">
                       {models.length === 0 && <div className="composer-menu-hint">{t('chat.modelMenu.empty')}</div>}
-                      {[...modelGroups.entries()].map(([provider, providerModels]) => (
-                        <div key={provider}>
-                          <div className="model-group-label">{provider}</div>
-                          {providerModels.map((m) => {
-                            const value = `${m.provider}/${m.id}`;
+                      {modelGroups.size === 1
+                        ? [...modelGroups.entries()].map(([provider, providerModels]) => (
+                            <div key={provider} className="model-group-items" data-testid="model-group-items">
+                              {providerModels.map((m) => {
+                                const value = `${m.provider}/${m.id}`;
+                                return (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    className="model-option"
+                                    data-testid="model-option"
+                                    data-value={value}
+                                    onClick={() => { setModelMenuOpen(false); applyModelSelection(value); }}
+                                  >
+                                    <span>{modelDisplayName(m)}</span>
+                                    {value === modelKey && <Check size={14} />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))
+                        : [...modelGroups.entries()].map(([provider, providerModels]) => {
+                            const isCollapsed = collapsedProviders.has(provider);
                             return (
-                              <button
-                                key={value}
-                                className="model-option"
-                                data-testid="model-option"
-                                data-value={value}
-                                onClick={() => { setModelMenuOpen(false); applyModelSelection(value); }}
-                              >
-                                <span>{modelDisplayName(m)}</span>
-                                {value === modelKey && <Check size={14} />}
-                              </button>
+                              <div key={provider} className="model-group">
+                                <button
+                                  type="button"
+                                  className="model-group-toggle"
+                                  data-testid="model-group-toggle"
+                                  data-value={provider}
+                                  aria-expanded={!isCollapsed}
+                                  aria-label={isCollapsed ? t('chat.modelMenu.expandProvider', { provider }) : t('chat.modelMenu.collapseProvider', { provider })}
+                                  onClick={() => toggleProviderCollapse(provider)}
+                                >
+                                  <span className="model-group-toggle-title">
+                                    {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                                    <span>{provider}</span>
+                                  </span>
+                                  <span className="model-group-count">{providerModels.length}</span>
+                                </button>
+                                {!isCollapsed && (
+                                  <div className="model-group-items" data-testid="model-group-items">
+                                    {providerModels.map((m) => {
+                                      const value = `${m.provider}/${m.id}`;
+                                      return (
+                                        <button
+                                          key={value}
+                                          type="button"
+                                          className="model-option"
+                                          data-testid="model-option"
+                                          data-value={value}
+                                          onClick={() => { setModelMenuOpen(false); applyModelSelection(value); }}
+                                        >
+                                          <span>{modelDisplayName(m)}</span>
+                                          {value === modelKey && <Check size={14} />}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
                             );
                           })}
-                        </div>
-                      ))}
                     </div>
                   )}
                   {modelMenuSection === 'thinking' && (
@@ -1081,6 +1154,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                       {effectiveThinkingLevels.map((level) => (
                         <button
                           key={level}
+                          type="button"
                           className="model-option"
                           data-testid="thinking-option"
                           data-value={level}
@@ -1099,6 +1173,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                   )}
                   <div className="model-menu-main">
                     <button
+                      type="button"
                       className={`model-menu-row${modelMenuSection === 'models' ? ' active' : ''}`}
                       data-testid="model-menu-models"
                       onClick={() => setModelMenuSection((s) => (s === 'models' ? null : 'models'))}
@@ -1111,6 +1186,7 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
                     </button>
                     {reasoning && effectiveThinkingLevels.length > 0 && (
                       <button
+                        type="button"
                         className={`model-menu-row${modelMenuSection === 'thinking' ? ' active' : ''}`}
                         data-testid="model-menu-thinking"
                         disabled={isStreaming}

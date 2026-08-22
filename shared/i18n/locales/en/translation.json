@@ -371,7 +371,9 @@
     "startRetry": "Retry",
     "modelMenu": {
       "model": "Model",
-      "empty": "No models available"
+      "empty": "No models available",
+      "expandProvider": "Expand {{provider}}",
+      "collapseProvider": "Collapse {{provider}}"
     },
     "bash": {
       "excluded": "excluded from context",

@@ -371,7 +371,9 @@
     "startRetry": "重试",
     "modelMenu": {
       "model": "模型",
-      "empty": "暂无可用模型"
+      "empty": "暂无可用模型",
+      "expandProvider": "展开 {{provider}}",
+      "collapseProvider": "折叠 {{provider}}"
     },
     "bash": {
       "excluded": "不入上下文",

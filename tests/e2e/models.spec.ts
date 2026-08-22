@@ -474,7 +474,105 @@ async function selectChatModel(page: import('@playwright/test').Page, value: str
   await page.locator(`[data-testid="model-option"][data-value="${value}"]`).click();
 }
 
-test('聊天页模型菜单按供应商分组', async ({ launchElectronApp }) => {
+test('聊天页模型菜单按供应商分组与折叠展开', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  await selector.click();
+
+  const modelMenu = page.getByTestId('model-menu');
+  await expect(modelMenu).toBeVisible();
+  // 初始无子菜单展开，无 with-submenu 修饰类
+  await expect(modelMenu).not.toHaveClass(/with-submenu/);
+
+  await page.getByTestId('model-menu-models').click();
+  await expect(modelMenu).toHaveClass(/with-submenu/);
+  const submenu = page.getByTestId('model-submenu');
+  await expect(submenu).toBeVisible();
+
+  // 当前默认模型为 mock/mock-1 -> mock 组默认展开，包含 2 个模型选项
+  const mockToggle = page.locator('[data-testid="model-group-toggle"][data-value="mock"]');
+  await expect(mockToggle).toBeVisible();
+  await expect(mockToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(mockToggle.locator('.model-group-count')).toHaveText('2');
+  const mockGroup = page.locator('.model-group', { has: page.locator('[data-testid="model-group-toggle"][data-value="mock"]') });
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(2);
+
+  // 非当前模型组（extension-models）默认折叠，数量徽标显示 1
+  const extensionToggle = page.locator('[data-testid="model-group-toggle"][data-value="extension-models"]');
+  await expect(extensionToggle).toBeVisible();
+  await expect(extensionToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(extensionToggle.locator('.model-group-count')).toHaveText('1');
+  const extensionGroup = page.locator('.model-group', { has: page.locator('[data-testid="model-group-toggle"][data-value="extension-models"]') });
+  await expect(extensionGroup.getByTestId('model-option')).toHaveCount(0);
+
+  // 点击展开 extension-models
+  await extensionToggle.click();
+  await expect(extensionToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(extensionGroup.getByTestId('model-option')).toHaveText(['Extension Model 1']);
+
+  // 再次点击折叠
+  await extensionToggle.click();
+  await expect(extensionToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(extensionGroup.getByTestId('model-option')).toHaveCount(0);
+
+  // 再次展开并选中模型，验证选中后菜单关闭并在重新打开时默认展开该组
+  await extensionToggle.click();
+  await extensionGroup.getByTestId('model-option').click();
+  await expect(modelMenu).not.toBeVisible();
+  await expect(selector).toHaveAttribute('data-value', 'extension-models/extension-1');
+
+  // 重新打开模型子菜单：此时当前模型所在组为 extension-models，默认展开；mock 变为折叠
+  await selector.click();
+  await page.getByTestId('model-menu-models').click();
+  await expect(extensionToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(extensionGroup.getByTestId('model-option')).toHaveCount(1);
+  await expect(mockToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(0);
+});
+
+test('单供应商场景：组头不渲染，列表直接平铺', async ({ launchElectronApp }) => {
+  // 覆盖 settings 与 models.json，仅保留单一 mock 供应商
+  await writeFile(
+    path.join(agentDir, 'models.json'),
+    JSON.stringify({
+      providers: {
+        mock: {
+          baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+          api: 'openai-completions',
+          apiKey: 'mock-key',
+          models: [
+            {
+              id: 'mock-single-1',
+              name: 'Mock Single 1',
+              reasoning: false,
+              input: ['text'],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 128000,
+              maxTokens: 4096,
+            },
+            {
+              id: 'mock-single-2',
+              name: 'Mock Single 2',
+              reasoning: false,
+              input: ['text'],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 128000,
+              maxTokens: 4096,
+            },
+          ],
+        },
+      },
+    }),
+  );
+  await rm(path.join(agentDir, 'extensions'), { recursive: true, force: true });
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'mock-single-1' }),
+  );
+
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
 
@@ -482,17 +580,14 @@ test('聊天页模型菜单按供应商分组', async ({ launchElectronApp }) =>
   await expect(selector).toBeVisible({ timeout: 30_000 });
   await selector.click();
   await page.getByTestId('model-menu-models').click();
+
   const submenu = page.getByTestId('model-submenu');
   await expect(submenu).toBeVisible();
-  const mockGroup = submenu.locator('> div', {
-    has: page.locator('.model-group-label', { hasText: 'mock' }),
-  });
-  await expect(mockGroup).toHaveCount(1);
-  await expect(mockGroup.getByTestId('model-option')).toHaveCount(2);
-  const extensionGroup = submenu.locator('> div', {
-    has: page.locator('.model-group-label', { hasText: 'extension-models' }),
-  });
-  await expect(extensionGroup.getByTestId('model-option')).toHaveText(['Extension Model 1']);
+  // 单供应商下不渲染折叠头
+  await expect(submenu.getByTestId('model-group-toggle')).toHaveCount(0);
+  // 模型列表直接可见
+  await expect(submenu.getByTestId('model-option')).toHaveCount(2);
+  await expect(submenu.getByTestId('model-option')).toHaveText(['Mock Single 1', 'Mock Single 2']);
 });
 
 test('Models 页标识扩展供应商并展示 pi 模型协议与费率', async ({ launchElectronApp }) => {
@@ -520,8 +615,12 @@ test('LM Studio：自动发现模型并同步视觉能力与真实上下文', as
   await expect(selector).toBeVisible({ timeout: 30_000 });
   await selector.click();
   await page.getByTestId('model-menu-models').click();
-  const group = page.locator('.model-submenu > div', {
-    has: page.locator('.model-group-label', { hasText: 'LM Studio' }),
+  const submenu = page.getByTestId('model-submenu');
+  const lmStudioToggle = page.locator('[data-testid="model-group-toggle"][data-value="LM Studio"]');
+  await expect(lmStudioToggle).toBeVisible();
+  await lmStudioToggle.click();
+  const group = page.locator('.model-group', {
+    has: page.locator('[data-testid="model-group-toggle"][data-value="LM Studio"]'),
   });
   await expect(group).toHaveCount(1);
   await expect(group.getByTestId('model-option')).toHaveText(['Qwen3.5 9B']);
