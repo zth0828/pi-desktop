@@ -49,9 +49,8 @@ import { parseDiffLines } from '../../lib/tool-display';
 import {
   clampPanelWidth,
   getNextModePreference,
+  resolveDefaultPanelWidth,
   resolveEffectiveMode,
-  DEFAULT_PANEL_WIDTH_FILES,
-  DEFAULT_PANEL_WIDTH_REVIEW,
   PANEL_WIDTH_STORAGE_KEY,
   WORKSPACE_PANEL_MODE_KEY,
   type WorkspacePanelEffectiveMode,
@@ -650,6 +649,9 @@ export function ReviewPanel() {
     const saved = Number(window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY));
     return Number.isFinite(saved) && saved > 0 ? saved : undefined;
   });
+  // 扩窗期间钉住的面板像素宽（不持久化）：窗口变宽后容器随变，不钉则默认宽公式把面板继续撑大。
+  // 与 panelWidth（用户拖拽、持久化）分开；关闭或离开 docked 时清空，下次展开重新按公式算默认宽。
+  const [pinnedWidth, setPinnedWidth] = useState<number | undefined>(undefined);
   const [modePreference, setModePreference] = useState<WorkspacePanelModePreference>(() => {
     const saved = window.localStorage.getItem(WORKSPACE_PANEL_MODE_KEY);
     if (saved === 'docked' || saved === 'overlay' || saved === 'auto') return saved;
@@ -719,8 +721,8 @@ export function ReviewPanel() {
   }, [open]);
 
   const effectiveContainerWidth = containerWidth || availablePanelSpace(panelRef.current);
-  const expectedPanelWidth = panelWidth ?? (tab === 'review' ? DEFAULT_PANEL_WIDTH_REVIEW : DEFAULT_PANEL_WIDTH_FILES);
-  const effectiveMode = resolveEffectiveMode(modePreference, effectiveContainerWidth, expectedPanelWidth);
+  const effectiveMode = resolveEffectiveMode(modePreference, effectiveContainerWidth);
+  const expectedPanelWidth = panelWidth ?? pinnedWidth ?? resolveDefaultPanelWidth(effectiveContainerWidth, tab === 'review' ? 'review' : 'files', effectiveMode);
 
   const isNarrowPanel = panelClientWidth > 0 && panelClientWidth < 480;
   const effectiveTreeOpen = isNarrowPanel
@@ -761,14 +763,21 @@ export function ReviewPanel() {
     };
   }, [open, effectiveMode]);
 
+  // docked 展开时把 OS 窗口向右加宽出面板宽度：聊天列保持展开前像素宽，不被挤压。
+  // 关闭 / 切 overlay / 卸载时对称缩回。屏幕右缘空间不足由后端 clamp，差额仍由聊天列让出。
   useEffect(() => {
-    if (panelWidth !== undefined) {
-      const clamped = clampPanelWidth(panelWidth, effectiveContainerWidth, effectiveMode);
-      if (clamped !== panelWidth) {
-        setPanelWidth(clamped);
-      }
-    }
-  }, [effectiveContainerWidth, effectiveMode]);
+    if (!open || effectiveMode !== 'docked') return;
+    const currentWidth = Math.round(panelRef.current?.clientWidth ?? expectedPanelWidth);
+    if (currentWidth <= 0) return;
+    setPinnedWidth(currentWidth);
+    void hostApi.windows.expandRight({ extraWidth: currentWidth });
+    return () => {
+      setPinnedWidth(undefined);
+      void hostApi.windows.restoreExpandRight();
+    };
+    // 仅在打开/模式切换时触发；面板宽度变化（拖拽）不重复扩窗
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, effectiveMode]);
 
   useEffect(() => {
     if (!dragState) return;
@@ -879,7 +888,8 @@ export function ReviewPanel() {
         data-testid="review-panel"
         data-mode={effectiveMode}
         data-mode-preference={modePreference}
-        style={panelWidth ? { '--workspace-panel-width': `${panelWidth}px` } as CSSProperties : undefined}
+        // 宽度始终由 TS 统一公式下发；CSS 不再含百分比默认，只保留聊天列下限兜底
+        style={{ '--workspace-panel-width': `${Math.round(expectedPanelWidth)}px` } as CSSProperties}
       >
         <div
           className="workspace-resize-handle"
@@ -900,16 +910,15 @@ export function ReviewPanel() {
           onPointerDown={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            const currentWidth = panelRef.current?.clientWidth ?? panelWidth ?? (tab === 'review' ? DEFAULT_PANEL_WIDTH_REVIEW : DEFAULT_PANEL_WIDTH_FILES);
+            const currentWidth = panelRef.current?.clientWidth ?? expectedPanelWidth;
             setDragState({ startX: event.clientX, initialWidth: currentWidth });
           }}
           onKeyDown={(event) => {
             if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
             event.preventDefault();
             event.stopPropagation();
-            const current = panelWidth ?? (tab === 'review' ? DEFAULT_PANEL_WIDTH_REVIEW : DEFAULT_PANEL_WIDTH_FILES);
             const delta = event.key === 'ArrowLeft' ? 24 : -24;
-            setPanelWidth(clampPanelWidth(current + delta, effectiveContainerWidth, effectiveMode));
+            setPanelWidth(clampPanelWidth(expectedPanelWidth + delta, effectiveContainerWidth, effectiveMode));
           }}
         />
         <div className="workspace-tabs">
