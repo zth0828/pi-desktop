@@ -24,6 +24,7 @@ import {
   Search,
   Sparkles,
   SquareX,
+  Terminal,
   WrapText,
   X,
 } from 'lucide-react';
@@ -58,11 +59,12 @@ import {
 } from '../../lib/workspace-panel-mode';
 import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 import { FilePreviewContent } from './FilePreviewContent';
+import type { ChatMessage } from '../../lib/chat-types';
 
 type PendingRevert =
   | { kind: 'file'; path: string }
   | { kind: 'hunk'; path: string; patch: string };
-type WorkbenchTab = 'files' | 'review' | `file:${string}`;
+type WorkbenchTab = 'files' | 'review' | 'commands' | `file:${string}`;
 
 function getContainer(panelEl: HTMLElement | null): HTMLElement | null {
   return panelEl?.closest<HTMLElement>('.chat-page') ?? document.querySelector<HTMLElement>('.chat-page');
@@ -359,6 +361,61 @@ type SelectedReviewItem = {
   group: 'session' | 'workspace';
   path: string;
 };
+
+/** 右侧「命令」面板：本会话 bash 执行列表（进行中 + 已落盘），与消息流同源。 */
+function CommandList() {
+  const { t } = useTranslation();
+  const bashDraft = usePaneChatStore((s) => s.bashDraft);
+  const historyMessages = usePaneChatStore((s) => s.historyMessages);
+  const [expanded, setExpanded] = useState<ChatMessage | null>(null);
+  const runs = historyMessages.filter((m) => m.role === 'bashExecution').reverse();
+  if (!bashDraft && runs.length === 0) {
+    return <div className="command-list workspace-empty" data-testid="command-list">{t('workspace.commandsEmpty')}</div>;
+  }
+  return (
+    <div className="command-list" data-testid="command-list">
+      {bashDraft && (
+        <div className="command-run running" data-testid="command-run-running">
+          <div className="command-run-header">
+            <span className="command-run-name">$ {bashDraft.command}</span>
+            <span className="bash-badge running">{t('workspace.commandsRunning')}</span>
+            {bashDraft.excludeFromContext && <span className="bash-badge">{t('chat.bash.excluded')}</span>}
+          </div>
+          <pre className="command-run-output" data-testid="command-run-output">{bashDraft.output}<span className="cursor-blink">▍</span></pre>
+        </div>
+      )}
+      {runs.map((m, i) => {
+        const raw = m.raw as {
+          command?: string;
+          output?: string;
+          exitCode?: number;
+          cancelled?: boolean;
+          excludeFromContext?: boolean;
+        } | undefined;
+        const open = expanded === m;
+        return (
+          <div className={`command-run${open ? ' expanded' : ''}`} key={i} data-testid="command-run">
+            <button
+              className="command-run-header"
+              data-testid="command-run-toggle"
+              onClick={() => setExpanded(open ? null : m)}
+            >
+              <span className="command-run-name">$ {raw?.command}</span>
+              {raw?.cancelled && <span className="bash-badge">{t('chat.bash.cancelled')}</span>}
+              {raw?.exitCode !== undefined && (
+                <span className={`bash-badge${raw.exitCode === 0 ? '' : ' error'}`}>
+                  {t('chat.bash.exitCode', { code: raw.exitCode })}
+                </span>
+              )}
+              {raw?.excludeFromContext && <span className="bash-badge">{t('chat.bash.excluded')}</span>}
+            </button>
+            {open && raw?.output && <pre className="command-run-output" data-testid="command-run-output">{raw.output}</pre>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function ReviewWorkspace() {
   const { t } = useTranslation();
@@ -931,9 +988,10 @@ export function ReviewPanel() {
               </div>
             ))}
             <button className={`workspace-tab${tab === 'review' ? ' active' : ''}`} role="tab" aria-selected={tab === 'review'} data-testid="workspace-review-tab" onClick={() => { setReviewOpen(true); setTab('review'); }}><FileCode2 size={14} />{t('review.title')}</button>
+            <button className={`workspace-tab${tab === 'commands' ? ' active' : ''}`} role="tab" aria-selected={tab === 'commands'} data-testid="workspace-commands-tab" onClick={() => { setWorkspaceOpen(true); setTab('commands'); }}><Terminal size={14} />{t('workspace.commands')}</button>
           </div>
           <div className="workspace-tab-actions">
-            {tab !== 'review' && (
+            {tab !== 'review' && tab !== 'commands' && (
               <button className={`workspace-tree-trigger${effectiveTreeOpen ? ' active' : ''}`} data-testid="workspace-tree-toggle" aria-expanded={effectiveTreeOpen} title={effectiveTreeOpen ? t('workspace.hideFiles') : t('workspace.showFiles')} onClick={toggleFileTree}>
                 <Files size={15} />
                 {rootItemCount > 0 && <span aria-label={t('workspace.itemCount', { count: rootItemCount })}>{rootItemCount}</span>}
@@ -952,7 +1010,7 @@ export function ReviewPanel() {
             <button className="icon-button" data-testid="workspace-close" title={t('workspace.close')} onClick={close}><PanelRightClose size={16} /></button>
           </div>
         </div>
-        {tab === 'review' ? <ReviewWorkspace /> : (
+        {tab === 'review' ? <ReviewWorkspace /> : tab === 'commands' ? <CommandList /> : (
           <div className={`workspace-browser${effectiveTreeOpen ? ' tree-open' : ''}`}>
             <button className="workspace-tree-backdrop" aria-label={t('workspace.hideFiles')} tabIndex={effectiveTreeOpen ? 0 : -1} onClick={closeFileTree} />
             <FileExplorer selected={activeFile} onSelect={chooseFile} onRootCount={setRootItemCount} />

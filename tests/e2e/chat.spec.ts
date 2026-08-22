@@ -579,6 +579,29 @@ test('命令模式：加号菜单进入、默认不入上下文、发送后自�
   await expect(bar).toBeHidden();
 });
 
+test('右侧「命令」tab：bash 历史记录与消息流同源，可点击展开', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 命令模式执行一条命令（默认不入上下文），供右侧面板展示
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('chat-input').fill('echo pi-desktop-command-panel');
+  await page.getByTestId('chat-send').click();
+  const card = page.getByTestId('message-bash').last();
+  await expect(card.getByTestId('bash-command')).toContainText('echo pi-desktop-command-panel', { timeout: 15_000 });
+
+  // 右侧「命令」tab：历史记录与消息流同源，默认折叠，点击展开全文
+  await page.getByTestId('workspace-toggle').click();
+  await page.getByTestId('workspace-commands-tab').click();
+  const run = page.getByTestId('command-run').last();
+  await expect(run).toContainText('echo pi-desktop-command-panel');
+  await expect(run).toContainText(/不入上下文|excluded from context/);
+  await run.getByTestId('command-run-toggle').click();
+  await expect(run.getByTestId('command-run-output')).toContainText('pi-desktop-command-panel');
+});
+
 test('命令模式：上下文开关切到入上下文、全角 ！ 前缀兼容', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
