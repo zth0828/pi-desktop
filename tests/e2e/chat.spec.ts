@@ -740,6 +740,46 @@ test('@ 文件选择：图片与 docx 也能作为附件加入', async ({ launch
   await page.getByTestId('file-option').filter({ hasText: 'e2e-doc.docx' }).click();
   await expect(page.getByTestId('staged-file')).toContainText('e2e-doc.docx');
 });
+test('bash 执行中：composer 停止按钮不显示，命令停止走 bash 卡', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('chat-input').fill("bash -c 'for i in $(seq 1 40); do echo $i; sleep 0.1; done'");
+  await page.getByTestId('chat-send').click();
+  // bash 执行中（无消息回合）：bash 卡有停止按钮，composer 不显示 stop（命令与会话停止分离）
+  await expect(page.getByTestId('bash-stop').first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('chat-stop')).toHaveCount(0);
+  // 用 bash 卡按钮停止命令 → cancelled 落盘
+  await page.getByTestId('bash-stop').first().click();
+  const card = page.getByTestId('message-bash').last();
+  await expect(card).toContainText(/已取消|cancelled/, { timeout: 15_000 });
+  await expect(card.getByTestId('bash-exit-code')).toHaveCount(0);
+});
+
+test('回合中断不影响后台 bash：stop 停回合，命令继续跑完', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 后台慢命令（6s），随后发一个慢回合
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('chat-input').fill("bash -c 'for i in $(seq 1 30); do echo $i; sleep 0.2; done'");
+  await page.getByTestId('chat-send').click();
+  await page.getByTestId('chat-input').fill('SLOW_END stream');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 30_000 });
+  // 停回合（composer stop）：bash 继续后台跑，不被连带取消
+  await page.getByTestId('chat-stop').click();
+  await expect(page.getByTestId('chat-stop')).not.toBeVisible({ timeout: 30_000 });
+  // bash 完成后正常落盘（exit 0）
+  const card = page.getByTestId('message-bash').last();
+  await expect(card.getByTestId('bash-exit-code')).toContainText('0', { timeout: 25_000 });
+});
+
 test('技能：加号菜单选择后以 badge 显示在输入框上方，不写入输入框', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

@@ -1162,14 +1162,13 @@ export const piRuntimeApi = {
       session.clearQueue();
       session.clearAgentQueues();
     }
-    // bash 停止是独立动作：不重置回合状态，否则消息回合会被误标记为已停止（“整个停止”）
-    const bashAborted = session.isBashRunning;
-    if (session.isBashRunning) session.abortBash();
-    else if (session.isCompacting) session.abortCompaction();
+    // bash 停止走独立的 abortBash（bash 卡/命令面板按钮），与回合停止分离：
+    // 这里只处理回合/压缩/分支摘要/重试，保证后台命令在回合中断时继续跑。
+    if (session.isCompacting) session.abortCompaction();
     else if (active.summarizingBranch) session.abortBranchSummary();
     else if (session.isRetrying) session.abortRetry();
     else await session.abort();
-    if (!bashAborted && (active.running || session.isStreaming)) {
+    if (active.running || session.isStreaming) {
       active.running = false;
       noteRunEnded(active.instanceId);
       sendHostEvent('piRuntime', 'runtimeStateChanged', {

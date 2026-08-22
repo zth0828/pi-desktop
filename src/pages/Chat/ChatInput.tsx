@@ -1437,8 +1437,9 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
               >
                 <ArrowUp size={15} />
               </button>
-              {/* 压缩中/重试等待中/bash 执行中 isStreaming=false，但回合仍可中断（pi Escape 语义） */}
-              {(compacting || retrying || bashing || isRunning) && (
+              {/* 压缩中/重试等待中/回合运行中 isStreaming=false，但回合仍可中断（pi Escape 语义）；
+                  bash 执行不在这里：命令停止走 bash 卡上的按钮，与回合停止分离 */}
+              {(compacting || retrying || isRunning) && (
                 <button
                   data-testid="chat-stop"
                   className="send-button stop"
