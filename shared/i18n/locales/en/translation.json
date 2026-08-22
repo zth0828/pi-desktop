@@ -399,7 +399,8 @@
       "exit": "Exit command mode",
       "runningHint": "A command is still running",
       "stopBash": "Stop command",
-      "planModeOn": "Plan mode is on (sent messages get /plan prefix)"
+      "planModeOn": "Plan mode is on (sent messages get /plan prefix)",
+    "skillRemove": "Remove skill"
     },
     "errors": {
       "invalidKey": "API key issue: the key may be invalid, expired or revoked — update it in provider settings.",

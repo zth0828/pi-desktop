@@ -556,12 +556,13 @@ test('! bash 流式窗口：执行中只见尾部预览，无展开交互', asyn
   await expect(streaming.getByTestId('bash-output-more')).toContainText('45');
 });
 
-test('命令模式：工具栏进入、默认不入上下文、发送后自动退出', async ({ launchElectronApp }) => {
+test('命令模式：加号菜单进入、默认不入上下文、发送后自动退出', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  // 工具栏 → 运行命令 → 命令模式指示条出现，默认「不入上下文」
+  // 加号菜单 → 运行命令 → 命令模式指示条出现，默认「不入上下文」
+  await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-command-mode').click();
   const bar = page.getByTestId('command-mode-bar');
   await expect(bar).toBeVisible();
@@ -584,6 +585,7 @@ test('右侧「命令」tab：bash 历史记录与消息流同源，可点击展
   await waitSessionReady(page);
 
   // 命令模式执行一条命令（默认不入上下文），供右侧面板展示
+  await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-command-mode').click();
   await page.getByTestId('chat-input').fill('echo pi-desktop-command-panel');
   await page.getByTestId('chat-send').click();
@@ -606,6 +608,7 @@ test('命令模式：上下文开关切到入上下文、全角 ！ 前缀兼容
   await waitSessionReady(page);
 
   // 进入命令模式，切换到「入上下文」
+  await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-command-mode').click();
   await page.getByTestId('command-context-toggle').click();
   await expect(page.getByTestId('command-context-toggle')).toContainText(/入上下文|In context/);
@@ -628,6 +631,7 @@ test('命令模式：执行中发送按钮禁用，完成后恢复', async ({ la
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
+  await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-command-mode').click();
   await page.getByTestId('chat-input').fill("bash -c 'sleep 2; echo pi-desktop-bash-slow'");
   await page.getByTestId('chat-send').click();
@@ -648,6 +652,7 @@ test('bash 执行中可单独停止：流式卡停止按钮取消命令', async 
   await waitSessionReady(page);
 
   // 命令模式跑慢命令，留出停止窗口
+  await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-command-mode').click();
   await page.getByTestId('chat-input').fill("bash -c 'for i in $(seq 1 200); do echo $i; sleep 0.2; done'");
   await page.getByTestId('chat-send').click();
@@ -686,41 +691,46 @@ test('计划模式：常驻切换，开启后发送带 /plan 前缀，可退出'
   await expect(last).not.toContainText('/plan');
 });
 
-test('引用文件：工具栏点击直接展开文件列表，选中追加到输入末尾不删内容', async ({ launchElectronApp }) => {
+test('引用文件：加号菜单直接展开列表，选中作为附件不写入输入框', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  // 先输入内容，再点工具栏「引用文件」：无需先输入 @ 即弹出列表
+  // 先输入内容，再经加号菜单「引用文件」：无需先输入 @ 即弹出列表
   await page.getByTestId('chat-input').fill('请检查这个文件');
+  await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-file-reference').click();
   await expect(page.getByTestId('file-panel')).toBeVisible();
   const options = page.getByTestId('file-option');
   await expect(options.first()).toBeVisible();
   await options.first().click();
-  // 已有内容保留，@引用追加到末尾
-  await expect(page.getByTestId('chat-input')).toHaveValue(/请检查这个文件 @/);
+  // 引用作为附件（staged-file）暂存，输入框内容保持原样（不写 @path）
+  await expect(page.getByTestId('staged-file')).toBeVisible();
+  await expect(page.getByTestId('chat-input')).toHaveValue('请检查这个文件');
   // 面板关闭
   await expect(page.getByTestId('file-panel')).toBeHidden();
 });
 
-test('技能面板：工具栏展开技能列表，选择后追加到输入开头不删已有内容', async ({ launchElectronApp }) => {
+test('技能：加号菜单选择后以 badge 显示在输入框上方，不写入输入框', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
   await page.getByTestId('chat-input').fill('帮我写个脚本');
-  await page.getByTestId('composer-skill-toggle').click();
-  const panel = page.getByTestId('skill-panel');
-  await expect(panel).toBeVisible();
-  // 环境无 skill 时显示空态提示；有则点第一个，已输入内容保留在末尾
-  const skillOptions = panel.locator('[data-testid^="composer-skill-"]');
-  if (await skillOptions.count() === 0) {
-    await expect(panel).toContainText(/暂无|No skills/);
+  await page.getByTestId('composer-menu').click();
+  const skillOption = page.locator('[data-testid^="composer-skill-"]').first();
+  if (await skillOption.count() === 0) {
+    // 环境无 skill：菜单内显示空态提示
+    await expect(page.getByTestId('composer-menu-panel')).toContainText(/暂无|No skills/);
+  } else {
+    // 选中后输入框上方出现 skill badge，输入框内容不被破坏
+    await skillOption.click();
+    await expect(page.getByTestId('skill-mode-bar')).toBeVisible();
+    await expect(page.getByTestId('chat-input')).toHaveValue('帮我写个脚本');
+    // 点 × 移除
+    await page.getByTestId('skill-mode-remove').click();
+    await expect(page.getByTestId('skill-mode-bar')).toBeHidden();
   }
-  // 再次点击 toggle 关闭
-  await page.getByTestId('composer-skill-toggle').click();
-  await expect(panel).toBeHidden();
 });
 
 test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当前轮插入', async ({ launchElectronApp }) => {

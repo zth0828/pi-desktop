@@ -2337,6 +2337,36 @@ button.danger-outline {
 }
 .command-mode-exit:hover { color: var(--text); }
 
+/* 已选 skill 的指示条（输入框上方，同命令模式条） */
+.skill-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+}
+.skill-mode-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--accent);
+}
+.skill-mode-remove {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.skill-mode-remove:hover { color: var(--text); }
+
 .context-chip {
   display: inline-flex;
   align-items: center;
@@ -2705,13 +2735,6 @@ button.danger-outline {
 }
 .composer-tool:hover { color: var(--text); background: var(--bg-hover); }
 .composer-tool.active { color: var(--accent); background: var(--bg-hover); }
-.composer-tool-skill-wrap { position: relative; }
-.composer-tool-skill-wrap .command-panel {
-  left: 0;
-  right: auto;
-  width: 260px;
-  bottom: calc(100% + 4px);
-}
 
 .attach-button {
   display: inline-flex;
@@ -3047,6 +3070,8 @@ button.danger-outline {
   box-shadow: var(--shadow-panel);
   z-index: 10;
 }
+/* 长列表滚动：flex 子项默认不压缩，否则条目被压扁且溢出无法滚动 */
+.command-panel .command-item { flex-shrink: 0; }
 
 .command-item {
   display: flex;
