@@ -1,7 +1,7 @@
 // pi 安装检测：动态定位 Node/npm/pi，判定安装类型与版本。
 // 路径一律动态解析（npm root -g / PATH 逐级 realpath），禁止硬编码。
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, existsSync, readFileSync, realpathSync } from 'node:fs';import path from 'node:path';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';import path from 'node:path';
 import { MIN_NODE_VERSION, MIN_PI_VERSION, PI_PACKAGE_NAME } from '@shared/pi-compat';
 import type {
   NodeDetectResult,
@@ -86,11 +86,6 @@ export function detectNpm(): NpmDetectResult {
   if (rootOut && existsSync(rootOut)) {
     // macOS: /tmp → /private/tmp 等 symlink，比较前必须 realpath
     globalRoot = realpathSync(rootOut);
-  }
-  if (process.env.PI_DESKTOP_E2E_DETECT_DEBUG) {
-    try {
-      appendFileSync(process.env.PI_DESKTOP_E2E_DETECT_DEBUG, `${JSON.stringify({ at: 'detectNpm', binPath, rootOut, exists: rootOut ? existsSync(rootOut) : null, globalRoot })}\n`);
-    } catch { /* ignore */ }
   }
   return { found: true, path: binPath, version, globalRoot };
 }
@@ -213,13 +208,6 @@ function detectWindowsNpmShim(
   npm: NpmDetectResult,
   platform: NodeJS.Platform,
 ): PiDetectResult | null {
-  const dbg = (extra: Record<string, unknown>) => {
-    if (process.env.PI_DESKTOP_E2E_DETECT_DEBUG) {
-      try {
-        appendFileSync(process.env.PI_DESKTOP_E2E_DETECT_DEBUG, `${JSON.stringify({ at: 'detectWindowsNpmShim', ...extra })}\n`);
-      } catch { /* ignore */ }
-    }
-  };
   if (!needsWindowsCommandShell(binPath, platform)) return null;
   const shimDir = path.dirname(binPath);
   // 标准 npm 全局布局：shim 与全局 root 同属一个 prefix 目录
@@ -228,10 +216,7 @@ function detectWindowsNpmShim(
     && sameDirectory(shimDir, path.dirname(npm.globalRoot), platform)
   ) {
     const detected = readPiPackageRoot(path.join(npm.globalRoot, PI_PACKAGE_NAME), npm);
-    dbg({ branch: 'standard', shimDir, globalRoot: npm.globalRoot, globalRootParent: path.dirname(npm.globalRoot), detected: detected?.installKind ?? null });
     if (detected) return { ...detected, binPath };
-  } else {
-    dbg({ branch: 'standard-miss', shimDir, globalRoot: npm.globalRoot, globalRootParent: npm.globalRoot ? path.dirname(npm.globalRoot) : undefined, sameDir: npm.globalRoot ? sameDirectory(shimDir, path.dirname(npm.globalRoot), platform) : null });
   }
   // npm --prefix <P> 的安装：包在 P/node_modules，shim 可能不属于当前全局 root；
   // 按 shim 自身 prefix 布局解析，是否算 npm 安装仍由 globalRoot 归属判定
@@ -239,7 +224,6 @@ function detectWindowsNpmShim(
     path.join(shimDir, 'node_modules', PI_PACKAGE_NAME),
     npm,
   );
-  dbg({ branch: 'fallback', detected: detected?.installKind ?? null, shimDir });
   return detected ? { ...detected, binPath } : null;
 }
 

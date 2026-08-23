@@ -1,6 +1,6 @@
 // onboarding 五场景 E2E。
 // 通过 PI_DESKTOP_USER_PATH / PI_DESKTOP_NPM_ROOT 测试钩子隔离模拟各环境。
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
@@ -28,7 +28,12 @@ async function makeFakeNodeBin(version: string): Promise<{ binDir: string; clean
  *  POSIX：<root>/bin/pi → lib/node_modules/.../dist/cli.js（symlink）
  *  Windows：<root>/pi.cmd + <root>/node_modules/...（.cmd shim，无 symlink） */
 async function makeFakeNpmPrefix(version: string): Promise<{ prefix: string; npmRoot: string; cleanup: () => Promise<void> }> {
-  const prefix = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-prefix-'));
+  // Windows runner 的 %TEMP% 可能是 8.3 短名（RUNNER~1），而 realpath 返回长名
+  // （runneradmin）。检测器比较 shim 目录与 npm root 父目录的 realpath 字符串，
+  // 长短名不一致会误判非 npm 安装。统一用 realpath 后的长路径建 prefix，
+  // 使 PATH 里的 shim 与 globalRoot 解析到同一字符串。
+  const rawPrefix = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-prefix-'));
+  const prefix = await realpath(rawPrefix);
   const pkgSubPath = '@earendil-works/pi-coding-agent';
   if (isWin) {
     const pkgDir = path.join(prefix, 'node_modules', ...pkgSubPath.split('/'));
@@ -127,7 +132,6 @@ test('场景3：非 npm 安装的 pi → 一键切换引导', async ({ launchEle
 });
 
 test('场景4：npm 安装但版本过低 → 阻断升级页', async ({ launchElectronApp }) => {
-  process.env.PI_DESKTOP_E2E_DETECT_DEBUG = path.join(await mkdtemp(path.join(tmpdir(), 'pi-detect-debug-')), 'detect.log');
   const fake = await makeFakeNpmPrefix('0.82.0');
   try {
     const app = await launchElectronApp({
@@ -138,13 +142,11 @@ test('场景4：npm 安装但版本过低 → 阻断升级页', async ({ launchE
     await expect(page.getByRole('heading', { name: 'pi is too old' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/v0\.82\.0/)).toBeVisible();
   } finally {
-    console.log('DEBUG detect log:', await readFile(process.env.PI_DESKTOP_E2E_DETECT_DEBUG!, 'utf8').catch(() => 'NO LOG'));
     await fake.cleanup();
   }
 });
 
 test('场景5：npm 安装且版本达标 → 进入主界面', async ({ launchElectronApp }) => {
-  process.env.PI_DESKTOP_E2E_DETECT_DEBUG = path.join(await mkdtemp(path.join(tmpdir(), 'pi-detect-debug-')), 'detect.log');
   const fake = await makeFakeNpmPrefix('0.83.0');
   try {
     const app = await launchElectronApp({
@@ -155,7 +157,6 @@ test('场景5：npm 安装且版本达标 → 进入主界面', async ({ launchE
     await expect(page.getByTestId('nav-chat')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: 'Choose folder' })).toBeVisible();
   } finally {
-    console.log('DEBUG detect log:', await readFile(process.env.PI_DESKTOP_E2E_DETECT_DEBUG!, 'utf8').catch(() => 'NO LOG'));
     await fake.cleanup();
   }
 });
