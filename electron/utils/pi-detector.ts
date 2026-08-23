@@ -112,6 +112,12 @@ export function locatePackageRoot(realBinPath: string): { packageRoot: string; v
 }
 
 export function isUnderDir(child: string, parent: string): boolean {
+  // Windows 路径大小写不敏感；realpath 可能返回不同的 case（如用户目录），
+  // 比较前统一小写，避免 npm 归属误判为 non-npm。
+  if (process.platform === 'win32') {
+    child = child.toLowerCase();
+    parent = parent.toLowerCase();
+  }
   const rel = path.relative(parent, child);
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }

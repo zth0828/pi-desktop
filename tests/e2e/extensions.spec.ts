@@ -74,9 +74,11 @@ test('Extensions 页：settings.json 里配置的 npm 扩展出现在列表', as
     path.join(agentDir, 'settings.json'),
     JSON.stringify({ packages: ['npm:pi-mcp-adapter'] }),
   );
-  // 不 seed workspaceCwd：不起 runtime，避免 resourceLoader 去网络解析缺失的包
+  // 不 seed workspaceCwd：不起 runtime，避免 resourceLoader 去网络解析缺失的包。
+  // 等侧边栏出现即可（onboarding 完成，无需 runtime/模型徽标）。
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
+  await expect(page.getByTestId('nav-chat')).toBeVisible({ timeout: 60_000 });
 
   await page.getByTestId('nav-extensions').click();
   await page.getByTestId('extensions-tab-installed').click();
