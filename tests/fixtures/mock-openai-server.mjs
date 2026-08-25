@@ -58,6 +58,8 @@ const server = http.createServer((req, res) => {
       { id: "mock-2" },
       // input 上报：验证目录→models.json→UI 的多模态识别链路
       { id: "mock-discovered", context_window: 256000, max_output_tokens: 16384, input: ["text", "image"] },
+      // OpenRouter 风格元数据（top_provider.max_completion_tokens）：验证最大输出 token 的通用映射
+      { id: "openrouter-style", context_length: 262144, top_provider: { max_completion_tokens: 65536 } },
     ] }));
     return;
   }

@@ -175,7 +175,7 @@ test('Models 页：录入 API key 后状态变已配置', async ({ launchElectro
   await expect(page.getByTestId('provider-model-customnoauth-mock-discovered')).toBeVisible({
     timeout: 15_000,
   });
-  await expect(row).toContainText('Found 2 models, including 1 new');
+  await expect(row).toContainText('Found 3 models, including 2 new');
   await expect.poll(async () => {
     const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
       providers: { customnoauth: { models: Array<{ id: string }> } };
@@ -406,7 +406,7 @@ test('Models 页：刷新会发现已配置自定义供应商的新模型', asyn
   await page.getByTestId('nav-models').click();
   await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('refresh-models').click();
-  await expect(page.getByTestId('models-refresh-message')).toContainText('Found 2 custom models', {
+  await expect(page.getByTestId('models-refresh-message')).toContainText('Found 3 custom models', {
     timeout: 30_000,
   });
   await expect(page.getByTestId('models-refresh-message')).toContainText(
@@ -440,6 +440,19 @@ test('Models 页：刷新会发现已配置自定义供应商的新模型', asyn
       return doc.providers.mock.models.find((m) => m.id === 'mock-discovered')?.input;
     }, { timeout: 15_000 })
     .toEqual(['text', 'image']);
+  // OpenRouter 风格 top_provider.max_completion_tokens → maxTokens 通用映射：
+  // models.json 持久化完整数值，UI meta 片段完整显示（不截断数字）
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; maxTokens?: number; contextWindow?: number }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'openrouter-style');
+    }, { timeout: 15_000 })
+    .toEqual(expect.objectContaining({ id: 'openrouter-style', contextWindow: 262144, maxTokens: 65536 }));
+  await expect(
+    page.getByTestId('provider-model-meta-output-mock-openrouter-style'),
+  ).toContainText('65,536');
 });
 
 test('Models 页：已配置供应商展开显示可用模型，可设为当前模型并持久化', async ({
