@@ -502,6 +502,9 @@
     "current": "Current",
     "reasoningSupport": "Reasoning",
     "reasoningHint": "Third-party models are treated as reasoning-capable by default so the thinking-depth menu stays available. Turn off only if the provider rejects thinking parameters.",
+    "imageSupport": "Images",
+    "imageSupportHint": "Image input support is auto-detected from mainstream model specs. Adjust manually when the gateway drops image support or detection is off.",
+    "visionMeta": "Image input",
     "probeSpec": "Context {{contextWindow}} · Max output {{maxOutput}}",
     "probeCatalogFailed": "Could not fetch the model list: {{error}}. Make sure the server is running and the address/port is correct (open LM Studio first for local models)."
   },

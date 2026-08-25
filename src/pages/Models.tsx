@@ -214,6 +214,34 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
     // 若活动会话正在使用该模型，同步会话状态，思考深度菜单立即恢复可用
   };
 
+  // 图像开关与推理开关同构：活动会话正在使用该模型时同步 input 声明，
+  // 图片附件能力即时生效。
+  const syncRuntimeInput = (modelId: string, image: boolean) => {
+    const activeStore = getActiveChatStore();
+    const runtime = activeStore?.getState();
+    if (!activeStore || !runtime?.model || runtime.model.provider !== provider.id || runtime.model.id !== modelId) return;
+    activeStore.getState().applyModelUpdate({
+      success: true,
+      model: { ...runtime.model, input: image ? ['text', 'image'] : ['text'] },
+      thinkingLevel: runtime.thinkingLevel,
+      availableThinkingLevels: runtime.availableThinkingLevels,
+      contextUsage: runtime.contextUsage ?? undefined,
+    });
+  };
+
+  const setImage = async (modelId: string, image: boolean) => {
+    setBusy(true);
+    setMessage(undefined);
+    const result = await hostApi.providers.setModelInput(provider.id, modelId, image);
+    setBusy(false);
+    if (!result.success) {
+      setMessage(result.error);
+      return;
+    }
+    onChanged();
+    syncRuntimeInput(modelId, image);
+  };
+
   const isDefault = (modelId: string) =>
     defaultModel?.provider === provider.id && defaultModel.id === modelId;
 
@@ -354,6 +382,14 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                         {m.name && m.name !== m.id && <span className="hint">{m.id}</span>}
                       </div>
                       <span className="provider-model-meta" data-testid={`provider-model-meta-${provider.id}-${m.id}`}>
+                        {m.input?.includes('image') && (
+                          <span
+                            className="provider-model-vision"
+                            data-testid={`provider-model-vision-${provider.id}-${m.id}`}
+                          >
+                            {t('models.visionMeta')}
+                          </span>
+                        )}
                         {t('models.modelMeta', {
                           api: m.api,
                           context: m.contextWindow?.toLocaleString() ?? '—',
@@ -381,6 +417,21 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                           onChange={(e) => void setReasoning(m.id, e.target.checked)}
                         />
                         <span>{t('models.reasoningSupport')}</span>
+                      </label>
+                    )}
+                    {provider.source === 'config' && (
+                      <label
+                        className="provider-model-reasoning"
+                        data-testid={`provider-model-image-${provider.id}-${m.id}`}
+                        title={t('models.imageSupportHint')}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(m.input?.includes('image'))}
+                          disabled={busy}
+                          onChange={(e) => void setImage(m.id, e.target.checked)}
+                        />
+                        <span>{t('models.imageSupport')}</span>
                       </label>
                     )}
                     <span className="spacer" />
@@ -500,13 +551,14 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
       .map((s) => s.trim())
       .filter(Boolean)
       .map((mid) => {
-        // 上下文与最大输出自动管理：探测值优先，探测不到用前缀规格表。
+        // 上下文/最大输出/输入模态自动管理：探测值优先，探测不到用前缀规格表。
         const detail = detectedDetails.get(mid);
         const profile = matchModelProfile(mid);
         return {
           id: mid,
           contextWindow: (detail?.contextWindow && detail.contextWindow > 0) ? detail.contextWindow : profile.contextWindow,
           ...(detail?.maxTokens ? { maxTokens: detail.maxTokens } : profile.maxTokens ? { maxTokens: profile.maxTokens } : {}),
+          ...(detail?.input ? { input: detail.input } : profile.input ? { input: profile.input } : {}),
           ...(detail?.thinkingLevelMap ? { thinkingLevelMap: detail.thinkingLevelMap } : {}),
         };
       });
@@ -662,6 +714,11 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                       />
                       <span className="probe-model-id">{modelId}</span>
                       <span className="probe-model-spec" data-testid={`probe-model-spec-${modelId}`}>
+                        {(detail?.input ?? profile.input)?.includes('image') && (
+                          <span className="provider-model-vision" data-testid={`probe-model-vision-${modelId}`}>
+                            {t('models.imageSupport')}
+                          </span>
+                        )}
                         {t('models.probeSpec', {
                           contextWindow: (detail?.contextWindow ?? profile.contextWindow).toLocaleString(),
                           maxOutput: profile.maxTokens?.toLocaleString() ?? '—',
