@@ -68,6 +68,12 @@ function killProcessTree(pid: number): void {
   }
 }
 
+function shallowStripEnv(env: NodeJS.ProcessEnv, keys: string[]): NodeJS.ProcessEnv {
+  const next: NodeJS.ProcessEnv = { ...env };
+  for (const key of keys) delete next[key];
+  return next;
+}
+
 async function closeElectronApp(app: ElectronApplication, timeoutMs = 5_000): Promise<void> {
   let pid: number | undefined;
   try {
@@ -159,12 +165,12 @@ export const test = base.extend<ElectronFixtures>({
             electronEntry,
           ],
           env: {
-            ...process.env,
             // IDE 内嵌终端注入的 ELECTRON_FORCE_IS_PACKAGED 会让裸 Electron 的
             // app.isPackaged 变 true，main 走打包分支（resourcesPath 图标等解析失败）
             // 后 uncaughtException → app.quit()，全部用例启动即退；E2E 固定跑
-            // dist-electron 裸入口，必须剥离该注入。
-            ELECTRON_FORCE_IS_PACKAGED: undefined,
+            // dist-electron 裸入口，必须剥离该注入（解构丢弃，避免 env 里出现
+            // undefined 值违反 Record<string, string> 类型）。
+            ...shallowStripEnv(process.env, ['ELECTRON_FORCE_IS_PACKAGED']),
             HOME: homeDir,
             // Windows 的 os.homedir()/Electron 读 USERPROFILE 而非 HOME，不隔离会穿透到真实用户目录
             ...(process.platform === 'win32' ? { USERPROFILE: homeDir } : {}),
