@@ -149,7 +149,13 @@ export const test = base.extend<ElectronFixtures>({
           : `${piEnv!.piBinDir}:${nodeBinDir}:/usr/bin:/bin`);
         const app = await electron.launch({
           executablePath: electronBinaryPath,
-          args: ['--lang=en-US', electronEntry],
+          // darwin 直跑 node_modules 裸 Electron 时 seatbelt 沙箱初始化会 EPERM，
+          // GPU 进程反复崩溃（白屏）；与 packaged-macos.spec.ts 一律加 --no-sandbox。
+          args: [
+            '--lang=en-US',
+            ...(process.platform === 'darwin' ? ['--no-sandbox'] : []),
+            electronEntry,
+          ],
           env: {
             ...process.env,
             HOME: homeDir,
@@ -169,7 +175,13 @@ export const test = base.extend<ElectronFixtures>({
               ? { PI_DESKTOP_NPM_ROOT: options.npmRoot ?? piEnv!.npmRoot }
               : {}),
             ...(options.agentDir ? { PI_CODING_AGENT_DIR: options.agentDir } : {}),
-            ...(options.githubApiUrl ? { PI_DESKTOP_GITHUB_API_URL: options.githubApiUrl } : {}),
+            // 默认指向本地拒绝连接的地址：不打真实 GitHub API，否则更新提示
+            // toast 会弹出并盖住 composer（版本更新场景由 version-update.spec 显式传 mock）。
+            ...(options.githubApiUrl
+              ? { PI_DESKTOP_GITHUB_API_URL: options.githubApiUrl }
+              : { PI_DESKTOP_GITHUB_API_URL: 'http://127.0.0.1:9/releases/latest' }),
+            // 同理：pi 版本检查默认也不打真实 npm registry，避免 pi 升级提示 toast 弹出。
+            PI_DESKTOP_PI_REGISTRY_URL: 'http://127.0.0.1:9/pi',
             ...(options.packageCatalogUrl ? { PI_PACKAGE_CATALOG_URL: options.packageCatalogUrl } : {}),
             ...(options.npmRegistryUrl ? { npm_config_registry: options.npmRegistryUrl } : {}),
             ...(options.initialPage
