@@ -299,8 +299,11 @@ test('Models 页：已配置模型的自定义供应商仍可编辑名称与请�
   await page.getByTestId('edit-provider-mock').click();
   await expect(page.getByTestId('provider-edit-form-mock')).toBeVisible();
   await expect(page.getByTestId('edit-name-mock')).toHaveValue('mock');
+  // 适配器描述随选中项即时更新
+  await expect(page.getByTestId('edit-api-hint-mock')).toContainText('Chat Completions');
   await page.getByTestId('edit-name-mock').fill('Renamed Mock');
   await page.getByTestId('edit-api-mock').selectOption('openai-responses');
+  await expect(page.getByTestId('edit-api-hint-mock')).toContainText('Responses');
   await page.getByRole('button', { name: 'Save changes' }).click();
 
   // 列表行立即显示新名称，models.json 仅更新基本信息，模型与凭证保持不变
@@ -400,6 +403,13 @@ test('Models 页：探测全失败时说明不代表供应商不可用并展示�
 });
 
 test('Models 页：刷新会发现已配置自定义供应商的新模型', async ({ launchElectronApp }) => {
+  // 模拟 agentrouter 真实场景：models.json 无 cost（价格未知），验证不写误导性 0
+  const modelsDoc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+    providers: { mock: { models: Array<Record<string, unknown>> } };
+  };
+  for (const model of modelsDoc.providers.mock.models) delete model.cost;
+  await writeFile(path.join(agentDir, 'models.json'), JSON.stringify(modelsDoc));
+
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
 
@@ -453,6 +463,18 @@ test('Models 页：刷新会发现已配置自定义供应商的新模型', asyn
   await expect(
     page.getByTestId('provider-model-meta-output-mock-openrouter-style'),
   ).toContainText('65,536');
+  // 目录未上报价格：models.json 不写 cost，UI 显示占位而非误导性 $0
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; cost?: unknown }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'openrouter-style')?.cost;
+    }, { timeout: 15_000 })
+    .toBeUndefined();
+  await expect(
+    page.getByTestId('provider-model-pricing-mock-openrouter-style'),
+  ).toContainText('—');
 });
 
 test('Models 页：已配置供应商展开显示可用模型，可设为当前模型并持久化', async ({
