@@ -286,6 +286,12 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     composerScrollTimerRef.current = window.setTimeout(() => setComposerScrollbarActive(false), 700);
   };
 
+  // 会话身份变化（切换/重建/面板改绑）时旧会话的 session totals 已过期，
+  // 立即清空 usage 快照，避免轮询返回新值前短暂显示上一会话的累计数。
+  useEffect(() => {
+    setUsage(null);
+  }, [sessionId, generation, paneApi]);
+
   useEffect(() => {
     let disposed = false;
     if (started) {

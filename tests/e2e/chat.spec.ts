@@ -935,6 +935,28 @@ test('切回历史会话后恢复上下文与整个会话 Token 统计', async (
   await expect(page.getByTestId('usage-session-input').locator('strong')).not.toHaveText(/^(0|—)$/);
 });
 
+test('切换到新会话后 usage 弹层归零：不残留上一会话的 session totals', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('chat-input').fill('USAGE RESIDUE OLD');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+
+  // 旧会话的 session totals 非零
+  await page.getByTestId('token-usage').click();
+  await expect(page.getByTestId('usage-session-input').locator('strong')).not.toHaveText(/^0$/);
+  await page.getByTestId('token-usage').click();
+
+  // 新建空会话：轮询返回新会话数据前 usage 快照已被清空，
+  // totals 归零而不是带着旧会话的累计数
+  await page.getByTestId('new-chat').click();
+  await expect(page.getByTestId('message-user')).toHaveCount(0, { timeout: 15_000 });
+  await page.getByTestId('token-usage').click();
+  await expect(page.getByTestId('usage-session-input').locator('strong')).toHaveText(/^0$/, { timeout: 10_000 });
+});
+
 test('缓存失效 → assistant 尾部显示 cache miss 警告', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
