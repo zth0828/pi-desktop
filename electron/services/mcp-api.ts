@@ -163,6 +163,11 @@ export const mcpApi = {
   remove: async (payload: PiMcpServerRefPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
       const { agentDir, cwd } = await resolvePaths(ctx);
+      // project scope 请求丢失 cwd 时必须失败，不能回退到 global 配置——
+      // 否则会删掉用户全局 mcp.json 里的同名 server（真实数据丢失）。
+      if (payload.scope === 'project' && !cwd) {
+        return { success: false, error: 'no workspace for project scope' };
+      }
       const filePath =
         payload.scope === 'project' && cwd
           ? path.join(cwd, '.mcp.json')
@@ -177,6 +182,10 @@ export const mcpApi = {
   setDisabled: async (payload: PiMcpSetDisabledPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
       const { agentDir, cwd } = await resolvePaths(ctx);
+      // 同 remove：project scope 无 cwd 不得写 global 配置。
+      if (payload.scope === 'project' && !cwd) {
+        return { success: false, error: 'no workspace for project scope' };
+      }
       const filePath =
         payload.scope === 'project' && cwd
           ? path.join(cwd, '.mcp.json')
