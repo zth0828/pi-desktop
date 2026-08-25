@@ -298,11 +298,18 @@ export type PiRuntimeStateResult = {
   pendingUiRequests?: PiUiRequestPayload[];
   /** 删除会话驱动的替换：被删会话的原 sessionId，供正在查看它的面板认领新会话。 */
   replacesSessionId?: string;
+  /**
+   * 渲染层发起的替换动作 id（newSession/fork 请求携带、main 原样回显）：
+   * 同窗口多面板并发替换时，各面板只应用自己发起的那次事件，防止面板劫持。
+   */
+  replacementActionId?: string;
 };
 
 // —— piRuntime 消息级 fork / 分支导航（/tree）——
 
-export type PiRuntimeForkPayload = { entryId: string };
+export type PiRuntimeForkPayload = { entryId: string; actionId?: string };
+/** newSession 请求载荷：actionId 供 sessionReplaced 事件回显发起上下文。 */
+export type PiRuntimeNewSessionPayload = { actionId?: string };
 export type PiRuntimeForkResult = HostSuccess & {
   /** position='before' 语义：被选中 user 消息的文本（回填输入框供编辑重发） */
   selectedText?: string;
@@ -1054,7 +1061,7 @@ export type HostApiContract = {
     queueRemove: (payload: PiRuntimeQueueItemPayload) => PiRuntimeQueueMutationResult;
     /** 在 pi 原生 steering/followUp 队列之间移动消息。 */
     queueMove: (payload: PiRuntimeQueueMovePayload) => PiRuntimeQueueMutationResult;
-    newSession: () => HostSuccess;
+    newSession: (payload?: PiRuntimeNewSessionPayload) => HostSuccess;
     /** /compact [instructions]：手动压缩上下文，可带 pi 的自定义压缩指令。 */
     compact: (payload?: PiRuntimeCompactPayload) => HostSuccess;
     /** 消息级 fork：从某条历史 user 消息分叉出新会话并切过去（runtime.fork，TUI /fork 语义）。 */

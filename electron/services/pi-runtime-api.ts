@@ -3,6 +3,7 @@
 // 必须重新 subscribe + bindExtensions（SDK 约定）。
 import {
   mapPiSessionEvent,
+  type PiEventDropCallback,
   type PiRuntimeEventEnvelope,
 } from '@shared/pi-event-map';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
@@ -17,6 +18,7 @@ import type {
   PiRuntimeUsageTurn,
   PiRuntimeForkPayload,
   PiRuntimeForkResult,
+  PiRuntimeNewSessionPayload,
   PiRuntimeTreeNode,
   PiRuntimeTreeResult,
   PiRuntimeNavigatePayload,
@@ -31,6 +33,7 @@ import type {
   PiPromptLifecyclePhase,
 } from '@shared/host-api/contract';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
+import { toModelUnavailableError } from '@shared/provider-error';
 import type {
   PiEventBusPort,
   PiRuntimeHandle,
@@ -41,6 +44,7 @@ import type {
 } from './pi-adapter';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { app } from 'electron';
 import { sendHostEvent, sendHostEventToWebContents } from '../main/ipc/host-events';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import {
@@ -80,6 +84,7 @@ import {
   PiAdapterNotReadyError,
   type PiRuntimeAdapter,
 } from './pi-adapter';
+import { serializeSessionOp } from './session-mutex';
 
 export type ActiveRuntime = {
   instanceId: string;
@@ -128,6 +133,8 @@ function emitPromptLifecycle(runtime: ActiveRuntime, phase: PiPromptLifecyclePha
 
 let active: ActiveRuntime | null = null;
 const runtimes = new Set<ActiveRuntime>();
+/** 因运行中而暂缓回收的孤儿 runtime，等 run.ended / 窗口销毁清扫兜底。 */
+const pendingDisposeRuntimes = new Set<ActiveRuntime>();
 let runtimeSequence = 0;
 let generationSequence = 0;
 let startInFlight: Promise<PiRuntimeStateResult> | null = null;
@@ -248,12 +255,7 @@ export function activateSessionRuntime(runtime: ActiveRuntime): PiRuntimeStateRe
   const state = snapshotState(runtime);
   sendHostEvent('piRuntime', 'sessionReplaced', state);
   for (const request of state.pendingUiRequests ?? []) sendHostEvent('piRuntime', 'uiRequest', request);
-  // 仍有窗口绑定着的 runtime 不回收（其他窗口正在看它）
-  const previousFile = previous?.adapterRuntime.session.view.sessionFile;
-  const previousWatched = previousFile ? findWindowBySession(previousFile) !== null : false;
-  if (previous && previous !== runtime && !previous.adapterRuntime.session.view.isStreaming && !previous.running && !previousWatched) {
-    disposeRuntime(previous);
-  }
+  if (previous && previous !== runtime) maybeDisposeRuntime(previous);
   return state;
 }
 
@@ -266,7 +268,52 @@ function disposeRuntime(runtime: ActiveRuntime): void {
   }
   runtime.adapter.dispose(runtime.adapterRuntime);
   runtimes.delete(runtime);
+  pendingDisposeRuntimes.delete(runtime);
   if (active === runtime) active = null;
+}
+
+/**
+ * 替换/失联后的 runtime 回收判定：无人观看（findWindowBySession 为 null）、
+ * 非全局 active、且不在运行（running/isStreaming）才 dispose。
+ * 运行中的不能中断：登记待回收，由 run.ended / 窗口销毁的清扫兜底，
+ * 否则持有它的窗口在流式期间关闭后 runtime 永久滞留（事件订阅等泄漏）。
+ */
+function maybeDisposeRuntime(runtime: ActiveRuntime): boolean {
+  if (runtime === active) {
+    pendingDisposeRuntimes.delete(runtime);
+    return false;
+  }
+  if (runtime.running || runtime.adapterRuntime.session.view.isStreaming) {
+    pendingDisposeRuntimes.add(runtime);
+    return false;
+  }
+  pendingDisposeRuntimes.delete(runtime);
+  const sessionFile = runtime.adapterRuntime.session.view.sessionFile;
+  if (sessionFile && findWindowBySession(sessionFile) !== null) return false;
+  disposeRuntime(runtime);
+  return true;
+}
+
+/** 待回收 runtime 的兜底清扫：已结束运行且无人观看的回收，其余留在集合等下一轮。 */
+function sweepPendingDisposeRuntimes(): void {
+  for (const runtime of [...pendingDisposeRuntimes]) {
+    maybeDisposeRuntime(runtime);
+  }
+}
+
+// 窗口销毁后清扫一次：持有待回收 runtime 的窗口关闭时立即回收其中的空闲项。
+// 经 app 级 browser-window-created 挂钩，保持 runtime 生命周期收敛在本模块，
+// 不侵入 window-manager 的注册表。
+// 容错：单测里 electron 可能是 npm 包导出的路径字符串（app 为 undefined），
+// 也可能是未定义 app 导出的部分 mock（访问该绑定直接抛）；真实 main 进程两者不会发生。
+try {
+  if (typeof app?.on === 'function') {
+    app.on('browser-window-created', (_event, win) => {
+      win.once('closed', () => sweepPendingDisposeRuntimes());
+    });
+  }
+} catch {
+  // 非 Electron 运行时（单测直连 npm electron 包）：无窗口生命周期，无需清扫挂钩
 }
 
 export function disposeAllRuntimes(): void {
@@ -541,11 +588,35 @@ function workspaceBoundaryExtension(pi: { on: (event: string, handler: (event: a
   });
 }
 
-function bridgeSessionEvents(runtime: ActiveRuntime): void {
+// pi 事件结构漂移（未知类型/畸形 payload）的采样记录：每 reason+rawType 每分钟至多一条，防刷屏
+const eventDropLogAt = new Map<string, number>();
+const EVENT_DROP_LOG_INTERVAL_MS = 60_000;
+
+function createEventDropLogger(runtime: ActiveRuntime): PiEventDropCallback {
+  return (reason, rawType) => {
+    const key = `${reason}:${rawType}`;
+    const now = Date.now();
+    if (now - (eventDropLogAt.get(key) ?? 0) < EVENT_DROP_LOG_INTERVAL_MS) return;
+    eventDropLogAt.set(key, now);
+    writePiDiagnostic({
+      level: 'warning',
+      event: 'pi.event.dropped',
+      sessionId: runtime.sessionId,
+      generation: runtime.generation,
+      piVersion: runtime.adapter.packageVersion,
+      eventType: rawType,
+      detail: reason,
+    });
+  };
+}
+
+/** 建立会话事件桥并返回退订句柄；调用方负责句柄的保存与交换（见 afterSessionReplaced）。 */
+function bridgeSessionEvents(runtime: ActiveRuntime): () => void {
   const session = runtime.adapterRuntime.session;
-  runtime.unsubscribe = session.subscribe((piEvent) => {
+  const onDrop = createEventDropLogger(runtime);
+  return session.subscribe((piEvent) => {
     try {
-      const mapped = mapPiSessionEvent(piEvent);
+      const mapped = mapPiSessionEvent(piEvent, onDrop);
       if (!mapped) return;
       if (mapped.type === 'tool.execution.started') {
         rememberPreviewableFile(runtime, mapped.toolName, mapped.args);
@@ -585,6 +656,8 @@ function bridgeSessionEvents(runtime: ActiveRuntime): void {
             sessionPath: runtime.adapterRuntime.session.sessionFile,
             running: false,
           }));
+          // run 结束后兜底清扫：流式期间被替换/失联的待回收 runtime 此时才可安全回收
+          sweepPendingDisposeRuntimes();
         }
       }
       const envelope: PiRuntimeEventEnvelope = {
@@ -730,7 +803,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
   await bindCurrentSession(active_);
   timingMark('runtime:extensions-bound');
   restorePreviewableExternalFiles(active_);
-  bridgeSessionEvents(active_);
+  active_.unsubscribe = bridgeSessionEvents(active_);
   await captureReviewBaseline(cwd);
   timingMark('runtime:baseline-captured');
   runtimes.add(active_);
@@ -774,16 +847,7 @@ export async function createSessionRuntimeForWindow(
   }
   sendRuntimeStateToWindow(runtime, target);
 
-  const previousFile = previousActive?.adapterRuntime.session.sessionFile;
-  const previousWatched = previousFile ? findWindowBySession(previousFile) !== null : false;
-  if (
-    previousActive
-    && previousActive !== runtime
-    && !previousActive.adapterRuntime.session.isStreaming
-    && !previousWatched
-  ) {
-    disposeRuntime(previousActive);
-  }
+  if (previousActive && previousActive !== runtime) maybeDisposeRuntime(previousActive);
   return snapshotState(runtime);
 }
 
@@ -835,8 +899,21 @@ export async function detachRuntimesFromSessionFile(sessionPath: string): Promis
   for (const runtime of [...runtimes]) {
     if (!samePath(runtime.adapterRuntime.session.sessionFile, sessionPath)) continue;
     const previousSessionId = runtime.sessionId;
-    await runtime.adapterRuntime.newSession();
-    await afterSessionReplaced(runtime, undefined, { replacesSessionId: previousSessionId });
+    try {
+      await runtime.adapterRuntime.newSession();
+      await afterSessionReplaced(runtime, undefined, { replacesSessionId: previousSessionId });
+    } catch (err) {
+      // 单个 runtime 失败不能中断循环：其余持有者仍要 detach，
+      // 否则它们继续往已删会话文件追加（会话"复活"）
+      writePiDiagnostic({
+        level: 'error',
+        event: 'session.detach-failed',
+        sessionId: runtime.sessionId,
+        generation: runtime.generation,
+        piVersion: runtime.adapter.packageVersion,
+        ...safeErrorFields(err),
+      });
+    }
   }
 }
 
@@ -844,10 +921,9 @@ export async function detachRuntimesFromSessionFile(sessionPath: string): Promis
 export async function afterSessionReplaced(
   runtime: ActiveRuntime,
   target?: HostActionContext,
-  options?: { replacesSessionId?: string; preserveRunning?: boolean },
+  options?: { replacesSessionId?: string; preserveRunning?: boolean; actionId?: string },
 ): Promise<PiRuntimeStateResult> {
   const previousActive = active;
-  runtime.unsubscribe();
   // 旧会话挂起的扩展 UI 请求全部取消（渲染层同步移除对话框）
   cancelPendingUiForContext({ sessionId: runtime.sessionId, generation: runtime.generation });
   // 旧会话若在运行中被替换，其 run.ended 不会再到：兜底解除防休眠
@@ -857,9 +933,28 @@ export async function afterSessionReplaced(
   }
   runtime.generation = ++generationSequence;
   runtime.sessionId = runtime.adapterRuntime.session.sessionId;
-  await bindCurrentSession(runtime);
-  restorePreviewableExternalFiles(runtime);
-  bridgeSessionEvents(runtime);
+  // 订阅句柄原子交换：先建新订阅、后退旧订阅。先退再建的话，中间任何步骤
+  // 抛异常 runtime 就失去事件桥且无自愈路径（用户发消息看不到任何流式响应）。
+  const oldUnsubscribe = runtime.unsubscribe;
+  try {
+    try {
+      await bindCurrentSession(runtime);
+    } catch (err) {
+      // 扩展重绑失败不静默：诊断留痕后仍要重建事件桥，会话本体可用
+      writePiDiagnostic({
+        level: 'error',
+        event: 'session.rebind-failed',
+        sessionId: runtime.sessionId,
+        generation: runtime.generation,
+        piVersion: runtime.adapter.packageVersion,
+        ...safeErrorFields(err),
+      });
+    }
+    restorePreviewableExternalFiles(runtime);
+    runtime.unsubscribe = bridgeSessionEvents(runtime);
+  } finally {
+    oldUnsubscribe();
+  }
   // fork/newSession 会换新会话文件，绑定旧文件的窗口改绑到新文件，
   // 否则后续 hostInvoke 按旧路径寻址 runtime 会失败（必须在推事件前完成）
   const previousFile = runtime.sessionFile;
@@ -874,22 +969,12 @@ export async function afterSessionReplaced(
   if (options?.preserveRunning) runtime.running = true;
   const state = snapshotState(runtime);
   if (options?.replacesSessionId) state.replacesSessionId = options.replacesSessionId;
+  // 回显发起动作 id：同窗口多面板并发替换时各面板据此只认领自己发起的事件
+  if (options?.actionId) state.replacementActionId = options.actionId;
   if (target) sendHostEventToWebContents(target.sender, 'piRuntime', 'sessionReplaced', state);
   else sendHostEvent('piRuntime', 'sessionReplaced', state);
 
-  const previousActiveFile = previousActive?.adapterRuntime.session.sessionFile;
-  const previousActiveWatched = previousActiveFile
-    ? findWindowBySession(previousActiveFile) !== null
-    : false;
-  if (
-    previousActive &&
-    previousActive !== runtime &&
-    !previousActive.adapterRuntime.session.isStreaming &&
-    !previousActive.running &&
-    !previousActiveWatched
-  ) {
-    disposeRuntime(previousActive);
-  }
+  if (previousActive && previousActive !== runtime) maybeDisposeRuntime(previousActive);
   return state;
 }
 
@@ -901,11 +986,12 @@ function shouldIsolateSessionReplacement(runtime: ActiveRuntime, ctx?: HostActio
 async function createReplacementRuntime(
   current: ActiveRuntime,
   ctx?: HostActionContext,
+  actionId?: string,
 ): Promise<ActiveRuntime> {
   const wasRunning = current.running || current.adapterRuntime.session.isStreaming;
   const replacement = await createRuntime(current.cwd);
   if (ctx) {
-    await afterSessionReplaced(replacement, ctx);
+    await afterSessionReplaced(replacement, ctx, actionId !== undefined ? { actionId } : undefined);
     if (wasRunning) {
       replacement.running = true;
       sendHostEventToWebContents(ctx.sender, 'piRuntime', 'sessionReplaced', snapshotState(replacement));
@@ -1043,6 +1129,12 @@ export const piRuntimeApi = {
       ]);
       if (active) bindSenderToRuntime(ctx, active);
       return state;
+    } catch (err) {
+      // 会话构建失败里的模型不可用文本（含恢复会话场景）转结构化错误码，
+      // 渲染层按 MODEL_UNAVAILABLE 提供换模型自救入口；其余错误原样上抛。
+      const modelError = toModelUnavailableError(toError(err));
+      if (modelError) throw modelError;
+      throw err;
     } finally {
       clearTimeout(timer);
     }
@@ -1188,54 +1280,73 @@ export const piRuntimeApi = {
     return { success: true };
   },
 
-  newSession: async (_payload?: unknown, ctx?: HostActionContext) => {
-    const active = resolveRuntimeForContext(ctx);
-    if (!active) return { success: false, error: 'session not started' };
-    // 同一会话可同时显示在多个窗口。此时不能在共享 runtime 上原地
-    // newSession，否则所有窗口都会收到 sessionReplaced；只为发起窗口创建新 runtime。
-    if (active.adapterRuntime.session.isStreaming || active.running || shouldIsolateSessionReplacement(active, ctx)) {
-      try {
-        await createReplacementRuntime(active, ctx);
-        return { success: true };
-      } catch (err) {
-        return { success: false, error: toError(err) };
+  newSession: async (payload?: PiRuntimeNewSessionPayload, ctx?: HostActionContext) => {
+    // 渲染层发起替换动作的关联 id：随 sessionReplaced 回显，发起面板据此认领事件
+    const actionId = typeof payload?.actionId === 'string' ? payload.actionId : undefined;
+    const runtime = resolveRuntimeForContext(ctx);
+    if (!runtime) return { success: false, error: 'session not started' };
+    // 以被替换的会话文件为锁键串行（排队期间状态可能变化，锁内重解析 runtime）
+    const key = runtime.adapterRuntime.session.view.sessionFile ?? runtime.instanceId;
+    return serializeSessionOp(key, async () => {
+      const active = resolveRuntimeForContext(ctx);
+      if (!active) return { success: false, error: 'session not started' };
+      // 同一会话可同时显示在多个窗口。此时不能在共享 runtime 上原地
+      // newSession，否则所有窗口都会收到 sessionReplaced；只为发起窗口创建新 runtime。
+      if (active.adapterRuntime.session.isStreaming || active.running || shouldIsolateSessionReplacement(active, ctx)) {
+        try {
+          await createReplacementRuntime(active, ctx, actionId);
+          return { success: true };
+        } catch (err) {
+          return { success: false, error: toError(err) };
+        }
       }
-    }
-    await active.adapterRuntime.newSession();
-    await afterSessionReplaced(active, ctx);
-    bindSenderToRuntime(ctx, active);
-    return { success: true };
+      await active.adapterRuntime.newSession();
+      await afterSessionReplaced(active, ctx, actionId !== undefined ? { actionId } : undefined);
+      bindSenderToRuntime(ctx, active);
+      return { success: true };
+    });
   },
 
   /** 消息级 fork（TUI /fork 选消息）：position='before'，新会话不含被选消息，文本回填编辑器。 */
   fork: async (payload: PiRuntimeForkPayload, ctx?: HostActionContext): Promise<PiRuntimeForkResult> => {
-    const active = resolveRuntimeForContext(ctx);
-    if (!active) return { success: false, error: 'session not started' };
-    if (active.adapterRuntime.session.isStreaming) return { success: false, error: 'session is streaming' };
-    let forkRuntime = active;
-    let isolated = false;
-    try {
-      // fork 也会改变 runtime 的 session file。共享会话时先从原文件创建独立
-      // runtime，避免另一个窗口收到 fork 后被错误改绑。
-      if (shouldIsolateSessionReplacement(active, ctx)) {
-        const sessionPath = active.adapterRuntime.session.sessionFile;
-        if (!sessionPath) return { success: false, error: 'session has no file' };
-        forkRuntime = await createRuntime(active.cwd, sessionPath);
-        isolated = true;
-      }
-      const result = await forkRuntime.adapterRuntime.fork(payload.entryId);
-      if (result.cancelled) {
+    const runtime = resolveRuntimeForContext(ctx);
+    if (!runtime) return { success: false, error: 'session not started' };
+    // 以被 fork 的会话文件为锁键串行（排队期间状态可能变化，锁内重解析 runtime）
+    const key = runtime.adapterRuntime.session.view.sessionFile ?? runtime.instanceId;
+    return serializeSessionOp(key, async () => {
+      const active = resolveRuntimeForContext(ctx);
+      if (!active) return { success: false, error: 'session not started' };
+      if (active.adapterRuntime.session.isStreaming) return { success: false, error: 'session is streaming' };
+      let forkRuntime = active;
+      let isolated = false;
+      try {
+        // fork 也会改变 runtime 的 session file。共享会话时先从原文件创建独立
+        // runtime，避免另一个窗口收到 fork 后被错误改绑。
+        if (shouldIsolateSessionReplacement(active, ctx)) {
+          const sessionPath = active.adapterRuntime.session.sessionFile;
+          if (!sessionPath) return { success: false, error: 'session has no file' };
+          forkRuntime = await createRuntime(active.cwd, sessionPath);
+          isolated = true;
+        }
+        const result = await forkRuntime.adapterRuntime.fork(payload.entryId);
+        if (result.cancelled) {
+          if (isolated) disposeRuntime(forkRuntime);
+          return { success: false, error: 'cancelled' };
+        }
+        // fork 产生新会话文件并整体替换 runtime：走既有 sessionReplaced 刷新流程
+        // （actionId 随事件回显，发起面板据此认领自己的 fork 结果）
+        await afterSessionReplaced(
+          forkRuntime,
+          ctx,
+          typeof payload?.actionId === 'string' ? { actionId: payload.actionId } : undefined,
+        );
+        bindSenderToRuntime(ctx, forkRuntime);
+        return { success: true, selectedText: result.selectedText };
+      } catch (err) {
         if (isolated) disposeRuntime(forkRuntime);
-        return { success: false, error: 'cancelled' };
+        return { success: false, error: toError(err) };
       }
-      // fork 产生新会话文件并整体替换 runtime：走既有 sessionReplaced 刷新流程
-      await afterSessionReplaced(forkRuntime, ctx);
-      bindSenderToRuntime(ctx, forkRuntime);
-      return { success: true, selectedText: result.selectedText };
-    } catch (err) {
-      if (isolated) disposeRuntime(forkRuntime);
-      return { success: false, error: toError(err) };
-    }
+    });
   },
 
   getTree: (_payload?: unknown, ctx?: HostActionContext): PiRuntimeTreeResult => {
