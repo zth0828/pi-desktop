@@ -30,6 +30,8 @@ export type LaunchOptions = {
   githubApiUrl?: string;
   /** npm package 安装测试使用的 registry 地址。 */
   npmRegistryUrl?: string;
+  /** 仅 E2E：缩短主进程会话启动超时（毫秒），驱动 start-timeout 场景。 */
+  startTimeoutMs?: number;
   /** 仅 E2E：模拟 dev 脚本指定的初始功能页。 */
   initialPage?: string;
   /** 仅 E2E：模拟 dev 脚本显式选择非 npm pi 包。 */
@@ -184,6 +186,9 @@ export const test = base.extend<ElectronFixtures>({
             PI_DESKTOP_PI_REGISTRY_URL: 'http://127.0.0.1:9/pi',
             ...(options.packageCatalogUrl ? { PI_PACKAGE_CATALOG_URL: options.packageCatalogUrl } : {}),
             ...(options.npmRegistryUrl ? { npm_config_registry: options.npmRegistryUrl } : {}),
+            ...(options.startTimeoutMs !== undefined
+              ? { PI_DESKTOP_E2E: '1', PI_DESKTOP_START_TIMEOUT_MS: String(options.startTimeoutMs) }
+              : {}),
             ...(options.initialPage
               ? { PI_DESKTOP_E2E: '1', PI_DESKTOP_DEV_INITIAL_PAGE: options.initialPage }
               : {}),

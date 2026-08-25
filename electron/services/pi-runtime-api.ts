@@ -1084,9 +1084,13 @@ async function removeQueuedItem(
 
 /**
  * 会话启动上限。超时后渲染层得到错误（可重试），底层构建继续在后台完成：
- * startInFlight 只在构建自然结束后清理，重试会复用同一个构建而不是再起一个。
+ * startInFlight 只在构建自然结束时清理，重试会复用同一个构建而不是再起一个。
+ * E2E 用 PI_DESKTOP_START_TIMEOUT_MS 缩短超时（须同时置 PI_DESKTOP_E2E=1），
+ * 否则每个超时用例都要真等 45s。
  */
-const START_TIMEOUT_MS = 45_000;
+const START_TIMEOUT_MS = process.env.PI_DESKTOP_E2E === '1' && process.env.PI_DESKTOP_START_TIMEOUT_MS
+  ? Number(process.env.PI_DESKTOP_START_TIMEOUT_MS)
+  : 45_000;
 
 export const piRuntimeApi = {
   start: async (payload: PiRuntimeStartPayload, ctx?: HostActionContext): Promise<PiRuntimeStateResult> => {
