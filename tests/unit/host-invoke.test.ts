@@ -21,6 +21,7 @@ vi.mock('@electron/main/window-manager', () => ({
 }));
 
 import { HostApiRegistry, registerHostInvokeHandler } from '@electron/main/ipc/host-invoke';
+import { HostError } from '@shared/host-api/errors';
 
 type Captured = { ctx?: HostActionContext; payload?: unknown };
 let captured: Captured;
@@ -80,5 +81,39 @@ describe('host-invoke 显式 sessionPath 寻址（P1）', () => {
     };
     expect(res.ok).toBe(false);
     expect(res.error?.code).toBe('VALIDATION');
+  });
+});
+
+describe('host-invoke 错误码透传', () => {
+  function invokeThrowing(action: unknown): Promise<unknown> {
+    const registry = new HostApiRegistry();
+    registry.registerCoreServices({
+      piRuntime: { getState: action as never },
+    });
+    registerHostInvokeHandler(registry);
+    return h.handlers.get('host:invoke')!({ sender: { id: 1 } }, baseRequest);
+  }
+
+  it('action 抛 HostError 时透传其 code 与 detail', async () => {
+    const res = await invokeThrowing(() => {
+      throw new HostError('MODEL_UNAVAILABLE', 'provider model missing', {
+        providerId: 'mock',
+        modelId: 'mock-1',
+      });
+    }) as { ok: boolean; error?: { code?: string; message?: string; details?: unknown } };
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe('MODEL_UNAVAILABLE');
+    expect(res.error?.message).toBe('provider model missing');
+    expect(res.error?.details).toEqual({ providerId: 'mock', modelId: 'mock-1' });
+  });
+
+  it('普通 Error 维持 INTERNAL 且不带 details', async () => {
+    const res = await invokeThrowing(() => {
+      throw new Error('boom');
+    }) as { ok: boolean; error?: { code?: string; message?: string; details?: unknown } };
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe('INTERNAL');
+    expect(res.error?.message).toBe('boom');
+    expect(res.error?.details).toBeUndefined();
   });
 });

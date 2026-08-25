@@ -1,5 +1,6 @@
 // hostInvoke IPC 单通道：请求校验 + registry 分发（壳自身不做插件化，无扩展贡献注册）。
 import { ipcMain } from 'electron';
+import { HostError } from '@shared/host-api/errors';
 import {
   type HostActionContext,
   type HostResponse,
@@ -88,6 +89,18 @@ export function createHostInvokeDispatcher(registryOrServices: HostApiRegistry |
         action: request.action,
         ...safeErrorFields(error),
       });
+      // HostError 的 code/detail 透传给渲染层分类处理；普通 Error 统一 INTERNAL。
+      if (error instanceof HostError) {
+        return {
+          id: request.id,
+          ok: false,
+          error: {
+            code: error.code,
+            message: error.message,
+            ...(error.detail !== undefined ? { details: error.detail } : {}),
+          },
+        };
+      }
       return {
         id: request.id,
         ok: false,

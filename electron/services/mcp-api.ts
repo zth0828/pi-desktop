@@ -193,7 +193,7 @@ export const mcpApi = {
 
   /** 一键安装 adapter：spawn 用户环境的 pi bin（路径来自检测，不硬编码）。 */
   installAdapter: async (): Promise<HostSuccess> => {
-    const env = detectPiEnvironment();
+    const env = await detectPiEnvironment();
     if (!env.pi.found || !env.pi.binPath) {
       return { success: false, error: 'pi not found' };
     }

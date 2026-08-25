@@ -81,7 +81,7 @@ export async function applyProxyToPi(): Promise<ProxyApplyResult> {
   try {
     // 定位 pi 的 http-dispatcher（与 loader 相同的动态 import 方式）。
     const { detectPiEnvironment } = await import('../utils/pi-detector');
-    const environment = detectPiEnvironment();
+    const environment = await detectPiEnvironment();
     if (!environment.pi.found || !environment.pi.packageRoot) {
       return { success: false, error: 'pi is not installed' };
     }

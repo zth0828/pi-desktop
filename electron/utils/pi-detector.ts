@@ -1,7 +1,8 @@
 // pi 安装检测：动态定位 Node/npm/pi，判定安装类型与版本。
 // 路径一律动态解析（npm root -g / PATH 逐级 realpath），禁止硬编码。
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';import path from 'node:path';
+import { promisify } from 'node:util';
 import { MIN_NODE_VERSION, MIN_PI_VERSION, PI_PACKAGE_NAME } from '@shared/pi-compat';
 import type {
   NodeDetectResult,
@@ -11,14 +12,25 @@ import type {
   PiInstallKind,
 } from '@shared/host-api/contract';
 import { gte } from './semver';
+import { safeErrorFields, writePiDiagnostic } from './pi-diagnostic-log';
 import { envWithUserPath, resolveUserPath } from './shell-env';
 
 export type { NodeDetectResult, NpmDetectResult, PiDetectResult, PiEnvironment, PiInstallKind };
 
-function run(binPath: string, args: string[]): string | null {
+// execFile 必须异步执行：同步版会阻塞主进程（node/npm/pi 链式最多约 24s），
+// 期间所有 IPC 与窗口事件冻结。promisify 的重载推断不保留 encoding 约束，
+// 这里显式收窄为 string 输出；stdio 在 ExecFileOptions 类型上缺失但 spawn
+// 层支持（stdin ignore），保留原同步版的选项行为。
+const execFileAsync = promisify(execFile) as (
+  file: string,
+  args: string[],
+  options: Parameters<typeof execFile>[2] & { stdio?: ('ignore' | 'pipe')[] },
+) => Promise<{ stdout: string | Buffer; stderr: string | Buffer }>;
+
+async function run(binPath: string, args: string[]): Promise<string | null> {
   const useShell = needsWindowsCommandShell(binPath);
   try {
-    return execFileSync(useShell ? path.basename(binPath) : binPath, args, {
+    const { stdout } = await execFileAsync(useShell ? path.basename(binPath) : binPath, args, {
       encoding: 'utf8',
       timeout: 8000,
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -27,8 +39,16 @@ function run(binPath: string, args: string[]): string | null {
       // avoids shell parsing failures for standard paths such as C:\Program Files.
       shell: useShell,
       cwd: useShell ? path.dirname(binPath) : undefined,
-    }).trim();
-  } catch {
+    });
+    return (typeof stdout === 'string' ? stdout : stdout.toString('utf8')).trim();
+  } catch (err) {
+    // 失败原因（超时/ENOENT/非零退出）不吞掉：写入诊断日志供排障，检测仍按未找到处理。
+    writePiDiagnostic({
+      level: 'warning',
+      event: 'pi-detect.exec-failed',
+      detail: `${useShell ? path.basename(binPath) : binPath} ${args.join(' ')}`,
+      ...safeErrorFields(err),
+    });
     return null;
   }
 }
@@ -62,9 +82,23 @@ function findOnPath(bin: string, platform: NodeJS.Platform = process.platform): 
   return null;
 }
 
-export function detectNode(): NodeDetectResult {
+// 测试钩子（E2E 用临时 npm prefix 模拟各安装场景）只对开发/未打包运行生效：
+// 真实用户机器上恰好存在同名环境变量时，不得污染安装类型判定——生产一律
+// 真实执行 npm root -g。process.defaultApp 在 `electron <entry>` 直启
+// （dev / E2E / 验证脚本）时为 true，打包产物为 undefined。
+function devNpmRootOverride(): string | undefined {
+  const isDev = process.env.NODE_ENV === 'development'
+    || !!process.env.VITE_DEV_SERVER_URL
+    || process.env.PI_DESKTOP_E2E === '1'
+    || process.defaultApp === true;
+  if (!isDev) return undefined;
+  const value = process.env.PI_DESKTOP_NPM_ROOT;
+  return value && value.length > 0 ? value : undefined;
+}
+
+export async function detectNode(): Promise<NodeDetectResult> {
   const binPath = findOnPath('node');
-  const out = binPath ? run(binPath, ['--version']) : null;
+  const out = binPath ? await run(binPath, ['--version']) : null;
   if (!binPath || !out) return { found: false, meetsMin: false };
   const version = out.replace(/^v/, '');
   let meetsMin = false;
@@ -76,12 +110,11 @@ export function detectNode(): NodeDetectResult {
   return { found: true, path: binPath, version, meetsMin };
 }
 
-export function detectNpm(): NpmDetectResult {
+export async function detectNpm(): Promise<NpmDetectResult> {
   const binPath = findOnPath('npm');
-  const version = binPath ? run(binPath, ['--version']) : null;
+  const version = binPath ? await run(binPath, ['--version']) : null;
   if (!binPath || !version) return { found: false };
-  // 测试钩子：E2E 用临时 npm prefix 模拟各安装场景
-  const rootOut = process.env.PI_DESKTOP_NPM_ROOT ?? run(binPath, ['root', '-g']);
+  const rootOut = devNpmRootOverride() ?? await run(binPath, ['root', '-g']);
   let globalRoot: string | undefined;
   if (rootOut && existsSync(rootOut)) {
     // macOS: /tmp → /private/tmp 等 symlink，比较前必须 realpath
@@ -227,10 +260,10 @@ function detectWindowsNpmShim(
   return detected ? { ...detected, binPath } : null;
 }
 
-export function detectPi(
+export async function detectPi(
   npm: NpmDetectResult,
   platform: NodeJS.Platform = process.platform,
-): PiDetectResult {
+): Promise<PiDetectResult> {
   const binPath = findOnPath('pi', platform);
   const base: PiDetectResult = { found: false, meetsMin: false };
 
@@ -292,13 +325,16 @@ export function detectPi(
 // loadPiAdapter / createRuntime / mcp / proxy 等热路径都会调用它。
 // 按 5 分钟 TTL + 输入指纹缓存（与 piSystemApi 的 detect TTL 一致），
 // 安装 / 强检通过 invalidatePiDetectCache() 或 force 参数失效。
+// 异步化后并发调用会同时 miss 缓存，用同指纹的 in-flight promise 去重，
+// 避免启动期（detect / loadPiAdapter / proxy 同时触发）重复 spawn 子进程。
 const DETECT_TTL_MS = 5 * 60 * 1000;
 let detectCache: { at: number; fingerprint: string; env: PiEnvironment } | null = null;
+let detectInFlight: { fingerprint: string; promise: Promise<PiEnvironment> } | null = null;
 
 function detectionFingerprint(): string {
   return [
     resolveUserPath(),
-    process.env.PI_DESKTOP_NPM_ROOT ?? '',
+    devNpmRootOverride() ?? '',
     process.env.PI_DESKTOP_DEV_ALLOW_NON_NPM ?? '',
     process.env.PI_DESKTOP_DEV_PI_PACKAGE_ROOT ?? '',
     process.env.PI_DESKTOP_DEV_ALLOW_OUTDATED ?? '',
@@ -309,20 +345,11 @@ export function invalidatePiDetectCache(): void {
   detectCache = null;
 }
 
-export function detectPiEnvironment(force = false): PiEnvironment {
-  const fingerprint = detectionFingerprint();
-  if (
-    !force
-    && detectCache
-    && detectCache.fingerprint === fingerprint
-    && Date.now() - detectCache.at < DETECT_TTL_MS
-  ) {
-    return detectCache.env;
-  }
-  const node = detectNode();
-  const npm = node.found ? detectNpm() : { found: false };
+async function runDetection(fingerprint: string): Promise<PiEnvironment> {
+  const node = await detectNode();
+  const npm = node.found ? await detectNpm() : { found: false };
   const pi = npm.found
-    ? detectDevPiOverride(npm) ?? detectPi(npm)
+    ? detectDevPiOverride(npm) ?? await detectPi(npm)
     : { found: false, meetsMin: false };
   const env: PiEnvironment = {
     node,
@@ -333,4 +360,24 @@ export function detectPiEnvironment(force = false): PiEnvironment {
   };
   detectCache = { at: Date.now(), fingerprint, env };
   return env;
+}
+
+export function detectPiEnvironment(force = false): Promise<PiEnvironment> {
+  const fingerprint = detectionFingerprint();
+  if (
+    !force
+    && detectCache
+    && detectCache.fingerprint === fingerprint
+    && Date.now() - detectCache.at < DETECT_TTL_MS
+  ) {
+    return Promise.resolve(detectCache.env);
+  }
+  if (!force && detectInFlight && detectInFlight.fingerprint === fingerprint) {
+    return detectInFlight.promise;
+  }
+  const promise = runDetection(fingerprint).finally(() => {
+    if (detectInFlight?.promise === promise) detectInFlight = null;
+  });
+  detectInFlight = { fingerprint, promise };
+  return promise;
 }

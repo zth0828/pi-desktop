@@ -72,6 +72,9 @@ test('packaged app.asar starts and sends through pi with the local mock provider
         PI_CODING_AGENT_DIR: agentDir,
         PI_DESKTOP_USER_DATA_DIR: userData,
         PI_DESKTOP_USER_PATH: `${pi.piBinDir}${path.delimiter}${path.dirname(process.execPath)}:/usr/bin:/bin`,
+        // 打包产物默认忽略 PI_DESKTOP_NPM_ROOT 测试钩子（防生产环境污染变量
+        // 污染安装类型判定）；显式标记 E2E 才放行。
+        PI_DESKTOP_E2E: '1',
         PI_DESKTOP_NPM_ROOT: pi.npmRoot,
       },
       timeout: 60_000,

@@ -110,7 +110,7 @@ export async function loadPiAdapter(): Promise<PiRuntimeAdapter> {
       // 磁盘不可读：走完整检测路径
     }
   }
-  const environment = detectPiEnvironment();
+  const environment = await detectPiEnvironment();
   if (!environment.pi.found || !environment.pi.packageRoot) {
     throw new PiAdapterNotReadyError('not-installed');
   }
@@ -195,7 +195,7 @@ export async function inspectPiCompatibility(): Promise<PiCompatibilityReport | 
   try {
     return (await loadPiAdapter()).compatibility;
   } catch (error) {
-    const environment = detectPiEnvironment();
+    const environment = await detectPiEnvironment();
     if (!environment.pi.found || !environment.pi.packageRoot || !environment.pi.version) return undefined;
     const failureCode = error instanceof PiAdapterNotReadyError
       ? error.reason as PiCompatibilityFailureCode

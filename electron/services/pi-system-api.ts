@@ -29,7 +29,7 @@ export const piSystemApi = {
     if (!payload?.force && detectCache && Date.now() - detectCache.at < DETECT_TTL_MS) {
       return detectCache.env;
     }
-    const env = detectPiEnvironment(payload?.force === true);
+    const env = await detectPiEnvironment(payload?.force === true);
     detectCache = { at: Date.now(), env };
     // 兼容性报告需要加载 pi SDK（约 2-3s）：异步补齐后推送 envChanged，
     // 不阻塞启动/主界面（onboarding 状态只依赖基础检测，不需要 SDK）。
@@ -88,7 +88,7 @@ export const piSystemApi = {
       child.on('close', async (code) => {
         invalidateDetectCache();
         if (code === 0) {
-          const env = detectPiEnvironment(true);
+          const env = await detectPiEnvironment(true);
           const compatibility = env.pi.found ? await inspectPiCompatibility() : undefined;
           detectCache = { at: Date.now(), env: { ...env, compatibility } };
           sendHostEvent('piSystem', 'installProgress', {
