@@ -518,34 +518,53 @@ button.danger-outline {
   overscroll-behavior: contain;
 }
 
-/* 删除/归档失败提示：列首行内条，可关闭 */
-.session-action-error {
+/* 主内容区顶部的全局错误条（侧栏删除/归档失败等跨区域提示），可逐条关闭 */
+.global-error-stack {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 6px;
-  margin: 4px 4px 2px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--danger, #e5484d);
-  background: color-mix(in srgb, var(--danger, #e5484d) 10%, transparent);
+  max-width: min(560px, calc(100% - 48px));
+  pointer-events: none;
 }
 
-.session-action-error button {
+.global-error-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--danger, #e5484d);
+  background: color-mix(in srgb, var(--danger, #e5484d) 12%, var(--bg-elevated, #fff));
+  box-shadow: 0 6px 22px rgb(0 0 0 / 22%);
+  pointer-events: auto;
+}
+
+.global-error-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.global-error-item button {
   flex: none;
   display: grid;
   place-items: center;
-  padding: 2px;
+  padding: 3px;
   border: none;
-  border-radius: 4px;
+  border-radius: 5px;
   background: transparent;
   color: inherit;
   cursor: pointer;
 }
 
-.session-action-error button:hover {
+.global-error-item button:hover {
   background: color-mix(in srgb, var(--danger, #e5484d) 14%, transparent);
 }
 
@@ -617,6 +636,7 @@ button.danger-outline {
 }
 
 .content {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -882,6 +902,23 @@ button.danger-outline {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+/* banner 关闭按钮：仅清展示，与重试/选择模型按钮并存 */
+.error-banner .error-banner-dismiss {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.error-banner .error-banner-dismiss:hover {
+  background: color-mix(in srgb, var(--danger, #e5484d) 14%, transparent);
 }
 
 .error-banner button {

@@ -180,6 +180,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const runtimeError = usePaneChatStore((s) => s.runtimeError);
   const lastFailedSwitch = usePaneChatStore((s) => s.lastFailedSwitch);
   const dismissRuntimeError = usePaneChatStore((s) => s.dismissRuntimeError);
+  const dismissStartError = usePaneChatStore((s) => s.dismissStartError);
   const messages = usePaneChatStore((s) => s.messages);
   const historyMessages = usePaneChatStore((s) => s.historyMessages);
   const bashDraft = usePaneChatStore((s) => s.bashDraft);
@@ -767,6 +768,15 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
                 </button>
               </>
             )}
+            <button
+              className="error-banner-dismiss"
+              data-testid="start-error-dismiss"
+              onClick={dismissStartError}
+              aria-label={t('chat.runtimeErrorDismiss')}
+              title={t('chat.runtimeErrorDismiss')}
+            >
+              <X size={14} />
+            </button>
           </div>
         )}
         {onClosePane && !started && (

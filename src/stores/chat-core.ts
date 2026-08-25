@@ -175,6 +175,8 @@ export type ChatState = {
   clearInputDraft: () => void;
   /** 关闭运行期错误行内提示 */
   dismissRuntimeError: () => void;
+  /** 关闭启动/切换失败 banner（仅清展示，不影响面板其余状态） */
+  dismissStartError: () => void;
   /** 消息级 fork：从指定 user 消息分叉新会话（sessionReplaced 事件负责刷新列表） */
   forkFrom: (entryId: string) => Promise<void>;
   /** 编辑并重发：空闲时直接 fork + 回填；流式中先 abort 等 run 结束后 fork + 回填 */
@@ -520,6 +522,9 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       setCommandExcludeFromContext: (excluded) => set({ commandExcludeFromContext: excluded }),
       clearInputDraft: () => set({ inputDraft: null }),
       dismissRuntimeError: () => set({ runtimeError: undefined }),
+      /** 关闭启动/切换失败 banner：仅清展示（旧会话若仍可用不受影响），
+       * 后续 start/switch 失败会重新置位 startError */
+      dismissStartError: () => set({ startError: undefined, startErrorCode: undefined }),
 
       openWorkspaceFile: (rawPath) => {
         const cwd = get().cwd?.replace(/\/$/, '');

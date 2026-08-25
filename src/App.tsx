@@ -25,6 +25,7 @@ import { hostApi } from './lib/host-api';
 import { onNavigateToPage } from './lib/app-navigation';
 import { initTheme } from './lib/theme';
 import { SessionList } from './components/SessionList';
+import { GlobalErrorBanner } from './components/GlobalErrorBanner';
 import { SessionSearchDialog } from './components/SessionSearchDialog';
 import { ExtensionUiNotifications } from './components/ExtensionUiDialog';
 import { TrustDialog } from './components/TrustDialog';
@@ -357,6 +358,8 @@ export default function App() {
         </div>
       </nav>
       <main className="content">
+        {/* 主内容区顶部的全局错误条：侧栏等跨区域操作的失败提示，任何页面可见 */}
+        <GlobalErrorBanner />
         {visitedPages.has('chat') && <div className={`page-view${page === 'chat' ? ' active' : ''}`}><ChatPage searchTarget={chatSearchTarget} onSearchTargetHandled={clearChatSearchTarget} /></div>}
         {visitedPages.has('models') && <div className={`page-view${page === 'models' ? ' active' : ''}`}><ModelsPage /></div>}
         {visitedPages.has('sessions') && <div className={`page-view${page === 'sessions' ? ' active' : ''}`}><SessionsPage onOpenChat={() => navigate('chat')} /></div>}

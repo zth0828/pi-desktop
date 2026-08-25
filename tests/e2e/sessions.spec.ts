@@ -517,11 +517,15 @@ test('流式中删除会话 → 被拒绝且给出可读提示，流结束后可
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
 
-  // main 拒绝删除（session is running）：列表回滚 + 可读失败提示（而非静默复活）
-  const notice = page.getByTestId('session-action-error');
+  // main 拒绝删除（session is running）：列表回滚 + 顶部全局错误提示（而非静默复活）
+  const notice = page.getByTestId('global-error-stack');
   await expect(notice).toBeVisible({ timeout: 15_000 });
   await expect(notice).toContainText('This session is running');
   await expect(row).toHaveCount(1);
+
+  // 提示可关闭：点 X 后消失，删除入口仍可用
+  await notice.getByTestId('global-error-dismiss').click();
+  await expect(notice).toHaveCount(0);
 
   // 等慢速流自然结束（stop 按钮消失），再删 → 成功
   await expect(page.getByTestId('chat-stop')).toHaveCount(0, { timeout: 30_000 });

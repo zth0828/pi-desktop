@@ -116,3 +116,24 @@ test('启动超时 → banner 不卡死面板，后台构建完成后重试即�
   });
   await app.close();
 });
+
+test('启动超时 banner 可关闭，关闭后面板仍可交互', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+    startTimeoutMs: START_TIMEOUT_MS,
+  });
+  const page = await app.firstWindow();
+
+  const banner = page.locator('.error-banner');
+  await expect(banner).toBeVisible({ timeout: 20_000 });
+
+  // 关闭按钮存在且可点：banner 消失，面板不因关闭进入异常态
+  await page.getByTestId('start-error-dismiss').click();
+  await expect(banner).toHaveCount(0);
+  const input = page.getByTestId('chat-input');
+  await expect(input).toBeEnabled();
+  await input.fill('still works after dismiss');
+  await app.close();
+});
