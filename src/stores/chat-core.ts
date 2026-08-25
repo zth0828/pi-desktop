@@ -16,7 +16,13 @@ import type {
   PiUiRequestPayload,
 } from '@shared/host-api/contract';
 import { hostApi, scopedHostApi, type HostApi } from '../lib/host-api';
-import { matchesBoundSession, shouldApplySessionReplaced } from '../lib/session-binding';
+import type { HostInvokeError } from '@shared/host-api/errors';
+import {
+  matchesBoundSession,
+  nextReplacementActionId,
+  SESSION_REPLACEMENT_TIMEOUT,
+  shouldApplySessionReplaced,
+} from '../lib/session-binding';
 import { createStreamBatcher } from '../lib/stream-throttle';
 import { restoreFromText, restoreToComposer } from '../lib/message-restore';
 import {
@@ -60,10 +66,20 @@ export type ChatStoreDeps = {
   reporters?: ChatEventReporters;
 };
 
+/** 发起替换（newSession/fork）后等待 sessionReplaced 的兜底时限 */
+const REPLACEMENT_WAIT_TIMEOUT_MS = 5_000;
+
 export type ChatState = {
   started: boolean;
   starting: boolean;
+  /** 仅承载 start/switchSession 失败（进列内 banner）；运行期错误走 runtimeError */
   startError?: string;
+  /** start/switchSession 失败的错误码（main 侧 HostError code，如 MODEL_UNAVAILABLE）；banner 按它提供分类自救入口 */
+  startErrorCode?: string;
+  /** 运行期操作失败（prompt/bash/队列/分支导航等）：行内可关闭提示，不阻塞对话 */
+  runtimeError?: string;
+  /** switchSession 失败的目标：重试按钮据此重发切换，而不是 start 新会话 */
+  lastFailedSwitch: { path: string; cwd?: string } | null;
   cwd?: string;
   sessionId?: string;
   /**
@@ -77,8 +93,13 @@ export type ChatState = {
    * （main 侧按会话文件路径匹配 runtime）。in-memory 新会话暂无文件，为 null 时回退窗口级调用。
    */
   boundSessionPath: string | null;
-  /** 本面板刚发起会话替换动作，下一个 sessionReplaced 无论 sessionId 都接受并改绑 */
+  /**
+   * 本面板刚发起会话替换动作，下一个 sessionReplaced 无论 sessionId 都接受并改绑。
+   * 放行受 expectedReplacementActionId 相关性约束（见 shouldApplySessionReplaced）。
+   */
   expectingReplacement: boolean;
+  /** 发起替换时记录的动作 id；null = 等待不带发起上下文的事件（switch 兜底） */
+  expectedReplacementActionId: string | null;
   generation: number;
   model?: PiRuntimeModelInfo;
   thinkingLevel: string;
@@ -152,6 +173,8 @@ export type ChatState = {
   setCommandMode: (mode: boolean) => void;
   setCommandExcludeFromContext: (excluded: boolean) => void;
   clearInputDraft: () => void;
+  /** 关闭运行期错误行内提示 */
+  dismissRuntimeError: () => void;
   /** 消息级 fork：从指定 user 消息分叉新会话（sessionReplaced 事件负责刷新列表） */
   forkFrom: (entryId: string) => Promise<void>;
   /** 编辑并重发：空闲时直接 fork + 回填；流式中先 abort 等 run 结束后 fork + 回填 */
@@ -202,6 +225,7 @@ function bindInstanceEvents(
   store: StoreApi<ChatState>,
   onEvent: HostEventSubscriber,
   reporters?: ChatEventReporters,
+  clearReplacementWait?: () => void,
 ): () => void {
   // 流式合帧：assistant.partial / tool.execution.updated 是替换式流式事件，
   // 在 ≤50ms 窗口内合并（同类只留最新）后批量进 store；其余关键事件直透（直透前先
@@ -224,12 +248,24 @@ function bindInstanceEvents(
     onEvent('piRuntime', 'sessionReplaced', (state) => {
       const s = store.getState();
       // 非本面板绑定会话的状态推送丢弃。本面板发起的会话替换
-      // （newSession/fork 后 sessionId 会变）由 expectingReplacement 放行并改绑；
-      // switch 链路在 switchSession 里已用 getState 直接应用并改绑，晚到的
-      // 广播事件 sessionId 与 bound 一致，重复应用幂等。
-      if (!shouldApplySessionReplaced(s.boundSessionId, state.sessionId, s.expectingReplacement, state.replacesSessionId)) return;
+      // （newSession/fork 后 sessionId 会变）由 expectingReplacement 放行并改绑，
+      // 但必须与事件回显的发起动作 id 匹配——同窗口其他面板并发替换的
+      // 事件不能放行（面板劫持竞态）；switch 链路在 switchSession 里已用
+      // getState 直接应用并改绑，晚到的广播事件 sessionId 与 bound 一致，重复应用幂等。
+      if (!shouldApplySessionReplaced(
+        s.boundSessionId,
+        state.sessionId,
+        s.expectingReplacement,
+        {
+          replacesSessionId: state.replacesSessionId,
+          eventActionId: state.replacementActionId,
+          expectedActionId: s.expectedReplacementActionId,
+        },
+      )) return;
       s.applyState(state);
-      store.setState({ boundSessionId: state.sessionId, expectingReplacement: false });
+      // attach 兜底路径（switchSession 里 getState 取不到状态）只有这里能把面板置为已启动
+      clearReplacementWait?.();
+      store.setState({ started: true, boundSessionId: state.sessionId, expectingReplacement: false, expectedReplacementActionId: null });
     }),
     onEvent('piRuntime', 'runtimeStateChanged', (event) => {
       const current = store.getState();
@@ -262,6 +298,15 @@ function bindInstanceEvents(
 }
 
 export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
+  // expectingReplacement 的超时兜底句柄：sessionReplaced 事件丢失（窗口重载、
+  // 订阅竞态）时标志会永远悬挂，之后任意广播都可能误命中，必须在时限内收敛。
+  const replacementTimer: { handle: ReturnType<typeof setTimeout> | null } = { handle: null };
+  const clearReplacementTimer = () => {
+    if (replacementTimer.handle !== null) {
+      clearTimeout(replacementTimer.handle);
+      replacementTimer.handle = null;
+    }
+  };
   const store = createStore<ChatState>()((set, get) => {
     // 面板内 host 调用寻址：已绑定会话走 scoped client（信封带会话文件路径，
     // main 侧优先于窗口绑定路由到本面板 runtime）；未绑定（start 引导期 / in-memory 会话）
@@ -271,12 +316,30 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       return path ? scopedHostApi(path) : hostApi;
     };
 
+    // 撤销替换等待（事件已应用 / 动作失败 / 新绑定建立）：清定时器与标志
+    const endReplacementWait = () => {
+      clearReplacementTimer();
+      set({ expectingReplacement: false, expectedReplacementActionId: null });
+    };
+    // 进入替换等待并记录发起上下文；超时未收到匹配事件则收敛标志并报运行期错误
+    const beginReplacementWait = (actionId: string | null) => {
+      clearReplacementTimer();
+      set({ expectingReplacement: true, expectedReplacementActionId: actionId });
+      replacementTimer.handle = setTimeout(() => {
+        replacementTimer.handle = null;
+        if (!get().expectingReplacement) return;
+        set({ expectingReplacement: false, expectedReplacementActionId: null, runtimeError: SESSION_REPLACEMENT_TIMEOUT });
+      }, REPLACEMENT_WAIT_TIMEOUT_MS);
+    };
+
     return {
       started: false,
       starting: false,
+      lastFailedSwitch: null,
       boundSessionId: null,
       boundSessionPath: null,
       expectingReplacement: false,
+      expectedReplacementActionId: null,
       generation: 0,
       thinkingLevel: 'off',
       availableThinkingLevels: [],
@@ -314,7 +377,9 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         // 页面来回切换会重挂 ChatPane：同 cwd 的重复 start 直接忽略，
         // 否则会闪「正在启动会话…」并被 applyState 无谓重置。
         if (current.started && current.cwd === cwd) return;
-        set({ starting: true, startError: undefined });
+        // start 的语义是「在工作区新起会话」：清掉历史失败切换记录，
+        // 否则此后 banner 的重试按钮会误重试旧的 switchSession 目标
+        set({ starting: true, startError: undefined, startErrorCode: undefined, lastFailedSwitch: null });
         try {
           // start 是引导动作（面板尚未绑定会话），走窗口级 hostApi。
           // 兜底超时：main 侧也有自己的超时，这里防 IPC 完全无响应把页面卡死
@@ -325,14 +390,18 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             }),
           ]);
           get().applyState(state);
-          set({ started: true, starting: false, boundSessionId: state.sessionId });
+          set({ started: true, starting: false, boundSessionId: state.sessionId, startErrorCode: undefined });
         } catch (err) {
-          set({ starting: false, startError: err instanceof Error ? err.message : String(err) });
+          set({
+            starting: false,
+            startError: err instanceof Error ? err.message : String(err),
+            startErrorCode: (err as HostInvokeError).code,
+          });
         }
       },
 
       switchSession: async (path, cwd) => {
-        set({ starting: true, startError: undefined, pendingEditEntryId: null });
+        set({ starting: true, startError: undefined, startErrorCode: undefined, pendingEditEntryId: null });
         try {
           // 用切换前的绑定寻址本面板 runtime（main 侧据此决定复用/新建/改绑）；
           // 尚未绑定（新面板 attach）时按目标路径寻址：窗口级调用会把
@@ -341,7 +410,10 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           const result = await (fromPath ? scopedHostApi(fromPath) : scopedHostApi(path))
             .piSessions.switch(path, cwd);
           if (!result.success) {
-            set({ starting: false, startError: result.error });
+            // 旧会话 runtime 仍可用：保留 started 现值与消息展示（面板此前无会话时
+            // started 本来就是 false），仅记录失败目标供重试按钮重发切换。
+            // success:false 返回值不携带错误码（main 侧模型类失败已改为抛 HostError）
+            set({ starting: false, startError: result.error, startErrorCode: undefined, lastFailedSwitch: { path, cwd } });
             return result;
           }
           // 目标即当前会话的早退路径不推事件，统一重取状态（事件晚到时 sessionId 已匹配，幂等）。
@@ -350,15 +422,20 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           const state = await scopedHostApi(path).piRuntime.getState().catch(() => null);
           if (state) {
             get().applyState(state);
-            set({ started: true, starting: false, boundSessionId: state.sessionId });
+            // 成功切换即建立新绑定：撤销尚未到账的替换等待，
+            // 避免迟到的旧替换事件（动作 id 仍匹配）把面板劫持回旧目标
+            endReplacementWait();
+            set({ started: true, starting: false, boundSessionId: state.sessionId, lastFailedSwitch: null, startErrorCode: undefined });
           } else {
             // 取不到状态时放行下一次 sessionReplaced 兜底
-            set({ starting: false, expectingReplacement: true });
+            // （switch 事件不带发起动作 id，等待同样不记录，凭此区分并发的新建/分叉）
+            set({ starting: false, lastFailedSwitch: null });
+            beginReplacementWait(null);
           }
           return { success: true };
         } catch (err) {
           const error = err instanceof Error ? err.message : String(err);
-          set({ starting: false, startError: error });
+          set({ starting: false, startError: error, startErrorCode: (err as HostInvokeError).code, lastFailedSwitch: { path, cwd } });
           return { success: false, error };
         }
       },
@@ -370,7 +447,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
         const result = await api().piRuntime.prompt(text, images, behavior);
-        if (!result.success) set({ startError: result.error });
+        if (!result.success) set({ runtimeError: result.error });
       },
 
       abort: async () => {
@@ -390,7 +467,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       runBash: async (command, excludeFromContext) => {
         set({ bashDraft: { command, output: '', excludeFromContext } });
         const result = await api().piRuntime.executeBash({ command, excludeFromContext });
-        if (!result.success) set({ bashDraft: null, startError: result.error });
+        if (!result.success) set({ bashDraft: null, runtimeError: result.error });
         // 成功后草稿清理由两条路覆盖：非流式 main 推 sessionReplaced（applyState 清），
         // 流式中 pi 延迟落消息，run.ended 时 refreshMessages 并清。
       },
@@ -398,7 +475,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       queueRemove: async (kind, index) => {
         const result = await api().piRuntime.queueRemove(kind, index);
         if (!result.success) {
-          set({ startError: result.error });
+          set({ runtimeError: result.error });
           return;
         }
         if (result.text) {
@@ -409,14 +486,20 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
 
       queueMove: async (kind, index, target) => {
         const result = await api().piRuntime.queueMove(kind, index, target);
-        if (!result.success) set({ startError: result.error });
+        if (!result.success) set({ runtimeError: result.error });
       },
 
       newSession: async () => {
-        // 新会话 sessionId 会变：放行随后的 sessionReplaced 并改绑
-        set({ expectingReplacement: true, pendingEditEntryId: null });
-        const result = await api().piRuntime.newSession();
-        if (!result.success) set({ expectingReplacement: false, startError: result.error });
+        // 新会话 sessionId 会变：放行随后的 sessionReplaced 并改绑。
+        // 携带动作 id 让并发替换的各面板只认领自己发起的那次事件。
+        const actionId = nextReplacementActionId();
+        beginReplacementWait(actionId);
+        set({ pendingEditEntryId: null });
+        const result = await api().piRuntime.newSession({ actionId });
+        if (!result.success) {
+          endReplacementWait();
+          set({ runtimeError: result.error });
+        }
         // sessionReplaced 事件会带回新状态
       },
 
@@ -436,6 +519,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       setCommandMode: (mode) => set({ commandMode: mode }),
       setCommandExcludeFromContext: (excluded) => set({ commandExcludeFromContext: excluded }),
       clearInputDraft: () => set({ inputDraft: null }),
+      dismissRuntimeError: () => set({ runtimeError: undefined }),
 
       openWorkspaceFile: (rawPath) => {
         const cwd = get().cwd?.replace(/\/$/, '');
@@ -457,11 +541,14 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           ? restoreToComposer(targetMessage)
           : null;
 
-        // fork 产生新会话（sessionId 变）：放行随后的 sessionReplaced 并改绑
-        set({ expectingReplacement: true });
-        const result = await api().piRuntime.fork(entryId);
+        // fork 产生新会话（sessionId 变）：放行随后的 sessionReplaced 并改绑。
+        // 携带动作 id 让并发替换的各面板只认领自己发起的那次事件。
+        const actionId = nextReplacementActionId();
+        beginReplacementWait(actionId);
+        const result = await api().piRuntime.fork(entryId, actionId);
         if (!result.success) {
-          set({ expectingReplacement: false, startError: result.error });
+          endReplacementWait();
+          set({ runtimeError: result.error });
           return;
         }
         // sessionReplaced 事件刷新消息列表；被选消息文本与附件回填输入框供编辑重发
@@ -484,7 +571,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           } catch (err) {
             set({
               pendingEditEntryId: null,
-              startError: err instanceof Error ? err.message : String(err),
+              runtimeError: err instanceof Error ? err.message : String(err),
             });
           }
           return;
@@ -496,7 +583,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         const result = await api().piRuntime.navigateTree(targetId, options);
         if (!result.success) {
           // aborted（摘要被打断）由 TreeDialog 收回交互，不进错误条
-          if (!result.aborted) set({ startError: result.error });
+          if (!result.aborted) set({ runtimeError: result.error });
           return result;
         }
         // 目标是 user 消息时 pi 把文本退回编辑器（/tree 语义）
@@ -532,6 +619,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           sessionId: state.sessionId,
           generation: state.generation,
           boundSessionPath: state.sessionFile ?? null,
+          // 会话状态整体替换（start/switch/sessionReplaced）：旧会话的运行期错误已过期
+          runtimeError: undefined,
           model: state.model,
           thinkingLevel: state.thinkingLevel,
           availableThinkingLevels: state.availableThinkingLevels ?? [],
@@ -775,8 +864,13 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
     };
   });
-  const dispose = deps.onEvent
-    ? bindInstanceEvents(store, deps.onEvent, deps.reporters)
+  // dispose 同时清替换等待定时器：面板卸载后超时回调再触发就是对已废弃实例写状态
+  const unbindEvents = deps.onEvent
+    ? bindInstanceEvents(store, deps.onEvent, deps.reporters, clearReplacementTimer)
     : () => {};
+  const dispose = () => {
+    clearReplacementTimer();
+    unbindEvents();
+  };
   return Object.assign(store, { dispose });
 }

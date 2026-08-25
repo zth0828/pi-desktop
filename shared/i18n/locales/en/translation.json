@@ -388,6 +388,14 @@
     },
     "startTimeout": "Session start timed out. Please try again.",
     "startRetry": "Retry",
+    "switchFailedNote": "Failed to open that session. The previous session is still shown and remains usable.",
+    "runtimeErrorTitle": "Action failed",
+    "runtimeErrorDismiss": "Dismiss",
+    "error": {
+      "modelUnavailable": "The model used by this session is unavailable ({{provider}}/{{model}}). Please choose another model.",
+      "chooseModel": "Choose model",
+      "retrySwitch": "Retry opening session"
+    },
     "modelMenu": {
       "model": "Model",
       "empty": "No models available",
@@ -420,6 +428,7 @@
       "upstream": "Upstream issue: the request reached the server, but the provider's own upstream is failing. Retry later, or contact the provider with the request ID below.",
       "rateLimit": "Rate limited: too many requests — wait a moment and retry.",
       "quota": "Account quota or usage limit reached: contact the provider to top up or renew.",
+      "replacementTimeout": "Session replacement timed out without confirmation. Please retry or switch sessions.",
       "requestId": "Request ID: {{id}}"
     }
   },
@@ -934,6 +943,7 @@
     "dropSplitTop": "Release to split above",
     "dropSplitBottom": "Release to split below",
     "dropReplace": "Release to replace this pane's session",
+    "dropAlreadyOpen": "This session is already open in a pane",
     "dragHint": "Drop on a pane edge to split, center to replace; drag outside the window to open a detached window; Esc to cancel"
   },
   "trust": {

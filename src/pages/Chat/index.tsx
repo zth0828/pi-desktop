@@ -2,10 +2,12 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useTranslation } from 'react-i18next';
 import { ArrowDown, Check, ChevronRight, PanelRight, X } from 'lucide-react';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
+import { parseProviderError } from '@shared/provider-error';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { cacheHitRate, summarizeUsage } from '../../lib/usage-stats';
 import { hostApi } from '../../lib/host-api';
 import { onHostEvent } from '../../lib/host-events';
+import { SESSION_REPLACEMENT_TIMEOUT } from '../../lib/session-binding';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
 import { workspaceErrorMessage } from '../../lib/workspace-error';
 import { timingMark } from '../../lib/timing';
@@ -168,9 +170,15 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const chatStore = usePaneChatStoreApi();
   const [cwd, setCwd] = useState<string | undefined>();
   const [workspaceError, setWorkspaceError] = useState<string>();
+  // 模型不可用 banner 的「选择模型」入口信号（nonce 递增：重复点击每次都触发打开）
+  const [modelMenuNonce, setModelMenuNonce] = useState(0);
   const started = usePaneChatStore((s) => s.started);
   const starting = usePaneChatStore((s) => s.starting);
   const startError = usePaneChatStore((s) => s.startError);
+  const startErrorCode = usePaneChatStore((s) => s.startErrorCode);
+  const runtimeError = usePaneChatStore((s) => s.runtimeError);
+  const lastFailedSwitch = usePaneChatStore((s) => s.lastFailedSwitch);
+  const dismissRuntimeError = usePaneChatStore((s) => s.dismissRuntimeError);
   const messages = usePaneChatStore((s) => s.messages);
   const historyMessages = usePaneChatStore((s) => s.historyMessages);
   const bashDraft = usePaneChatStore((s) => s.bashDraft);
@@ -702,20 +710,55 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     );
   }
 
+  // banner 重试语义：上次失败的是会话切换时重发切换（start 会因 started 守卫早退且语义不符），
+  // 否则按原语义在工作区重启会话
+  const retryStart = lastFailedSwitch
+    ? () => void switchSession(lastFailedSwitch.path, lastFailedSwitch.cwd)
+    : () => void start(effectiveCwd);
+
+  // 模型不可用（MODEL_UNAVAILABLE）：provider/model 从错误文本解析供文案插值；
+  // 解析不出（如网关 503 文案不含 provider/id）时退回原始错误展示
+  const unavailableModel = startErrorCode === 'MODEL_UNAVAILABLE' && startError
+    ? parseProviderError(startError)
+    : undefined;
+  const unavailableProvider = unavailableModel?.providerId;
+  const unavailableModelId = unavailableModel?.modelId;
+  const modelUnavailable = unavailableProvider !== undefined && unavailableModelId !== undefined;
+
   return (
     <div className={`chat-page${workspaceVisible ? ' workspace-visible' : ''}`}>
-      {startError && (
-        <div className="error-banner">
-          <span>{startError === 'start-timeout' ? t('chat.startTimeout') : workspaceErrorMessage(startError, t)}</span>
-          {effectiveCwd && (
-            <button data-testid="start-retry" onClick={() => void start(effectiveCwd)}>
-              {t('chat.startRetry')}
-            </button>
-          )}
-        </div>
-      )}
-
       <div className="chat-column">
+        {startError && (
+          <div className="error-banner">
+            <div className="error-banner-text">
+              <span>
+                {modelUnavailable
+                  ? t('chat.error.modelUnavailable', { provider: unavailableProvider, model: unavailableModelId })
+                  : startError === 'start-timeout' ? t('chat.startTimeout') : workspaceErrorMessage(startError, t)}
+              </span>
+              {lastFailedSwitch && started && (
+                <span className="error-banner-note" data-testid="switch-failed-note">
+                  {t('chat.switchFailedNote')}
+                </span>
+              )}
+            </div>
+            {effectiveCwd && (
+              <>
+                {modelUnavailable && (
+                  <button
+                    data-testid="model-unavailable-choose"
+                    onClick={() => setModelMenuNonce((nonce) => nonce + 1)}
+                  >
+                    {t('chat.error.chooseModel')}
+                  </button>
+                )}
+                <button data-testid="start-retry" onClick={retryStart}>
+                  {modelUnavailable ? t('chat.error.retrySwitch') : t('chat.startRetry')}
+                </button>
+              </>
+            )}
+          </div>
+        )}
         {onClosePane && !started && (
           <button className="icon-button pane-close-floating" data-testid="pane-close" title={t('chat.closePane')} aria-label={t('chat.closePane')} onClick={onClosePane}>
             <X size={16} />
@@ -787,11 +830,27 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
           )}
         </div>
 
+        {runtimeError && (
+          <div className="runtime-error-notice" data-testid="runtime-error-notice" role="alert">
+            <span className="runtime-error-text">
+              <span className="runtime-error-title">{t('chat.runtimeErrorTitle')}</span>
+              {/* store 保持 node-safe 不能引 i18n：替换超时以哨兵值入 state，这里翻译 */}
+              {runtimeError === SESSION_REPLACEMENT_TIMEOUT
+                ? t('chat.errors.replacementTimeout')
+                : runtimeError}
+            </span>
+            <button type="button" data-testid="runtime-error-dismiss" onClick={dismissRuntimeError}>
+              {t('chat.runtimeErrorDismiss')}
+            </button>
+          </div>
+        )}
+
         <ExtensionWidgets placement="aboveEditor" />
         <StatusBar />
         <ChatInput
           cwd={effectiveCwd}
           onChooseWorkspace={chooseWorkspace}
+          openModelMenuNonce={modelMenuNonce}
         />
         <ExtensionWidgets placement="belowEditor" />
       </div>

@@ -861,6 +861,54 @@ button.danger-outline {
   font-size: 12px;
 }
 
+/* banner 内文本列：主错误 + 切换失败附注（旧会话仍在展示时的说明） */
+.error-banner-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.error-banner-note {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* 运行期错误行内提示（prompt/bash 等操作失败）：消息区与输入区之间，可关闭、不打断对话 */
+.runtime-error-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 24px 6px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.runtime-error-notice .runtime-error-title {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.runtime-error-notice .runtime-error-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.runtime-error-notice button {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border: 1px solid currentColor;
+  border-radius: 7px;
+  font-size: 12px;
+  background: transparent;
+  color: currentColor;
+  cursor: pointer;
+}
+
 /* 会话启动中的占位：放在 message-list 内，布局与正常会话一致 */
 
 .chat-starting {
@@ -5567,6 +5615,24 @@ button.danger-outline {
 .pane-drop-highlight.zone-right { top: 6px; bottom: 6px; right: 6px; width: calc(25% - 6px); }
 .pane-drop-highlight.zone-top { left: 6px; right: 6px; top: 6px; height: calc(25% - 6px); }
 .pane-drop-highlight.zone-bottom { left: 6px; right: 6px; bottom: 6px; height: calc(25% - 6px); }
+/* 拖的会话已在某面板打开：整面板高亮（不分四区），配合"已在某面板打开"文案 */
+.pane-drop-highlight.zone-already-open { inset: 6px; }
+
+/* 已打开会话拖入松手：持有面板播放一次认领闪烁（forwards 停留透明态，
+   重复触发由组件 key 变化重挂载重放动画） */
+.pane-claimed-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 131;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  animation: pane-claimed-flash-kf 0.45s ease-out forwards;
+}
+@keyframes pane-claimed-flash-kf {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
 
 /* 落区操作描述：固定在覆盖层中心（指针在边缘区时也落在面板中心，不遮挡高亮块） */
 .pane-drop-label {

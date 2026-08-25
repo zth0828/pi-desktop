@@ -38,6 +38,8 @@ function detectAtToken(text: string, caret: number): AtToken | null {
 type ChatInputProps = {
   cwd: string;
   onChooseWorkspace: () => Promise<void>;
+  /** 「选择模型」入口信号（nonce 递增触发打开模型菜单；0 = 无请求） */
+  openModelMenuNonce?: number;
 };
 
 type FollowupBehavior = 'queue' | 'steer';
@@ -117,7 +119,7 @@ function lastAssistantText(messages: ChatMessage[]): string | null {
   return null;
 }
 
-export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
+export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: ChatInputProps) {
   const { t } = useTranslation();
   const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
   const [commands, setCommands] = useState<PiCommandRow[]>([]);
@@ -321,6 +323,13 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   useEffect(() => {
     if (model) setModelKey(`${model.provider}/${model.id}`);
   }, [model]);
+
+  // banner「选择模型」入口信号：打开模型菜单（面板作用域，nonce 变化即触发）
+  useEffect(() => {
+    if (openModelMenuNonce <= 0) return;
+    setModelMenuSection('models');
+    setModelMenuOpen(true);
+  }, [openModelMenuNonce]);
 
   // 当前工作区 git 分支：cwd 切换后立即刷新，并低频轮询跟随 checkout 换分支
   // （与 pi TUI footer 同口径；非仓库返回 null 时不显示 chip）。
@@ -534,6 +543,11 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         return;
       }
       chatStore.getState().applyModelUpdate(result);
+      // 打开会话因模型不可用失败时：选定可用模型后自动重试切换目标会话
+      const state = chatStore.getState();
+      if (state.startErrorCode === 'MODEL_UNAVAILABLE' && state.lastFailedSwitch) {
+        void state.switchSession(state.lastFailedSwitch.path, state.lastFailedSwitch.cwd);
+      }
       const nextUsage = await paneApi.piRuntime.getUsage();
       setUsage(nextUsage);
     });

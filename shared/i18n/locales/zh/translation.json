@@ -388,6 +388,14 @@
     },
     "startTimeout": "会话启动超时，请检查后重试",
     "startRetry": "重试",
+    "switchFailedNote": "打开该会话失败，当前仍显示原会话，可继续对话。",
+    "runtimeErrorTitle": "操作失败",
+    "runtimeErrorDismiss": "关闭",
+    "error": {
+      "modelUnavailable": "该会话使用的模型不可用（{{provider}}/{{model}}），请选择其他模型",
+      "chooseModel": "选择模型",
+      "retrySwitch": "重试打开会话"
+    },
     "modelMenu": {
       "model": "模型",
       "empty": "暂无可用模型",
@@ -420,6 +428,7 @@
       "upstream": "这是服务商（上游）问题：请求已到达服务器，但服务商自己的上游渠道异常。请稍后重试，或联系服务商并提供下方请求 ID。",
       "rateLimit": "上游限流：请求过于频繁，请稍等片刻再试。",
       "quota": "账号配额或用量已达上限：需要联系服务商充值或续期。",
+      "replacementTimeout": "会话替换超时未确认，请重试或切换会话。",
       "requestId": "请求 ID：{{id}}"
     }
   },
@@ -934,6 +943,7 @@
     "dropSplitTop": "松手在上方分栏",
     "dropSplitBottom": "松手在下方分栏",
     "dropReplace": "松手替换当前面板会话",
+    "dropAlreadyOpen": "该会话已在某面板打开",
     "dragHint": "拖到面板边缘分栏 / 中心替换；拖出窗口打开独立窗口；Esc 取消"
   },
   "trust": {
