@@ -619,6 +619,8 @@ export const providersApi = {
             : null;
           if (model && model.id === payload.modelId) {
             model.input = payload.image ? ['text', 'image'] : ['text'];
+            // 用户显式声明：发现合并刷新陈旧字段时不覆盖（models.json 纯 JSON 解析，额外字段安全）
+            model.inputPinned = true;
             found = true;
           }
         }

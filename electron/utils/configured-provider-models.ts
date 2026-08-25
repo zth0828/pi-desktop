@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
-import { matchModelProfile } from '@shared/model-profiles';
+import { matchModelProfile, matchModelProfileEntry } from '@shared/model-profiles';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -138,6 +138,52 @@ export function parseProviderModelDirectory(payload: unknown, api: string): Dete
   return detected;
 }
 
+/** 历史兜底 contextWindow：这些值说明记录来自旧版缺省写入而非真实目录/规格数据。 */
+const LEGACY_FALLBACK_CONTEXT_WINDOWS = new Set([DEFAULT_CONTEXT_WINDOW, 128000]);
+
+/** current.input 是否为历史默认（缺失或 ['text']）：可被目录/规格表升级。 */
+function isLegacyDefaultInput(current: JsonRecord): boolean {
+  const input = current.input;
+  if (!Array.isArray(input)) return true;
+  return input.length === 1 && input[0] === 'text';
+}
+
+/**
+ * 已存在模型的陈旧字段刷新：只纠正历史缺省写入的值，用户改过的字段不动。
+ * - input：未 pin（inputPinned !== true）且当前为历史默认 → 目录上报/规格表升级。
+ * - contextWindow：缺失或等于兜底值 → 目录 > template > 规格表。
+ * - maxTokens：缺失 → 目录 > template > 规格表。
+ * reasoning/cost/name 与用户改过的非兜底 contextWindow 保持原样。
+ */
+function refreshStaleModel(
+  current: JsonRecord,
+  model: DetectedModel | null,
+  template: JsonRecord,
+): JsonRecord {
+  const next: JsonRecord = { ...current };
+  const { matched, profile } = matchModelProfileEntry(String(current.id ?? ''));
+  const detectedInput = model?.input ?? (matched ? profile.input : undefined);
+  if (current.inputPinned !== true && isLegacyDefaultInput(current) && detectedInput) {
+    next.input = detectedInput;
+  }
+  const currentContext = positiveNumber(current.contextWindow);
+  // template（用户/目录写过的真实值）优先；未命中规格表时兜底 profile 只是
+  // 保守默认，不作为"更准确值"写入。
+  const betterContext = model?.contextWindow
+    ?? positiveNumber(template.contextWindow)
+    ?? (matched ? profile.contextWindow : undefined);
+  if ((!currentContext || LEGACY_FALLBACK_CONTEXT_WINDOWS.has(currentContext)) && betterContext) {
+    next.contextWindow = betterContext;
+  }
+  if (!positiveNumber(current.maxTokens)) {
+    const maxTokens = model?.maxTokens
+      ?? positiveNumber(template.maxTokens)
+      ?? (matched ? profile.maxTokens : undefined);
+    if (maxTokens) next.maxTokens = maxTokens;
+  }
+  return next;
+}
+
 export function mergeDiscoveredProviderModels(existing: unknown[], detected: DetectedModel[]): JsonRecord[] {
   const existingModels = existing.map(record).filter((model): model is JsonRecord => model !== null);
   const byId = new Map(existingModels.map((model) => [String(model.id ?? ''), model]));
@@ -145,15 +191,7 @@ export function mergeDiscoveredProviderModels(existing: unknown[], detected: Det
   const merged = detected.map((model) => {
     const current = byId.get(model.id);
     if (current) {
-      if (!positiveNumber(current.contextWindow)) {
-        return {
-          ...current,
-          contextWindow: model.contextWindow
-            ?? positiveNumber(template.contextWindow)
-            ?? DEFAULT_CONTEXT_WINDOW,
-        };
-      }
-      return current;
+      return refreshStaleModel(current, model, template);
     }
     return {
       id: model.id,
@@ -177,7 +215,11 @@ export function mergeDiscoveredProviderModels(existing: unknown[], detected: Det
     };
   });
   const detectedIds = new Set(detected.map((model) => model.id));
-  merged.push(...existingModels.filter((model) => !detectedIds.has(String(model.id ?? ''))));
+  // 目录未列出的旧模型（手动 modelIds 添加）也走规格表刷新：多模态/规格识别
+  // 不应因目录不收录而失效。
+  merged.push(...existingModels
+    .filter((model) => !detectedIds.has(String(model.id ?? '')))
+    .map((model) => refreshStaleModel(model, null, template)));
   return merged;
 }
 

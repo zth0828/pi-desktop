@@ -104,10 +104,50 @@ describe('configured provider model discovery', () => {
   });
 
   it('keeps manually declared input for existing models', () => {
-    // 用户逐模型写过的 input 不被发现流程覆盖（与 reasoning 同策略）
-    const existing = [{ id: 'gemini-2.5-pro', reasoning: true, input: ['text'], contextWindow: 1048576 }];
+    // 用户逐模型写过的 input（inputPinned）不被发现流程覆盖（与 reasoning 同策略）
+    const existing = [{
+      id: 'gemini-2.5-pro',
+      reasoning: true,
+      input: ['text'],
+      inputPinned: true,
+      contextWindow: 1048576,
+    }];
     const merged = mergeDiscoveredProviderModels(existing, [{ id: 'gemini-2.5-pro', input: ['text', 'image'] }]);
     expect(merged[0]).toEqual(expect.objectContaining({ id: 'gemini-2.5-pro', input: ['text'] }));
+  });
+
+  it('upgrades legacy text-only input to vision when directory or profile recognises it', () => {
+    // 历史版本一律写死 input: ['text'] 且无 pin 标记：视为陈旧缺省值，刷新时纠正
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'gemini-2.5-pro', reasoning: true, input: ['text'], contextWindow: 1048576 }],
+      [{ id: 'gemini-2.5-pro' }],
+    );
+    expect(merged[0]).toEqual(expect.objectContaining({ input: ['text', 'image'] }));
+  });
+
+  it('refreshes stale legacy fallback context window and missing maxTokens', () => {
+    // 兜底 contextWindow（262144/128000）是历史缺省写入，用目录真实值替换
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'gateway-model', reasoning: true, input: ['text'], contextWindow: 262144 }],
+      [{ id: 'gateway-model', contextWindow: 1000000, maxTokens: 65536 }],
+    );
+    expect(merged[0]).toEqual(expect.objectContaining({ contextWindow: 1000000, maxTokens: 65536 }));
+    // 用户改过的非兜底 contextWindow 不动
+    const kept = mergeDiscoveredProviderModels(
+      [{ id: 'gateway-model', reasoning: true, contextWindow: 32000 }],
+      [{ id: 'gateway-model', contextWindow: 1000000 }],
+    );
+    expect(kept[0]).toEqual(expect.objectContaining({ contextWindow: 32000 }));
+  });
+
+  it('applies profile-table refresh to existing models missing from the directory', () => {
+    // 手动 modelIds 添加、目录未列出的旧模型同样享受规格表识别（多模态/规格）
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'qwen3-vl-plus', reasoning: true, input: ['text'], contextWindow: 128000 }],
+      [{ id: 'other-model' }],
+    );
+    expect(merged.find((m) => m.id === 'qwen3-vl-plus'))
+      .toEqual(expect.objectContaining({ input: ['text', 'image'] }));
   });
 
 

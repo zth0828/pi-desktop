@@ -132,6 +132,13 @@ export const MODEL_PROFILES: ProfileEntry[] = [
  * vLLM/Ollama 的模型 id 常带组织前缀（Qwen/Qwen3-VL-8B），除完整 id 外
  * 也匹配斜杠后的基础模型名。 */
 export function matchModelProfile(modelId: string): ModelProfile {
+  const { profile } = matchModelProfileEntry(modelId);
+  return profile;
+}
+
+/** 带命中标志的匹配：未命中时 profile 是保守兜底而非真实规格，
+ * 调用方（陈旧字段刷新）不应把兜底值当作"更准确值"写入。 */
+export function matchModelProfileEntry(modelId: string): { matched: boolean; profile: ModelProfile } {
   const normalized = modelId.toLowerCase();
   const candidates = normalized.includes('/')
     ? [normalized, normalized.split('/').pop() ?? '']
@@ -141,14 +148,18 @@ export function matchModelProfile(modelId: string): ModelProfile {
   for (const candidate of candidates) {
     for (const { prefix, profile } of MODEL_PROFILES) {
       const p = prefix.toLowerCase();
-      if (p && !candidate.startsWith(p)) continue;
+      // 空前缀是兜底条目（匹配一切），不算真实命中
+      if (!p) continue;
+      if (!candidate.startsWith(p)) continue;
       if (p.length > bestLength) {
         best = profile;
         bestLength = p.length;
       }
     }
   }
-  return best ?? MODEL_PROFILES[MODEL_PROFILES.length - 1].profile;
+  return best
+    ? { matched: true, profile: best }
+    : { matched: false, profile: MODEL_PROFILES[MODEL_PROFILES.length - 1].profile };
 }
 
 /** 模型是否支持图像输入（多模态识别入口）。 */
