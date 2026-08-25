@@ -54,7 +54,9 @@ function modelDisplayName(model: PiModelRow, provider: PiProviderRow): string {
   return name;
 }
 
-function formatRate(rate: number): string {
+function formatRate(rate: number | undefined): string {
+  // 未上报价格 → 占位；真 0（如免费/本地模型）仍显示 $0
+  if (rate === undefined || rate === null) return '—';
   return rate === 0 ? '$0' : `$${rate.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
 }
 
@@ -327,28 +329,49 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
             >
               <div className="provider-edit-dialog">
                 <div className="provider-edit-form-title">{t('models.editProviderTitle')}</div>
-                <input
-                  data-testid={`edit-name-${provider.id}`}
-                  placeholder={t('models.customName')}
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                />
-                <input
-                  data-testid={`edit-base-url-${provider.id}`}
-                  placeholder={t('models.customBaseUrl')}
-                  value={editBaseUrl}
-                  onChange={(e) => setEditBaseUrl(e.target.value)}
-                />
-                <select
-                  aria-label={t('models.customApi')}
-                  data-testid={`edit-api-${provider.id}`}
-                  value={editApi}
-                  onChange={(e) => setEditApi(e.target.value)}
-                >
-                  {CUSTOM_API_TYPES.map((apiType) => (
-                    <option key={apiType} value={apiType}>{apiType}</option>
-                  ))}
-                </select>
+                <div className="provider-field">
+                  <label htmlFor={`edit-name-${provider.id}`}>{t('models.fieldName')}</label>
+                  <input
+                    id={`edit-name-${provider.id}`}
+                    data-testid={`edit-name-${provider.id}`}
+                    placeholder={t('models.customName')}
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                  <div className="provider-field-hint">{t('models.fieldNameHint')}</div>
+                </div>
+                <div className="provider-field">
+                  <label htmlFor={`edit-base-url-${provider.id}`}>{t('models.fieldBaseUrl')}</label>
+                  <input
+                    id={`edit-base-url-${provider.id}`}
+                    data-testid={`edit-base-url-${provider.id}`}
+                    placeholder={t('models.customBaseUrl')}
+                    value={editBaseUrl}
+                    onChange={(e) => setEditBaseUrl(e.target.value)}
+                  />
+                  <div className="provider-field-hint">{t('models.fieldBaseUrlHint')}</div>
+                </div>
+                <div className="provider-field">
+                  <label htmlFor={`edit-api-${provider.id}`}>{t('models.fieldApi')}</label>
+                  <select
+                    id={`edit-api-${provider.id}`}
+                    aria-label={t('models.customApi')}
+                    data-testid={`edit-api-${provider.id}`}
+                    value={editApi}
+                    onChange={(e) => setEditApi(e.target.value)}
+                  >
+                    {CUSTOM_API_TYPES.map((apiType) => (
+                      <option key={apiType} value={apiType}>{apiType}</option>
+                    ))}
+                  </select>
+                  {/* 当前选中适配器的用途说明：随选项与语言即时更新 */}
+                  <div
+                    className="provider-field-hint"
+                    data-testid={`edit-api-hint-${provider.id}`}
+                  >
+                    {t(`models.apiHint.${editApi}`)}
+                  </div>
+                </div>
                 <div className="actions">
                   <button
                     className="primary"
@@ -388,10 +411,10 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                     output: m.maxTokens?.toLocaleString() ?? '—',
                   });
                   const pricingText = t('models.pricing', {
-                    input: formatRate(m.cost.input),
-                    output: formatRate(m.cost.output),
-                    cacheRead: formatRate(m.cost.cacheRead),
-                    cacheWrite: formatRate(m.cost.cacheWrite),
+                    input: formatRate(m.cost?.input),
+                    output: formatRate(m.cost?.output),
+                    cacheRead: formatRate(m.cost?.cacheRead),
+                    cacheWrite: formatRate(m.cost?.cacheWrite),
                   });
                   const metaTitle = [
                     m.input?.includes('image') ? t('models.visionMeta') : '',
@@ -407,16 +430,17 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                     data-testid={`provider-model-${provider.id}-${m.id}`}
                   >
                     <div className="provider-model-main">
-                      <div>
-                        <span className="provider-model-name">{modelDisplayName(m, provider)}</span>
-                        {m.name && m.name !== m.id && <span className="hint">{m.id}</span>}
-                      </div>
-                      {/* meta 拆片段：数字片段内不换行不截断，容器可折行到第二行；title 提供全文 */}
-                      <span
-                        className="provider-model-meta"
-                        title={metaTitle}
-                        data-testid={`provider-model-meta-${provider.id}-${m.id}`}
-                      >
+                      {/* 行1：名称 + ID（超长 ellipsis，title 悬浮全文）+ 视觉徽标 */}
+                      <div className="provider-model-title">
+                        <span
+                          className="provider-model-name"
+                          title={modelDisplayName(m, provider)}
+                        >
+                          {modelDisplayName(m, provider)}
+                        </span>
+                        {m.name && m.name !== m.id && (
+                          <span className="provider-model-id hint" title={m.id}>{m.id}</span>
+                        )}
                         {m.input?.includes('image') && (
                           <span
                             className="provider-model-vision"
@@ -425,15 +449,29 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                             {t('models.visionMeta')}
                           </span>
                         )}
-                        <span className="provider-model-meta-chunk">{m.api}</span>
-                        <span className="provider-model-meta-chunk">{contextText}</span>
-                        <span
-                          className="provider-model-meta-chunk"
-                          data-testid={`provider-model-meta-output-${provider.id}-${m.id}`}
-                        >
-                          {outputText}
+                      </div>
+                      {/* 行2：协议 · 上下文 · 最大输出；行3：价格。meta 容器 testid 供 E2E 断言 */}
+                      <span
+                        className="provider-model-meta"
+                        title={metaTitle}
+                        data-testid={`provider-model-meta-${provider.id}-${m.id}`}
+                      >
+                        <span className="provider-model-specs">
+                          <span className="provider-model-meta-chunk">{m.api}</span>
+                          <span className="provider-model-meta-chunk">{contextText}</span>
+                          <span
+                            className="provider-model-meta-chunk"
+                            data-testid={`provider-model-meta-output-${provider.id}-${m.id}`}
+                          >
+                            {outputText}
+                          </span>
                         </span>
-                        <span className="provider-model-meta-chunk">{pricingText}</span>
+                        <span
+                          className="provider-model-pricing"
+                          data-testid={`provider-model-pricing-${provider.id}-${m.id}`}
+                        >
+                          {pricingText}
+                        </span>
                       </span>
                     </div>
                     {provider.source === 'config' && (
@@ -716,6 +754,10 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                 <option key={apiType} value={apiType}>{apiType}</option>
               ))}
             </select>
+            {/* 当前选中适配器的用途说明：随选项与语言即时更新 */}
+            <div className="provider-field-hint" data-testid="custom-api-hint">
+              {t(`models.apiHint.${api}`)}
+            </div>
             {requestUrlForApi(baseUrl, api) && (
               <span className="probe-request-url" data-testid="custom-request-url">
                 {t('models.actualRequest', { url: requestUrlForApi(baseUrl, api) })}

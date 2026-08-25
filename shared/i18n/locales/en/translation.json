@@ -450,6 +450,17 @@
     },
     "metaContext": "context {{context}}",
     "metaOutput": "max output {{output}}",
+    "fieldName": "Provider name",
+    "fieldNameHint": "Display name for this provider",
+    "fieldBaseUrl": "Base URL",
+    "fieldBaseUrlHint": "The provider's OpenAI-compatible endpoint, usually ending with /v1",
+    "fieldApi": "Adapter type",
+    "apiHint": {
+      "openai-responses": "OpenAI Responses protocol, supports reasoning models",
+      "openai-completions": "Legacy Chat Completions protocol, used by most third-party APIs / OpenRouter",
+      "anthropic-messages": "Anthropic Messages protocol, for the official Anthropic API",
+      "google-generative-ai": "Google Generative AI protocol, for the official Gemini API"
+    },
     "pricing": "Per 1M tokens: input {{input}}, output {{output}}, cache read {{cacheRead}}, cache write {{cacheWrite}}",
     "keyPlaceholder": "API key",
     "saveKey": "Save key",

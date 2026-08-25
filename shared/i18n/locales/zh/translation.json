@@ -450,6 +450,17 @@
     },
     "metaContext": "上下文 {{context}}",
     "metaOutput": "最大输出 {{output}}",
+    "fieldName": "供应商名称",
+    "fieldNameHint": "界面展示用的名称，保存后不可更改 ID",
+    "fieldBaseUrl": "API 地址（Base URL）",
+    "fieldBaseUrlHint": "服务商的 OpenAI 兼容接口地址，通常以 /v1 结尾",
+    "fieldApi": "适配器类型",
+    "apiHint": {
+      "openai-responses": "适配 OpenAI Responses 接口协议，支持推理思考类模型",
+      "openai-completions": "适配传统 Chat Completions 接口协议，绝大多数第三方 API / OpenRouter 使用",
+      "anthropic-messages": "适配 Anthropic Messages 接口协议，用于 Anthropic 官方 API",
+      "google-generative-ai": "适配 Google Generative AI 接口协议，用于 Gemini 官方 API"
+    },
     "pricing": "每百万 Token：输入 {{input}}，输出 {{output}}，缓存读 {{cacheRead}}，缓存写 {{cacheWrite}}",
     "keyPlaceholder": "API key",
     "saveKey": "保存 key",

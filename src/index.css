@@ -3109,6 +3109,7 @@ button.danger-outline {
 .probe-api-choice { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; gap: 7px 12px; margin-top: 5px; padding: 9px; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
 .probe-api-choice select { min-width: 0; width: 100%; }
 .probe-request-url { grid-column: 1 / -1; color: var(--text-secondary); font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; }
+.probe-api-choice .provider-field-hint { grid-column: 1 / -1; }
 .probe-models { display: flex; flex-direction: column; gap: 4px; margin-top: 3px; }
 .probe-models-title { padding: 3px 2px 1px; color: var(--text-secondary); font-size: 11.5px; font-weight: 600; }
 .probe-models-fold { margin-top: 6px; }
@@ -3568,12 +3569,45 @@ button.danger-outline {
 
 .provider-model-main .hint { margin-left: 7px; }
 
-/* meta 片段化：容器可折行（完整信息 title 提供），每个片段内部 nowrap，
-   数字（上下文/最大输出）不会被截断；右侧控件经 flex-shrink 不被挤压 */
+/* 行1：名称/ID 超长 ellipsis（title 悬浮全文），徽标随行右侧 */
+.provider-model-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.provider-model-title .provider-model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-model-title .provider-model-id {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-model-title .provider-model-vision {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* 行2 规格 + 行3 价格：meta 容器纵向两块，片段内 nowrap 数字不截断 */
 .provider-model-meta {
   color: var(--text-tertiary);
   font-size: 10.5px;
   line-height: 1.35;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 100%;
+}
+
+.provider-model-specs,
+.provider-model-pricing {
   display: flex;
   flex-wrap: wrap;
   column-gap: 4px;
@@ -3655,8 +3689,8 @@ button.danger-outline {
   width: min(460px, 86vw);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 16px;
+  gap: 12px;
+  padding: 20px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--bg-raised);
@@ -3668,9 +3702,28 @@ button.danger-outline {
   color: var(--text-secondary, var(--text-tertiary));
 }
 
-.provider-edit-dialog input,
-.provider-edit-dialog select {
+/* 表单字段块：label + 输入控件 + 辅助说明小字 */
+.provider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.provider-field label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary, var(--text-tertiary));
+}
+
+.provider-field input,
+.provider-field select {
   width: 100%;
+}
+
+.provider-field-hint {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
 }
 
 .provider-edit-dialog .actions {
