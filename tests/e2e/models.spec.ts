@@ -175,7 +175,7 @@ test('Models 页：录入 API key 后状态变已配置', async ({ launchElectro
   await expect(page.getByTestId('provider-model-customnoauth-mock-discovered')).toBeVisible({
     timeout: 15_000,
   });
-  await expect(row).toContainText('Found 3 models, including 2 new');
+  await expect(row).toContainText('Found 7 models, including 6 new');
   await expect.poll(async () => {
     const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
       providers: { customnoauth: { models: Array<{ id: string }> } };
@@ -246,7 +246,8 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
       // 第三方模型缺省按支持推理处理，思考深度菜单可用
       reasoning: models.providers['added-provider'].models?.[0]?.reasoning,
     };
-  }).toEqual({ name: 'Added Provider', inlineKey: undefined, storedKey: 'added-secret', contextWindow: 262144, reasoning: true });
+    // mock-2 目录未上报且不在 pi 内置目录：规格未知不瞎写（运行时用 pi 默认兜底）
+  }).toEqual({ name: 'Added Provider', inlineKey: undefined, storedKey: 'added-secret', contextWindow: undefined, reasoning: true });
 
   await added.locator('.provider-row-header').click();
   await expect(page.getByTestId('provider-request-url-added-provider')).toContainText(
@@ -363,9 +364,10 @@ test('Models 页：协议探测拒绝 200 HTML，发现 /v1 并选择真实 Open
   page.once('dialog', (dialog) => dialog.accept());
   await form.getByTestId('custom-api-select').selectOption('openai-completions');
   await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/chat/completions`);
-  // 上下文与最大输出自动管理：探测到的用探测值，探测不到的用前缀规格表兜底。
+  // 上下文与最大输出自动管理：目录上报的用目录值；目录未上报且不在
+  // pi 内置目录的（mock-2）如实显示未知（—），不再瞎写缺省规格。
   await expect(form.getByTestId('probe-model-spec-mock-discovered')).toContainText('256,000');
-  await expect(form.getByTestId('probe-model-spec-mock-2')).toContainText('262,144');
+  await expect(form.getByTestId('probe-model-spec-mock-2')).toContainText('—');
   await expect(form.getByTestId('probe-models')).toBeVisible();
   await expect(form.getByTestId('probe-model-mock-2')).toContainText('mock-2');
   await expect(form.getByTestId('probe-model-mock-discovered')).toContainText('mock-discovered');
@@ -416,7 +418,7 @@ test('Models 页：刷新会发现已配置自定义供应商的新模型', asyn
   await page.getByTestId('nav-models').click();
   await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('refresh-models').click();
-  await expect(page.getByTestId('models-refresh-message')).toContainText('Found 3 custom models', {
+  await expect(page.getByTestId('models-refresh-message')).toContainText('Found 7 custom models', {
     timeout: 30_000,
   });
   await expect(page.getByTestId('models-refresh-message')).toContainText(
@@ -475,6 +477,29 @@ test('Models 页：刷新会发现已配置自定义供应商的新模型', asyn
   await expect(
     page.getByTestId('provider-model-pricing-mock-openrouter-style'),
   ).toContainText('—');
+  // agentrouter 场景（claude-opus-4.8）：目录上报官方上下文/最大输出（完整不截断），
+  // 目录未上报的能力/价格由 pi 内置目录补全：视觉徽标 + 官方价格
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; contextWindow?: number; maxTokens?: number; input?: string[]; cost?: { input?: number } }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'claude-opus-4.8');
+    }, { timeout: 15_000 })
+    .toEqual(expect.objectContaining({
+      id: 'claude-opus-4.8',
+      contextWindow: 1000000,
+      maxTokens: 128000,
+      input: ['text', 'image'],
+      cost: expect.objectContaining({ input: 5 }),
+    }));
+  await expect(
+    page.getByTestId('provider-model-meta-output-mock-claude-opus-4.8'),
+  ).toContainText('128,000');
+  await expect(page.getByTestId('provider-model-vision-mock-claude-opus-4.8')).toBeVisible();
+  await expect(
+    page.getByTestId('provider-model-pricing-mock-claude-opus-4.8'),
+  ).toContainText('$5');
 });
 
 test('Models 页：已配置供应商展开显示可用模型，可设为当前模型并持久化', async ({
@@ -614,9 +639,9 @@ test('Models 页：图像开关声明自定义模型的多模态输入', async (
     .toEqual(['text']);
 });
 
-test('Models 页：刷新把旧版写入的多模态声明升级为规格表识别结果', async ({ launchElectronApp }) => {
+test('Models 页：刷新把旧版写入的多模态声明升级为内置目录识别结果', async ({ launchElectronApp }) => {
   // 覆盖 beforeEach 的 models.json：模拟历史版本写入的旧模型——
-  // gemini-2.5-pro 命中规格表（视觉），plain-legacy-model 未命中
+  // gemini-2.5-pro 命中 pi 内置目录（视觉），plain-legacy-model 未命中
   const modelsDoc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
     providers: { mock: { models: unknown[] } };
   };

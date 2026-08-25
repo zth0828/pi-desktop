@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Radar, RefreshCw } from 'lucide-react';
-import { matchModelProfile } from '@shared/model-profiles';
 import type { PiDefaultModel, PiModelRow, PiProviderProbeResult, PiProviderRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
@@ -474,53 +473,55 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                         </span>
                       </span>
                     </div>
-                    {provider.source === 'config' && (
-                      <label
-                        className="provider-model-reasoning"
-                        data-testid={`provider-model-reasoning-${provider.id}-${m.id}`}
-                        title={t('models.reasoningHint')}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(m.reasoning)}
+                    {/* 右侧固定列：标签胶囊组在上、当前徽标/按钮在下，不与左侧元数据互挤 */}
+                    <div className="provider-model-side">
+                      {provider.source === 'config' && (
+                        <div className="provider-model-badges">
+                          <label
+                            className="provider-model-pill"
+                            data-testid={`provider-model-reasoning-${provider.id}-${m.id}`}
+                            title={t('models.reasoningHint')}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(m.reasoning)}
+                              disabled={busy}
+                              onChange={(e) => void setReasoning(m.id, e.target.checked)}
+                            />
+                            <span>{t('models.reasoningSupport')}</span>
+                          </label>
+                          <label
+                            className="provider-model-pill"
+                            data-testid={`provider-model-image-${provider.id}-${m.id}`}
+                            title={t('models.imageSupportHint')}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(m.input?.includes('image'))}
+                              disabled={busy}
+                              onChange={(e) => void setImage(m.id, e.target.checked)}
+                            />
+                            <span>{t('models.imageSupport')}</span>
+                          </label>
+                        </div>
+                      )}
+                      {isDefault(m.id) ? (
+                        <span
+                          className="provider-model-pill provider-model-current"
+                          data-testid={`current-model-${provider.id}-${m.id}`}
+                        >
+                          {t('models.current')}
+                        </span>
+                      ) : (
+                        <button
                           disabled={busy}
-                          onChange={(e) => void setReasoning(m.id, e.target.checked)}
-                        />
-                        <span>{t('models.reasoningSupport')}</span>
-                      </label>
-                    )}
-                    {provider.source === 'config' && (
-                      <label
-                        className="provider-model-reasoning"
-                        data-testid={`provider-model-image-${provider.id}-${m.id}`}
-                        title={t('models.imageSupportHint')}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(m.input?.includes('image'))}
-                          disabled={busy}
-                          onChange={(e) => void setImage(m.id, e.target.checked)}
-                        />
-                        <span>{t('models.imageSupport')}</span>
-                      </label>
-                    )}
-                    <span className="spacer" />
-                    {isDefault(m.id) ? (
-                      <span
-                        className="provider-model-current"
-                        data-testid={`current-model-${provider.id}-${m.id}`}
-                      >
-                        {t('models.current')}
-                      </span>
-                    ) : (
-                      <button
-                        disabled={busy}
-                        data-testid={`set-current-${provider.id}-${m.id}`}
-                        onClick={() => void setCurrent(m.id)}
-                      >
-                        {t('models.setCurrent')}
-                      </button>
-                    )}
+                          data-testid={`set-current-${provider.id}-${m.id}`}
+                          onClick={() => void setCurrent(m.id)}
+                        >
+                          {t('models.setCurrent')}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   );
                 })
@@ -622,14 +623,14 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
       .map((s) => s.trim())
       .filter(Boolean)
       .map((mid) => {
-        // 上下文/最大输出/输入模态自动管理：探测值优先，探测不到用前缀规格表。
+        // 元数据自动管理：probe 返回的 modelDetails 已由后端用网关目录 +
+        // pi 内置官方目录回填，前端直接透传。
         const detail = detectedDetails.get(mid);
-        const profile = matchModelProfile(mid);
         return {
           id: mid,
-          contextWindow: (detail?.contextWindow && detail.contextWindow > 0) ? detail.contextWindow : profile.contextWindow,
-          ...(detail?.maxTokens ? { maxTokens: detail.maxTokens } : profile.maxTokens ? { maxTokens: profile.maxTokens } : {}),
-          ...(detail?.input ? { input: detail.input } : profile.input ? { input: profile.input } : {}),
+          ...(detail?.contextWindow && detail.contextWindow > 0 ? { contextWindow: detail.contextWindow } : {}),
+          ...(detail?.maxTokens ? { maxTokens: detail.maxTokens } : {}),
+          ...(detail?.input ? { input: detail.input } : {}),
           ...(detail?.thinkingLevelMap ? { thinkingLevelMap: detail.thinkingLevelMap } : {}),
         };
       });
@@ -772,7 +773,6 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
               <div className="probe-models">
                 {probeResult.models.map((modelId) => {
                   const detail = probeResult.modelDetails?.find((model) => model.id === modelId);
-                  const profile = matchModelProfile(modelId);
                   const selected = modelIds.split(',').map((id) => id.trim()).includes(modelId);
                   return (
                     <label className="probe-model-row" data-testid={`probe-model-${modelId}`} key={modelId}>
@@ -789,14 +789,14 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                       />
                       <span className="probe-model-id">{modelId}</span>
                       <span className="probe-model-spec" data-testid={`probe-model-spec-${modelId}`}>
-                        {(detail?.input ?? profile.input)?.includes('image') && (
+                        {detail?.input?.includes('image') && (
                           <span className="provider-model-vision" data-testid={`probe-model-vision-${modelId}`}>
                             {t('models.imageSupport')}
                           </span>
                         )}
                         {t('models.probeSpec', {
-                          contextWindow: (detail?.contextWindow ?? profile.contextWindow).toLocaleString(),
-                          maxOutput: profile.maxTokens?.toLocaleString() ?? '—',
+                          contextWindow: detail?.contextWindow?.toLocaleString() ?? '—',
+                          maxOutput: detail?.maxTokens?.toLocaleString() ?? '—',
                         })}
                       </span>
                     </label>
