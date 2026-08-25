@@ -4,7 +4,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DEFAULT_CONTEXT_WINDOW, PI_DEFAULT_TOOLS } from '@shared/host-api/contract';
-import { matchModelProfile } from '@shared/model-profiles';
 import type {
   HostSuccess,
   PiDefaultModel,
@@ -31,6 +30,7 @@ import { loadPiAdapter, type PiModelRuntimeHandle } from './pi-adapter';
 import { isLmStudioProvider, isLocalServer, syncLmStudioModels } from '../utils/lmstudio-models';
 import { compatForOpenAi, placeholderApiKey, resolveServerType, thinkingLevelMapFor } from '../utils/custom-provider-config';
 import { parseMaxOutputTokens, syncConfiguredProviderModels } from '../utils/configured-provider-models';
+import { findBuiltinModel, loadBuiltinModelCatalog, type BuiltinModelCatalog } from '../utils/builtin-model-catalog';
 import {
   piRuntimeApi,
   reloadRuntimeSettings,
@@ -153,6 +153,8 @@ async function syncConfiguredCatalogs(
   onlyProviderIds?: readonly string[],
 ): Promise<{ discovered: number; added: number; migrated: number; changed: boolean; errors: string[] }> {
   const configured = configuredProviders(agentDir);
+  // pi 内置目录（pi-ai 静态数据）：网关目录未上报的元数据用官方规格补全
+  const builtinCatalog = loadBuiltinModelCatalog(adapter.packageRoot);
   const selected = onlyProviderIds ? new Set(onlyProviderIds) : null;
   let discovered = 0;
   let added = 0;
@@ -184,6 +186,7 @@ async function syncConfiguredCatalogs(
           baseUrl: resolution.auth.baseUrl,
           headers,
         },
+        catalog: builtinCatalog,
       });
       if (result) {
         discovered += result.discovered;
@@ -481,6 +484,8 @@ export const providersApi = {
       if (existingIds.has(payload.id)) {
         return { success: false, error: `provider id already exists: ${payload.id}` };
       }
+      // pi 内置目录官方规格：探测不到的字段（上下文/输出/能力/价格）以此兜底
+      const builtinCatalog = loadBuiltinModelCatalog(adapter.packageRoot);
       await adapter.settings.updateJson(agentDir, 'models.json', (doc) => {
         const providers = doc.providers && typeof doc.providers === 'object' && !Array.isArray(doc.providers)
           ? doc.providers as Record<string, unknown>
@@ -511,18 +516,19 @@ export const providersApi = {
         // 第三方模型缺省按支持推理处理：思考深度菜单可用；网关拒绝思考参数时
         // 用户可在 Models 页逐模型关闭。
         models: payload.models.map((m) => {
-          const profile = matchModelProfile(m.id);
+          const builtin = findBuiltinModel(builtinCatalog, m.id);
           const tlm = m.thinkingLevelMap ?? (lmStudio && (m.reasoning ?? true) && thinkingMap ? thinkingMap : undefined);
           return {
             id: m.id,
             name: m.name ?? m.id,
             reasoning: m.reasoning ?? true,
             ...(tlm ? { thinkingLevelMap: tlm } : {}),
-            // 输入模态：探测目录上报 > 规格表（已知视觉模型）> 纯文本。
-            input: m.input ?? profile.input ?? ['text'],
-            // 价格未知时不写 cost（pi 定义允许缺省）：前端显示占位，与真 0 区分
-            contextWindow: m.contextWindow ?? profile.contextWindow,
-            maxTokens: m.maxTokens ?? profile.maxTokens,
+            // 输入模态：探测目录上报 > pi 内置目录（官方能力声明）> 纯文本。
+            input: m.input ?? builtin?.input ?? ['text'],
+            // 官方目录价格透传；未知时不写 cost（前端显示占位，与真 0 区分）
+            ...(builtin?.cost ? { cost: builtin.cost } : {}),
+            contextWindow: m.contextWindow ?? builtin?.contextWindow,
+            maxTokens: m.maxTokens ?? builtin?.maxTokens,
           };
         }),
         };
@@ -838,10 +844,24 @@ export const providersApi = {
       } catch { /* 非 vLLM 服务器没有 /version 端点。 */ }
     }
     const model = payload.model || models[0] || 'test-model';
-    // 目录未上报上下文的模型补上前缀规格表（探测不出时给用户一个合理的默认展示）。
+    // 目录未上报的元数据用 pi 内置目录官方规格补全（上下文/输出/输入模态），
+    // 让「添加模型」预览与最终落库都拿到准确默认值。probe 无 runtime，
+    // 复用 loadPiAdapter 的热路径缓存取包根；pi 不可用时无兜底（不阻断探测）。
+    let builtinCatalog: BuiltinModelCatalog = new Map();
+    try {
+      builtinCatalog = loadBuiltinModelCatalog((await loadPiAdapter()).packageRoot);
+    } catch { /* pi 未就绪时跳过官方规格补全 */ }
     for (const modelId of models) {
-      if (!modelDetails.some((detail) => detail.id === modelId)) {
-        modelDetails.push({ id: modelId, contextWindow: matchModelProfile(modelId).contextWindow });
+      const builtin = findBuiltinModel(builtinCatalog, modelId);
+      let detail = modelDetails.find((entry) => entry.id === modelId);
+      if (!detail) {
+        detail = { id: modelId };
+        modelDetails.push(detail);
+      }
+      if (!detail.contextWindow && builtin?.contextWindow) detail.contextWindow = builtin.contextWindow;
+      if (!detail.maxTokens && builtin?.maxTokens) detail.maxTokens = builtin.maxTokens;
+      if (!detail.input?.length && builtin?.input) {
+        detail.input = builtin.input.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image');
       }
     }
     // 服务端 supported_endpoint_types 声明 → 对应协议（不经请求的软提示）。

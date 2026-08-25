@@ -60,6 +60,12 @@ const server = http.createServer((req, res) => {
       { id: "mock-discovered", context_window: 256000, max_output_tokens: 16384, input: ["text", "image"] },
       // OpenRouter 风格元数据（top_provider.max_completion_tokens）：验证最大输出 token 的通用映射
       { id: "openrouter-style", context_length: 262144, top_provider: { max_completion_tokens: 65536 } },
+      // Claude / Gemini / DeepSeek（agentrouter 常见模型）：目录值取官方真实规格，
+      // 不上报 input 与价格：能力走 pi 内置目录识别，价格显示占位
+      { id: "claude-opus-4.8", context_length: 1000000, top_provider: { max_completion_tokens: 128000 } },
+      { id: "claude-opus-5", context_length: 1000000, top_provider: { max_completion_tokens: 128000 } },
+      { id: "gemini-2.5-pro", context_length: 1048576, top_provider: { max_completion_tokens: 65536 } },
+      { id: "deepseek-v4-flash", context_length: 1000000, top_provider: { max_completion_tokens: 384000 } },
     ] }));
     return;
   }

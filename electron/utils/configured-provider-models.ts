@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
-import { matchModelProfile, matchModelProfileEntry } from '@shared/model-profiles';
+import { findBuiltinModel, type BuiltinModelCatalog } from './builtin-model-catalog';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -166,77 +166,85 @@ function isLegacyDefaultInput(current: JsonRecord): boolean {
 
 /**
  * 已存在模型的陈旧字段刷新：只纠正历史缺省写入的值，用户改过的字段不动。
- * - input：未 pin（inputPinned !== true）且当前为历史默认 → 目录上报/规格表升级。
- * - contextWindow：缺失或等于兜底值 → 目录 > template > 规格表。
- * - maxTokens：缺失 → 目录 > template > 规格表。
+ * 元数据优先级：网关目录上报 > pi 内置目录（官方规格）> template。
+ * - input：未 pin（inputPinned !== true）且当前为历史默认 → 目录/内置目录升级。
+ * - contextWindow：缺失或等于兜底值 → 目录 > template > 内置目录。
+ * - maxTokens：缺失 → 目录 > template > 内置目录。
  * reasoning/cost/name 与用户改过的非兜底 contextWindow 保持原样。
  */
 function refreshStaleModel(
   current: JsonRecord,
   model: DetectedModel | null,
   template: JsonRecord,
+  catalog: BuiltinModelCatalog,
 ): JsonRecord {
   const next: JsonRecord = { ...current };
-  const { matched, profile } = matchModelProfileEntry(String(current.id ?? ''));
-  const detectedInput = model?.input ?? (matched ? profile.input : undefined);
+  const builtin = findBuiltinModel(catalog, String(current.id ?? ''));
+  const detectedInput = model?.input ?? builtin?.input;
   if (current.inputPinned !== true && isLegacyDefaultInput(current) && detectedInput) {
     next.input = detectedInput;
   }
   const currentContext = positiveNumber(current.contextWindow);
-  // template（用户/目录写过的真实值）优先；未命中规格表时兜底 profile 只是
-  // 保守默认，不作为"更准确值"写入。
+  // template（用户/目录写过的真实值）优先；内置目录官方规格最后兜底
   const betterContext = model?.contextWindow
     ?? positiveNumber(template.contextWindow)
-    ?? (matched ? profile.contextWindow : undefined);
+    ?? builtin?.contextWindow;
   if ((!currentContext || LEGACY_FALLBACK_CONTEXT_WINDOWS.has(currentContext)) && betterContext) {
     next.contextWindow = betterContext;
   }
   if (!positiveNumber(current.maxTokens)) {
     const maxTokens = model?.maxTokens
       ?? positiveNumber(template.maxTokens)
-      ?? (matched ? profile.maxTokens : undefined);
+      ?? builtin?.maxTokens;
     if (maxTokens) next.maxTokens = maxTokens;
   }
   return next;
 }
 
-export function mergeDiscoveredProviderModels(existing: unknown[], detected: DetectedModel[]): JsonRecord[] {
+export function mergeDiscoveredProviderModels(
+  existing: unknown[],
+  detected: DetectedModel[],
+  catalog: BuiltinModelCatalog = new Map(),
+): JsonRecord[] {
   const existingModels = existing.map(record).filter((model): model is JsonRecord => model !== null);
   const byId = new Map(existingModels.map((model) => [String(model.id ?? ''), model]));
   const template = existingModels[0] ?? {};
   const merged = detected.map((model) => {
     const current = byId.get(model.id);
     if (current) {
-      return refreshStaleModel(current, model, template);
+      return refreshStaleModel(current, model, template, catalog);
     }
+    const builtin = findBuiltinModel(catalog, model.id);
     return {
       id: model.id,
       name: model.name ?? model.id,
       // 第三方目录普遍不上报推理能力：缺省按支持处理，让思考深度可用；
       // 供应商拒绝思考参数时用户可在 Models 页逐模型关闭（写入后不被发现流程覆盖）。
-      reasoning: model.reasoning ?? (typeof template.reasoning === 'boolean' ? template.reasoning : true),
+      reasoning: model.reasoning ?? builtin?.reasoning ?? (typeof template.reasoning === 'boolean' ? template.reasoning : true),
       ...(model.thinkingLevelMap ? { thinkingLevelMap: model.thinkingLevelMap } : {}),
-      // input 优先级：目录上报 > 规格表（已知视觉模型）> 供应商模板继承 > 纯文本。
-      // 目录显式 text 优先于规格表：网关可能确实剥离了视觉。
+      // input 优先级：目录上报 > pi 内置目录（官方能力声明）> 供应商模板继承 > 纯文本。
+      // 目录显式 text 优先于内置目录：网关可能确实剥离了视觉。
       input: model.input
-        ?? matchModelProfile(model.id).input
+        ?? builtin?.input
         ?? (Array.isArray(template.input) ? template.input : ['text']),
-      // 价格未知时不写 cost（pi 定义允许缺省）：前端显示占位，与真 0 区分
-      ...(record(template.cost) ? { cost: record(template.cost) } : {}),
+      // 官方目录价格透传：覆盖「价格未知显示占位」的 agentrouter 场景
+      ...(builtin?.cost ? { cost: builtin.cost } : record(template.cost) ? { cost: record(template.cost) } : {}),
       contextWindow: model.contextWindow
+        ?? builtin?.contextWindow
         ?? positiveNumber(template.contextWindow)
         ?? DEFAULT_CONTEXT_WINDOW,
       ...(model.maxTokens
         ? { maxTokens: model.maxTokens }
+        : builtin?.maxTokens ? { maxTokens: builtin.maxTokens }
         : positiveNumber(template.maxTokens) ? { maxTokens: positiveNumber(template.maxTokens) } : {}),
     };
   });
   const detectedIds = new Set(detected.map((model) => model.id));
-  // 目录未列出的旧模型（手动 modelIds 添加）也走规格表刷新：多模态/规格识别
+  // 目录未列出的旧模型（手动 modelIds 添加）也走内置目录刷新：官方规格识别
   // 不应因目录不收录而失效。
   merged.push(...existingModels
     .filter((model) => !detectedIds.has(String(model.id ?? '')))
-    .map((model) => refreshStaleModel(model, null, template)));
+    .map((model) => refreshStaleModel(model, null, template, catalog)));
   return merged;
 }
 
@@ -246,6 +254,7 @@ export async function syncConfiguredProviderModels(options: {
   api: string;
   auth: ProviderDirectoryAuth;
   fetchImpl?: typeof fetch;
+  catalog?: BuiltinModelCatalog;
 }): Promise<ProviderModelSyncResult | null> {
   const modelsPath = path.join(options.agentDir, 'models.json');
   if (!existsSync(modelsPath)) return null;
@@ -278,7 +287,7 @@ export async function syncConfiguredProviderModels(options: {
   }
   const existing = Array.isArray(provider.models) ? provider.models : [];
   const existingIds = new Set(existing.map((model) => String(record(model)?.id ?? '')));
-  const models = mergeDiscoveredProviderModels(existing, detected);
+  const models = mergeDiscoveredProviderModels(existing, detected, options.catalog ?? new Map());
   const changed = JSON.stringify(models) !== JSON.stringify(existing);
   if (changed) {
     provider.models = models;

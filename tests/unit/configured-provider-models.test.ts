@@ -99,10 +99,13 @@ describe('configured provider model discovery', () => {
   });
 
   it('backfills image input for known vision models when the directory is silent', () => {
-    // 目录未上报 input：按规格表识别已知视觉模型
-    const merged = mergeDiscoveredProviderModels([], [{ id: 'gemini-2.5-pro' }, { id: 'qwen3-32b' }]);
+    // 目录未上报 input：按 pi 内置目录（官方能力声明）识别已知视觉模型
+    const catalog = new Map([
+      ['gemini-2-5-pro', { id: 'gemini-2.5-pro', input: ['text', 'image'], contextWindow: 1048576, maxTokens: 65536 }],
+    ]);
+    const merged = mergeDiscoveredProviderModels([], [{ id: 'gemini-2.5-pro' }, { id: 'qwen3-32b' }], catalog);
     expect(merged.find((m) => m.id === 'gemini-2.5-pro'))
-      .toEqual(expect.objectContaining({ id: 'gemini-2.5-pro', input: ['text', 'image'] }));
+      .toEqual(expect.objectContaining({ id: 'gemini-2.5-pro', input: ['text', 'image'], contextWindow: 1048576, maxTokens: 65536 }));
     expect(merged.find((m) => m.id === 'qwen3-32b'))
       .toEqual(expect.objectContaining({ id: 'qwen3-32b', input: ['text'] }));
   });
@@ -126,11 +129,15 @@ describe('configured provider model discovery', () => {
     expect(merged[0]).toEqual(expect.objectContaining({ id: 'gemini-2.5-pro', input: ['text'] }));
   });
 
-  it('upgrades legacy text-only input to vision when directory or profile recognises it', () => {
+  it('upgrades legacy text-only input to vision when directory or builtin catalog recognises it', () => {
     // 历史版本一律写死 input: ['text'] 且无 pin 标记：视为陈旧缺省值，刷新时纠正
+    const catalog = new Map([
+      ['gemini-2-5-pro', { id: 'gemini-2.5-pro', input: ['text', 'image'], contextWindow: 1048576 }],
+    ]);
     const merged = mergeDiscoveredProviderModels(
       [{ id: 'gemini-2.5-pro', reasoning: true, input: ['text'], contextWindow: 1048576 }],
       [{ id: 'gemini-2.5-pro' }],
+      catalog,
     );
     expect(merged[0]).toEqual(expect.objectContaining({ input: ['text', 'image'] }));
   });
@@ -169,14 +176,18 @@ describe('configured provider model discovery', () => {
     expect(byId['no-metadata']).not.toHaveProperty('maxTokens');
   });
 
-  it('applies profile-table refresh to existing models missing from the directory', () => {
-    // 手动 modelIds 添加、目录未列出的旧模型同样享受规格表识别（多模态/规格）
+  it('applies builtin catalog refresh to existing models missing from the directory', () => {
+    // 手动 modelIds 添加、目录未列出的旧模型同样享受内置目录识别（多模态/规格）
+    const catalog = new Map([
+      ['qwen3-vl-plus', { id: 'qwen3-vl-plus', input: ['text', 'image'], contextWindow: 131072 }],
+    ]);
     const merged = mergeDiscoveredProviderModels(
       [{ id: 'qwen3-vl-plus', reasoning: true, input: ['text'], contextWindow: 128000 }],
       [{ id: 'other-model' }],
+      catalog,
     );
     expect(merged.find((m) => m.id === 'qwen3-vl-plus'))
-      .toEqual(expect.objectContaining({ input: ['text', 'image'] }));
+      .toEqual(expect.objectContaining({ input: ['text', 'image'], contextWindow: 128000 }));
   });
 
 
