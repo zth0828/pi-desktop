@@ -30,7 +30,7 @@ import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiAdapter, type PiModelRuntimeHandle } from './pi-adapter';
 import { isLmStudioProvider, isLocalServer, syncLmStudioModels } from '../utils/lmstudio-models';
 import { compatForOpenAi, placeholderApiKey, resolveServerType, thinkingLevelMapFor } from '../utils/custom-provider-config';
-import { syncConfiguredProviderModels } from '../utils/configured-provider-models';
+import { parseMaxOutputTokens, syncConfiguredProviderModels } from '../utils/configured-provider-models';
 import {
   piRuntimeApi,
   reloadRuntimeSettings,
@@ -681,7 +681,7 @@ export const providersApi = {
       ) || Object.values(record).some(hasCache);
     };
     const models: string[] = [];
-    const modelDetails: Array<{ id: string; contextWindow?: number; input?: Array<'text' | 'image'> }> = [];
+    const modelDetails: Array<{ id: string; contextWindow?: number; maxTokens?: number; input?: Array<'text' | 'image'> }> = [];
     const advertisedEndpointTypes = new Set<string>();
     // 目录命中在哪个 base 上：/v1 下命中时把 baseUrl 顺带纠正，与协议验证的 resolvedBaseUrl 语义一致。
     let modelsBaseUrl: string | undefined;
@@ -739,12 +739,15 @@ export const providersApi = {
           const input = rawInput
             ?.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image');
           const vision = capabilities?.vision === true || capabilities?.image === true;
-          const detail: { id: string; contextWindow?: number; input?: Array<'text' | 'image'>; thinkingLevelMap?: Record<string, string | null> } = { id };
+          const detail: { id: string; contextWindow?: number; maxTokens?: number; input?: Array<'text' | 'image'>; thinkingLevelMap?: Record<string, string | null> } = { id };
           if (contextWindow > 0) detail.contextWindow = contextWindow;
+          // 最大输出 token：OpenAI/Anthropic/OpenRouter 各家目录字段变体统一解析
+          const maxTokens = parseMaxOutputTokens(row);
+          if (maxTokens) detail.maxTokens = maxTokens;
           if (input?.length) detail.input = input;
           else if (vision) detail.input = ['text', 'image'];
           if (thinkingLevelMap && Object.keys(thinkingLevelMap).length > 0) detail.thinkingLevelMap = thinkingLevelMap;
-          if (contextWindow > 0 || (input?.length ?? 0) > 0 || vision || (thinkingLevelMap && Object.keys(thinkingLevelMap).length > 0)) {
+          if (contextWindow > 0 || maxTokens || (input?.length ?? 0) > 0 || vision || (thinkingLevelMap && Object.keys(thinkingLevelMap).length > 0)) {
             modelDetails.push(detail);
           }
           const endpointTypes = Array.isArray(row.supported_endpoint_types)

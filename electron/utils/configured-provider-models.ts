@@ -56,6 +56,24 @@ function positiveNumber(...values: unknown[]): number | undefined {
   return undefined;
 }
 
+/**
+ * 目录行 → 最大输出 token。字段变体按各家目录兼容：
+ * OpenAI 风格 max_tokens/max_output_tokens、Anthropic/部分网关
+ * max_completion_tokens、OpenRouter 风格 top_provider.max_completion_tokens
+ * （agentrouter 等 OpenRouter 兼容网关同构）。
+ */
+export function parseMaxOutputTokens(row: JsonRecord): number | undefined {
+  const topProvider = record(row.top_provider);
+  return positiveNumber(
+    row.maxTokens,
+    row.max_tokens,
+    row.max_output_tokens,
+    row.max_completion_tokens,
+    topProvider?.max_completion_tokens,
+    topProvider?.max_tokens,
+  );
+}
+
 function setHeader(headers: Record<string, string>, name: string, value: string): void {
   for (const existing of Object.keys(headers)) {
     if (existing.toLowerCase() === name.toLowerCase()) delete headers[existing];
@@ -130,9 +148,7 @@ export function parseProviderModelDirectory(payload: unknown, api: string): Dete
       ...(positiveNumber(row.contextWindow, row.context_window, row.context_length, row.max_context_length, row.max_model_len)
         ? { contextWindow: positiveNumber(row.contextWindow, row.context_window, row.context_length, row.max_context_length, row.max_model_len) }
         : {}),
-      ...(positiveNumber(row.maxTokens, row.max_tokens, row.max_output_tokens)
-        ? { maxTokens: positiveNumber(row.maxTokens, row.max_tokens, row.max_output_tokens) }
-        : {}),
+      ...(parseMaxOutputTokens(row) ? { maxTokens: parseMaxOutputTokens(row) } : {}),
     });
   }
   return detected;

@@ -140,6 +140,25 @@ describe('configured provider model discovery', () => {
     expect(kept[0]).toEqual(expect.objectContaining({ contextWindow: 32000 }));
   });
 
+  it('parses max output tokens across directory field variants', () => {
+    // OpenAI 风格 max_output_tokens / max_completion_tokens、OpenRouter 风格
+    // top_provider.max_completion_tokens（agentrouter 等兼容网关同构）
+    const detected = parseProviderModelDirectory({ data: [
+      { id: 'openai-style', max_output_tokens: 32768 },
+      { id: 'completion-style', max_completion_tokens: 8192 },
+      { id: 'openrouter-style', context_length: 262144, top_provider: { max_completion_tokens: 65536 } },
+      { id: 'no-metadata' },
+    ] }, 'openai-completions');
+    const byId = Object.fromEntries(detected.map((m) => [m.id, m]));
+    expect(byId['openai-style']).toEqual(expect.objectContaining({ maxTokens: 32768 }));
+    expect(byId['completion-style']).toEqual(expect.objectContaining({ maxTokens: 8192 }));
+    expect(byId['openrouter-style']).toEqual(expect.objectContaining({
+      contextWindow: 262144,
+      maxTokens: 65536,
+    }));
+    expect(byId['no-metadata']).not.toHaveProperty('maxTokens');
+  });
+
   it('applies profile-table refresh to existing models missing from the directory', () => {
     // 手动 modelIds 添加、目录未列出的旧模型同样享受规格表识别（多模态/规格）
     const merged = mergeDiscoveredProviderModels(
