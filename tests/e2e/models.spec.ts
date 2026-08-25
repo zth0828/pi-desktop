@@ -430,6 +430,16 @@ test('Models 页：刷新会发现已配置自定义供应商的新模型', asyn
   await row.locator('.provider-row-header').click();
   await expect(page.getByTestId('provider-request-url-mock')).toContainText('/v1/responses');
   await expect(page.getByTestId('provider-model-mock-mock-discovered')).toBeVisible();
+  // 目录上报 input: ['text','image'] → 发现链路写入 models.json 并在界面标识
+  await expect(page.getByTestId('provider-model-vision-mock-mock-discovered')).toBeVisible();
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; input?: string[] }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'mock-discovered')?.input;
+    }, { timeout: 15_000 })
+    .toEqual(['text', 'image']);
 });
 
 test('Models 页：已配置供应商展开显示可用模型，可设为当前模型并持久化', async ({
@@ -526,6 +536,47 @@ test('Models 页：推理开关恢复自定义模型的思考深度', async ({ l
   await selector.click();
   await expect(page.getByTestId('model-menu-thinking')).toContainText('High', { timeout: 15_000 });
   await expect(page.getByTestId('model-trigger-thinking')).toContainText('High');
+});
+
+test('Models 页：图像开关声明自定义模型的多模态输入', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  const row = page.getByTestId('provider-mock');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.provider-row-header').click();
+
+  // mock-1 初始 input: ['text'] → 开关关闭，无图像标识
+  const toggle = page.getByTestId('provider-model-image-mock-mock-1').locator('input');
+  await expect(toggle).not.toBeChecked();
+  await expect(page.getByTestId('provider-model-vision-mock-mock-1')).toHaveCount(0);
+
+  // 受控 checkbox：状态经 IPC 往返后异步刷新
+  await toggle.click();
+  await expect(toggle).toBeChecked({ timeout: 15_000 });
+  await expect(page.getByTestId('provider-model-vision-mock-mock-1')).toBeVisible();
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; input?: string[] }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'mock-1')?.input;
+    }, { timeout: 15_000 })
+    .toEqual(['text', 'image']);
+
+  // 关闭后写回 ['text']，标识消失
+  await toggle.click();
+  await expect(toggle).not.toBeChecked({ timeout: 15_000 });
+  await expect(page.getByTestId('provider-model-vision-mock-mock-1')).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; input?: string[] }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'mock-1')?.input;
+    }, { timeout: 15_000 })
+    .toEqual(['text']);
 });
 
 /** Codex 风格模型菜单：触发器 → 「模型」行 → 子菜单里按 data-value 点选 */

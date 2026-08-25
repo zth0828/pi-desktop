@@ -56,7 +56,8 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ data: [
       { id: "mock-2" },
-      { id: "mock-discovered", context_window: 256000, max_output_tokens: 16384 },
+      // input 上报：验证目录→models.json→UI 的多模态识别链路
+      { id: "mock-discovered", context_window: 256000, max_output_tokens: 16384, input: ["text", "image"] },
     ] }));
     return;
   }
