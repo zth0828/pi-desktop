@@ -429,6 +429,7 @@
       "rateLimit": "Rate limited: too many requests — wait a moment and retry.",
       "quota": "Account quota or usage limit reached: contact the provider to top up or renew.",
       "replacementTimeout": "Session replacement timed out without confirmation. Please retry or switch sessions.",
+      "hostInvokeTimeout": "Timed out communicating with the main process ({{action}}). Please try again.",
       "requestId": "Request ID: {{id}}"
     }
   },
@@ -532,7 +533,11 @@
     "openExportFolder": "Open folder",
     "emptyAll": "No sessions yet. Start chatting first.",
     "projectCount": "{{count}} sessions",
-    "openProjectFolder": "Open folder"
+    "openProjectFolder": "Open folder",
+    "actionFailed": "Action failed: {{error}}",
+    "actionFailedPlain": "Action failed. Please try again.",
+    "deleteRunning": "This session is running. Stop it before deleting.",
+    "actionErrorDismiss": "Dismiss"
   },
   "extensions": {
     "title": "Packages",

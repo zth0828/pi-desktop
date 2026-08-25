@@ -501,6 +501,36 @@ test('侧栏会话菜单 → 复制 ID、重命名、在新聊天中继续', asy
   await expect(page.locator('.sidebar-session-row')).toHaveCount(2, { timeout: 15_000 });
 });
 
+test('流式中删除会话 → 被拒绝且给出可读提示，流结束后可删除', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'delete while streaming HERON');
+  const row = page.locator('.sidebar-session-row').filter({ hasText: 'delete while streaming HERON' });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+
+  // SLOW_END：30 chunk × 100ms 慢速流（3s 后自然结束）；趁流式进行中发起删除
+  await page.getByTestId('chat-input').fill('SLOW_END delete while streaming');
+  await page.getByTestId('chat-send').click();
+  await row.locator('.sidebar-session-menu-trigger').click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+
+  // main 拒绝删除（session is running）：列表回滚 + 可读失败提示（而非静默复活）
+  const notice = page.getByTestId('session-action-error');
+  await expect(notice).toBeVisible({ timeout: 15_000 });
+  await expect(notice).toContainText('This session is running');
+  await expect(row).toHaveCount(1);
+
+  // 等慢速流自然结束（stop 按钮消失），再删 → 成功
+  await expect(page.getByTestId('chat-stop')).toHaveCount(0, { timeout: 30_000 });
+  await row.locator('.sidebar-session-menu-trigger').click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+  await expect(row).toHaveCount(0, { timeout: 15_000 });
+});
+
 test('侧栏会话列表：长列表展开与收起（含当前会话保底与归档分组）', async ({ launchElectronApp }) => {
   // 预置活跃工作区的 25 个会话
   const longWorkspace = await realpath(await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-long-')));

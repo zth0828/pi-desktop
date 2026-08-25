@@ -79,6 +79,9 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   const [menuPosition, setMenuPosition] = useState<MenuPosition>();
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
+  // 删除/归档等操作失败的可读提示（null = 无）。raw 保留原始错误供通用文案插值；
+  // running 是已知的「会话运行中不可删」场景，用专属文案。
+  const [actionError, setActionError] = useState<{ key: 'running' | 'generic'; raw?: string } | null>(null);
   const [draggingPath, setDraggingPath] = useState<string>();
   const dragPayload = useRef<{ sessionPath: string; cwd: string } | undefined>(undefined);
   // 拖拽期间挂的 Esc keydown 监听（dragend 摘除）；Esc 取消坐标启发式接不住 mac，见 session-drag.ts
@@ -263,14 +266,20 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     setSessions((prev) => prev.filter((s) => s.path !== sessionPath));
     setOpenMenu(undefined);
     setConfirmDelete(undefined);
+    setActionError(null);
     setBusy(true);
     try {
       const result = await hostApi.piSessions.remove(sessionPath);
       if (!result.success) {
+        // 列表回滚之外必须给出失败原因，否则用户只看到会话「删了又回来」
+        setActionError(result.error === 'session is running'
+          ? { key: 'running' }
+          : { key: 'generic', raw: result.error });
         setSessions(previous);
         refresh();
       }
     } catch {
+      setActionError({ key: 'generic' });
       setSessions(previous);
       refresh();
     } finally {
@@ -284,14 +293,17 @@ export function SessionList({ onOpenChat }: SessionListProps) {
       prev.map((s) => (s.path === sessionPath ? { ...s, archived } : s)),
     );
     setOpenMenu(undefined);
+    setActionError(null);
     setBusy(true);
     try {
       const result = await hostApi.piSessions.archive(sessionPath, archived);
       if (!result.success) {
+        setActionError({ key: 'generic', raw: result.error });
         setSessions(previous);
         refresh();
       }
     } catch {
+      setActionError({ key: 'generic' });
       setSessions(previous);
       refresh();
     } finally {
@@ -305,14 +317,17 @@ export function SessionList({ onOpenChat }: SessionListProps) {
       prev.map((s) => (s.cwd === cwd ? { ...s, archived } : s)),
     );
     setOpenMenu(undefined);
+    setActionError(null);
     setBusy(true);
     try {
       const result = await hostApi.piSessions.archiveProject(cwd, archived);
       if (!result.success) {
+        setActionError({ key: 'generic', raw: result.error });
         setSessions(previous);
         refresh();
       }
     } catch {
+      setActionError({ key: 'generic' });
       setSessions(previous);
       refresh();
     } finally {
@@ -649,6 +664,25 @@ export function SessionList({ onOpenChat }: SessionListProps) {
       onDrop={onSidebarDrop}
     >
       {draggingPath && <SessionDragHint />}
+      {actionError && (
+        <div className="session-action-error" data-testid="session-action-error" role="alert">
+          <span>
+            {actionError.key === 'running'
+              ? t('sessions.deleteRunning')
+              : actionError.raw
+                ? t('sessions.actionFailed', { error: actionError.raw })
+                : t('sessions.actionFailedPlain')}
+          </span>
+          <button
+            type="button"
+            data-testid="session-action-error-dismiss"
+            onClick={() => setActionError(null)}
+            aria-label={t('sessions.actionErrorDismiss')}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
       {started && activeGroups.map((group) => renderGroup(group, false))}
       {started && archivedGroups.length > 0 && (
         <div className="archived-sessions" data-testid="archived-sessions">

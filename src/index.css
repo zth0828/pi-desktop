@@ -518,6 +518,37 @@ button.danger-outline {
   overscroll-behavior: contain;
 }
 
+/* 删除/归档失败提示：列首行内条，可关闭 */
+.session-action-error {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 4px 4px 2px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--danger, #e5484d);
+  background: color-mix(in srgb, var(--danger, #e5484d) 10%, transparent);
+}
+
+.session-action-error button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.session-action-error button:hover {
+  background: color-mix(in srgb, var(--danger, #e5484d) 14%, transparent);
+}
+
 .sidebar-session {
   text-align: left;
   padding: 7px 10px;

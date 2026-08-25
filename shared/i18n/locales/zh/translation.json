@@ -429,6 +429,7 @@
       "rateLimit": "上游限流：请求过于频繁，请稍等片刻再试。",
       "quota": "账号配额或用量已达上限：需要联系服务商充值或续期。",
       "replacementTimeout": "会话替换超时未确认，请重试或切换会话。",
+      "hostInvokeTimeout": "与主进程通信超时（{{action}}），请重试。",
       "requestId": "请求 ID：{{id}}"
     }
   },
@@ -532,7 +533,11 @@
     "openExportFolder": "打开文件夹",
     "emptyAll": "还没有任何会话记录，先去聊几句吧。",
     "projectCount": "{{count}} 个会话",
-    "openProjectFolder": "打开文件夹"
+    "openProjectFolder": "打开文件夹",
+    "actionFailed": "操作失败：{{error}}",
+    "actionFailedPlain": "操作失败，请重试。",
+    "deleteRunning": "会话正在运行，请先停止后再删除",
+    "actionErrorDismiss": "关闭"
   },
   "extensions": {
     "title": "Packages",
