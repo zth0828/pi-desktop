@@ -458,6 +458,7 @@
     "deleteProvider": "Delete provider",
     "deleteProviderConfirm": "Delete provider \"{{name}}\" together with all of its models and credentials? This cannot be undone.",
     "editProvider": "Edit info",
+    "editProviderTitle": "Edit provider info",
     "saveEdit": "Save changes",
     "oauth": "Sign in with browser",
     "oauthStarted": "Authorization started — complete it in your browser.",

@@ -458,6 +458,7 @@
     "deleteProvider": "删除供应商",
     "deleteProviderConfirm": "删除供应商“{{name}}”及其全部模型和凭证？此操作无法撤销。",
     "editProvider": "编辑信息",
+    "editProviderTitle": "编辑供应商信息",
     "saveEdit": "保存修改",
     "oauth": "浏览器授权登录",
     "oauthStarted": "授权已发起——请在浏览器中完成。",

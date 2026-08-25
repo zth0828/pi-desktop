@@ -318,6 +318,7 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
           )}
           {provider.source === 'config' && editing && (
             <div className="provider-edit-form" data-testid={`provider-edit-form-${provider.id}`}>
+              <div className="provider-edit-form-title">{t('models.editProviderTitle')}</div>
               <input
                 data-testid={`edit-name-${provider.id}`}
                 placeholder={t('models.customName')}
@@ -370,7 +371,22 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
               {models.length === 0 ? (
                 <div className="hint">{t('models.noAvailableModels')}</div>
               ) : (
-                models.map((m) => (
+                models.map((m) => {
+                  const metaText = [
+                    m.input?.includes('image') ? t('models.visionMeta') : '',
+                    t('models.modelMeta', {
+                      api: m.api,
+                      context: m.contextWindow?.toLocaleString() ?? '—',
+                      output: m.maxTokens?.toLocaleString() ?? '—',
+                    }),
+                    t('models.pricing', {
+                      input: formatRate(m.cost.input),
+                      output: formatRate(m.cost.output),
+                      cacheRead: formatRate(m.cost.cacheRead),
+                      cacheWrite: formatRate(m.cost.cacheWrite),
+                    }),
+                  ].filter(Boolean).join(' · ');
+                  return (
                   <div
                     className="provider-model-row"
                     key={m.id}
@@ -381,7 +397,12 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                         <span className="provider-model-name">{modelDisplayName(m, provider)}</span>
                         {m.name && m.name !== m.id && <span className="hint">{m.id}</span>}
                       </div>
-                      <span className="provider-model-meta" data-testid={`provider-model-meta-${provider.id}-${m.id}`}>
+                      {/* meta 单行省略：完整信息放 title，避免长文本换行挤压右侧控件 */}
+                      <span
+                        className="provider-model-meta"
+                        title={metaText}
+                        data-testid={`provider-model-meta-${provider.id}-${m.id}`}
+                      >
                         {m.input?.includes('image') && (
                           <span
                             className="provider-model-vision"
@@ -452,7 +473,8 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                       </button>
                     )}
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}
