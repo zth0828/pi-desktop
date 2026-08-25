@@ -40,6 +40,49 @@ export function consumeSessionDragCancelled(): boolean {
   return value;
 }
 
+// 拖拽 payload 单例：dragover 阶段浏览器禁止读 dataTransfer 数据，落区拿不到
+// 拖的是什么会话；SessionList dragstart 写入、dragend 清除，落区 dragover 据此
+// 判断拖的会话是否已在某面板打开。跨窗口拖拽时目标窗口读不到本单例，回落为
+// 普通分栏/替换提示（drop 仍可读 dataTransfer，行为不受影响）。
+let dragPayload: { sessionPath: string; cwd?: string } | null = null;
+
+export function setSessionDragPayload(payload: { sessionPath: string; cwd?: string }): void {
+  dragPayload = payload;
+}
+
+export function clearSessionDragPayload(): void {
+  dragPayload = null;
+}
+
+export function getSessionDragPayload(): { sessionPath: string; cwd?: string } | null {
+  return dragPayload;
+}
+
+// 已打开会话被拖入（面板落区/侧栏）松手：持有面板播放一次认领闪烁，
+// 告知"会话在这里"而不是静默无反应。快照为 "paneId#递增序号" 字符串——
+// 序号保证同一面板连续触发也能驱动重渲染与动画重放（key 变化重挂载）。
+let claimedPaneId: string | null = null;
+let claimNonce = 0;
+const claimListeners = new Set<() => void>();
+
+export function flashPaneClaimed(paneId: string): void {
+  claimedPaneId = paneId;
+  claimNonce += 1;
+  claimListeners.forEach((listener) => listener());
+}
+
+export function subscribePaneClaim(listener: () => void): () => void {
+  claimListeners.add(listener);
+  return () => {
+    claimListeners.delete(listener);
+  };
+}
+
+/** useSyncExternalStore 快照（字符串，引用稳定） */
+export function getPaneClaimSnapshot(): string {
+  return claimedPaneId ? `${claimedPaneId}#${claimNonce}` : '';
+}
+
 // 落区悬停标记：拖拽指针悬停在某面板落区时置位，SessionList 的全局拖拽提示
 // 据此弱化让位，避免与落区中心的操作描述视觉打架。
 let paneDropHover = false;

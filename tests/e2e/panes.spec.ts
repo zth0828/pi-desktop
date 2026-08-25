@@ -10,6 +10,8 @@
 // 8) 落区操作描述：合成 dragover 到右缘/中心 → overlay 中心显示分栏/替换描述并随指针切换，
 //    dragleave 后消失（需求 1）。
 // 9) 拖拽全局提示：dragstart → 顶部浮条出现，悬停落区时弱化（muted），dragend → 消失（需求 2）。
+// 10) 拖入已打开会话：dragover 整面板「已打开」提示，drop 激活持有面板 + 认领闪烁，不新增面板。
+// 11) 拖当前会话出窗（持有窗口=源窗口）：落点在窗口外 → 按落点拆出独立窗口，源面板不动。
 // HTML5 DnD 在 Playwright 无法原生拖拽，落区 drop 用合成 DragEvent（同 scripts/verify-panes-perf.mjs）。
 // 模式同 multi-window.spec.ts：每用例独立 agentDir，mock 走 tests/fixtures/mock-openai-server.mjs。
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -91,7 +93,7 @@ const pane = (page: Page, index: number) => page.locator('.pane-leaf').nth(index
 
 // evaluate 回调运行在页面 DOM 环境，但 e2e spec 走 tsconfig.node.json（无 DOM lib），
 // 参考 chat.spec.ts 的做法对 globalThis 做结构化断言。
-type DomRectLike = { left: number; right: number; top: number; width: number; height: number };
+type DomRectLike = { left: number; right: number; top: number; bottom: number; width: number; height: number };
 type DomElementLike = {
   getBoundingClientRect(): DomRectLike;
   dispatchEvent(event: unknown): boolean;
@@ -135,7 +137,7 @@ async function sessionPathOf(page: Page, sessionText: string): Promise<string> {
 }
 
 /**
- * 合成 drop 把侧栏会话放进指定面板的落区（edge = 右缘分栏 / center = 中心替换）。
+ * 合成 drop 把侧栏会话放进指定面板的落区（四缘分栏 / center = 中心替换）。
  * payload 必须带 cwd（同 SessionList dragstart）：缺 cwd 时 main 侧 switch 会退化为
  * 改绑全局 active runtime，抢走别的面板正在用的会话。
  */
@@ -143,7 +145,7 @@ async function dropSessionIntoPane(
   page: Page,
   sessionPath: string,
   paneIndex: number,
-  zone: 'right' | 'center',
+  zone: 'left' | 'right' | 'top' | 'bottom' | 'center',
   cwd: string,
 ) {
   await page.evaluate(
@@ -153,11 +155,19 @@ async function dropSessionIntoPane(
       const rect = target.getBoundingClientRect();
       const dt = new dom.DataTransfer();
       dt.setData('application/x-pi-session', JSON.stringify({ sessionPath: p, cwd: c }));
+      // zoneFromPoint 先判 x（<25% left / >75% right）再判 y，top/bottom 的
+      // clientX 必须落在中段，否则会被 left/right 区抢先命中
+      const clientX = z === 'left' ? rect.left + 10
+        : z === 'right' ? rect.right - 10
+          : rect.left + rect.width / 2;
+      const clientY = z === 'top' ? rect.top + 10
+        : z === 'bottom' ? rect.bottom - 10
+          : rect.top + rect.height / 2;
       target.dispatchEvent(new dom.DragEvent('drop', {
         bubbles: true,
         cancelable: true,
-        clientX: z === 'center' ? rect.left + rect.width / 2 : rect.right - 10,
-        clientY: rect.top + rect.height / 2,
+        clientX,
+        clientY,
         dataTransfer: dt,
       }));
     },
@@ -177,6 +187,39 @@ async function setupTwoPanes(page: Page, draggedText: string, currentText: strin
   await expect(pane(page, 1).getByTestId('message-user').first()).toContainText(draggedText, {
     timeout: 30_000,
   });
+}
+
+/** 侧栏会话行对应的会话 id（data-testid 后缀，用于合成行级拖拽事件） */
+async function sidebarRowSessionId(page: Page, sessionText: string): Promise<string> {
+  const row = page.locator('.sidebar-session-row').filter({ hasText: sessionText });
+  const testId = await row.locator('[data-testid^="sidebar-session-"]').first().getAttribute('data-testid');
+  expect(testId).toBeTruthy();
+  return testId!.replace('sidebar-session-', '');
+}
+
+/** 合成 dragstart/dragend 到侧栏会话行（payload 由真实 onDragStart 处理器从闭包写入） */
+async function dispatchRowDragEvent(
+  page: Page,
+  sessionId: string,
+  type: 'dragstart' | 'dragend',
+  init: Record<string, unknown> = {},
+) {
+  await page.evaluate(
+    ({ id, type: t, init: i }) => {
+      const dom = globalThis as unknown as DomEnv;
+      const button = dom.document.querySelector(`[data-testid="sidebar-session-${id}"]`);
+      const row = button?.closest('.sidebar-session-row');
+      if (!row) throw new Error('sidebar session row not found');
+      const dt = new dom.DataTransfer();
+      row.dispatchEvent(new dom.DragEvent(t, {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: dt,
+        ...i,
+      }));
+    },
+    { id: sessionId, type, init },
+  );
 }
 
 test('拖入分栏：会话拖到面板右缘 → 分两列，两面板各自加载各自会话历史', async ({
@@ -199,6 +242,119 @@ test('拖入分栏：会话拖到面板右缘 → 分两列，两面板各自加
   await expect(pane(page, 1).getByTestId('message-user')).toHaveCount(1);
   await expect(pane(page, 1).getByTestId('message-user').last()).toContainText('split ALPHA');
   await expect(pane(page, 1).getByTestId('message-assistant').last()).toContainText('PONG');
+});
+
+test('拖入分栏（左）：会话拖到面板左缘 → 分两列，左侧新面板加载目标会话', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'Say PONG split-left ALPHA');
+  await page.getByTestId('new-chat').click();
+  await sendAndWaitReply(page, 'Say PONG split-left BETA');
+  await dropSessionIntoPane(page, await sessionPathOf(page, 'split-left ALPHA'), 0, 'left', workspace);
+
+  await expect(page.locator('.pane-leaf')).toHaveCount(2, { timeout: 10_000 });
+  await expect(page.locator('.pane-split-row')).toBeVisible();
+
+  // left：新面板插在目标面板左侧（DOM 序在前）
+  await expect(pane(page, 0).getByTestId('message-user').first()).toContainText('split-left ALPHA', {
+    timeout: 30_000,
+  });
+  await expect(pane(page, 0).getByTestId('message-assistant').last()).toContainText('PONG');
+  await expect(pane(page, 1).getByTestId('message-user')).toHaveCount(1);
+  await expect(pane(page, 1).getByTestId('message-user').last()).toContainText('split-left BETA');
+});
+
+test('拖入分栏（上）：会话拖到面板上缘 → 分两行，上方新面板加载目标会话', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'Say PONG split-top ALPHA');
+  await page.getByTestId('new-chat').click();
+  await sendAndWaitReply(page, 'Say PONG split-top BETA');
+  await dropSessionIntoPane(page, await sessionPathOf(page, 'split-top ALPHA'), 0, 'top', workspace);
+
+  await expect(page.locator('.pane-leaf')).toHaveCount(2, { timeout: 10_000 });
+  await expect(page.locator('.pane-split-column')).toBeVisible();
+
+  // top：新面板插在目标面板上方（DOM 序在前）
+  await expect(pane(page, 0).getByTestId('message-user').first()).toContainText('split-top ALPHA', {
+    timeout: 30_000,
+  });
+  await expect(pane(page, 0).getByTestId('message-assistant').last()).toContainText('PONG');
+  await expect(pane(page, 1).getByTestId('message-user')).toHaveCount(1);
+  await expect(pane(page, 1).getByTestId('message-user').last()).toContainText('split-top BETA');
+});
+
+test('拖入分栏（下）：会话拖到面板下缘 → 分两行，下方新面板加载目标会话', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'Say PONG split-bottom ALPHA');
+  await page.getByTestId('new-chat').click();
+  await sendAndWaitReply(page, 'Say PONG split-bottom BETA');
+  await dropSessionIntoPane(page, await sessionPathOf(page, 'split-bottom ALPHA'), 0, 'bottom', workspace);
+
+  await expect(page.locator('.pane-leaf')).toHaveCount(2, { timeout: 10_000 });
+  await expect(page.locator('.pane-split-column')).toBeVisible();
+
+  // bottom：新面板插在目标面板下方（DOM 序在后）
+  await expect(pane(page, 0).getByTestId('message-user')).toHaveCount(1);
+  await expect(pane(page, 0).getByTestId('message-user').last()).toContainText('split-bottom BETA');
+  await expect(pane(page, 1).getByTestId('message-user').first()).toContainText('split-bottom ALPHA', {
+    timeout: 30_000,
+  });
+  await expect(pane(page, 1).getByTestId('message-assistant').last()).toContainText('PONG');
+});
+
+test('拖入已打开会话：整面板「已打开」提示，松手激活持有面板并闪烁，不新增面板', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await setupTwoPanes(page, 'already-open ALPHA', 'already-open BETA');
+  // ALPHA 在 pane1（splitAt 后为活跃面板）；先把活跃面板切到 pane0，验证 drop 后跳回持有面板
+  await page.locator('.sidebar-session-row').filter({ hasText: 'already-open BETA' })
+    .locator('[data-testid^="sidebar-session-"]').first().click();
+  await expect(page.locator('.pane-leaf[data-active]')).toContainText('already-open BETA');
+
+  // 真实 dragstart 写入拖拽单例（dragover 读不到 dataTransfer 数据，靠单例判定已打开）
+  const alphaId = await sidebarRowSessionId(page, 'already-open ALPHA');
+  await dispatchRowDragEvent(page, alphaId, 'dragstart');
+
+  // dragover 到 pane0 右缘：已打开 → 整面板提示（不是分栏提示）
+  await dragOverPaneLeaf(page, 'dragover-right');
+  await expect(page.getByTestId('pane-drop-overlay')).toBeVisible();
+  await expect(page.getByTestId('pane-drop-highlight')).toHaveClass(/zone-already-open/);
+  await expect(page.getByTestId('pane-drop-label')).toHaveText(/已在某面板打开|already open/i);
+
+  // drop：不新增面板，激活持有面板（pane1）并播放认领闪烁
+  await dropSessionIntoPane(
+    page,
+    await sessionPathOf(page, 'already-open ALPHA'),
+    0,
+    'right',
+    workspace,
+  );
+  await expect(page.locator('.pane-leaf')).toHaveCount(2);
+  await expect(page.locator('.pane-leaf[data-active]')).toContainText('already-open ALPHA');
+  await expect(pane(page, 1).getByTestId('pane-claimed-flash')).toBeVisible();
+
+  // dragend：已由落区消化，不上报 OS 开窗
+  await dispatchRowDragEvent(page, alphaId, 'dragend');
+  await page.waitForTimeout(1_000);
+  expect(app.windows()).toHaveLength(1);
 });
 
 test('两面板并发流式：各自收到自己的回复，互不串台', async ({ launchElectronApp }) => {
@@ -387,6 +543,31 @@ test('拖出窗口仍开 OS 独立窗口（与分栏共存回归）', async ({ l
   });
   // 主窗口仍停留在 BETA 会话，且未被拖出动作分栏
   await expect(page.getByTestId('message-user').last()).toContainText('main BETA');
+  await expect(page.locator('.pane-leaf')).toHaveCount(1);
+});
+
+test('拖当前会话出窗（持有窗口=源窗口）：按落点拆出独立窗口，源面板不动', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // ALPHA 是主窗口当前面板正在显示的会话：持有窗口即拖拽源窗口 → 拆出路径
+  await sendAndWaitReply(page, 'Say PONG tearout ALPHA');
+  const alphaId = await sidebarRowSessionId(page, 'tearout ALPHA');
+
+  await dispatchRowDragEvent(page, alphaId, 'dragstart');
+  await dispatchRowDragEvent(page, alphaId, 'dragend', { screenX: -3000, screenY: -3000 });
+
+  await expect.poll(() => app.windows().length, { timeout: 15_000 }).toBe(2);
+  const detached = app.windows().find((w) => w !== page)!;
+  await waitSessionReady(detached);
+  await expect(detached.getByTestId('message-user').last()).toContainText('tearout ALPHA', {
+    timeout: 30_000,
+  });
+  // 源面板仍显示该会话（拆出 = 另开查看位，不关源面板），且未分栏
+  await expect(page.getByTestId('message-user').last()).toContainText('tearout ALPHA');
   await expect(page.locator('.pane-leaf')).toHaveCount(1);
 });
 

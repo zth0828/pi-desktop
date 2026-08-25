@@ -11,18 +11,23 @@ import type {
   WindowsSetSessionsPayload,
 } from '@shared/host-api/contract';
 import {
+  createAppWindow,
   createSessionWindow,
   createSessionWindowAtPoint,
   findWindowBySession,
   claimWindowSession,
   focusWindowForSession,
+  getWindowBounds,
   listWindows,
+  resolveWindowSize,
   setWindowSessions,
 } from '../main/window-manager';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { sendHostEventToWindow } from '../main/ipc/host-events';
 import { prewarmSessionRuntime } from './pi-runtime-api';
 import { timingMark } from '../utils/timing';
+import { centerBoundsAtPoint, isPointInsideRects } from '../utils/detach-drop';
+import { hashSessionPath, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { computeRightExpansion, shouldRestoreExpansion } from '../utils/window-bounds';
 
 /** 每窗口的向右加宽状态：count 支持同窗口多面板各自展开工作台（只加宽一次，归零才缩回）。 */
@@ -62,18 +67,49 @@ export const windowsApi = {
     prewarmSessionRuntime(payload.sessionPath, payload.cwd);
     createSessionWindow(payload.sessionPath, payload.cwd);
   },
-  openDetachedAt: (payload: WindowsOpenDetachedAtPayload): void => {
+  openDetachedAt: (payload: WindowsOpenDetachedAtPayload, ctx?: HostActionContext): void => {
     const existing = findWindowBySession(payload.sessionPath);
+    if (existing) {
+      const sourceWin = ctx ? BrowserWindow.fromWebContents(ctx.sender) : null;
+      // 持有窗口不是拖拽源窗口：复用持有窗口（聚焦 + 激活对应面板），
+      // 不建新窗，保证同一会话全局只归一个窗口。
+      if (sourceWin?.webContents.id !== existing.webContents.id) {
+        if (existing.isMinimized()) existing.restore();
+        existing.focus();
+        sendHostEventToWindow(existing, 'windows', 'focusSession', { sessionPath: payload.sessionPath });
+        return;
+      }
+      // 持有窗口即拖拽源窗口：用户把本窗口打开的会话拖出 → 拆出独立窗口。
+      // 落点在任一 app 窗口内（面板/侧栏等非落区位置）不拆出。
+      const point = { x: payload.screenX, y: payload.screenY };
+      if (isPointInsideRects(point, getWindowBounds())) return;
+      // 不走 createSessionWindowAtPoint：它内部的 createSessionWindow 会复用
+      // 持有窗口（源窗口）导致拆出永远不发生，这里直接按落点几何建窗。
+      const display = screen.getDisplayNearestPoint(point);
+      const bounds = centerBoundsAtPoint(point, resolveWindowSize(), display.workArea);
+      createAppWindow({
+        sessionPath: payload.sessionPath,
+        cwd: payload.cwd,
+        position: { x: bounds.x, y: bounds.y },
+      });
+      // 拆出后源窗口面板仍显示该会话，注册表出现双持有（findWindowBySession
+      // 仍以源窗口为先）；冲突记诊断日志，focusSession 发给持有窗口激活其面板。
+      writePiDiagnostic({
+        level: 'warning',
+        event: 'session.registry-conflict',
+        module: 'windows',
+        action: 'openDetachedAt',
+        sessionPathHash: hashSessionPath(payload.sessionPath),
+        detail: 'session torn out of its owning window, which still displays it',
+      });
+      sendHostEventToWindow(existing, 'windows', 'focusSession', { sessionPath: payload.sessionPath });
+      return;
+    }
     const win = createSessionWindowAtPoint(payload.sessionPath, payload.cwd, {
       x: payload.screenX,
       y: payload.screenY,
     });
     if (!win) return;
-    if (existing) {
-      // 拖出已打开会话时复用持有窗口，并激活其中的对应面板。
-      sendHostEventToWindow(win, 'windows', 'focusSession', { sessionPath: payload.sessionPath });
-      return;
-    }
     prewarmSessionRuntime(payload.sessionPath, payload.cwd);
   },
   focus: (payload: WindowsFocusPayload): void => {

@@ -22,12 +22,17 @@ import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { groupByProject, type ProjectGroup } from '../lib/session-groups';
 import {
+  clearSessionDragPayload,
   consumeSessionDragCancelled,
   consumeSessionDroppedInWindow,
+  flashPaneClaimed,
+  getSessionDragPayload,
   isPaneDropHoverActive,
   markSessionDragCancelled,
+  markSessionDroppedInWindow,
   resetSessionDragCancelled,
   resetSessionDroppedInWindow,
+  setSessionDragPayload,
   subscribePaneDropHover,
 } from '../lib/session-drag';
 import { sessionPathsInTree } from '../stores/panes';
@@ -114,6 +119,34 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     panes.openOrFocusSession(sessionPath, cwd);
     return true;
   }, []);
+
+  // 侧栏自身也是落区：已打开会话拖回侧栏 = 激活其所在面板（配认领闪烁反馈）。
+  // 未打开会话不承接——dragend 上报 openDetachedAt 后由 main 侧窗口 bounds
+  // 判定兜住（落点在窗口内不开窗），行为与没有侧栏落区时一致。
+  const onSidebarDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes('application/x-pi-session')) return;
+    const dragged = getSessionDragPayload();
+    if (!dragged || !panesStore.getState().findPaneBySession(dragged.sessionPath)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  };
+  const onSidebarDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    const raw = event.dataTransfer.getData('application/x-pi-session');
+    if (!raw) return;
+    let payload: { sessionPath?: string };
+    try {
+      payload = JSON.parse(raw) as { sessionPath?: string };
+    } catch {
+      return;
+    }
+    if (!payload.sessionPath) return;
+    const existingPane = panesStore.getState().findPaneBySession(payload.sessionPath);
+    if (!existingPane) return;
+    event.preventDefault();
+    panesStore.getState().activatePane(existingPane);
+    flashPaneClaimed(existingPane);
+    markSessionDroppedInWindow();
+  };
 
   const refresh = useCallback(() => {
     const sequence = ++refreshSequence.current;
@@ -373,6 +406,8 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                 resetSessionDroppedInWindow();
                 resetSessionDragCancelled();
                 dragPayload.current = { sessionPath: session.path, cwd: session.cwd };
+                // dragover 阶段落区读不到 dataTransfer 数据，经模块单例桥接
+                setSessionDragPayload(dragPayload.current);
                 event.dataTransfer.setData(
                   'application/x-pi-session',
                   JSON.stringify(dragPayload.current),
@@ -396,6 +431,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                 setDraggingPath(undefined);
                 dragEscCleanup.current?.();
                 dragEscCleanup.current = undefined;
+                clearSessionDragPayload();
                 const payload = dragPayload.current;
                 dragPayload.current = undefined;
                 // 分栏落区已消化本次拖拽（分栏/替换/同会话激活），不再上报 OS 开窗
@@ -605,7 +641,13 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   };
 
   return (
-    <div ref={listRef} className="sidebar-sessions" data-testid="sidebar-sessions">
+    <div
+      ref={listRef}
+      className="sidebar-sessions"
+      data-testid="sidebar-sessions"
+      onDragOver={onSidebarDragOver}
+      onDrop={onSidebarDrop}
+    >
       {draggingPath && <SessionDragHint />}
       {started && activeGroups.map((group) => renderGroup(group, false))}
       {started && archivedGroups.length > 0 && (
