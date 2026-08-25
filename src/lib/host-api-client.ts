@@ -55,6 +55,17 @@ function hostInvokeTimeoutError(timeoutMs: number, module: string, action: strin
   return error;
 }
 
+/**
+ * 判断错误文本是否为本通道的通信超时（错误码可能丢失——success:false 返回值不带 code，
+ * 只有 message），展示层据此把英文原文换成可读文案。
+ * 返回 action 名（如 piSessions.switch）供文案插值。
+ */
+export function matchHostInvokeTimeout(message: string | undefined): string | null {
+  if (!message) return null;
+  const matched = /^Host request timed out after \d+ms: (\S+)$/.exec(message);
+  return matched ? matched[1] : null;
+}
+
 async function invokeHostImpl<
   M extends HostApiModule,
   A extends HostApiAction<M>,

@@ -9,7 +9,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { expect, test } from './fixtures/electron';
+import { expect, test, type LaunchOptions } from './fixtures/electron';
 
 let mock: ChildProcess;
 let mockPort: number;
@@ -116,17 +116,18 @@ async function expectLayoutIntact(page: import('@playwright/test').Page) {
   expect(inputBox!.width).toBeGreaterThan(viewport.width * 0.3);
 }
 
-type Launcher = (options?: unknown) => Promise<import('@playwright/test').ElectronApplication>;
-
-const launchOptions = (agentDir: string) => ({
+const launchOptions = (agentDir: string): LaunchOptions => ({
   withPi: true,
   agentDir,
   seedSettings: { workspaceCwd: workspace },
 });
 
 /** 阶段一：正常创建一个会话（标题 "Say PONG"），返回后 app 已关闭 */
-async function createSessionThenClose(launchElectronApp: Launcher, agentDir: string) {
-  const app = await launchElectronApp(launchOptions(agentDir) as never);
+async function createSessionThenClose(
+  launchElectronApp: (options?: LaunchOptions) => Promise<import('@playwright/test').ElectronApplication>,
+  agentDir: string,
+) {
+  const app = await launchElectronApp(launchOptions(agentDir));
   const page = await app.firstWindow();
   await waitSessionReady(page);
   await sendOneRound(page);
@@ -144,7 +145,7 @@ test('删除供应商（仍有可用模型）→ 旧会话静默回退，历史�
   // 模拟用户删掉 mock 供应商（只剩 rescue）
   await writeModels(agentDir, { withMock: false });
 
-  const app = await launchElectronApp(launchOptions(agentDir) as never);
+  const app = await launchElectronApp(launchOptions(agentDir));
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
@@ -168,7 +169,7 @@ test('改错 apiKey → 旧会话正常打开，发消息报 401 行内提示、
   // 模拟用户把 apiKey 改错（mock server 对 wrong-key 返回 401）
   await writeModels(agentDir, { mockApiKey: 'wrong-key' });
 
-  const app = await launchElectronApp(launchOptions(agentDir) as never);
+  const app = await launchElectronApp(launchOptions(agentDir));
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
@@ -199,7 +200,7 @@ test('供应商全删（无可用模型）→ 旧会话仍可打开，发消息�
   // 模拟用户唯一供应商被删：models.json 无任何 provider
   await writeModels(agentDir, { withMock: false, withRescue: false });
 
-  const app = await launchElectronApp(launchOptions(agentDir) as never);
+  const app = await launchElectronApp(launchOptions(agentDir));
   const page = await app.firstWindow();
   await waitSessionReady(page);
 

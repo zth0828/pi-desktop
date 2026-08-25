@@ -6,6 +6,7 @@ import { parseProviderError } from '@shared/provider-error';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { cacheHitRate, summarizeUsage } from '../../lib/usage-stats';
 import { hostApi } from '../../lib/host-api';
+import { matchHostInvokeTimeout } from '../../lib/host-api-client';
 import { onHostEvent } from '../../lib/host-events';
 import { SESSION_REPLACEMENT_TIMEOUT } from '../../lib/session-binding';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
@@ -734,7 +735,16 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               <span>
                 {modelUnavailable
                   ? t('chat.error.modelUnavailable', { provider: unavailableProvider, model: unavailableModelId })
-                  : startError === 'start-timeout' ? t('chat.startTimeout') : workspaceErrorMessage(startError, t)}
+                  : startError === 'start-timeout'
+                    ? t('chat.startTimeout')
+                    : (() => {
+                      // 通道级超时（如切换请求 30s 无响应）翻译成可读文案；
+                      // 其余 main 侧错误保留原文（有诊断价值，且来源多样无法穷举）
+                      const timeoutAction = matchHostInvokeTimeout(startError);
+                      return timeoutAction
+                        ? t('chat.errors.hostInvokeTimeout', { action: timeoutAction })
+                        : workspaceErrorMessage(startError, t);
+                    })()}
               </span>
               {lastFailedSwitch && started && (
                 <span className="error-banner-note" data-testid="switch-failed-note">
@@ -830,20 +840,32 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
           )}
         </div>
 
-        {runtimeError && (
-          <div className="runtime-error-notice" data-testid="runtime-error-notice" role="alert">
-            <span className="runtime-error-text">
-              <span className="runtime-error-title">{t('chat.runtimeErrorTitle')}</span>
-              {/* store 保持 node-safe 不能引 i18n：替换超时以哨兵值入 state，这里翻译 */}
-              {runtimeError === SESSION_REPLACEMENT_TIMEOUT
-                ? t('chat.errors.replacementTimeout')
-                : runtimeError}
-            </span>
-            <button type="button" data-testid="runtime-error-dismiss" onClick={dismissRuntimeError}>
-              {t('chat.runtimeErrorDismiss')}
-            </button>
-          </div>
-        )}
+        {runtimeError && (() => {
+          // store 保持 node-safe 不能引 i18n：替换超时以哨兵值入 state，这里翻译。
+          // 通道超时同理按 message 形态识别；供应商类错误附归属 hint（与消息流内一致）。
+          const timeoutAction = matchHostInvokeTimeout(runtimeError);
+          const parsed = parseProviderError(runtimeError);
+          return (
+            <div className="runtime-error-notice" data-testid="runtime-error-notice" role="alert">
+              <span className="runtime-error-text">
+                <span className="runtime-error-title">{t('chat.runtimeErrorTitle')}</span>
+                {runtimeError === SESSION_REPLACEMENT_TIMEOUT
+                  ? t('chat.errors.replacementTimeout')
+                  : timeoutAction
+                    ? t('chat.errors.hostInvokeTimeout', { action: timeoutAction })
+                    : runtimeError}
+                {parsed.category !== 'unknown' && (
+                  <div className="error-hint" data-testid={`runtime-error-hint-${parsed.category}`}>
+                    {t(`chat.errors.${parsed.category}`)}
+                  </div>
+                )}
+              </span>
+              <button type="button" data-testid="runtime-error-dismiss" onClick={dismissRuntimeError}>
+                {t('chat.runtimeErrorDismiss')}
+              </button>
+            </div>
+          );
+        })()}
 
         <ExtensionWidgets placement="aboveEditor" />
         <StatusBar />
