@@ -55,7 +55,7 @@ test('vLLM：探测识别服务器类型，写库走 chat-template 思考控制 
   await expect(page.getByTestId('add-custom-provider')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('add-custom-provider').click();
   const form = page.getByTestId('custom-provider-form');
-  await form.getByPlaceholder('Provider id (e.g. my-llm)').fill('friend-vllm');
+  await form.getByPlaceholder('Provider name (e.g. My LLM)').fill('Friend VLLM');
   await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}`);
   await form.getByTestId('probe-custom-provider').click();
 

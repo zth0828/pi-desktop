@@ -215,7 +215,7 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
   await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('add-custom-provider').click();
   const form = page.getByTestId('custom-provider-form');
-  await form.getByPlaceholder('Provider id (e.g. my-llm)').fill('added-provider');
+  await form.getByPlaceholder('Provider name (e.g. My LLM)').fill('Added Provider');
   await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}/v1`);
   await form.getByPlaceholder('API key').fill('added-secret');
   await expect(form.getByTestId('custom-api-select')).toHaveCount(0);
@@ -229,22 +229,24 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
 
   const added = page.getByTestId('provider-added-provider');
   await expect(added).toBeVisible({ timeout: 15_000 });
+  await expect(added.locator('.provider-name')).toHaveText('Added Provider');
   await expect(page.getByTestId('provider-status-added-provider')).toHaveClass(/configured/);
   await expect.poll(async () => {
     const models = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
-      providers: { 'added-provider': { apiKey?: string; models?: Array<{ contextWindow?: number; reasoning?: boolean }> } };
+      providers: { 'added-provider': { name?: string; apiKey?: string; models?: Array<{ contextWindow?: number; reasoning?: boolean }> } };
     };
     const auth = JSON.parse(await readFile(path.join(agentDir, 'auth.json'), 'utf8')) as {
       'added-provider'?: { key?: string };
     };
     return {
+      name: models.providers['added-provider'].name,
       inlineKey: models.providers['added-provider'].apiKey,
       storedKey: auth['added-provider']?.key,
       contextWindow: models.providers['added-provider'].models?.[0]?.contextWindow,
       // 第三方模型缺省按支持推理处理，思考深度菜单可用
       reasoning: models.providers['added-provider'].models?.[0]?.reasoning,
     };
-  }).toEqual({ inlineKey: undefined, storedKey: 'added-secret', contextWindow: 262144, reasoning: true });
+  }).toEqual({ name: 'Added Provider', inlineKey: undefined, storedKey: 'added-secret', contextWindow: 262144, reasoning: true });
 
   await added.locator('.provider-row-header').click();
   await expect(page.getByTestId('provider-request-url-added-provider')).toContainText(
@@ -263,6 +265,65 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
       hasCredential: Object.hasOwn(auth, 'added-provider'),
     };
   }).toEqual({ hasProvider: false, hasCredential: false });
+});
+
+test('Models 页：重新打开新增供应商表单时字段为空', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('add-custom-provider').click();
+  const form = page.getByTestId('custom-provider-form');
+  await form.getByPlaceholder('Provider name (e.g. My LLM)').fill('Temp Provider');
+  await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}/v1`);
+  await form.getByRole('button', { name: 'Cancel' }).click();
+
+  // 再次打开：上次填写的内容不应残留
+  await page.getByTestId('add-custom-provider').click();
+  await expect(form.getByPlaceholder('Provider name (e.g. My LLM)')).toHaveValue('');
+  await expect(form.getByPlaceholder('baseURL')).toHaveValue('');
+  await expect(form.getByTestId('probe-results')).toHaveCount(0);
+});
+
+test('Models 页：已配置模型的自定义供应商仍可编辑名称与请求协议', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  const row = page.getByTestId('provider-mock');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.provider-row-header').click();
+  await expect(page.getByTestId('provider-model-mock-mock-1')).toBeVisible();
+
+  await page.getByTestId('edit-provider-mock').click();
+  await expect(page.getByTestId('provider-edit-form-mock')).toBeVisible();
+  await expect(page.getByTestId('edit-name-mock')).toHaveValue('mock');
+  await page.getByTestId('edit-name-mock').fill('Renamed Mock');
+  await page.getByTestId('edit-api-mock').selectOption('openai-responses');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+
+  // 列表行立即显示新名称，models.json 仅更新基本信息，模型与凭证保持不变
+  await expect(row.locator('.provider-name')).toHaveText('Renamed Mock', { timeout: 15_000 });
+  await expect.poll(async () => {
+    const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+      providers: { mock: { name?: string; api?: string; baseUrl?: string; apiKey?: string; models?: Array<{ id: string }> } };
+    };
+    const p = doc.providers.mock;
+    return {
+      name: p.name,
+      api: p.api,
+      baseUrl: p.baseUrl,
+      apiKey: p.apiKey,
+      modelIds: p.models?.map((m) => m.id),
+    };
+  }).toEqual({
+    name: 'Renamed Mock',
+    api: 'openai-responses',
+    baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+    apiKey: 'mock-key',
+    modelIds: ['mock-1', 'mock-wide'],
+  });
 });
 
 test('Models 页：协议探测拒绝 200 HTML，发现 /v1 并选择真实 OpenAI 接口', async ({ launchElectronApp }) => {
