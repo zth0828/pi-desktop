@@ -160,6 +160,11 @@ export const test = base.extend<ElectronFixtures>({
           ],
           env: {
             ...process.env,
+            // IDE 内嵌终端注入的 ELECTRON_FORCE_IS_PACKAGED 会让裸 Electron 的
+            // app.isPackaged 变 true，main 走打包分支（resourcesPath 图标等解析失败）
+            // 后 uncaughtException → app.quit()，全部用例启动即退；E2E 固定跑
+            // dist-electron 裸入口，必须剥离该注入。
+            ELECTRON_FORCE_IS_PACKAGED: undefined,
             HOME: homeDir,
             // Windows 的 os.homedir()/Electron 读 USERPROFILE 而非 HOME，不隔离会穿透到真实用户目录
             ...(process.platform === 'win32' ? { USERPROFILE: homeDir } : {}),
