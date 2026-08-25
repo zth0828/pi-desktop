@@ -448,7 +448,8 @@
       "config": "models.json",
       "extension": "Extension"
     },
-    "modelMeta": "{{api}} · context {{context}} · max output {{output}}",
+    "metaContext": "context {{context}}",
+    "metaOutput": "max output {{output}}",
     "pricing": "Per 1M tokens: input {{input}}, output {{output}}, cache read {{cacheRead}}, cache write {{cacheWrite}}",
     "keyPlaceholder": "API key",
     "saveKey": "Save key",

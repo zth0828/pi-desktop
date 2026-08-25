@@ -3568,26 +3568,34 @@ button.danger-outline {
 
 .provider-model-main .hint { margin-left: 7px; }
 
-/* meta 单行省略：长文本换行会把「设为当前」按钮和开关挤换行 */
+/* meta 片段化：容器可折行（完整信息 title 提供），每个片段内部 nowrap，
+   数字（上下文/最大输出）不会被截断；右侧控件经 flex-shrink 不被挤压 */
 .provider-model-meta {
   color: var(--text-tertiary);
   font-size: 10.5px;
   line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 4px;
+  row-gap: 1px;
   max-width: 100%;
+}
+
+.provider-model-meta-chunk {
+  white-space: nowrap;
 }
 
 .provider-model-vision {
   display: inline-block;
-  margin-right: 7px;
   padding: 1px 7px;
   border-radius: 99px;
   font-size: 10px;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
+
+/* 探测结果列表里徽标后紧跟规格文本：meta flex gap 不适用，保留间距 */
+.probe-model-spec .provider-model-vision { margin-right: 7px; }
 
 .provider-model-reasoning {
   display: inline-flex;
@@ -3632,11 +3640,22 @@ button.danger-outline {
   border-radius: 99px;
 }
 
-.provider-edit-form {
+/* 编辑供应商：浮层弹窗（fixed + 遮罩），不插入行内 DOM 挤压页面布局 */
+.provider-edit-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+
+.provider-edit-dialog {
+  width: min(460px, 86vw);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 460px;
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -3649,7 +3668,12 @@ button.danger-outline {
   color: var(--text-secondary, var(--text-tertiary));
 }
 
-.provider-edit-form .actions {
+.provider-edit-dialog input,
+.provider-edit-dialog select {
+  width: 100%;
+}
+
+.provider-edit-dialog .actions {
   display: flex;
   gap: 8px;
   margin-left: auto;

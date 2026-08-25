@@ -448,7 +448,8 @@
       "config": "models.json",
       "extension": "扩展"
     },
-    "modelMeta": "{{api}} · 上下文 {{context}} · 最大输出 {{output}}",
+    "metaContext": "上下文 {{context}}",
+    "metaOutput": "最大输出 {{output}}",
     "pricing": "每百万 Token：输入 {{input}}，输出 {{output}}，缓存读 {{cacheRead}}，缓存写 {{cacheWrite}}",
     "keyPlaceholder": "API key",
     "saveKey": "保存 key",

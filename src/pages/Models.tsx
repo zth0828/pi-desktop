@@ -317,41 +317,50 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
             </button>
           )}
           {provider.source === 'config' && editing && (
-            <div className="provider-edit-form" data-testid={`provider-edit-form-${provider.id}`}>
-              <div className="provider-edit-form-title">{t('models.editProviderTitle')}</div>
-              <input
-                data-testid={`edit-name-${provider.id}`}
-                placeholder={t('models.customName')}
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-              />
-              <input
-                data-testid={`edit-base-url-${provider.id}`}
-                placeholder={t('models.customBaseUrl')}
-                value={editBaseUrl}
-                onChange={(e) => setEditBaseUrl(e.target.value)}
-              />
-              <select
-                aria-label={t('models.customApi')}
-                data-testid={`edit-api-${provider.id}`}
-                value={editApi}
-                onChange={(e) => setEditApi(e.target.value)}
-              >
-                {CUSTOM_API_TYPES.map((apiType) => (
-                  <option key={apiType} value={apiType}>{apiType}</option>
-                ))}
-              </select>
-              <div className="actions">
-                <button
-                  className="primary"
-                  disabled={busy || !editName.trim() || !editBaseUrl.trim()}
-                  onClick={() => void saveEdit()}
+            <div
+              className="provider-edit-overlay"
+              data-testid={`provider-edit-form-${provider.id}`}
+              onClick={(e) => {
+                // 点遮罩关闭；表单内部点击不冒泡关闭
+                if (e.target === e.currentTarget) setEditing(false);
+              }}
+            >
+              <div className="provider-edit-dialog">
+                <div className="provider-edit-form-title">{t('models.editProviderTitle')}</div>
+                <input
+                  data-testid={`edit-name-${provider.id}`}
+                  placeholder={t('models.customName')}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                />
+                <input
+                  data-testid={`edit-base-url-${provider.id}`}
+                  placeholder={t('models.customBaseUrl')}
+                  value={editBaseUrl}
+                  onChange={(e) => setEditBaseUrl(e.target.value)}
+                />
+                <select
+                  aria-label={t('models.customApi')}
+                  data-testid={`edit-api-${provider.id}`}
+                  value={editApi}
+                  onChange={(e) => setEditApi(e.target.value)}
                 >
-                  {t('models.saveEdit')}
-                </button>
-                <button disabled={busy} onClick={() => setEditing(false)}>
-                  {t('models.cancel')}
-                </button>
+                  {CUSTOM_API_TYPES.map((apiType) => (
+                    <option key={apiType} value={apiType}>{apiType}</option>
+                  ))}
+                </select>
+                <div className="actions">
+                  <button
+                    className="primary"
+                    disabled={busy || !editName.trim() || !editBaseUrl.trim()}
+                    onClick={() => void saveEdit()}
+                  >
+                    {t('models.saveEdit')}
+                  </button>
+                  <button disabled={busy} onClick={() => setEditing(false)}>
+                    {t('models.cancel')}
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -372,19 +381,24 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                 <div className="hint">{t('models.noAvailableModels')}</div>
               ) : (
                 models.map((m) => {
-                  const metaText = [
+                  const contextText = t('models.metaContext', {
+                    context: m.contextWindow?.toLocaleString() ?? '—',
+                  });
+                  const outputText = t('models.metaOutput', {
+                    output: m.maxTokens?.toLocaleString() ?? '—',
+                  });
+                  const pricingText = t('models.pricing', {
+                    input: formatRate(m.cost.input),
+                    output: formatRate(m.cost.output),
+                    cacheRead: formatRate(m.cost.cacheRead),
+                    cacheWrite: formatRate(m.cost.cacheWrite),
+                  });
+                  const metaTitle = [
                     m.input?.includes('image') ? t('models.visionMeta') : '',
-                    t('models.modelMeta', {
-                      api: m.api,
-                      context: m.contextWindow?.toLocaleString() ?? '—',
-                      output: m.maxTokens?.toLocaleString() ?? '—',
-                    }),
-                    t('models.pricing', {
-                      input: formatRate(m.cost.input),
-                      output: formatRate(m.cost.output),
-                      cacheRead: formatRate(m.cost.cacheRead),
-                      cacheWrite: formatRate(m.cost.cacheWrite),
-                    }),
+                    m.api ?? '',
+                    contextText,
+                    outputText,
+                    pricingText,
                   ].filter(Boolean).join(' · ');
                   return (
                   <div
@@ -397,10 +411,10 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                         <span className="provider-model-name">{modelDisplayName(m, provider)}</span>
                         {m.name && m.name !== m.id && <span className="hint">{m.id}</span>}
                       </div>
-                      {/* meta 单行省略：完整信息放 title，避免长文本换行挤压右侧控件 */}
+                      {/* meta 拆片段：数字片段内不换行不截断，容器可折行到第二行；title 提供全文 */}
                       <span
                         className="provider-model-meta"
-                        title={metaText}
+                        title={metaTitle}
                         data-testid={`provider-model-meta-${provider.id}-${m.id}`}
                       >
                         {m.input?.includes('image') && (
@@ -411,18 +425,15 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                             {t('models.visionMeta')}
                           </span>
                         )}
-                        {t('models.modelMeta', {
-                          api: m.api,
-                          context: m.contextWindow?.toLocaleString() ?? '—',
-                          output: m.maxTokens?.toLocaleString() ?? '—',
-                        })}
-                        {' · '}
-                        {t('models.pricing', {
-                          input: formatRate(m.cost.input),
-                          output: formatRate(m.cost.output),
-                          cacheRead: formatRate(m.cost.cacheRead),
-                          cacheWrite: formatRate(m.cost.cacheWrite),
-                        })}
+                        <span className="provider-model-meta-chunk">{m.api}</span>
+                        <span className="provider-model-meta-chunk">{contextText}</span>
+                        <span
+                          className="provider-model-meta-chunk"
+                          data-testid={`provider-model-meta-output-${provider.id}-${m.id}`}
+                        >
+                          {outputText}
+                        </span>
+                        <span className="provider-model-meta-chunk">{pricingText}</span>
                       </span>
                     </div>
                     {provider.source === 'config' && (
