@@ -17,6 +17,7 @@ import type {
   PiProviderProbeResult,
   PiProviderServerType,
   PiProviderSetModelReasoningPayload,
+  PiProviderUpdateCustomPayload,
   PiProviderSetKeyResult,
   PiCompactionSettings,
   PiRetrySettingsPayload,
@@ -227,6 +228,17 @@ function providerLabel(id: string, name: string, baseUrl?: string): string {
   return name || id;
 }
 
+/** 自定义供应商展示名：models.json 里用户命名的 name 优先，避免被 providerLabel
+ *  的 hostname/ID 推断覆盖（首页模型菜单等处的分组名即来自这里）。 */
+function customProviderLabel(
+  providerId: string,
+  fallbackName: string,
+  configured: Record<string, ConfiguredProvider>,
+): string {
+  return configured[providerId]?.name
+    ?? providerLabel(providerId, fallbackName, configured[providerId]?.baseUrl);
+}
+
 /** 凭证变化后调用：下次使用时重建 ModelRuntime。 */
 export function invalidateModelRuntime(): void {
   runtimePromise = null;
@@ -269,8 +281,9 @@ export const providersApi = {
       const auth = provider.auth as { apiKey?: unknown; oauth?: unknown };
       rows.push({
         id: provider.id,
-        name: providerLabel(provider.id, provider.name, configuredProvidersById[provider.id]?.baseUrl),
+        name: customProviderLabel(provider.id, provider.name, configuredProvidersById),
         baseUrl: configuredProvidersById[provider.id]?.baseUrl ?? provider.baseUrl,
+        api: configuredProvidersById[provider.id]?.api,
         source: extensionProviderIds.has(provider.id)
           ? 'extension'
           : configuredProvidersById[provider.id]
@@ -294,10 +307,10 @@ export const providersApi = {
     return {
       models: available.map((m) => ({
         provider: m.provider,
-        providerLabel: providerLabel(
+        providerLabel: customProviderLabel(
           m.provider,
           providerNames.get(m.provider) ?? m.provider,
-          configuredProvidersById[m.provider]?.baseUrl,
+          configuredProvidersById,
         ),
         id: m.id,
         name: m.name,
@@ -441,6 +454,12 @@ export const providersApi = {
     try {
       const adapter = await loadPiAdapter();
       const agentDir = adapter.paths.getAgentDir();
+      // id 冲突保护：与已有自定义/内置供应商同 id 的写入会静默覆盖对方配置
+      const { runtime: currentRuntime } = await getModelRuntime(ctx);
+      const existingIds = new Set(adapter.providers.listProviders(currentRuntime).map((provider) => provider.id));
+      if (existingIds.has(payload.id)) {
+        return { success: false, error: `provider id already exists: ${payload.id}` };
+      }
       await adapter.settings.updateJson(agentDir, 'models.json', (doc) => {
         const providers = doc.providers && typeof doc.providers === 'object' && !Array.isArray(doc.providers)
           ? doc.providers as Record<string, unknown>
@@ -457,6 +476,7 @@ export const providersApi = {
         const compat = compatForOpenAi(serverType);
         const thinkingMap = thinkingLevelMapFor(serverType);
         providers[payload.id] = {
+        name: payload.name.trim() || payload.id,
         baseUrl: normalizeBaseUrlForApi(payload.baseUrl, payload.api),
         api: payload.api,
         ...(localServer && !payload.apiKey ? { apiKey: placeholderApiKey(serverType) } : {}),
@@ -495,6 +515,40 @@ export const providersApi = {
           notify: () => {},
         });
       }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /**
+   * 编辑自定义供应商基本信息（名称/baseUrl/请求协议）。已配置的模型与凭证
+   * 保持不变——添加模型后仍可改名、换地址或换协议，无需删除重建。
+   */
+  updateCustom: async (payload: PiProviderUpdateCustomPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    try {
+      const adapter = await loadPiAdapter();
+      const agentDir = adapter.paths.getAgentDir();
+      const existing = configuredProviders(agentDir)[payload.providerId];
+      if (!existing) {
+        return { success: false, error: `custom provider not found: ${payload.providerId}` };
+      }
+      // baseUrl 规范化依赖 api（anthropic 需去掉 /v1 后缀）：优先用本次提交的 api
+      const nextApi = payload.api ?? existing.api ?? '';
+      const found = await updateConfiguredProvider(agentDir, payload.providerId, (provider) => {
+        if (payload.name !== undefined) provider.name = payload.name.trim() || payload.providerId;
+        if (payload.api !== undefined) provider.api = payload.api;
+        if (payload.baseUrl !== undefined) {
+          provider.baseUrl = normalizeBaseUrlForApi(payload.baseUrl, nextApi);
+        }
+      });
+      if (!found) {
+        return { success: false, error: `custom provider not found: ${payload.providerId}` };
+      }
+      invalidateModelRuntime();
+      const active = await resolveRuntimeForContextReady(ctx);
+      const { runtime } = await getModelRuntime(ctx);
+      if (active) await adapter.providers.refresh(runtime, { allowNetwork: false });
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };

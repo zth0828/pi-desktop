@@ -108,6 +108,7 @@ function createHostApi(sessionPath?: string) {
     startOAuth: (providerId: string) => invoke('providers', 'startOAuth', { providerId }),
     addCustom: (payload: {
       id: string;
+      name: string;
       baseUrl: string;
       api: string;
       apiKey?: string;
@@ -121,6 +122,8 @@ function createHostApi(sessionPath?: string) {
         thinkingLevelMap?: Record<string, string | null>;
       }>;
     }) => invoke('providers', 'addCustom', payload),
+    updateCustom: (payload: { providerId: string; name?: string; baseUrl?: string; api?: string }) =>
+      invoke('providers', 'updateCustom', payload),
     setModelReasoning: (providerId: string, modelId: string, reasoning: boolean) =>
       invoke('providers', 'setModelReasoning', { providerId, modelId, reasoning }),
     probe: (payload: { baseUrl: string; apiKey?: string; model?: string; verifyProtocols?: boolean }) =>

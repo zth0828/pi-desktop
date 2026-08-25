@@ -624,6 +624,8 @@ export type PiProviderRow = {
   name: string;
   /** 供应商 API 请求地址（内置来自 pi catalog，自定义来自 models.json baseUrl）。 */
   baseUrl?: string;
+  /** 请求协议（自定义供应商来自 models.json api；内置供应商缺省）。 */
+  api?: string;
   source: 'builtin' | 'config' | 'extension';
   authMethods: string[];
   configured: boolean;
@@ -660,6 +662,8 @@ export type PiProviderServerType = 'lm-studio' | 'vllm' | 'generic';
 
 export type PiProviderAddCustomPayload = {
   id: string;
+  /** 展示名：写入 models.json providers.<id>.name，pi 会将其作为供应商名返回。 */
+  name: string;
   baseUrl: string;
   api: string;
   apiKey?: string;
@@ -673,6 +677,13 @@ export type PiProviderAddCustomPayload = {
     maxTokens?: number;
     thinkingLevelMap?: Record<string, string | null>;
   }>;
+};
+/** 编辑自定义供应商基本信息（名称/baseUrl/请求协议）；模型与凭证保持不变。 */
+export type PiProviderUpdateCustomPayload = {
+  providerId: string;
+  name?: string;
+  baseUrl?: string;
+  api?: string;
 };
 export type PiProviderProbePayload = {
   baseUrl: string;
@@ -1098,6 +1109,8 @@ export type HostApiContract = {
     deleteCustom: (payload: { providerId: string }) => HostSuccess;
     startOAuth: (payload: { providerId: string }) => HostSuccess;
     addCustom: (payload: PiProviderAddCustomPayload) => HostSuccess;
+    /** 编辑自定义供应商基本信息（名称/baseUrl/请求协议）；模型与凭证保持不变。 */
+    updateCustom: (payload: PiProviderUpdateCustomPayload) => HostSuccess;
     /**
      * 切换 models.json 自定义模型的 reasoning 声明。目录探测不上报推理能力时，
      * 用户用此开关手动声明；活动会话正在使用该模型时同步重新应用模型定义。
