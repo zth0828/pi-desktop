@@ -650,7 +650,7 @@ export type PiModelRow = {
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
-  cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 };
 export type PiProviderRefreshResult = HostSuccess & {
   aborted?: boolean;

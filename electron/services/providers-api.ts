@@ -305,28 +305,48 @@ export const providersApi = {
     const configuredProvidersById = configuredProviders(agentDir);
     const providerNames = new Map(adapter.providers.listProviders(runtime).map((provider) => [provider.id, provider.name]));
     const available = await adapter.providers.getAvailable(runtime);
+    // pi 组装模型时对缺失 cost 强制填 0（provider-composer: definition.cost ?? {input:0,...}），
+    // 无法区分「未知价格」与「真 0」；对自定义供应商读 models.json 原始记录还原：
+    // 原始记录没写 cost → UI 显示占位。
+    const modelsWithCost = new Map<string, Set<string>>();
+    for (const [providerId, provider] of Object.entries(configuredProvidersById)) {
+      const ids = new Set<string>();
+      for (const raw of provider.models ?? []) {
+        if (raw && typeof raw === 'object' && (raw as { cost?: unknown }).cost !== undefined) {
+          ids.add(String((raw as { id?: unknown }).id ?? ''));
+        }
+      }
+      modelsWithCost.set(providerId, ids);
+    }
     return {
-      models: available.map((m) => ({
-        provider: m.provider,
-        providerLabel: customProviderLabel(
-          m.provider,
-          providerNames.get(m.provider) ?? m.provider,
-          configuredProvidersById,
-        ),
-        id: m.id,
-        name: m.name,
-        api: m.api,
-        reasoning: m.reasoning,
-        input: m.input,
-        contextWindow: m.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
-        maxTokens: m.maxTokens,
-        cost: {
-          input: m.cost?.input ?? 0,
-          output: m.cost?.output ?? 0,
-          cacheRead: m.cost?.cacheRead ?? 0,
-          cacheWrite: m.cost?.cacheWrite ?? 0,
-        },
-      })),
+      models: available.map((m) => {
+        const hasExplicitCost = modelsWithCost.get(m.provider)?.has(m.id)
+          ?? !configuredProvidersById[m.provider]; // 内置/扩展供应商：pi 目录的价格即真实值
+        const cost = m.cost && typeof m.cost === 'object'
+          ? {
+            input: m.cost.input ?? 0,
+            output: m.cost.output ?? 0,
+            cacheRead: m.cost.cacheRead ?? 0,
+            cacheWrite: m.cost.cacheWrite ?? 0,
+          }
+          : undefined;
+        return {
+          provider: m.provider,
+          providerLabel: customProviderLabel(
+            m.provider,
+            providerNames.get(m.provider) ?? m.provider,
+            configuredProvidersById,
+          ),
+          id: m.id,
+          name: m.name,
+          api: m.api,
+          reasoning: m.reasoning,
+          input: m.input,
+          contextWindow: m.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+          maxTokens: m.maxTokens,
+          cost: hasExplicitCost ? cost : undefined,
+        };
+      }),
     };
   },
 
@@ -500,7 +520,7 @@ export const providersApi = {
             ...(tlm ? { thinkingLevelMap: tlm } : {}),
             // 输入模态：探测目录上报 > 规格表（已知视觉模型）> 纯文本。
             input: m.input ?? profile.input ?? ['text'],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            // 价格未知时不写 cost（pi 定义允许缺省）：前端显示占位，与真 0 区分
             contextWindow: m.contextWindow ?? profile.contextWindow,
             maxTokens: m.maxTokens ?? profile.maxTokens,
           };

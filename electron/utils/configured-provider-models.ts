@@ -221,7 +221,8 @@ export function mergeDiscoveredProviderModels(existing: unknown[], detected: Det
       input: model.input
         ?? matchModelProfile(model.id).input
         ?? (Array.isArray(template.input) ? template.input : ['text']),
-      cost: record(template.cost) ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      // 价格未知时不写 cost（pi 定义允许缺省）：前端显示占位，与真 0 区分
+      ...(record(template.cost) ? { cost: record(template.cost) } : {}),
       contextWindow: model.contextWindow
         ?? positiveNumber(template.contextWindow)
         ?? DEFAULT_CONTEXT_WINDOW,

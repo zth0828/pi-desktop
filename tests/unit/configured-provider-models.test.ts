@@ -88,6 +88,16 @@ describe('configured provider model discovery', () => {
     )).toEqual([{ id: 'existing-without-context', reasoning: false, contextWindow: 128000 }]);
   });
 
+  it('omits cost for discovered models when the template has no price', () => {
+    // 价格未知时不写 cost（pi 定义允许缺省）：前端显示占位，与真 0 区分
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'manual', reasoning: true }],
+      [{ id: 'manual' }, { id: 'new-model' }],
+    );
+    expect(merged.find((m) => m.id === 'new-model')).not.toHaveProperty('cost');
+    expect(merged.find((m) => m.id === 'manual')).not.toHaveProperty('cost');
+  });
+
   it('backfills image input for known vision models when the directory is silent', () => {
     // 目录未上报 input：按规格表识别已知视觉模型
     const merged = mergeDiscoveredProviderModels([], [{ id: 'gemini-2.5-pro' }, { id: 'qwen3-32b' }]);
