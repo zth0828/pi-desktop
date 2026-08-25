@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseProviderError } from '../../src/lib/provider-error';
+import { parseProviderError, toModelUnavailableError } from '../../src/lib/provider-error';
 
 describe('parseProviderError', () => {
   it('401 → invalid-key，并提取 request id', () => {
@@ -98,5 +98,43 @@ describe('parseProviderError', () => {
   it('无法识别的内容 → unknown，不误报', () => {
     expect(parseProviderError('Request failed with status code 500 in my own code').category).toBe('unknown');
     expect(parseProviderError('something went wrong').category).toBe('unknown');
+  });
+
+  it('model not found 文本 → wrong-model 并提取 provider/model（模型 ID 可含斜杠）', () => {
+    const simple = parseProviderError('model not found: openai/gpt-5.5');
+    expect(simple.category).toBe('wrong-model');
+    expect(simple.providerId).toBe('openai');
+    expect(simple.modelId).toBe('gpt-5.5');
+
+    const slashed = parseProviderError('Model not found: openrouter/moonshotai/kimi-k2.6');
+    expect(slashed.category).toBe('wrong-model');
+    expect(slashed.providerId).toBe('openrouter');
+    expect(slashed.modelId).toBe('moonshotai/kimi-k2.6');
+  });
+
+  it('wrong-model 但文本不含 provider/id 引用（如网关 503 分组无渠道）时不提取', () => {
+    const info = parseProviderError(
+      'OpenAI API error (503): {"error":{"code":"model_not_found","message":"No available channel for model gpt-4o-mini under group 特惠分组"}}',
+    );
+    expect(info.category).toBe('wrong-model');
+    expect(info.providerId).toBeUndefined();
+    expect(info.modelId).toBeUndefined();
+  });
+});
+
+describe('toModelUnavailableError（main 侧启动/切换失败分类出口）', () => {
+  it('wrong-model 文本 → MODEL_UNAVAILABLE HostError，detail 带供应商/模型 ID', () => {
+    const error = toModelUnavailableError('model not found: openai/gpt-5.5');
+    expect(error).toBeInstanceOf(Error);
+    expect(error?.name).toBe('HostError');
+    expect(error?.code).toBe('MODEL_UNAVAILABLE');
+    expect(error?.message).toBe('model not found: openai/gpt-5.5');
+    expect(error?.detail).toEqual({ providerId: 'openai', modelId: 'gpt-5.5' });
+  });
+
+  it('非模型类错误（invalid-key / quota / unknown）返回 undefined', () => {
+    expect(toModelUnavailableError('OpenAI API error (401): invalid token')).toBeUndefined();
+    expect(toModelUnavailableError('OpenAI API error (402): payment required')).toBeUndefined();
+    expect(toModelUnavailableError('something went wrong')).toBeUndefined();
   });
 });
