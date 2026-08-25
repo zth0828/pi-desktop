@@ -579,6 +579,62 @@ test('Models 页：图像开关声明自定义模型的多模态输入', async (
     .toEqual(['text']);
 });
 
+test('Models 页：刷新把旧版写入的多模态声明升级为规格表识别结果', async ({ launchElectronApp }) => {
+  // 覆盖 beforeEach 的 models.json：模拟历史版本写入的旧模型——
+  // gemini-2.5-pro 命中规格表（视觉），plain-legacy-model 未命中
+  const modelsDoc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+    providers: { mock: { models: unknown[] } };
+  };
+  const legacyModel = (id: string) => ({
+    id,
+    name: id,
+    reasoning: false,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 262144,
+    maxTokens: 4096,
+  });
+  modelsDoc.providers.mock.models = [legacyModel('plain-legacy-model'), legacyModel('gemini-2.5-pro')];
+  await writeFile(path.join(agentDir, 'models.json'), JSON.stringify(modelsDoc));
+  // mock-1 已被替换：默认模型指向仍存在的旧模型，避免启动时解析失败
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'gemini-2.5-pro' }),
+  );
+
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  const row = page.getByTestId('provider-mock');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.provider-row-header').click();
+  // 刷新前：两个旧模型都无视觉标识
+  await expect(page.getByTestId('provider-model-vision-mock-gemini-2.5-pro')).toHaveCount(0);
+
+  await page.getByTestId('refresh-models').click();
+  await expect(page.getByTestId('models-refresh-message')).toContainText('Found', {
+    timeout: 30_000,
+  });
+
+  // 命中规格表的旧模型升级为多模态；未命中的保持纯文本
+  await expect(page.getByTestId('provider-model-vision-mock-gemini-2.5-pro')).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByTestId('provider-model-vision-mock-plain-legacy-model')).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; input?: string[] }> } };
+      };
+      return {
+        gemini: doc.providers.mock.models.find((m) => m.id === 'gemini-2.5-pro')?.input,
+        plain: doc.providers.mock.models.find((m) => m.id === 'plain-legacy-model')?.input,
+      };
+    }, { timeout: 15_000 })
+    .toEqual({ gemini: ['text', 'image'], plain: ['text'] });
+});
+
 /** Codex 风格模型菜单：触发器 → 「模型」行 → 子菜单里按 data-value 点选 */
 async function selectChatModel(page: import('@playwright/test').Page, value: string) {
   await page.getByTestId('model-select').click();
