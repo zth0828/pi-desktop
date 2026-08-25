@@ -58,12 +58,61 @@ function formatRate(rate: number): string {
   return rate === 0 ? '$0' : `$${rate.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
 }
 
+/** 供应商 id 由名称生成 slug（保留 Unicode 字母数字，中文名称可用）。 */
+function slugifyProviderName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^\p{L}\p{N}-]+/gu, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'custom-provider';
+}
+
+function uniqueProviderId(name: string, existingIds: string[]): string {
+  const base = slugifyProviderName(name);
+  if (!existingIds.includes(base)) return base;
+  let n = 2;
+  while (existingIds.includes(`${base}-${n}`)) n += 1;
+  return `${base}-${n}`;
+}
+
 function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChanged }: ProviderRowProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editBaseUrl, setEditBaseUrl] = useState('');
+  const [editApi, setEditApi] = useState('openai-responses');
+
+  const startEdit = () => {
+    setEditName(provider.name);
+    setEditBaseUrl(provider.baseUrl ?? '');
+    setEditApi(provider.api ?? models[0]?.api ?? 'openai-responses');
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    setBusy(true);
+    setMessage(undefined);
+    const result = await hostApi.providers.updateCustom({
+      providerId: provider.id,
+      name: editName.trim(),
+      baseUrl: editBaseUrl.trim(),
+      api: editApi,
+    });
+    setBusy(false);
+    if (result.success) {
+      setEditing(false);
+      onChanged();
+    } else {
+      setMessage(result.error);
+    }
+  };
   const setApiKey = async () => {
     setBusy(true);
     setMessage(undefined);
@@ -232,6 +281,53 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
           )}
           {provider.source === 'config' && (
             <button
+              data-testid={`edit-provider-${provider.id}`}
+              disabled={busy}
+              onClick={startEdit}
+            >
+              {t('models.editProvider')}
+            </button>
+          )}
+          {provider.source === 'config' && editing && (
+            <div className="provider-edit-form" data-testid={`provider-edit-form-${provider.id}`}>
+              <input
+                data-testid={`edit-name-${provider.id}`}
+                placeholder={t('models.customName')}
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+              <input
+                data-testid={`edit-base-url-${provider.id}`}
+                placeholder={t('models.customBaseUrl')}
+                value={editBaseUrl}
+                onChange={(e) => setEditBaseUrl(e.target.value)}
+              />
+              <select
+                aria-label={t('models.customApi')}
+                data-testid={`edit-api-${provider.id}`}
+                value={editApi}
+                onChange={(e) => setEditApi(e.target.value)}
+              >
+                {CUSTOM_API_TYPES.map((apiType) => (
+                  <option key={apiType} value={apiType}>{apiType}</option>
+                ))}
+              </select>
+              <div className="actions">
+                <button
+                  className="primary"
+                  disabled={busy || !editName.trim() || !editBaseUrl.trim()}
+                  onClick={() => void saveEdit()}
+                >
+                  {t('models.saveEdit')}
+                </button>
+                <button disabled={busy} onClick={() => setEditing(false)}>
+                  {t('models.cancel')}
+                </button>
+              </div>
+            </div>
+          )}
+          {provider.source === 'config' && (
+            <button
               className="danger-outline"
               data-testid={`delete-provider-${provider.id}`}
               disabled={busy}
@@ -316,10 +412,10 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
   );
 }
 
-function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
+function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => void; existingProviderIds: string[] }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [id, setId] = useState('');
+  const [name, setName] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [api, setApi] = useState<string>('openai-responses');
   const [apiKey, setApiKey] = useState('');
@@ -327,6 +423,23 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
   const [message, setMessage] = useState<string>();
   const [probing, setProbing] = useState(false);
   const [probeResult, setProbeResult] = useState<PiProviderProbeResult>();
+
+  // 每次打开都从空白开始：上次（已保存/已取消）的录入不应残留在新表单里
+  const resetForm = () => {
+    setName('');
+    setBaseUrl('');
+    setApi('openai-responses');
+    setApiKey('');
+    setModelIds('');
+    setMessage(undefined);
+    setProbeResult(undefined);
+    setProbing(false);
+  };
+
+  const openForm = () => {
+    resetForm();
+    setOpen(true);
+  };
 
   const resetProbe = () => {
     setProbeResult(undefined);
@@ -398,7 +511,9 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
         };
       });
     const result = await hostApi.providers.addCustom({
-      id: id.trim(),
+      // 供应商 id 由名称自动生成（slug + 去重），用户只负责命名
+      id: uniqueProviderId(name, existingProviderIds),
+      name: name.trim(),
       baseUrl: baseUrl.trim(),
       api,
       apiKey: apiKey.trim() || undefined,
@@ -406,8 +521,8 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
       models,
     });
     if (result.success) {
+      resetForm();
       setOpen(false);
-      setMessage(undefined);
       onAdded();
     } else {
       setMessage(result.error);
@@ -416,14 +531,19 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
 
   if (!open) {
     return (
-      <button data-testid="add-custom-provider" onClick={() => setOpen(true)}>
+      <button data-testid="add-custom-provider" onClick={openForm}>
         {t('models.addCustom')}
       </button>
     );
   }
   return (
     <div className="custom-provider-form" data-testid="custom-provider-form">
-      <input placeholder={t('models.customId')} value={id} onChange={(e) => setId(e.target.value)} />
+      <input
+        data-testid="custom-provider-name"
+        placeholder={t('models.customName')}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
       <input
         placeholder={t('models.customBaseUrl')}
         value={baseUrl}
@@ -564,7 +684,7 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
         />
       )}
       <div className="actions">
-        <button className="primary" disabled={!probeResult || !id.trim() || !baseUrl.trim() || !modelIds.trim()} onClick={() => void submit()}>
+        <button className="primary" disabled={!probeResult || !name.trim() || !baseUrl.trim() || !modelIds.trim()} onClick={() => void submit()}>
           {t('models.saveCustom')}
         </button>
         <button onClick={() => setOpen(false)}>{t('models.cancel')}</button>
@@ -690,7 +810,7 @@ export default function ModelsPage() {
           />
         ))}
       </div>
-      <CustomProviderForm onAdded={refresh} />
+      <CustomProviderForm onAdded={refresh} existingProviderIds={providers.map((p) => p.id)} />
     </div>
   );
 }
