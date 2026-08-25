@@ -16,6 +16,7 @@ import type {
   PiProviderProbePayload,
   PiProviderProbeResult,
   PiProviderServerType,
+  PiProviderSetModelInputPayload,
   PiProviderSetModelReasoningPayload,
   PiProviderUpdateCustomPayload,
   PiProviderSetKeyResult,
@@ -497,7 +498,8 @@ export const providersApi = {
             name: m.name ?? m.id,
             reasoning: m.reasoning ?? true,
             ...(tlm ? { thinkingLevelMap: tlm } : {}),
-            input: ['text'],
+            // 输入模态：探测目录上报 > 规格表（已知视觉模型）> 纯文本。
+            input: m.input ?? profile.input ?? ['text'],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             contextWindow: m.contextWindow ?? profile.contextWindow,
             maxTokens: m.maxTokens ?? profile.maxTokens,
@@ -600,6 +602,50 @@ export const providersApi = {
   },
 
   /**
+   * 切换 models.json 自定义模型的图像输入声明（多模态）。规格表识别不到的
+   * 新模型或网关剥离视觉时用户由此手动声明；活动会话正在使用该模型时用
+   * pi 原生 setModel 重新应用定义，图片附件能力立即生效。
+   */
+  setModelInput: async (payload: PiProviderSetModelInputPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    try {
+      const adapter = await loadPiAdapter();
+      const agentDir = adapter.paths.getAgentDir();
+      let found = false;
+      const providerExists = await updateConfiguredProvider(agentDir, payload.providerId, (provider) => {
+        const models = Array.isArray(provider.models) ? provider.models : [];
+        for (const raw of models) {
+          const model = raw && typeof raw === 'object' && !Array.isArray(raw)
+            ? (raw as Record<string, unknown>)
+            : null;
+          if (model && model.id === payload.modelId) {
+            model.input = payload.image ? ['text', 'image'] : ['text'];
+            found = true;
+          }
+        }
+      });
+      if (!providerExists) {
+        return { success: false, error: `custom provider not found: ${payload.providerId}` };
+      }
+      if (!found) {
+        return { success: false, error: `model not found: ${payload.providerId}/${payload.modelId}` };
+      }
+      invalidateModelRuntime();
+      const active = await resolveRuntimeForContextReady(ctx);
+      if (active) {
+        await active.adapter.providers.refresh(active.modelRuntimeHandle, { allowNetwork: false });
+        const current = active.adapterRuntime.session.model;
+        if (current?.provider === payload.providerId && current?.id === payload.modelId) {
+          const result = await piRuntimeApi.setModel({ provider: payload.providerId, id: payload.modelId }, ctx);
+          if (!result.success) return { success: false, error: result.error };
+        }
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /**
    * 探测自定义供应商，分两层，都在这一个 action 里：
    * - 模型目录（GET /models 等，元数据请求，不产生生成费用）：恒执行。
    * - 协议验证（POST 最小化生成请求，约 1 token）：仅 payload.verifyProtocols=true 时执行，
@@ -633,7 +679,7 @@ export const providersApi = {
       ) || Object.values(record).some(hasCache);
     };
     const models: string[] = [];
-    const modelDetails: Array<{ id: string; contextWindow?: number }> = [];
+    const modelDetails: Array<{ id: string; contextWindow?: number; input?: Array<'text' | 'image'> }> = [];
     const advertisedEndpointTypes = new Set<string>();
     // 目录命中在哪个 base 上：/v1 下命中时把 baseUrl 顺带纠正，与协议验证的 resolvedBaseUrl 语义一致。
     let modelsBaseUrl: string | undefined;
@@ -685,10 +731,18 @@ export const providersApi = {
                 ),
               ) as Record<string, string | null>
             : undefined;
-          const detail: { id: string; contextWindow?: number; thinkingLevelMap?: Record<string, string | null> } = { id };
+          // 目录上报的输入模态：input 数组或 capabilities.vision/image（与
+          // parseProviderModelDirectory 同构）。
+          const rawInput = Array.isArray(row.input) ? row.input : undefined;
+          const input = rawInput
+            ?.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image');
+          const vision = capabilities?.vision === true || capabilities?.image === true;
+          const detail: { id: string; contextWindow?: number; input?: Array<'text' | 'image'>; thinkingLevelMap?: Record<string, string | null> } = { id };
           if (contextWindow > 0) detail.contextWindow = contextWindow;
+          if (input?.length) detail.input = input;
+          else if (vision) detail.input = ['text', 'image'];
           if (thinkingLevelMap && Object.keys(thinkingLevelMap).length > 0) detail.thinkingLevelMap = thinkingLevelMap;
-          if (contextWindow > 0 || (thinkingLevelMap && Object.keys(thinkingLevelMap).length > 0)) {
+          if (contextWindow > 0 || (input?.length ?? 0) > 0 || vision || (thinkingLevelMap && Object.keys(thinkingLevelMap).length > 0)) {
             modelDetails.push(detail);
           }
           const endpointTypes = Array.isArray(row.supported_endpoint_types)
@@ -727,7 +781,15 @@ export const providersApi = {
           const first = instances[0] as { config?: { context_length?: unknown } } | undefined;
           const loaded = Number(first?.config?.context_length ?? 0);
           const maximum = Number(row.max_context_length ?? 0);
-          modelDetails.push({ id, ...(loaded > 0 || maximum > 0 ? { contextWindow: loaded || maximum } : {}) });
+          const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities)
+            ? row.capabilities as Record<string, unknown>
+            : undefined;
+          const vision = capabilities?.vision === true || capabilities?.image === true;
+          modelDetails.push({
+            id,
+            ...(loaded > 0 || maximum > 0 ? { contextWindow: loaded || maximum } : {}),
+            ...(vision ? { input: ['text' as const, 'image' as const] } : {}),
+          });
           if (!models.includes(id)) models.push(id);
         }
       }

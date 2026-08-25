@@ -88,6 +88,28 @@ describe('configured provider model discovery', () => {
     )).toEqual([{ id: 'existing-without-context', reasoning: false, contextWindow: 128000 }]);
   });
 
+  it('backfills image input for known vision models when the directory is silent', () => {
+    // 目录未上报 input：按规格表识别已知视觉模型
+    const merged = mergeDiscoveredProviderModels([], [{ id: 'gemini-2.5-pro' }, { id: 'qwen3-32b' }]);
+    expect(merged.find((m) => m.id === 'gemini-2.5-pro'))
+      .toEqual(expect.objectContaining({ id: 'gemini-2.5-pro', input: ['text', 'image'] }));
+    expect(merged.find((m) => m.id === 'qwen3-32b'))
+      .toEqual(expect.objectContaining({ id: 'qwen3-32b', input: ['text'] }));
+  });
+
+  it('respects directory-reported input over the profile table', () => {
+    // 目录显式 text：网关可能确实剥离了视觉，服务端声明优先
+    const merged = mergeDiscoveredProviderModels([], [{ id: 'gemini-2.5-pro', input: ['text'] }]);
+    expect(merged[0]).toEqual(expect.objectContaining({ id: 'gemini-2.5-pro', input: ['text'] }));
+  });
+
+  it('keeps manually declared input for existing models', () => {
+    // 用户逐模型写过的 input 不被发现流程覆盖（与 reasoning 同策略）
+    const existing = [{ id: 'gemini-2.5-pro', reasoning: true, input: ['text'], contextWindow: 1048576 }];
+    const merged = mergeDiscoveredProviderModels(existing, [{ id: 'gemini-2.5-pro', input: ['text', 'image'] }]);
+    expect(merged[0]).toEqual(expect.objectContaining({ id: 'gemini-2.5-pro', input: ['text'] }));
+  });
+
 
   it('defaults new third-party models to reasoning-capable when neither directory nor template says', () => {
     // 第三方目录普遍不上报推理能力：缺省按支持处理，让思考深度菜单可用

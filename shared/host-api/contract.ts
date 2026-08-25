@@ -226,6 +226,8 @@ export type PiRuntimeModelInfo = {
   id: string;
   name?: string;
   reasoning?: boolean;
+  /** 输入模态：含 'image' 表示支持图像输入（多模态）。 */
+  input?: string[];
   contextWindow?: number;
   /** Maximum generated tokens for one response. This is not the context window. */
   maxTokens?: number;
@@ -673,6 +675,8 @@ export type PiProviderAddCustomPayload = {
     id: string;
     name?: string;
     reasoning?: boolean;
+    /** 输入模态（多模态识别）：探测目录上报时传入；缺省由后端按规格表判定。 */
+    input?: Array<'text' | 'image'>;
     contextWindow?: number;
     maxTokens?: number;
     thinkingLevelMap?: Record<string, string | null>;
@@ -698,6 +702,12 @@ export type PiProviderSetModelReasoningPayload = {
   modelId: string;
   reasoning: boolean;
 };
+/** 切换 models.json 自定义模型的图像输入声明（多模态识别，决定图片附件是否可用）。 */
+export type PiProviderSetModelInputPayload = {
+  providerId: string;
+  modelId: string;
+  image: boolean;
+};
 export type PiProviderProbeProtocol = {
   api: string;
   /** true = 可用：真实验证通过，或服务端 supported_endpoint_types 声明支持（未验证时）。 */
@@ -716,6 +726,8 @@ export type PiProviderProbeResult = {
     id: string;
     contextWindow?: number;
     maxTokens?: number;
+    /** 目录上报的输入模态：含 image 表示支持图像输入（多模态）。 */
+    input?: Array<'text' | 'image'>;
     thinkingLevelMap?: Record<string, string | null>;
   }>;
   protocols: PiProviderProbeProtocol[];
@@ -1116,6 +1128,11 @@ export type HostApiContract = {
      * 用户用此开关手动声明；活动会话正在使用该模型时同步重新应用模型定义。
      */
     setModelReasoning: (payload: PiProviderSetModelReasoningPayload) => HostSuccess;
+    /**
+     * 切换 models.json 自定义模型的图像输入声明（多模态）。规格表识别不到或
+     * 网关剥离视觉时用户用此开关手动声明；活动会话正在使用该模型时同步重新应用。
+     */
+    setModelInput: (payload: PiProviderSetModelInputPayload) => HostSuccess;
     /**
      * 探测自定义供应商：默认只拉模型目录（GET /models，元数据，不发生成请求）；
      * verifyProtocols=true 时才对每个候选协议发送一次最小化测试请求（约 1 token）。

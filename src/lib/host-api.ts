@@ -117,6 +117,7 @@ function createHostApi(sessionPath?: string) {
         id: string;
         name?: string;
         reasoning?: boolean;
+        input?: Array<'text' | 'image'>;
         contextWindow?: number;
         maxTokens?: number;
         thinkingLevelMap?: Record<string, string | null>;
@@ -126,6 +127,8 @@ function createHostApi(sessionPath?: string) {
       invoke('providers', 'updateCustom', payload),
     setModelReasoning: (providerId: string, modelId: string, reasoning: boolean) =>
       invoke('providers', 'setModelReasoning', { providerId, modelId, reasoning }),
+    setModelInput: (providerId: string, modelId: string, image: boolean) =>
+      invoke('providers', 'setModelInput', { providerId, modelId, image }),
     probe: (payload: { baseUrl: string; apiKey?: string; model?: string; verifyProtocols?: boolean }) =>
       invoke('providers', 'probe', payload),
     getCompaction: () => invoke('providers', 'getCompaction'),

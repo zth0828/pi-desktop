@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
+import { matchModelProfile } from '@shared/model-profiles';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -161,7 +162,11 @@ export function mergeDiscoveredProviderModels(existing: unknown[], detected: Det
       // 供应商拒绝思考参数时用户可在 Models 页逐模型关闭（写入后不被发现流程覆盖）。
       reasoning: model.reasoning ?? (typeof template.reasoning === 'boolean' ? template.reasoning : true),
       ...(model.thinkingLevelMap ? { thinkingLevelMap: model.thinkingLevelMap } : {}),
-      input: model.input ?? (Array.isArray(template.input) ? template.input : ['text']),
+      // input 优先级：目录上报 > 规格表（已知视觉模型）> 供应商模板继承 > 纯文本。
+      // 目录显式 text 优先于规格表：网关可能确实剥离了视觉。
+      input: model.input
+        ?? matchModelProfile(model.id).input
+        ?? (Array.isArray(template.input) ? template.input : ['text']),
       cost: record(template.cost) ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: model.contextWindow
         ?? positiveNumber(template.contextWindow)

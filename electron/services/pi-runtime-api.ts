@@ -404,6 +404,7 @@ function modelInfo(session: PiSessionPort): PiRuntimeModelInfo | undefined {
         id: model.id,
         name: model.name,
         reasoning: model.reasoning,
+        input: model.input,
         contextWindow: model.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
         maxTokens: model.maxTokens,
       }
