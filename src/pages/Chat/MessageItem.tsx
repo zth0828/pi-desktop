@@ -2,7 +2,7 @@ import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Copy, FileText, GitFork, Pencil, Square } from 'lucide-react';
 import { parseUserMessage } from '@shared/message-attachments';
-import { parseProviderError } from '../../lib/provider-error';
+import { parseProviderError, PROVIDER_ERROR_HINT_KEYS } from '../../lib/provider-error';
 import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
 import { formatDuration, tailLines } from '../../lib/tool-display';
@@ -56,23 +56,26 @@ function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: stri
   );
 }
 
-/** 供应商错误提示：保留 pi 原文，按状态码/关键词附一条归属提示（谁的问题）。
- *  归属提示只在能识别时显示；识别不了的错误保持原样，避免误导。 */
+/** 供应商错误提示：能识别类别时以本地化说明为主文案，pi 原文降级为次要行
+ *  保留（排查/报障仍需原文与请求 ID）；识别不了的错误保持原样，避免误导。 */
 function ErrorNotice({ message, responseId }: { message: string; responseId?: string }) {
   const { t } = useTranslation();
   const parsed = parseProviderError(message);
   const requestId = parsed.requestId ?? responseId;
   return (
-    <div className="message-notice error" data-testid="message-error">
-      <div className="error-message-raw">{message}</div>
+    <div
+      className={`message-notice error${parsed.category !== 'unknown' ? ' known' : ''}`}
+      data-testid="message-error"
+    >
       {parsed.category !== 'unknown' && (
         <div className="error-hint" data-testid={`error-hint-${parsed.category}`}>
-          {t(`chat.errors.${parsed.category}`)}
+          {t(`chat.errors.${PROVIDER_ERROR_HINT_KEYS[parsed.category]}`)}
           {requestId && (
             <span className="error-request-id"> {t('chat.errors.requestId', { id: requestId })}</span>
           )}
         </div>
       )}
+      <div className="error-message-raw">{message}</div>
     </div>
   );
 }

@@ -428,6 +428,9 @@
       "upstream": "Upstream issue: the request reached the server, but the provider's own upstream is failing. Retry later, or contact the provider with the request ID below.",
       "rateLimit": "Rate limited: too many requests — wait a moment and retry.",
       "quota": "Account quota or usage limit reached: contact the provider to top up or renew.",
+      "network": "Network issue: couldn't reach the provider. Check your network or proxy settings, then retry.",
+      "timeout": "Request timed out: the provider didn't respond in time. Please retry.",
+      "stream": "Stream interrupted: the connection dropped mid-response. Please retry.",
       "replacementTimeout": "Session replacement timed out without confirmation. Please retry or switch sessions.",
       "hostInvokeTimeout": "Timed out communicating with the main process ({{action}}). Please try again.",
       "requestId": "Request ID: {{id}}"

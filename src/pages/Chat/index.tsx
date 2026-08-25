@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useTranslation } from 'react-i18next';
 import { ArrowDown, Check, ChevronRight, PanelRight, X } from 'lucide-react';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
-import { parseProviderError } from '@shared/provider-error';
+import { parseProviderError, PROVIDER_ERROR_HINT_KEYS } from '@shared/provider-error';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { cacheHitRate, summarizeUsage } from '../../lib/usage-stats';
 import { hostApi } from '../../lib/host-api';
@@ -864,9 +864,10 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
                   : timeoutAction
                     ? t('chat.errors.hostInvokeTimeout', { action: timeoutAction })
                     : runtimeError}
-                {parsed.category !== 'unknown' && (
+                {/* 哨兵/通道超时已有专属文案（且非供应商错误），不再叠供应商归属提示 */}
+                {parsed.category !== 'unknown' && !timeoutAction && runtimeError !== SESSION_REPLACEMENT_TIMEOUT && (
                   <div className="error-hint" data-testid={`runtime-error-hint-${parsed.category}`}>
-                    {t(`chat.errors.${parsed.category}`)}
+                    {t(`chat.errors.${PROVIDER_ERROR_HINT_KEYS[parsed.category]}`)}
                   </div>
                 )}
               </span>

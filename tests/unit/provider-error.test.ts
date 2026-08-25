@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseProviderError, toModelUnavailableError } from '../../src/lib/provider-error';
+import { parseProviderError, toModelUnavailableError, PROVIDER_ERROR_HINT_KEYS } from '../../src/lib/provider-error';
 
 describe('parseProviderError', () => {
   it('401 → invalid-key，并提取 request id', () => {
@@ -98,6 +98,27 @@ describe('parseProviderError', () => {
   it('无法识别的内容 → unknown，不误报', () => {
     expect(parseProviderError('Request failed with status code 500 in my own code').category).toBe('unknown');
     expect(parseProviderError('something went wrong').category).toBe('unknown');
+  });
+
+  it('SDK 连接类纯文本 → network', () => {
+    expect(parseProviderError('Connection error.').category).toBe('network');
+    expect(parseProviderError('fetch failed').category).toBe('network');
+    expect(parseProviderError('connect ECONNREFUSED 127.0.0.1:443').category).toBe('network');
+    expect(parseProviderError('Unable to connect to api.openai.com').category).toBe('network');
+  });
+
+  it('SDK 超时纯文本 → timeout', () => {
+    expect(parseProviderError('Request timed out.').category).toBe('timeout');
+    expect(parseProviderError('Request timeout exceeded').category).toBe('timeout');
+  });
+
+  it('流中断（terminal response event 缺失）→ stream', () => {
+    expect(parseProviderError('OpenAI Responses stream ended before a terminal response event').category).toBe('stream');
+    expect(parseProviderError('Anthropic stream ended unexpectedly').category).toBe('stream');
+  });
+
+  it('带状态码的 504 网关超时仍归 upstream，不被超时关键词抢占', () => {
+    expect(parseProviderError('OpenAI API error (504): Gateway Timeout').category).toBe('upstream');
   });
 
   it('model not found 文本 → wrong-model 并提取 provider/model（模型 ID 可含斜杠）', () => {

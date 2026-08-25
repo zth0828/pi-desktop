@@ -1,7 +1,9 @@
 // 把 pi 透传的供应商错误文本解析成 UI 可用的分类与请求 ID。
 // pi 的错误文案由 pi-ai 的 formatProviderError 拼接，形如
 // "OpenAI API error (503): {\"message\":...,\"type\":...,\"code\":...}"，
-// 也可能只是服务端原始 JSON 或纯文本（Anthropic / Google 协议各不相同）。
+// 也可能只是服务端原始 JSON 或纯文本（Anthropic / Google 协议各不相同），
+// 或 SDK 层连接类纯文本（"Connection error." / "Request timed out." /
+// "OpenAI Responses stream ended before a terminal response event"）。
 // 壳只负责按文本归类做提示，不改动 pi 的错误语义。
 // 本模块被 node 侧（electron/services）与 web 侧（src）共用，
 // 不得引入 electron / DOM 依赖。
@@ -13,7 +15,23 @@ export type ProviderErrorCategory =
   | 'upstream'
   | 'rate-limit'
   | 'quota'
+  | 'network'
+  | 'timeout'
+  | 'stream'
   | 'unknown';
+
+/** category → chat.errors.* 下的翻译 key（translation.json 多词 key 用 camelCase，
+ *  与 category 的 kebab-case 不同名，必须经此映射取 key）。 */
+export const PROVIDER_ERROR_HINT_KEYS: Record<Exclude<ProviderErrorCategory, 'unknown'>, string> = {
+  'invalid-key': 'invalidKey',
+  'wrong-model': 'wrongModel',
+  upstream: 'upstream',
+  'rate-limit': 'rateLimit',
+  quota: 'quota',
+  network: 'network',
+  timeout: 'timeout',
+  stream: 'stream',
+};
 
 export type ProviderErrorInfo = {
   category: ProviderErrorCategory;
@@ -115,6 +133,12 @@ export function parseProviderError(message: string): ProviderErrorInfo {
     category = 'rate-limit';
   } else if ((status !== undefined && status >= 500) || /auth_unavailable|no auth available|service temporarily unavailable|temporarily unavailable|bad gateway|internal_server_error|internal server error|server_error|server_is_overloaded|overloaded|upstream/.test(haystack)) {
     category = 'upstream';
+  } else if (/connection error|connection failed|connection reset|connection refused|connection closed|econnrefused|econnreset|econnaborted|enotfound|eai_again|fetch failed|unable to connect|network error|network request failed|socket hang up|dns/.test(haystack)) {
+    category = 'network';
+  } else if (/timed out|timeout|etimedout|deadline exceeded/.test(haystack)) {
+    category = 'timeout';
+  } else if (/stream ended|stream closed|stream interrupted|unexpected end of|before a terminal|without a terminal|premature close/.test(haystack)) {
+    category = 'stream';
   } else {
     category = 'unknown';
   }

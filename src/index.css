@@ -1630,9 +1630,14 @@ button.danger-outline {
   word-break: break-all;
 }
 
+/* 可识别类别：本地化说明为主文案（继承 danger 色），pi 原文降级为次要行 */
 .message-notice.error .error-hint {
-  margin-top: 6px;
-  color: var(--warning);
+  margin: 0 0 4px;
+}
+
+.message-notice.error.known .error-message-raw {
+  opacity: 0.7;
+  font-size: 11.5px;
 }
 
 .message-notice.error .error-request-id {

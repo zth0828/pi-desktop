@@ -3,6 +3,7 @@
 export {
   parseProviderError,
   toModelUnavailableError,
+  PROVIDER_ERROR_HINT_KEYS,
   type ProviderErrorCategory,
   type ProviderErrorInfo,
 } from '@shared/provider-error';
