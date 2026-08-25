@@ -81,6 +81,15 @@ const server = http.createServer((req, res) => {
     res.writeHead(404).end("not found");
     return;
   }
+  // 错误 key 模拟：models.json 的 apiKey 被改错后，所有请求带错误 Bearer → 401。
+  // 正确 key 为 mock-key；既有 spec 不受影响。
+  if (req.headers.authorization === "Bearer wrong-key") {
+    res.writeHead(401, { "content-type": "application/json" });
+    res.end(JSON.stringify({
+      error: { code: "", message: "Invalid token (request id: 20260825e2eWrongKey0000000000000aa)", type: "new_api_error" },
+    }));
+    return;
+  }
   let body = "";
   req.on("data", (c) => (body += c));
   req.on("end", () => {
