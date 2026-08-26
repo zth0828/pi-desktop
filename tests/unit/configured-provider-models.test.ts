@@ -1,5 +1,5 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -186,6 +186,25 @@ describe('configured provider model discovery', () => {
     }));
   });
 
+  it('aligns directory ids with stored ids across version separator styles', () => {
+    // 网关目录用横杠风格（claude-opus-4-8）、存量用点号风格（claude-opus-4.8）：
+    // 视为同一模型刷新元数据，保留存量 id，不产生重复条目
+    const catalog = new Map([
+      ['claude-opus-4-8', { id: 'claude-opus-4-8', contextWindow: 1000000, maxTokens: 128000 }],
+    ]);
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'claude-opus-4.8', reasoning: true, contextWindow: 200000, maxTokens: 64000 }],
+      [{ id: 'claude-opus-4-8' }],
+      catalog,
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual(expect.objectContaining({
+      id: 'claude-opus-4.8',
+      contextWindow: 1000000,
+      maxTokens: 128000,
+    }));
+  });
+
   it('keeps pinned input while correcting other stale fields', () => {
     // inputPinned 的模型 input 不动，但 ctx/maxTokens/价格仍按官方目录纠正
     const catalog = new Map([
@@ -269,7 +288,7 @@ describe('configured provider model discovery', () => {
   });
 
   it('falls back to /v1/models for openai servers whose baseUrl lacks /v1 (vLLM style)', async () => {
-    const agentDir = await mkdtemp(path.join(tmpdir(), 'pi-provider-discovery-v1-'));
+    const agentDir = await mkdtemp(path.join(os.tmpdir(), 'pi-provider-discovery-v1-'));
     tempDirs.push(agentDir);
     const modelsPath = path.join(agentDir, 'models.json');
     await writeFile(modelsPath, JSON.stringify({
@@ -305,24 +324,51 @@ describe('configured provider model discovery', () => {
     expect(result).toMatchObject({ discovered: 1, added: 1, changed: true });
   });
 
-  it('throws the last candidate error when every directory candidate fails', async () => {
-    const agentDir = await mkdtemp(path.join(tmpdir(), 'pi-provider-discovery-err-'));
+  it('degrades to builtin catalog correction when every directory candidate fails', async () => {
+    // 目录不可达不再阻断刷新：存量错值仍被官方目录纠正并落盘，失败原因经
+    // warning 上报（key 无效/网关不开放 /models 等）
+    const agentDir = await mkdtemp(path.join(os.tmpdir(), 'pi-provider-discovery-err-'));
     tempDirs.push(agentDir);
     const modelsPath = path.join(agentDir, 'models.json');
     await writeFile(modelsPath, JSON.stringify({
-      providers: { down: { baseUrl: 'http://127.0.0.1:8000', api: 'openai-completions', models: [] } },
+      providers: {
+        down: {
+          baseUrl: 'http://127.0.0.1:8000',
+          api: 'openai-completions',
+          models: [{
+            id: 'claude-opus-4.8',
+            reasoning: true,
+            input: ['text'],
+            contextWindow: 200000,
+            maxTokens: 64000,
+          }],
+        },
+      },
     }));
-    await expect(syncConfiguredProviderModels({
+    const result = await syncConfiguredProviderModels({
       agentDir,
       providerId: 'down',
       api: 'openai-completions',
       auth: { apiKey: 'dummy' },
       fetchImpl: async () => new Response('{}', { status: 403 }),
-    })).rejects.toThrow(/HTTP 403/);
+      catalog: new Map([
+        ['claude-opus-4-8', { id: 'claude-opus-4-8', contextWindow: 1000000, maxTokens: 128000 }],
+      ]),
+    });
+    expect(result?.warning).toMatch(/HTTP 403/);
+    expect(result).toMatchObject({ discovered: 0, added: 0, changed: true });
+    const saved = JSON.parse(await readFile(modelsPath, 'utf8')) as {
+      providers: { down: { models: Array<{ id: string; contextWindow: number; maxTokens: number }> } };
+    };
+    expect(saved.providers.down.models[0]).toMatchObject({
+      id: 'claude-opus-4.8',
+      contextWindow: 1000000,
+      maxTokens: 128000,
+    });
   });
 
   it('requests /models with resolved auth and writes discovered ids to models.json', async () => {
-    const agentDir = await mkdtemp(path.join(tmpdir(), 'pi-provider-discovery-'));
+    const agentDir = await mkdtemp(path.join(os.tmpdir(), 'pi-provider-discovery-'));
     tempDirs.push(agentDir);
     const modelsPath = path.join(agentDir, 'models.json');
     await writeFile(modelsPath, JSON.stringify({
@@ -336,6 +382,7 @@ describe('configured provider model discovery', () => {
     }));
     let requestedUrl = '';
     let authorization = '';
+    let userAgent = '';
     const result = await syncConfiguredProviderModels({
       agentDir,
       providerId: 'relay',
@@ -344,6 +391,7 @@ describe('configured provider model discovery', () => {
       fetchImpl: async (input, init) => {
         requestedUrl = String(input);
         authorization = new Headers(init?.headers).get('authorization') ?? '';
+        userAgent = new Headers(init?.headers).get('user-agent') ?? '';
         return new Response(JSON.stringify({ data: [{ id: 'manual' }, { id: 'remote' }] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -352,6 +400,9 @@ describe('configured provider model discovery', () => {
     });
     expect(requestedUrl).toBe('https://relay.example/v1/models');
     expect(authorization).toBe('Bearer secret');
+    // 目录请求带 pi 同款 UA：agentrouter 等网关按客户端白名单拦截未知 UA
+    expect(userAgent).toMatch(/^pi \(.+; .+\)$/);
+    expect(userAgent).toBe(`pi (${process.platform} ${os.release()}; ${process.arch})`);
     expect(result).toMatchObject({ discovered: 2, added: 1, changed: true });
     const saved = JSON.parse(await readFile(modelsPath, 'utf8')) as {
       providers: { relay: { models: Array<{ id: string }> } };

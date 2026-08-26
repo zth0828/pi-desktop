@@ -695,6 +695,84 @@ test('Models 页：刷新把旧版写入的多模态声明升级为内置目录�
     .toEqual({ gemini: ['text', 'image'], plain: ['text'] });
 });
 
+test('Models 页：刷新把历史错值纠正为官方规格（目录值与内置目录兜底）', async ({ launchElectronApp }) => {
+  // 模拟 agentrouter 存量数据（旧手写规格表写入的错值 + 全 0 价格占位）：
+  // - claude-opus-4.8/opus-5/deepseek-v4-flash：mock 目录已列出（带官方值）
+  // - gpt-5.6-sol：目录未列出（agentrouter 真实目录不含它），只能靠 pi 内置目录纠正
+  const modelsDoc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+    providers: { mock: { models: unknown[] } };
+  };
+  const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const historical = (
+    id: string,
+    contextWindow: number,
+    maxTokens: number,
+    extra: Record<string, unknown> = {},
+  ) => ({ id, name: id, reasoning: true, input: ['text'], cost: { ...zeroCost }, contextWindow, maxTokens, ...extra });
+  modelsDoc.providers.mock.models = [
+    historical('gpt-5.6-sol', 400000, 128000, { inputPinned: true }),
+    historical('claude-opus-4.8', 200000, 64000),
+    historical('claude-opus-5', 200000, 64000),
+    historical('deepseek-v4-flash', 1000000, 16384),
+  ];
+  await writeFile(path.join(agentDir, 'models.json'), JSON.stringify(modelsDoc));
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'gpt-5.6-sol' }),
+  );
+
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  const row = page.getByTestId('provider-mock');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.provider-row-header').click();
+
+  await page.getByTestId('refresh-models').click();
+  await expect(page.getByTestId('models-refresh-message')).toContainText('Found', {
+    timeout: 30_000,
+  });
+
+  // 目录列出的模型：ctx/max 按目录上报纠正，input 按内置目录升级多模态，全 0 价格换官方价
+  // 目录未列出的 gpt-5.6-sol：全链路靠内置目录纠正（openai 官方条目 272,000，
+  // 优先于 openrouter 聚合转报的 1,050,000）；inputPinned 尊重用户声明不覆盖
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<Record<string, unknown>> } };
+      };
+      const pick = (id: string) => doc.providers.mock.models.find((m) => m.id === id);
+      return {
+        solCtx: pick('gpt-5.6-sol')?.contextWindow,
+        solInput: pick('gpt-5.6-sol')?.input,
+        solCost: pick('gpt-5.6-sol')?.cost,
+        opusCtx: pick('claude-opus-4.8')?.contextWindow,
+        opusMax: pick('claude-opus-4.8')?.maxTokens,
+        opusInput: pick('claude-opus-4.8')?.input,
+        opusCost: pick('claude-opus-4.8')?.cost,
+        flashMax: pick('deepseek-v4-flash')?.maxTokens,
+        opus5Ctx: pick('claude-opus-5')?.contextWindow,
+      };
+    }, { timeout: 15_000 })
+    .toEqual({
+      solCtx: 272000,
+      solInput: ['text'],
+      solCost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25 },
+      opusCtx: 1000000,
+      opusMax: 128000,
+      opusInput: ['text', 'image'],
+      opusCost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+      flashMax: 384000,
+      opus5Ctx: 1000000,
+    });
+
+  // UI 侧同步可见：claude-opus-4.8 升级出视觉标识
+  await expect(page.getByTestId('provider-model-vision-mock-claude-opus-4.8')).toBeVisible({
+    timeout: 15_000,
+  });
+});
+
 /** Codex 风格模型菜单：触发器 → 「模型」行 → 子菜单里按 data-value 点选 */
 async function selectChatModel(page: import('@playwright/test').Page, value: string) {
   await page.getByTestId('model-select').click();

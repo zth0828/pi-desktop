@@ -29,7 +29,7 @@ import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiAdapter, type PiModelRuntimeHandle } from './pi-adapter';
 import { isLmStudioProvider, isLocalServer, syncLmStudioModels } from '../utils/lmstudio-models';
 import { compatForOpenAi, placeholderApiKey, resolveServerType, thinkingLevelMapFor } from '../utils/custom-provider-config';
-import { parseMaxOutputTokens, syncConfiguredProviderModels } from '../utils/configured-provider-models';
+import { parseMaxOutputTokens, piClientUserAgent, syncConfiguredProviderModels } from '../utils/configured-provider-models';
 import { findBuiltinModel, loadBuiltinModelCatalog, type BuiltinModelCatalog } from '../utils/builtin-model-catalog';
 import {
   piRuntimeApi,
@@ -192,6 +192,8 @@ async function syncConfiguredCatalogs(
         discovered += result.discovered;
         added += result.added;
         changed ||= result.changed;
+        // 目录不可达但已完成官方目录降级纠正：仍上报失败原因（key 无效等）
+        if (result.warning) errors.push(`${providerId}: ${result.warning}`);
       }
       if (api !== 'openai-responses' && model) {
         const responsesBaseUrl = await probeResponsesBaseUrl({
@@ -683,7 +685,11 @@ export const providersApi = {
   probe: async (payload: PiProviderProbePayload): Promise<PiProviderProbeResult> => {
     const base = payload.baseUrl.replace(/\/+$/, '');
     const openAiBases = /\/v1$/i.test(base) ? [base] : [base, `${base}/v1`];
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    // 目录探测同样带 pi UA：agentrouter 等网关按客户端白名单拦截未知 UA
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      'user-agent': piClientUserAgent(),
+    };
     if (payload.apiKey) {
       headers.authorization = `Bearer ${payload.apiKey}`;
       headers['x-api-key'] = payload.apiKey;

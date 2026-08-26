@@ -1,7 +1,12 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
-import { findBuiltinModel, type BuiltinModelCatalog } from './builtin-model-catalog';
+import {
+  findBuiltinModel,
+  normalizeBuiltinModelId,
+  type BuiltinModelCatalog,
+} from './builtin-model-catalog';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -16,6 +21,8 @@ export type ProviderModelSyncResult = {
   discovered: number;
   added: number;
   changed: boolean;
+  /** 目录不可达但已完成官方目录降级纠正时的失败原因（供上层提示）。 */
+  warning?: string;
 };
 
 export type ThinkingLevelMap = Record<string, string | null>;
@@ -95,8 +102,21 @@ function directoryUrlCandidates(baseUrl: string, api: string): string[] {
   return roots.map((root) => `${root}/models`);
 }
 
+/**
+ * pi 生态客户端 UA（与 pi-ai getPiUserAgent 同格式）。部分网关（agentrouter
+ * 等）对 /models 目录做客户端白名单：未知 UA 一律 401 unauthorized client，
+ * pi 在白名单内；所有目录探测请求统一带此 UA。
+ */
+export function piClientUserAgent(): string {
+  return `pi (${process.platform} ${os.release()}; ${process.arch})`;
+}
+
 function directoryHeaders(api: string, auth: ProviderDirectoryAuth): Record<string, string> {
-  const headers: Record<string, string> = { accept: 'application/json' };
+  // 用户在 provider 配置里自定义的 headers 仍可覆盖 UA（setHeader 后写）。
+  const headers: Record<string, string> = {
+    accept: 'application/json',
+    'user-agent': piClientUserAgent(),
+  };
   if (auth.apiKey) {
     if (api === 'anthropic-messages') {
       setHeader(headers, 'x-api-key', auth.apiKey);
@@ -221,11 +241,16 @@ export function mergeDiscoveredProviderModels(
   catalog: BuiltinModelCatalog = new Map(),
 ): JsonRecord[] {
   const existingModels = existing.map(record).filter((model): model is JsonRecord => model !== null);
-  const byId = new Map(existingModels.map((model) => [String(model.id ?? ''), model]));
+  // 网关目录与本地存量可能用不同版本分隔风格（claude-opus-4-8 vs
+  // claude-opus-4.8）：按规范化 id 对齐同一条模型，命中时保留存量 id
+  // （请求网关用的就是它）只刷元数据，避免同一模型出现重复条目。
+  const byId = new Map(existingModels.map((model) => [normalizeBuiltinModelId(String(model.id ?? '')), model]));
   const template = existingModels[0] ?? {};
+  const matched = new Set<JsonRecord>();
   const merged = detected.map((model) => {
-    const current = byId.get(model.id);
+    const current = byId.get(normalizeBuiltinModelId(model.id));
     if (current) {
+      matched.add(current);
       return refreshStaleModel(current, model, template, catalog);
     }
     const builtin = findBuiltinModel(catalog, model.id);
@@ -253,11 +278,11 @@ export function mergeDiscoveredProviderModels(
         : positiveNumber(template.maxTokens) ? { maxTokens: positiveNumber(template.maxTokens) } : {}),
     };
   });
-  const detectedIds = new Set(detected.map((model) => model.id));
+  const detectedIds = new Set(detected.map((model) => normalizeBuiltinModelId(model.id)));
   // 目录未列出的旧模型（手动 modelIds 添加）也走内置目录刷新：官方规格识别
   // 不应因目录不收录而失效。
   merged.push(...existingModels
-    .filter((model) => !detectedIds.has(String(model.id ?? '')))
+    .filter((model) => !matched.has(model) && !detectedIds.has(normalizeBuiltinModelId(String(model.id ?? ''))))
     .map((model) => refreshStaleModel(model, null, template, catalog)));
   return merged;
 }
@@ -294,13 +319,14 @@ export async function syncConfiguredProviderModels(options: {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
   }
-  if (!response) throw lastError ?? new Error('model directory unreachable');
-  const detected = parseProviderModelDirectory(await response.json(), options.api);
-  if (detected.length === 0) {
-    return { providerId: options.providerId, discovered: 0, added: 0, changed: false };
-  }
+  // 目录不可达（网关不开放 /models 或客户端被白名单拒绝）不阻断刷新：
+  // 已有模型仍走内置官方目录纠正历史错值，失败原因经 warning 上报调用方。
+  const warning = response
+    ? undefined
+    : (lastError?.message ?? 'model directory unreachable');
+  const detected = response ? parseProviderModelDirectory(await response.json(), options.api) : [];
   const existing = Array.isArray(provider.models) ? provider.models : [];
-  const existingIds = new Set(existing.map((model) => String(record(model)?.id ?? '')));
+  const existingIds = new Set(existing.map((model) => normalizeBuiltinModelId(String(record(model)?.id ?? ''))));
   const models = mergeDiscoveredProviderModels(existing, detected, options.catalog ?? new Map());
   const changed = JSON.stringify(models) !== JSON.stringify(existing);
   if (changed) {
@@ -310,7 +336,8 @@ export async function syncConfiguredProviderModels(options: {
   return {
     providerId: options.providerId,
     discovered: detected.length,
-    added: detected.filter((model) => !existingIds.has(model.id)).length,
+    added: detected.filter((model) => !existingIds.has(normalizeBuiltinModelId(model.id))).length,
     changed,
+    ...(warning ? { warning } : {}),
   };
 }
