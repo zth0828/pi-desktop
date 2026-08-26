@@ -26,6 +26,7 @@ import type {
   PiRuntimeCompactPayload,
   PiRuntimeExportPayload,
   PiRuntimeSessionInfo,
+  PiSessionExportRecord,
   PiSessionExportResult,
   PiUiResponsePayload,
   PiRuntimeQueueItemPayload,
@@ -62,7 +63,8 @@ import {
   previewableExternalFilesFromMessages,
 } from '../utils/previewable-files';
 import { syncLmStudioModels } from '../utils/lmstudio-models';
-import { sessionExportPath } from '../utils/session-export';
+import { projectFolderName, sessionExportPath } from '../utils/session-export';
+import { getElectronStore } from '../utils/electron-store';
 import {
   cancelPendingUiForContext,
   createExtensionUIContext,
@@ -1008,7 +1010,7 @@ function toError(err: unknown): string {
 }
 
 /** 消息 content（string 或 content block 数组）→ 单行摘要文本。 */
-function contentSummaryText(content: unknown): string {
+export function contentSummaryText(content: unknown): string {
   const raw =
     typeof content === 'string'
       ? content
@@ -1540,18 +1542,53 @@ export const piRuntimeApi = {
     }
   },
 
-  /** /export [path]：导出当前会话 HTML；缺省统一落到 Pi Desktop 的系统文档目录。 */
+  /** /export [path]：导出当前会话 HTML；缺省统一落到 Pi Desktop 的系统文档目录（按项目分目录）。 */
   exportHtml: async (payload?: PiRuntimeExportPayload, ctx?: HostActionContext): Promise<PiSessionExportResult> => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
     try {
+      const session = active.adapterRuntime.session;
+      const sessionFile = session.sessionFile;
+      const cwd = active.cwd;
+      const messages = session.messages as Array<{ role?: string; content?: unknown }>;
+      const firstUser = messages.find((m) => m.role === 'user');
+      const title = session.sessionManager.getSessionName()
+        ?? contentSummaryText(firstUser?.content)
+        ?? 'untitled';
+      const sessionId = session.sessionId;
+
       const outputPath = payload?.outputPath
-        ?? (active.adapterRuntime.session.sessionFile
-          ? await sessionExportPath(active.adapterRuntime.session.sessionFile)
+        ?? (sessionFile
+          ? await sessionExportPath({
+              sessionFile,
+              cwd,
+              title,
+              id: sessionId,
+            })
           : undefined);
-      const exported = await active.adapterRuntime.session.exportToHtml(outputPath);
+      const exported = await session.exportToHtml(outputPath);
+
+      let record: PiSessionExportRecord | undefined;
+      if (sessionFile) {
+        const projectName = projectFolderName(cwd);
+        record = {
+          path: exported,
+          sessionPath: sessionFile,
+          sessionId,
+          projectName,
+          cwd,
+          title: stripAttachmentEnvelope(title),
+          exportedAt: new Date().toISOString(),
+        };
+        const store = await getElectronStore();
+        const records = (store.get('sessionExportRecords') ?? {}) as Record<string, PiSessionExportRecord>;
+        records[sessionFile] = record;
+        store.set('sessionExportRecords', records);
+        store.set('lastSessionExportRecord', record);
+      }
+
       await settingsApi.set({ key: 'lastSessionExportPath', value: exported });
-      return { success: true, path: exported };
+      return { success: true, path: exported, record };
     } catch (err) {
       return { success: false, error: toError(err) };
     }

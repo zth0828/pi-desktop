@@ -268,7 +268,7 @@ test('Sessions 页删除非当前会话 → 文件真实移除且侧栏即时同
   await expect(stat(sessionFile!)).rejects.toThrow();
 });
 
-test('导出 HTML → 统一系统目录并在重新进入页面后保留打开入口', async ({
+test('导出 HTML → 按项目分类目录并在会话列表中标记已导出（有意义的文件名与最近导出联动）', async ({
   launchElectronApp,
 }) => {
   const app = await launchElectronApp(launchOptions());
@@ -281,23 +281,46 @@ test('导出 HTML → 统一系统目录并在重新进入页面后保留打开�
   await row.getByTestId('session-export').click();
 
   const exportInfo = page.getByTestId('sessions-export-info');
-  await expect(exportInfo).toContainText('Last export', { timeout: 15_000 });
+  await expect(exportInfo).toContainText('Recent exports', { timeout: 15_000 });
+  await expect(exportInfo).toContainText('export location OSPREY');
+  await expect(page.getByTestId('sessions-recent-list')).toBeVisible();
+  await expect(page.getByTestId('session-recent-item')).toHaveCount(1);
   await expect(page.getByTestId('sessions-open-export')).toBeVisible();
   await expect(page.getByTestId('sessions-show-export')).toBeVisible();
+
+  // 会话行显示已导出徽标、打开导出按钮与在文件夹中显示按钮
+  await expect(row.getByTestId('session-exported')).toBeVisible();
+  await expect(row.getByTestId('session-open-exported')).toBeVisible();
+  await expect(row.getByTestId('session-show-exported')).toBeVisible();
+
   await page.screenshot({ path: 'output/playwright/session-export-actions.png', fullPage: false });
 
   await page.getByTestId('nav-settings').click();
   const directory = (await page.getByTestId('settings-export-directory').textContent())?.trim();
   expect(directory).toBeTruthy();
   expect(directory!.split(path.sep).slice(-2)).toEqual(['Pi Desktop', 'Exports']);
-  const exportedFiles = (await readdir(directory!)).filter((name) => name.endsWith('.html'));
+  const workspaceName = (await realpath(workspace)).split(/[\\/]/).filter(Boolean).pop()!;
+  const projectExportDir = path.join(directory!, workspaceName);
+  const exportedFiles = (await readdir(projectExportDir)).filter((name) => name.endsWith('.html'));
   expect(exportedFiles).toHaveLength(1);
-  const exportedHtml = await readFile(path.join(directory!, exportedFiles[0]), 'utf8');
+  expect(exportedFiles[0]).toMatch(/^export location OSPREY_/);
+  const exportedHtml = await readFile(path.join(projectExportDir, exportedFiles[0]), 'utf8');
   expect(exportedHtml).toContain('<script id="session-data" type="application/json">');
 
   await page.getByTestId('nav-sessions').click();
   await expect(page.getByTestId('sessions-export-info')).toContainText(exportedFiles[0]);
   await expect(page.getByTestId('sessions-open-export')).toBeVisible();
+  await expect(row.getByTestId('session-exported')).toBeVisible();
+
+  // 若用户手动删除导出文件，点击查看导出给出友好提示并清理状态
+  await rm(path.join(projectExportDir, exportedFiles[0]));
+  await row.getByTestId('session-open-exported').click();
+  await expect(page.getByTestId('sessions-error')).toContainText('Exported file does not exist or has been removed');
+  // 重新导出成功
+  await row.getByTestId('session-export').click();
+  await expect(exportInfo).toContainText('Recent exports', { timeout: 15_000 });
+  const reExported = (await readdir(projectExportDir)).filter((name) => name.endsWith('.html'));
+  expect(reExported).toHaveLength(1);
 });
 
 test('切换会话 → 消息列表恢复目标会话内容', async ({ launchElectronApp }) => {

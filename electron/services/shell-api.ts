@@ -102,7 +102,11 @@ async function discoveredApplications(): Promise<ShellListApplicationsResult> {
 async function openPath(payload: { path: string }): Promise<HostSuccess> {
   try {
     const target = path.resolve(payload.path);
-    await stat(target);
+    try {
+      await stat(target);
+    } catch {
+      return { success: false, error: 'file-not-found' };
+    }
     const error = await shell.openPath(target);
     return error ? { success: false, error } : { success: true };
   } catch (error) {
@@ -113,7 +117,11 @@ async function openPath(payload: { path: string }): Promise<HostSuccess> {
 async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSuccess> {
   const target = path.resolve(payload.path);
   try {
-    await stat(target);
+    try {
+      await stat(target);
+    } catch {
+      return { success: false, error: 'file-not-found' };
+    }
     if (process.platform === 'darwin' && payload.application.path.endsWith('.app')) {
       await execFileAsync('open', ['-a', payload.application.path, target], { timeout: 15_000 });
     } else {
@@ -136,9 +144,21 @@ export const shellApi = {
   showInFolder: async (payload: { path: string }): Promise<HostSuccess> => {
     try {
       const target = path.resolve(payload.path);
-      await stat(target);
-      shell.showItemInFolder(target);
-      return { success: true };
+      try {
+        await stat(target);
+        shell.showItemInFolder(target);
+        return { success: true };
+      } catch {
+        // 如果文件本身已不存在，尝试打开其上层目录
+        const parent = path.dirname(target);
+        try {
+          await stat(parent);
+          await shell.openPath(parent);
+          return { success: true };
+        } catch {
+          return { success: false, error: 'file-not-found' };
+        }
+      }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }

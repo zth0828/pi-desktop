@@ -9,6 +9,8 @@ import { shell } from 'electron';
 import { sendHostEvent } from '../main/ipc/host-events';
 import type {
   HostSuccess,
+  PiSessionExportInfo,
+  PiSessionExportRecord,
   PiSessionExportResult,
   PiSessionForkResult,
   PiSessionListResult,
@@ -27,6 +29,7 @@ import {
   awaitPendingPrewarm,
   clearPrewarmMark,
   consumePrewarmedSessionRuntime,
+  contentSummaryText,
   createSessionRuntime,
   createSessionRuntimeForWindow,
   detachRuntimesFromSessionFile,
@@ -49,7 +52,13 @@ import { samePath } from '../utils/same-path';
 import { hashSessionPath, safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { toModelUnavailableError } from '@shared/provider-error';
-import { ensureSessionExportDirectory, sessionExportPath } from '../utils/session-export';
+import {
+  ensureSessionExportDirectory,
+  projectFolderName,
+  sessionExportPath,
+  sessionExportRootDirectory,
+} from '../utils/session-export';
+import { getElectronStore } from '../utils/electron-store';
 import { searchSessions } from './session-search';
 import { serializeSessionOp } from './session-mutex';
 import { timingMark } from '../utils/timing';
@@ -592,6 +601,15 @@ export const sessionsApi = {
       if (sessionCwd && !hasRuntimeWithCwd(sessionCwd)) {
         await rmdir(path.dirname(payload.path)).catch(() => {});
       }
+      // 清理会话对应的导出记录索引
+      try {
+        const store = await getElectronStore();
+        const records = (store.get('sessionExportRecords') ?? {}) as Record<string, PiSessionExportRecord>;
+        if (records[payload.path]) {
+          delete records[payload.path];
+          store.set('sessionExportRecords', records);
+        }
+      } catch {}
       return { success: true };
     } catch (err) {
       writePiDiagnostic({
@@ -616,17 +634,93 @@ export const sessionsApi = {
         if (result.cancelled) return { success: false, error: 'cancelled' };
         await afterSessionReplaced(active);
       }
-      const target = await sessionExportPath(payload.path);
-      const exported = await active.adapterRuntime.session.exportToHtml(target);
+
+      const session = active.adapterRuntime.session;
+      const cwd = payload.cwd ?? session.sessionManager.getCwd() ?? active.cwd;
+      const messages = session.messages as Array<{ role?: string; content?: unknown }>;
+      const firstUser = messages.find((m) => m.role === 'user');
+      const title = payload.title
+        ?? session.sessionManager.getSessionName()
+        ?? contentSummaryText(firstUser?.content)
+        ?? 'untitled';
+      const sessionId = payload.id ?? session.sessionId;
+
+      const target = await sessionExportPath({
+        sessionFile: payload.path,
+        cwd,
+        title,
+        id: sessionId,
+      });
+      const exported = await session.exportToHtml(target);
+      const projectName = projectFolderName(cwd);
+
+      const record: PiSessionExportRecord = {
+        path: exported,
+        sessionPath: payload.path,
+        sessionId,
+        projectName,
+        cwd,
+        title: stripAttachmentEnvelope(title),
+        exportedAt: new Date().toISOString(),
+      };
+
+      const store = await getElectronStore();
+      const records = (store.get('sessionExportRecords') ?? {}) as Record<string, PiSessionExportRecord>;
+      records[payload.path] = record;
+      store.set('sessionExportRecords', records);
+      store.set('lastSessionExportRecord', record);
       await settingsApi.set({ key: 'lastSessionExportPath', value: exported });
-      return { success: true, path: exported };
+
+      return { success: true, path: exported, record };
     } catch (err) {
       return { success: false, error: toError(err) };
     }
   },
 
-  getExportInfo: async () => ({
-    directory: await ensureSessionExportDirectory(),
-    lastPath: await settingsApi.get({ key: 'lastSessionExportPath' }),
-  }),
+  getExportInfo: async (): Promise<PiSessionExportInfo> => {
+    const directory = sessionExportRootDirectory();
+    const lastPath = await settingsApi.get({ key: 'lastSessionExportPath' });
+    const store = await getElectronStore();
+    const lastRecord = store.get('lastSessionExportRecord') as PiSessionExportRecord | undefined;
+    const rawRecords = (store.get('sessionExportRecords') ?? {}) as Record<string, PiSessionExportRecord>;
+
+    const validRecords: Record<string, PiSessionExportRecord> = {};
+    let recordsModified = false;
+    for (const [key, rec] of Object.entries(rawRecords)) {
+      if (rec?.path && existsSync(rec.path)) {
+        validRecords[key] = rec;
+      } else {
+        recordsModified = true;
+      }
+    }
+    if (recordsModified) {
+      store.set('sessionExportRecords', validRecords);
+    }
+
+    const sortedRecords = Object.values(validRecords).sort((a, b) => {
+      const timeA = a.exportedAt ? new Date(a.exportedAt).getTime() : 0;
+      const timeB = b.exportedAt ? new Date(b.exportedAt).getTime() : 0;
+      return timeB - timeA;
+    });
+    const recentRecords = sortedRecords.slice(0, 5);
+    const validLastRecord = recentRecords[0] ?? (lastRecord?.path && existsSync(lastRecord.path) ? lastRecord : undefined);
+
+    if (validLastRecord) {
+      store.set('lastSessionExportRecord', validLastRecord);
+      await settingsApi.set({ key: 'lastSessionExportPath', value: validLastRecord.path });
+    } else {
+      store.delete('lastSessionExportRecord');
+      store.delete('lastSessionExportPath');
+    }
+
+    const validLastPath = validLastRecord?.path ?? (lastPath && existsSync(lastPath) ? lastPath : undefined);
+
+    return {
+      directory,
+      lastPath: validLastPath,
+      lastRecord: validLastRecord,
+      recentRecords,
+      records: validRecords,
+    };
+  },
 };

@@ -3411,36 +3411,121 @@ button.danger-outline {
   flex-shrink: 0;
 }
 
-.session-export-status {
+.session-export-card {
   display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 820px;
-  min-height: 54px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px 0 14px;
+  gap: 10px;
+  padding: 12px 0 16px;
   border-bottom: 1px solid var(--border);
 }
 
-.session-export-copy {
+.session-export-card-header {
   display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-export-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
 }
 
-.session-export-copy .hint {
+.session-export-count-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--bg-active);
+  color: var(--text-secondary);
+}
+
+.session-recent-exports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-recent-export-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle, var(--border));
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.session-recent-export-item:hover {
+  background: var(--bg-hover);
+}
+
+.session-recent-export-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.session-recent-export-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.session-export-project-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.session-recent-export-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.session-export-actions {
+.session-recent-export-sub {
   display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-recent-export-filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-recent-export-actions {
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
-  gap: 8px;
+  gap: 6px;
+}
+
+.session-export-empty-hint {
+  font-size: 13px;
 }
 
 .provider-row,
@@ -3954,6 +4039,23 @@ button.danger-outline {
   color: var(--accent);
 }
 
+.session-exported-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--success, #10b981) 12%, transparent);
+  color: var(--success, #10b981);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.session-exported-badge:hover {
+  opacity: 0.8;
+}
+
 .skill-desc {
   margin-top: 4px;
   color: var(--text-secondary);
@@ -4095,7 +4197,7 @@ button.danger-outline {
   align-items: center;
   gap: 4px;
   margin-top: 0;
-  max-width: 300px;
+  max-width: 440px;
   opacity: 0;
   transition: opacity 0.12s;
 }
@@ -4106,7 +4208,10 @@ button.danger-outline {
 }
 
 .sessions-page .session-actions button {
-  padding: 3px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
   font-size: 12px;
 }
 

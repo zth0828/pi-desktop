@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, Folder, FolderOpen } from 'lucide-react';
-import type { PiSessionExportInfo, PiSessionRow } from '@shared/host-api/contract';
+import { ExternalLink, FileCheck, Folder, FolderOpen } from 'lucide-react';
+import type { PiSessionExportInfo, PiSessionExportRecord, PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { groupByProject } from '../lib/session-groups';
@@ -10,20 +10,40 @@ import { panesStore } from '../stores/panes-default';
 
 type RowProps = {
   session: PiSessionRow;
+  exportRecord?: PiSessionExportRecord;
   onChanged: () => void;
   onError: (message: string) => void;
   onExported: (path: string) => void;
+  onRefreshExportInfo: () => void;
   onOpenChat: () => void;
   onDelete: (path: string) => Promise<void>;
   onArchive: (path: string, archived: boolean) => Promise<void>;
 };
 
-function SessionRow({ session, onChanged, onError, onExported, onOpenChat, onDelete, onArchive }: RowProps) {
+function SessionRow({
+  session,
+  exportRecord,
+  onChanged,
+  onError,
+  onExported,
+  onRefreshExportInfo,
+  onOpenChat,
+  onDelete,
+  onArchive,
+}: RowProps) {
   const { t, i18n } = useTranslation();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(session.name ?? '');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const formatShellError = (err?: string) => {
+    if (!err) return t('sessions.actionFailedPlain');
+    if (err === 'file-not-found' || err.includes('ENOENT')) {
+      return t('sessions.exportFileNotFound');
+    }
+    return t('sessions.actionFailed', { error: err });
+  };
 
   const run = async (
     action: () => Promise<{ success: boolean; error?: string }>,
@@ -44,6 +64,14 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat, onDel
     }
   };
 
+  const runShellAction = async (action: () => Promise<{ success: boolean; error?: string }>) => {
+    const result = await action();
+    if (!result.success) {
+      onRefreshExportInfo();
+      onError(formatShellError(result.error));
+    }
+  };
+
   // 已在某面板打开 → 聚焦该面板；否则替换活跃面板会话
   const switchTo = () => run(() => panesStore.getState().openOrFocusSession(session.path, session.cwd) ?? Promise.resolve({ success: true }), true);
   const fork = () => run(() => hostApi.piSessions.fork(session.path), true);
@@ -52,7 +80,11 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat, onDel
   const exportHtml = async () => {
     setBusy(true);
     try {
-      const result = await hostApi.piSessions.exportHtml(session.path);
+      const result = await hostApi.piSessions.exportHtml(session.path, {
+        cwd: session.cwd,
+        title: session.name || session.firstMessage,
+        id: session.id,
+      });
       if (result.success && result.path) onExported(result.path);
       else if (!result.success) onError(result.error ?? 'unknown');
     } catch (err) {
@@ -89,6 +121,20 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat, onDel
               {t('sessions.running')}
             </span>
           )}
+          {exportRecord && (
+            <span
+              className="session-exported-badge"
+              data-testid="session-exported"
+              title={`${exportRecord.path}\n${t('sessions.openExportedTooltip')}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                void runShellAction(() => hostApi.shell.openPath(exportRecord.path));
+              }}
+            >
+              <FileCheck size={12} />
+              {t('sessions.exportedBadge')}
+            </span>
+          )}
           {t('sessions.messageCount', { count: session.messageCount })}
           {' · '}
           {formatRelativeTime(session.modified, Date.now(), i18n.language)}
@@ -122,9 +168,42 @@ function SessionRow({ session, onChanged, onError, onExported, onOpenChat, onDel
           <button data-testid="session-fork" disabled={busy || session.isRunning} onClick={() => void fork()}>
             {t('sessions.fork')}
           </button>
-          <button data-testid="session-export" disabled={busy} onClick={() => void exportHtml()}>
-            {t('sessions.export')}
-          </button>
+          {exportRecord ? (
+            <>
+              <button
+                className="session-action-exported"
+                data-testid="session-open-exported"
+                title={t('sessions.openExportedTooltip')}
+                disabled={busy}
+                onClick={() => void runShellAction(() => hostApi.shell.openPath(exportRecord.path))}
+              >
+                <ExternalLink size={13} />
+                {t('sessions.openExported')}
+              </button>
+              <button
+                className="session-action-exported"
+                data-testid="session-show-exported"
+                title={t('sessions.showExportedInFolderTooltip')}
+                disabled={busy}
+                onClick={() => void runShellAction(() => hostApi.shell.showInFolder(exportRecord.path))}
+              >
+                <FolderOpen size={13} />
+                {t('sessions.showExportedInFolder')}
+              </button>
+              <button
+                data-testid="session-export"
+                title={t('sessions.reExport')}
+                disabled={busy}
+                onClick={() => void exportHtml()}
+              >
+                {t('sessions.reExport')}
+              </button>
+            </>
+          ) : (
+            <button data-testid="session-export" disabled={busy} onClick={() => void exportHtml()}>
+              {t('sessions.export')}
+            </button>
+          )}
           <button data-testid="session-archive" disabled={busy || session.isRunning} onClick={() => void archive()}>
             {session.archived ? t('sessions.unarchive') : t('sessions.archive')}
           </button>
@@ -161,11 +240,19 @@ type SessionsPageProps = {
 };
 
 export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [sessions, setSessions] = useState<PiSessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [exportInfo, setExportInfo] = useState<PiSessionExportInfo>();
+
+  const formatShellError = (err?: string) => {
+    if (!err) return t('sessions.actionFailedPlain');
+    if (err === 'file-not-found' || err.includes('ENOENT')) {
+      return t('sessions.exportFileNotFound');
+    }
+    return t('sessions.actionFailed', { error: err });
+  };
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -177,6 +264,13 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
+  }, []);
+
+  const loadExportInfo = useCallback(() => {
+    hostApi.piSessions
+      .getExportInfo()
+      .then(setExportInfo)
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, []);
 
   useEffect(refresh, [refresh]);
@@ -193,21 +287,19 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
   }, [refresh]);
 
   useEffect(() => {
-    void hostApi.piSessions.getExportInfo().then(setExportInfo).catch((err) => {
-      setError(err instanceof Error ? err.message : String(err));
-    });
-  }, []);
+    loadExportInfo();
+  }, [loadExportInfo]);
 
   const runShellAction = async (action: () => Promise<{ success: boolean; error?: string }>) => {
     const result = await action();
-    if (!result.success) setError(result.error ?? 'unknown');
+    if (!result.success) {
+      loadExportInfo();
+      setError(formatShellError(result.error));
+    }
   };
 
-  const onExported = (lastPath: string) => {
-    setExportInfo((current) => ({
-      directory: current?.directory ?? lastPath.replace(/[\\/][^\\/]+$/, ''),
-      lastPath,
-    }));
+  const onExported = (_lastPath: string) => {
+    loadExportInfo();
   };
 
   const handleDelete = async (sessionPath: string) => {
@@ -242,8 +334,6 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
     }
   };
 
-  const lastExportName = exportInfo?.lastPath?.split(/[\\/]/).pop();
-
   const groups = useMemo(() => groupByProject(sessions), [sessions]);
 
   return (
@@ -263,35 +353,90 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
         </div>
       )}
       {exportInfo && (
-        <div className="session-export-status" data-testid="sessions-export-info">
-          <div className="session-export-copy">
-            <strong>{lastExportName ? t('sessions.lastExport') : t('sessions.exportLocation')}</strong>
-            <span className="hint" title={exportInfo.lastPath ?? exportInfo.directory}>
-              {lastExportName ?? exportInfo.directory}
-            </span>
-          </div>
-          <div className="session-export-actions">
-            {exportInfo.lastPath && (
-              <button
-                className="pill"
-                data-testid="sessions-open-export"
-                onClick={() => void runShellAction(() => hostApi.shell.openPath(exportInfo.lastPath!))}
-              >
-                <ExternalLink size={14} />
-                {t('sessions.openExport')}
-              </button>
-            )}
+        <div className="session-export-card" data-testid="sessions-export-info">
+          <div className="session-export-card-header">
+            <div className="session-export-card-title">
+              <strong>
+                {exportInfo.recentRecords && exportInfo.recentRecords.length > 0
+                  ? t('sessions.recentExports')
+                  : t('sessions.exportLocation')}
+              </strong>
+              {exportInfo.recentRecords && exportInfo.recentRecords.length > 0 && (
+                <span className="session-export-count-badge">
+                  {exportInfo.recentRecords.length}
+                </span>
+              )}
+            </div>
             <button
-              className="pill"
+              className="pill session-export-folder-btn"
               data-testid="sessions-show-export"
-              onClick={() => void runShellAction(() => exportInfo.lastPath
-                ? hostApi.shell.showInFolder(exportInfo.lastPath)
-                : hostApi.shell.openPath(exportInfo.directory))}
+              title={t('sessions.openExportFolder')}
+              onClick={() => void runShellAction(() => hostApi.shell.openPath(exportInfo.directory))}
             >
-              <FolderOpen size={14} />
-              {exportInfo.lastPath ? t('sessions.showInFolder') : t('sessions.openExportFolder')}
+              <FolderOpen size={13} />
+              {t('sessions.openExportFolder')}
             </button>
           </div>
+
+          {exportInfo.recentRecords && exportInfo.recentRecords.length > 0 ? (
+            <div className="session-recent-exports-list" data-testid="sessions-recent-list">
+              {exportInfo.recentRecords.map((record) => {
+                const fileName = record.path.split(/[\\/]/).pop();
+                return (
+                  <div className="session-recent-export-item" key={record.path} data-testid="session-recent-item">
+                    <div className="session-recent-export-info">
+                      <div className="session-recent-export-main">
+                        {record.projectName && (
+                          <span className="session-export-project-badge" title={record.cwd}>
+                            <Folder size={11} />
+                            {record.projectName}
+                          </span>
+                        )}
+                        <span className="session-recent-export-title" title={record.title}>
+                          {record.title}
+                        </span>
+                      </div>
+                      <div className="session-recent-export-sub hint">
+                        <span className="session-recent-export-filename" title={record.path}>
+                          {fileName}
+                        </span>
+                        {record.exportedAt && (
+                          <>
+                            <span>·</span>
+                            <span>{formatRelativeTime(record.exportedAt, Date.now(), i18n.language)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="session-recent-export-actions">
+                      <button
+                        className="pill"
+                        data-testid="sessions-open-export"
+                        title={t('sessions.openExportedTooltip')}
+                        onClick={() => void runShellAction(() => hostApi.shell.openPath(record.path))}
+                      >
+                        <ExternalLink size={13} />
+                        {t('sessions.openExport')}
+                      </button>
+                      <button
+                        className="pill"
+                        data-testid="sessions-show-export-item"
+                        title={t('sessions.showExportedInFolderTooltip')}
+                        onClick={() => void runShellAction(() => hostApi.shell.showInFolder(record.path))}
+                      >
+                        <FolderOpen size={13} />
+                        {t('sessions.showInFolder')}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="session-export-empty-hint hint" title={exportInfo.directory}>
+              {exportInfo.directory}
+            </div>
+          )}
         </div>
       )}
       {!loading && !error && groups.length === 0 ? (
@@ -325,9 +470,11 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
                 <SessionRow
                   key={s.path}
                   session={s}
+                  exportRecord={exportInfo?.records?.[s.path]}
                   onChanged={refresh}
                   onError={setError}
                   onExported={onExported}
+                  onRefreshExportInfo={loadExportInfo}
                   onOpenChat={onOpenChat}
                   onDelete={handleDelete}
                   onArchive={handleArchive}

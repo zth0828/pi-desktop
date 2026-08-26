@@ -804,13 +804,28 @@ export type PiSessionSearchRow = PiSessionRow & {
 };
 export type PiSessionSearchPayload = { query: string; limit?: number };
 export type PiSessionSearchResult = { sessions: PiSessionSearchRow[] };
-export type PiSessionPathPayload = { path: string; cwd?: string };
+export type PiSessionPathPayload = { path: string; cwd?: string; title?: string; id?: string };
 export type PiSessionArchivePayload = PiSessionPathPayload & { archived: boolean };
 export type PiSessionProjectArchivePayload = { cwd: string; archived: boolean };
 export type PiSessionRenamePayload = { path: string; name: string };
 export type PiSessionForkResult = HostSuccess & { path?: string };
-export type PiSessionExportResult = HostSuccess & { path?: string };
-export type PiSessionExportInfo = { directory: string; lastPath?: string };
+export type PiSessionExportRecord = {
+  path: string;
+  sessionPath: string;
+  sessionId?: string;
+  projectName: string;
+  cwd: string;
+  title: string;
+  exportedAt: string;
+};
+export type PiSessionExportResult = HostSuccess & { path?: string; record?: PiSessionExportRecord };
+export type PiSessionExportInfo = {
+  directory: string;
+  lastPath?: string;
+  lastRecord?: PiSessionExportRecord;
+  recentRecords?: PiSessionExportRecord[];
+  records?: Record<string, PiSessionExportRecord>;
+};
 
 // —— piFiles：@ 文件引用（补全候选；展开在 piRuntime.prompt 前处理，格式照 pi file-processor）——
 
