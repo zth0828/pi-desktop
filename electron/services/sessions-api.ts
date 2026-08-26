@@ -2,6 +2,7 @@
 // 列表/切换/重命名/分叉走 pi SDK（SessionManager 静态方法 + runtime.switchSession）；
 // 删除 pi 无 SDK API（已确认），对齐 pi `/resume`：优先移入系统废纸篓。
 // 会话替换后必须 afterSessionReplaced（重订阅 + 重绑扩展 + 推 sessionReplaced）。
+import { existsSync } from 'node:fs';
 import { readFile, rm, rmdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { shell } from 'electron';
@@ -391,7 +392,7 @@ export const sessionsApi = {
         liveSessions.map((s) => toRowSafely(s, current, adapter.sessions, 'list')),
       )
     )
-      .filter((row): row is PiSessionRow => row !== null)
+      .filter((row): row is PiSessionRow => row !== null && row.messageCount > 0)
       .sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
   },
@@ -406,7 +407,7 @@ export const sessionsApi = {
         liveSessions.map((s) => toRowSafely(s, current, adapter.sessions, 'listAll')),
       )
     )
-      .filter((row): row is PiSessionRow => row !== null)
+      .filter((row): row is PiSessionRow => row !== null && row.messageCount > 0)
       .sort((a, b) => b.modified.localeCompare(a.modified));
     return { sessions };
   },
@@ -415,7 +416,8 @@ export const sessionsApi = {
     const query = payload.query.trim();
     if (!query) return { sessions: [] };
     const adapter = await loadPiAdapter();
-    const infos = await adapter.sessions.listAll();
+    const rawInfos = await adapter.sessions.listAll();
+    const infos = rawInfos.filter((info) => info.messageCount > 0);
     const current = ctx?.sessionPath ?? currentSessionFile();
     const limit = Math.max(1, Math.min(payload.limit ?? 50, 100));
     // 搜索结果 snippet 直接展示原文，先剥离附件信封再进索引/命中
@@ -523,7 +525,8 @@ export const sessionsApi = {
   archiveProject: async (payload: PiSessionProjectArchivePayload): Promise<HostSuccess> => {
     try {
       const adapter = await loadPiAdapter();
-      const projectSessions = await adapter.sessions.list(payload.cwd);
+      const rawSessions = await adapter.sessions.list(payload.cwd);
+      const projectSessions = rawSessions.filter((session) => session.messageCount > 0);
       if (projectSessions.some((session) => isSessionRunning(session.path))) {
         return { success: false, error: 'project has a running session' };
       }
@@ -550,7 +553,9 @@ export const sessionsApi = {
       // 对齐 pi `/resume` 的删除语义：真实应用优先移到系统废纸篓；
       // E2E 隔离目录直接删除，避免把测试会话灌进用户废纸篓。
       let method: 'trash' | 'rm' = 'trash';
-      if (process.env.PI_DESKTOP_USER_DATA_DIR) {
+      if (!existsSync(payload.path)) {
+        method = 'rm';
+      } else if (process.env.PI_DESKTOP_USER_DATA_DIR) {
         await rm(payload.path, { force: true });
         method = 'rm';
       } else {

@@ -294,7 +294,7 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
           </div>
         </div>
       )}
-      {!loading && !error && sessions.length === 0 ? (
+      {!loading && !error && groups.length === 0 ? (
         <p className="hint" data-testid="sessions-empty">{t('sessions.emptyAll')}</p>
       ) : (
         <div className="session-list">

@@ -214,7 +214,7 @@ export function hasStreamingRuntimes(): boolean {
   return [...runtimes].some((runtime) => runtime.adapterRuntime.session.view.isStreaming || runtime.running);
 }
 
-/** SDK 列表暂未收录的保活会话（通常是仍在流式输出的首次 run）。 */
+/** SDK 列表暂未收录的保活会话（通常是仍在流式输出的首次 run）。未发送内容的空会话不展示。 */
 export function getLiveSessionRows(): Array<{
   path: string;
   id: string;
@@ -230,10 +230,11 @@ export function getLiveSessionRows(): Array<{
     const session = entry.adapterRuntime.session;
     const sessionFile = session.sessionFile;
     if (!sessionFile) return [];
+    const stats = session.getSessionStats();
+    if (stats.totalMessages === 0) return [];
     const messages = session.messages as Array<{ role?: string; content?: unknown; timestamp?: number }>;
     const firstUser = messages.find((message) => message.role === 'user');
     const firstMessage = contentSummaryText(firstUser?.content);
-    const stats = session.getSessionStats();
     return [{
       path: sessionFile,
       id: session.sessionId,

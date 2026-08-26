@@ -12,16 +12,20 @@ export type ProjectGroup = {
 export function groupByProject(sessions: PiSessionRow[]): ProjectGroup[] {
   const map = new Map<string, PiSessionRow[]>();
   for (const s of sessions) {
+    if (s.messageCount <= 0) continue;
     const key = s.cwd || '(unknown)';
     map.set(key, [...(map.get(key) ?? []), s]);
   }
   return [...map.entries()]
-    .map(([cwd, rows]) => ({
-      cwd,
-      // Windows 路径用 `\` 分隔，两种分隔符都要切
-      name: cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd,
-      sessions: rows,
-      latest: rows[0]?.modified ?? '',
-    }))
+    .map(([cwd, rows]) => {
+      const sortedRows = [...rows].sort((a, b) => b.modified.localeCompare(a.modified));
+      return {
+        cwd,
+        // Windows 路径用 `\` 分隔，两种分隔符都要切
+        name: cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd,
+        sessions: sortedRows,
+        latest: sortedRows[0]?.modified ?? '',
+      };
+    })
     .sort((a, b) => b.latest.localeCompare(a.latest));
 }

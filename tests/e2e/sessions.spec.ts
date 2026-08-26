@@ -92,6 +92,18 @@ async function sendAndWaitReply(page: import('@playwright/test').Page, text: str
 const sessionRows = (page: import('@playwright/test').Page) =>
   page.locator('[data-testid^="session-row-"]');
 
+test('未发送任何内容时进入 Sessions 页 → 显示空状态，无「未命名会话」', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('nav-sessions').click();
+  await expect(page.getByTestId('sessions-empty')).toBeVisible({ timeout: 15_000 });
+  await expect(sessionRows(page)).toHaveCount(0);
+});
+
 test('发消息 → Sessions 页出现该会话（firstMessage 匹配，标记为当前）', async ({
   launchElectronApp,
 }) => {
@@ -425,6 +437,26 @@ test('删除当前打开的会话 → 面板切到新会话并可继续发送', 
   // 新会话可正常发送（此前面板绑在已删文件上，发送报 session not started）
   await sendAndWaitReply(page, 'after delete KITE');
   await expect(page.getByTestId('message-user').last()).toContainText('after delete KITE');
+});
+
+test('Sessions 页删除当前打开的唯一会话 → 回到空状态，不出现「未命名会话」', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'delete sole active session SAPPHIRE');
+  await page.getByTestId('nav-sessions').click();
+
+  const row = sessionRows(page).filter({ hasText: 'delete sole active session SAPPHIRE' });
+  await expect(row).toHaveCount(1, { timeout: 15_000 });
+  await row.getByTestId('session-delete').click();
+  await row.getByTestId('session-delete-confirm').click();
+
+  // Sessions 页清空，直接展示 empty 提示，绝不出现未命名会话
+  await expect(page.getByTestId('sessions-empty')).toBeVisible({ timeout: 15_000 });
+  await expect(sessionRows(page)).toHaveCount(0);
 });
 
 test('侧栏会话菜单 → 归档后移入已归档，可恢复；删除后消失', async ({ launchElectronApp }) => {
