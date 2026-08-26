@@ -3694,45 +3694,142 @@ button.danger-outline {
   border-radius: 99px;
 }
 
-/* 编辑供应商：浮层弹窗（fixed + 遮罩），不插入行内 DOM 挤压页面布局 */
+/* 自定义供应商 浮层弹窗（添加 / 编辑） */
+.provider-modal-overlay,
 .provider-edit-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  z-index: 300;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 300;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  padding: 24px;
 }
 
+.provider-modal-dialog,
 .provider-edit-dialog {
-  width: min(460px, 86vw);
+  width: min(680px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.provider-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 28px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.provider-modal-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.provider-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.provider-modal-desc {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.provider-modal-close {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  padding: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: -2px;
+  margin-right: -4px;
+}
+
+.provider-modal-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.provider-modal-body {
+  padding: 22px 28px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.provider-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 28px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+  flex-shrink: 0;
+}
+
+.provider-modal-actions button {
+  padding: 7px 18px;
+  font-size: 13px;
+}
+
+/* 弹窗内的分区卡片（探测与验证区域） */
+.provider-form-section {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 20px;
+  padding: 16px 18px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--bg-raised);
+  background: var(--bg);
 }
 
-.provider-edit-form-title {
-  font-size: 12px;
+.provider-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.provider-section-title {
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--text-secondary, var(--text-tertiary));
+  color: var(--text-primary);
+}
+
+.provider-section-desc {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  line-height: 1.4;
 }
 
 /* 表单字段块：label + 输入控件 + 辅助说明小字 */
 .provider-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .provider-field label {
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--text-secondary, var(--text-tertiary));
+  color: var(--text-primary);
 }
 
 .provider-field input,
@@ -3741,18 +3838,11 @@ button.danger-outline {
 }
 
 .provider-field-hint {
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.4;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
-.provider-edit-dialog .actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.custom-provider-form,
 .mcp-server-form,
 .extensions-install-form {
   display: flex;

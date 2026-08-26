@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Radar, RefreshCw } from 'lucide-react';
+import { Radar, RefreshCw, X } from 'lucide-react';
 import type { PiDefaultModel, PiModelRow, PiProviderProbeResult, PiProviderRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
@@ -89,6 +89,15 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
   const [editName, setEditName] = useState('');
   const [editBaseUrl, setEditBaseUrl] = useState('');
   const [editApi, setEditApi] = useState('openai-responses');
+
+  useEffect(() => {
+    if (!editing) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEditing(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editing]);
 
   const startEdit = () => {
     setEditName(provider.name);
@@ -319,68 +328,91 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
           )}
           {provider.source === 'config' && editing && (
             <div
-              className="provider-edit-overlay"
-              data-testid={`provider-edit-form-${provider.id}`}
+              className="provider-modal-overlay"
+              data-testid={`provider-edit-overlay-${provider.id}`}
               onClick={(e) => {
                 // 点遮罩关闭；表单内部点击不冒泡关闭
                 if (e.target === e.currentTarget) setEditing(false);
               }}
             >
-              <div className="provider-edit-dialog">
-                <div className="provider-edit-form-title">{t('models.editProviderTitle')}</div>
-                <div className="provider-field">
-                  <label htmlFor={`edit-name-${provider.id}`}>{t('models.fieldName')}</label>
-                  <input
-                    id={`edit-name-${provider.id}`}
-                    data-testid={`edit-name-${provider.id}`}
-                    placeholder={t('models.customName')}
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                  />
-                  <div className="provider-field-hint">{t('models.fieldNameHint')}</div>
-                </div>
-                <div className="provider-field">
-                  <label htmlFor={`edit-base-url-${provider.id}`}>{t('models.fieldBaseUrl')}</label>
-                  <input
-                    id={`edit-base-url-${provider.id}`}
-                    data-testid={`edit-base-url-${provider.id}`}
-                    placeholder={t('models.customBaseUrl')}
-                    value={editBaseUrl}
-                    onChange={(e) => setEditBaseUrl(e.target.value)}
-                  />
-                  <div className="provider-field-hint">{t('models.fieldBaseUrlHint')}</div>
-                </div>
-                <div className="provider-field">
-                  <label htmlFor={`edit-api-${provider.id}`}>{t('models.fieldApi')}</label>
-                  <select
-                    id={`edit-api-${provider.id}`}
-                    aria-label={t('models.customApi')}
-                    data-testid={`edit-api-${provider.id}`}
-                    value={editApi}
-                    onChange={(e) => setEditApi(e.target.value)}
-                  >
-                    {CUSTOM_API_TYPES.map((apiType) => (
-                      <option key={apiType} value={apiType}>{apiType}</option>
-                    ))}
-                  </select>
-                  {/* 当前选中适配器的用途说明：随选项与语言即时更新 */}
-                  <div
-                    className="provider-field-hint"
-                    data-testid={`edit-api-hint-${provider.id}`}
-                  >
-                    {t(`models.apiHint.${editApi}`)}
+              <div className="provider-modal-dialog" data-testid={`provider-edit-form-${provider.id}`}>
+                <div className="provider-modal-header">
+                  <div className="provider-modal-title-group">
+                    <h3 className="provider-modal-title">{t('models.editProviderTitle')}</h3>
+                    <p className="provider-modal-desc">{t('models.editProviderDesc')}</p>
                   </div>
-                </div>
-                <div className="actions">
                   <button
+                    type="button"
+                    className="icon-button provider-modal-close"
+                    onClick={() => setEditing(false)}
+                    aria-label={t('models.closeDialog')}
+                    title={t('models.closeDialog')}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="provider-modal-body">
+                  <div className="provider-field">
+                    <label htmlFor={`edit-name-${provider.id}`}>{t('models.fieldName')}</label>
+                    <input
+                      id={`edit-name-${provider.id}`}
+                      data-testid={`edit-name-${provider.id}`}
+                      placeholder={t('models.customName')}
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                    />
+                    <div className="provider-field-hint">{t('models.fieldNameHint')}</div>
+                  </div>
+                  <div className="provider-field">
+                    <label htmlFor={`edit-base-url-${provider.id}`}>{t('models.fieldBaseUrl')}</label>
+                    <input
+                      id={`edit-base-url-${provider.id}`}
+                      data-testid={`edit-base-url-${provider.id}`}
+                      placeholder={t('models.customBaseUrl')}
+                      value={editBaseUrl}
+                      onChange={(e) => setEditBaseUrl(e.target.value)}
+                    />
+                    <div className="provider-field-hint">{t('models.fieldBaseUrlHint')}</div>
+                    {requestUrlForApi(editBaseUrl, editApi) && (
+                      <div className="provider-request-url" data-testid={`edit-request-url-${provider.id}`}>
+                        {t('models.actualRequest', { url: requestUrlForApi(editBaseUrl, editApi) })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="provider-field">
+                    <label htmlFor={`edit-api-${provider.id}`}>{t('models.fieldApi')}</label>
+                    <select
+                      id={`edit-api-${provider.id}`}
+                      aria-label={t('models.customApi')}
+                      data-testid={`edit-api-${provider.id}`}
+                      value={editApi}
+                      onChange={(e) => setEditApi(e.target.value)}
+                    >
+                      {CUSTOM_API_TYPES.map((apiType) => (
+                        <option key={apiType} value={apiType}>{apiType}</option>
+                      ))}
+                    </select>
+                    {/* 当前选中适配器的用途说明：随选项与语言即时更新 */}
+                    <div
+                      className="provider-field-hint"
+                      data-testid={`edit-api-hint-${provider.id}`}
+                    >
+                      {t(`models.apiHint.${editApi}`)}
+                    </div>
+                  </div>
+                  {message && <p className="error-text">{message}</p>}
+                </div>
+                <div className="provider-modal-actions">
+                  <button type="button" disabled={busy} onClick={() => setEditing(false)}>
+                    {t('models.cancel')}
+                  </button>
+                  <button
+                    type="button"
                     className="primary"
                     disabled={busy || !editName.trim() || !editBaseUrl.trim()}
                     onClick={() => void saveEdit()}
                   >
                     {t('models.saveEdit')}
-                  </button>
-                  <button disabled={busy} onClick={() => setEditing(false)}>
-                    {t('models.cancel')}
                   </button>
                 </div>
               </div>
@@ -547,6 +579,15 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
   const [probing, setProbing] = useState(false);
   const [probeResult, setProbeResult] = useState<PiProviderProbeResult>();
 
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open]);
+
   // 每次打开都从空白开始：上次（已保存/已取消）的录入不应残留在新表单里
   const resetForm = () => {
     setName('');
@@ -661,167 +702,229 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
     );
   }
   return (
-    <div className="custom-provider-form" data-testid="custom-provider-form">
-      <input
-        data-testid="custom-provider-name"
-        placeholder={t('models.customName')}
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <input
-        placeholder={t('models.customBaseUrl')}
-        value={baseUrl}
-        onChange={(e) => {
-          setBaseUrl(e.target.value);
-          resetProbe();
-        }}
-      />
-      <input
-        placeholder={t('models.keyPlaceholder')}
-        type="password"
-        value={apiKey}
-        onChange={(e) => {
-          setApiKey(e.target.value);
-          resetProbe();
-        }}
-      />
-      <div className="probe-actions">
-        <button type="button" className="primary probe-button" data-testid="probe-custom-provider" disabled={probing || !baseUrl.trim()} onClick={() => void probe()}>
-          <Radar size={15} />
-          {probing ? t('models.probing') : t('models.probe')}
-        </button>
-        <button
-          type="button"
-          className="probe-button"
-          data-testid="verify-protocols"
-          title={t('models.verifyProtocolHint')}
-          disabled={probing || !probeResult || !baseUrl.trim()}
-          onClick={() => void verifyProtocols()}
-        >
-          <Radar size={15} />
-          {probing ? t('models.probing') : t('models.verifyProtocol')}
-        </button>
-      </div>
-      <p className="hint" data-testid="probe-list-hint">{t('models.probeListHint')}</p>
-      {probeResult && (
-        <div className="probe-results" data-testid="probe-results">
-          {probeResult.models.length === 0 && probeResult.catalogError && (
-            <p className="error-text" data-testid="probe-catalog-error">
-              {t('models.probeCatalogFailed', { error: probeResult.catalogError })}
-            </p>
-          )}
-          {probeResult.protocols.length > 0
-            && probeResult.protocols.every((protocol) => protocol.verified && !protocol.available) && (
-            <p className="probe-rejected-hint" data-testid="probe-rejected-hint">
-              {t('models.probeRejectedHint')}
-            </p>
-          )}
-          {probeResult.protocols.map((protocol) => (
-            <div className="probe-result-row" key={protocol.api}>
-              <span className="probe-protocol-name">{protocol.api}</span>
-              {protocol.verified ? (
-                <span className={protocol.available ? 'probe-ok' : 'probe-fail'}>
-                  {protocol.available ? t('models.probeAvailable') : t('models.probeUnavailable')}
-                </span>
-              ) : protocol.available ? (
-                <span className="probe-ok">{t('models.probeAdvertised')}</span>
-              ) : (
-                <span className="hint">{t('models.probeUnverified')}</span>
-              )}
-              {protocol.verified && protocol.available && (
-                <span className={protocol.cacheStats ? 'probe-ok' : 'hint'}>
-                  {protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')}
-                </span>
-              )}
-              {protocol.verified && protocol.error && (
-                <span className="probe-error" data-testid={`probe-error-${protocol.api}`}>{protocol.error}</span>
-              )}
+    <div
+      className="provider-modal-overlay"
+      data-testid="custom-provider-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setOpen(false);
+      }}
+    >
+      <div className="provider-modal-dialog" data-testid="custom-provider-form">
+        <div className="provider-modal-header">
+          <div className="provider-modal-title-group">
+            <h3 className="provider-modal-title">{t('models.addCustomTitle')}</h3>
+            <p className="provider-modal-desc">{t('models.addCustomDesc')}</p>
+          </div>
+          <button
+            type="button"
+            className="icon-button provider-modal-close"
+            onClick={() => setOpen(false)}
+            aria-label={t('models.closeDialog')}
+            title={t('models.closeDialog')}
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="provider-modal-body">
+          <div className="provider-field">
+            <label htmlFor="custom-provider-name">{t('models.fieldName')}</label>
+            <input
+              id="custom-provider-name"
+              data-testid="custom-provider-name"
+              placeholder={t('models.customName')}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <div className="provider-field-hint">{t('models.fieldNameHint')}</div>
+          </div>
+          <div className="provider-field">
+            <label htmlFor="custom-provider-base-url">{t('models.fieldBaseUrl')}</label>
+            <input
+              id="custom-provider-base-url"
+              placeholder={t('models.customBaseUrl')}
+              value={baseUrl}
+              onChange={(e) => {
+                setBaseUrl(e.target.value);
+                resetProbe();
+              }}
+            />
+            <div className="provider-field-hint">{t('models.fieldBaseUrlHint')}</div>
+          </div>
+          <div className="provider-field">
+            <label htmlFor="custom-provider-key">{t('models.fieldApiKey')}</label>
+            <input
+              id="custom-provider-key"
+              placeholder={t('models.keyPlaceholder')}
+              type="password"
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                resetProbe();
+              }}
+            />
+            <div className="provider-field-hint">{t('models.fieldApiKeyHint')}</div>
+          </div>
+          <div className="provider-form-section">
+            <div className="provider-section-header">
+              <div className="provider-section-title">{t('models.probeSectionTitle')}</div>
+              <div className="provider-section-desc">{t('models.probeSectionDesc')}</div>
             </div>
-          ))}
-          <div className="probe-api-choice">
-            <label htmlFor="custom-api-select">
-              {probeResult.protocols.some((protocol) => protocol.verified && protocol.available)
-                ? t('models.detectedApi')
-                : t('models.unverifiedApi')}
-            </label>
-            <select
-              id="custom-api-select"
-              aria-label={t('models.customApi')}
-              data-testid="custom-api-select"
-              value={api}
-              onChange={(event) => selectApi(event.target.value)}
-            >
-              {CUSTOM_API_TYPES.map((apiType) => (
-                <option key={apiType} value={apiType}>{apiType}</option>
-              ))}
-            </select>
-            {/* 当前选中适配器的用途说明：随选项与语言即时更新 */}
-            <div className="provider-field-hint" data-testid="custom-api-hint">
-              {t(`models.apiHint.${api}`)}
+            <div className="probe-actions">
+              <button
+                type="button"
+                className="primary probe-button"
+                data-testid="probe-custom-provider"
+                disabled={probing || !baseUrl.trim()}
+                onClick={() => void probe()}
+              >
+                <Radar size={15} />
+                {probing ? t('models.probing') : t('models.probe')}
+              </button>
+              <button
+                type="button"
+                className="probe-button"
+                data-testid="verify-protocols"
+                title={t('models.verifyProtocolHint')}
+                disabled={probing || !probeResult || !baseUrl.trim()}
+                onClick={() => void verifyProtocols()}
+              >
+                <Radar size={15} />
+                {probing ? t('models.probing') : t('models.verifyProtocol')}
+              </button>
             </div>
-            {requestUrlForApi(baseUrl, api) && (
-              <span className="probe-request-url" data-testid="custom-request-url">
-                {t('models.actualRequest', { url: requestUrlForApi(baseUrl, api) })}
-              </span>
+            <p className="hint" data-testid="probe-list-hint">{t('models.probeListHint')}</p>
+            {probeResult && (
+              <div className="probe-results" data-testid="probe-results">
+                {probeResult.models.length === 0 && probeResult.catalogError && (
+                  <p className="error-text" data-testid="probe-catalog-error">
+                    {t('models.probeCatalogFailed', { error: probeResult.catalogError })}
+                  </p>
+                )}
+                {probeResult.protocols.length > 0
+                  && probeResult.protocols.every((protocol) => protocol.verified && !protocol.available) && (
+                  <p className="probe-rejected-hint" data-testid="probe-rejected-hint">
+                    {t('models.probeRejectedHint')}
+                  </p>
+                )}
+                {probeResult.protocols.map((protocol) => (
+                  <div className="probe-result-row" key={protocol.api}>
+                    <span className="probe-protocol-name">{protocol.api}</span>
+                    {protocol.verified ? (
+                      <span className={protocol.available ? 'probe-ok' : 'probe-fail'}>
+                        {protocol.available ? t('models.probeAvailable') : t('models.probeUnavailable')}
+                      </span>
+                    ) : protocol.available ? (
+                      <span className="probe-ok">{t('models.probeAdvertised')}</span>
+                    ) : (
+                      <span className="hint">{t('models.probeUnverified')}</span>
+                    )}
+                    {protocol.verified && protocol.available && (
+                      <span className={protocol.cacheStats ? 'probe-ok' : 'hint'}>
+                        {protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')}
+                      </span>
+                    )}
+                    {protocol.verified && protocol.error && (
+                      <span className="probe-error" data-testid={`probe-error-${protocol.api}`}>{protocol.error}</span>
+                    )}
+                  </div>
+                ))}
+                <div className="probe-api-choice">
+                  <label htmlFor="custom-api-select">
+                    {probeResult.protocols.some((protocol) => protocol.verified && protocol.available)
+                      ? t('models.detectedApi')
+                      : t('models.unverifiedApi')}
+                  </label>
+                  <select
+                    id="custom-api-select"
+                    aria-label={t('models.customApi')}
+                    data-testid="custom-api-select"
+                    value={api}
+                    onChange={(event) => selectApi(event.target.value)}
+                  >
+                    {CUSTOM_API_TYPES.map((apiType) => (
+                      <option key={apiType} value={apiType}>{apiType}</option>
+                    ))}
+                  </select>
+                  {/* 当前选中适配器的用途说明：随选项与语言即时更新 */}
+                  <div className="provider-field-hint" data-testid="custom-api-hint">
+                    {t(`models.apiHint.${api}`)}
+                  </div>
+                  {requestUrlForApi(baseUrl, api) && (
+                    <span className="probe-request-url" data-testid="custom-request-url">
+                      {t('models.actualRequest', { url: requestUrlForApi(baseUrl, api) })}
+                    </span>
+                  )}
+                </div>
+                {probeResult.models.length > 0 && (
+                  <details className="probe-models-fold" data-testid="probe-models" open>
+                    <summary className="probe-models-title">
+                      {t('models.probeModels', { count: probeResult.models.length })}
+                    </summary>
+                    <div className="probe-models">
+                      {probeResult.models.map((modelId) => {
+                        const detail = probeResult.modelDetails?.find((model) => model.id === modelId);
+                        const selected = modelIds.split(',').map((id) => id.trim()).includes(modelId);
+                        return (
+                          <label className="probe-model-row" data-testid={`probe-model-${modelId}`} key={modelId}>
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={(event) => {
+                                const ids = modelIds.split(',').map((id) => id.trim()).filter(Boolean);
+                                const next = event.target.checked
+                                  ? [...new Set([...ids, modelId])]
+                                  : ids.filter((id) => id !== modelId);
+                                setModelIds(next.join(', '));
+                              }}
+                            />
+                            <span className="probe-model-id">{modelId}</span>
+                            <span className="probe-model-spec" data-testid={`probe-model-spec-${modelId}`}>
+                              {detail?.input?.includes('image') && (
+                                <span className="provider-model-vision" data-testid={`probe-model-vision-${modelId}`}>
+                                  {t('models.imageSupport')}
+                                </span>
+                              )}
+                              {t('models.probeSpec', {
+                                contextWindow: detail?.contextWindow?.toLocaleString() ?? '—',
+                                maxOutput: detail?.maxTokens?.toLocaleString() ?? '—',
+                              })}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </details>
+                )}
+              </div>
             )}
           </div>
-          {probeResult.models.length > 0 && (
-            <details className="probe-models-fold" data-testid="probe-models" open>
-              <summary className="probe-models-title">
-                {t('models.probeModels', { count: probeResult.models.length })}
-              </summary>
-              <div className="probe-models">
-                {probeResult.models.map((modelId) => {
-                  const detail = probeResult.modelDetails?.find((model) => model.id === modelId);
-                  const selected = modelIds.split(',').map((id) => id.trim()).includes(modelId);
-                  return (
-                    <label className="probe-model-row" data-testid={`probe-model-${modelId}`} key={modelId}>
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        onChange={(event) => {
-                          const ids = modelIds.split(',').map((id) => id.trim()).filter(Boolean);
-                          const next = event.target.checked
-                            ? [...new Set([...ids, modelId])]
-                            : ids.filter((id) => id !== modelId);
-                          setModelIds(next.join(', '));
-                        }}
-                      />
-                      <span className="probe-model-id">{modelId}</span>
-                      <span className="probe-model-spec" data-testid={`probe-model-spec-${modelId}`}>
-                        {detail?.input?.includes('image') && (
-                          <span className="provider-model-vision" data-testid={`probe-model-vision-${modelId}`}>
-                            {t('models.imageSupport')}
-                          </span>
-                        )}
-                        {t('models.probeSpec', {
-                          contextWindow: detail?.contextWindow?.toLocaleString() ?? '—',
-                          maxOutput: detail?.maxTokens?.toLocaleString() ?? '—',
-                        })}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </details>
+          {probeResult && probeResult.models.length === 0 && (
+            <div className="provider-field">
+              <label htmlFor="custom-models">{t('models.fieldModels')}</label>
+              <input
+                id="custom-models"
+                data-testid="custom-models"
+                placeholder={t('models.customModels')}
+                value={modelIds}
+                onChange={(e) => setModelIds(e.target.value)}
+              />
+              <div className="provider-field-hint">{t('models.fieldModelsHint')}</div>
+            </div>
           )}
+          {message && <p className="error-text">{message}</p>}
         </div>
-      )}
-      {probeResult && probeResult.models.length === 0 && (
-        <input
-          data-testid="custom-models"
-          placeholder={t('models.customModels')}
-          value={modelIds}
-          onChange={(e) => setModelIds(e.target.value)}
-        />
-      )}
-      <div className="actions">
-        <button className="primary" disabled={!probeResult || !name.trim() || !baseUrl.trim() || !modelIds.trim()} onClick={() => void submit()}>
-          {t('models.saveCustom')}
-        </button>
-        <button onClick={() => setOpen(false)}>{t('models.cancel')}</button>
+        <div className="provider-modal-actions">
+          <button type="button" onClick={() => setOpen(false)}>{t('models.cancel')}</button>
+          <button
+            type="button"
+            className="primary"
+            disabled={!probeResult || !name.trim() || !baseUrl.trim() || !modelIds.trim()}
+            onClick={() => void submit()}
+          >
+            {t('models.saveCustom')}
+          </button>
+        </div>
       </div>
-      {message && <p className="error-text">{message}</p>}
     </div>
   );
 }
