@@ -530,8 +530,8 @@ export const providersApi = {
             name: m.name ?? m.id,
             reasoning: m.reasoning ?? true,
             ...(tlm ? { thinkingLevelMap: tlm } : {}),
-            // 输入模态：探测目录上报 > pi 内置目录（官方能力声明）> 纯文本。
-            input: m.input ?? builtin?.input ?? ['text'],
+            // 输入模态：pi 内置官方目录（能力声明最高权威）> 探测目录上报 > 纯文本。
+            input: builtin?.input ?? m.input ?? ['text'],
             // 官方目录价格透传；未知时不写 cost（前端显示占位，与真 0 区分）
             ...(builtin?.cost ? { cost: builtin.cost } : {}),
             contextWindow: m.contextWindow ?? builtin?.contextWindow,
@@ -872,8 +872,12 @@ export const providersApi = {
       }
       if (!detail.contextWindow && builtin?.contextWindow) detail.contextWindow = builtin.contextWindow;
       if (!detail.maxTokens && builtin?.maxTokens) detail.maxTokens = builtin.maxTokens;
-      if (!detail.input?.length && builtin?.input) {
+      // input 补全优先级：pi 内置官方目录 > 网关 /models 目录上报 > 纯文本。
+      // 官方目录明确声明的 input 直接采用，避免网关错误覆盖多模态能力。
+      if (builtin?.input) {
         detail.input = builtin.input.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image');
+      } else if (!detail.input?.length) {
+        detail.input = ['text'];
       }
     }
     // 服务端 supported_endpoint_types 声明 → 对应协议（不经请求的软提示）。

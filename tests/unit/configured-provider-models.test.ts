@@ -111,9 +111,18 @@ describe('configured provider model discovery', () => {
   });
 
   it('respects directory-reported input over the profile table', () => {
-    // 目录显式 text：网关可能确实剥离了视觉，服务端声明优先
+    // 目录显式 text：官方目录无数据时，服务端声明优先
     const merged = mergeDiscoveredProviderModels([], [{ id: 'gemini-2.5-pro', input: ['text'] }]);
     expect(merged[0]).toEqual(expect.objectContaining({ id: 'gemini-2.5-pro', input: ['text'] }));
+  });
+
+  it('prefers builtin catalog input over directory-reported text-only', () => {
+    // 网关目录错误声明 text-only，但 pi 内置官方目录声明多模态：以官方为准
+    const catalog = new Map([
+      ['gpt-5-6-sol', { id: 'gpt-5.6-sol', input: ['text', 'image'] }],
+    ]);
+    const merged = mergeDiscoveredProviderModels([], [{ id: 'gpt-5.6-sol', input: ['text'] }], catalog);
+    expect(merged[0]).toEqual(expect.objectContaining({ id: 'gpt-5.6-sol', input: ['text', 'image'] }));
   });
 
   it('keeps manually declared input for existing models', () => {
@@ -137,6 +146,19 @@ describe('configured provider model discovery', () => {
     const merged = mergeDiscoveredProviderModels(
       [{ id: 'gemini-2.5-pro', reasoning: true, input: ['text'], contextWindow: 1048576 }],
       [{ id: 'gemini-2.5-pro' }],
+      catalog,
+    );
+    expect(merged[0]).toEqual(expect.objectContaining({ input: ['text', 'image'] }));
+  });
+
+  it('upgrades legacy text-only input when directory wrongly reports text-only', () => {
+    // 网关目录也报 text-only 时，仍应以 pi 官方目录的多模态声明为准
+    const catalog = new Map([
+      ['gpt-5-6-sol', { id: 'gpt-5.6-sol', input: ['text', 'image'] }],
+    ]);
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'gpt-5.6-sol', reasoning: true, input: ['text'] }],
+      [{ id: 'gpt-5.6-sol', input: ['text'] }],
       catalog,
     );
     expect(merged[0]).toEqual(expect.objectContaining({ input: ['text', 'image'] }));

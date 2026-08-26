@@ -210,7 +210,10 @@ function refreshStaleModel(
 ): JsonRecord {
   const next: JsonRecord = { ...current };
   const builtin = findBuiltinModel(catalog, String(current.id ?? ''));
-  const detectedInput = model?.input ?? builtin?.input;
+  // input 刷新优先级：pi 内置官方目录 > 网关 /models 目录上报。
+  // 知名模型的官方规格比网关目录更可靠；网关目录错误声明 text-only 时
+  // 不应覆盖官方声明的多模态能力。
+  const detectedInput = builtin?.input ?? model?.input;
   if (current.inputPinned !== true && isLegacyDefaultInput(current) && detectedInput) {
     next.input = detectedInput;
   }
@@ -261,10 +264,10 @@ export function mergeDiscoveredProviderModels(
       // 供应商拒绝思考参数时用户可在 Models 页逐模型关闭（写入后不被发现流程覆盖）。
       reasoning: model.reasoning ?? builtin?.reasoning ?? (typeof template.reasoning === 'boolean' ? template.reasoning : true),
       ...(model.thinkingLevelMap ? { thinkingLevelMap: model.thinkingLevelMap } : {}),
-      // input 优先级：目录上报 > pi 内置目录（官方能力声明）> 供应商模板继承 > 纯文本。
-      // 目录显式 text 优先于内置目录：网关可能确实剥离了视觉。
-      input: model.input
-        ?? builtin?.input
+      // input 优先级：pi 内置官方目录 > 网关 /models 目录上报 > 供应商模板继承 > 纯文本。
+      // 知名模型的官方规格比网关目录更可靠；网关目录仅用于补充官方未收录模型。
+      input: builtin?.input
+        ?? model.input
         ?? (Array.isArray(template.input) ? template.input : ['text']),
       // 官方目录价格透传：覆盖「价格未知显示占位」的 agentrouter 场景
       ...(builtin?.cost ? { cost: builtin.cost } : record(template.cost) ? { cost: record(template.cost) } : {}),
