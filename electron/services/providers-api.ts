@@ -905,18 +905,20 @@ export const providersApi = {
     const protocols: PiProviderProbeResult['protocols'] = [];
     if (payload.verifyProtocols) {
       // 真实验证：每个协议发一次最小化生成请求（约 1 token）。只取首个成功的候选，
-      // 不再补发二次请求——首次成功即已判定可用，二次请求的超时不应回灌 error。
+      const prioritizedOpenAiBases = modelsBaseUrl
+        ? [modelsBaseUrl, ...openAiBases.filter((candidateBase) => candidateBase !== modelsBaseUrl)]
+        : (/\/v1$/i.test(base) ? [base] : [`${base}/v1`, base]);
       const anthropicUrl = /\/v1$/i.test(base) ? `${base}/messages` : `${base}/v1/messages`;
       type ProbeCandidate = { url: string; resolvedBaseUrl: string };
       const requests: Array<{ api: string; candidates: ProbeCandidate[]; body: Record<string, unknown>; headers?: Record<string, string> }> = [
         {
           api: 'openai-completions',
-          candidates: openAiBases.map((candidateBase) => ({ url: `${candidateBase}/chat/completions`, resolvedBaseUrl: candidateBase })),
+          candidates: prioritizedOpenAiBases.map((candidateBase) => ({ url: `${candidateBase}/chat/completions`, resolvedBaseUrl: candidateBase })),
           body: { model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 },
         },
         {
           api: 'openai-responses',
-          candidates: openAiBases.map((candidateBase) => ({ url: `${candidateBase}/responses`, resolvedBaseUrl: candidateBase })),
+          candidates: prioritizedOpenAiBases.map((candidateBase) => ({ url: `${candidateBase}/responses`, resolvedBaseUrl: candidateBase })),
           body: { model, input: 'ping', max_output_tokens: 1 },
         },
         {
