@@ -969,11 +969,23 @@ export const providersApi = {
                 error = undefined;
                 break;
               }
+              const extractErrorMessage = (json: Record<string, unknown>, status: number): string => {
+                const errObj = json.error && typeof json.error === 'object' ? (json.error as Record<string, unknown>) : json;
+                const msg = typeof errObj.message === 'string' ? errObj.message : typeof errObj.error === 'string' ? errObj.error : '';
+                if (msg) return `HTTP ${status}: ${msg}`;
+                const code = typeof errObj.code === 'string' ? errObj.code : '';
+                if (code) return `HTTP ${status} (${code})`;
+                if (status === 503) return `HTTP 503 (No available channel / unsupported protocol)`;
+                if (status === 403) return `HTTP 403 (Endpoint forbidden / not enabled)`;
+                if (status === 404) return `HTTP 404 (Endpoint not found)`;
+                if (status === 401) return `HTTP 401 (Invalid API key)`;
+                return `HTTP ${status}`;
+              };
               error = first.ok
                 ? (firstJson.error && typeof (firstJson.error as Record<string, unknown>).message === 'string'
                   ? String((firstJson.error as Record<string, unknown>).message)
                   : `unexpected content-type: ${first.headers.get('content-type') ?? 'unknown'}`)
-                : `HTTP ${first.status}`;
+                : extractErrorMessage(firstJson, first.status);
             } catch (candidateError) {
               error = candidateError instanceof Error ? candidateError.message : String(candidateError);
             }
