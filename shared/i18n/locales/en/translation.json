@@ -434,8 +434,7 @@
       "unsupportedRelay": "The provider does not support the Responses protocol (/v1/responses). Please switch the provider's adapter type to openai-completions (/v1/chat/completions) in Model Settings.",
       "replacementTimeout": "Session replacement timed out without confirmation. Please retry or switch sessions.",
       "hostInvokeTimeout": "Main-process communication timed out ({{action}}). Please retry.",
-      "requestId": "Request ID: {{id}}",
-      "viewRawDetails": "View error details"
+      "requestId": "Request ID: {{id}}"
     }
   },
   "models": {

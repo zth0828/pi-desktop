@@ -434,8 +434,7 @@
       "unsupportedRelay": "服务商不支持 Responses 协议（/v1/responses）。请在模型设置中将该供应商的适配器类型切换为 openai-completions（/v1/chat/completions）。",
       "replacementTimeout": "会话替换超时未确认，请重试或切换会话。",
       "hostInvokeTimeout": "与主进程通信超时（{{action}}），请重试。",
-      "requestId": "请求 ID：{{id}}",
-      "viewRawDetails": "展开原始错误信息"
+      "requestId": "请求 ID：{{id}}"
     }
   },
   "models": {

@@ -1008,8 +1008,8 @@ export const providersApi = {
       }
     }
     const protocolPreference = [
-      'openai-responses',
       'openai-completions',
+      'openai-responses',
       'anthropic-messages',
       'google-generative-ai',
     ];

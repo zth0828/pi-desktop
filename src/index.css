@@ -1643,33 +1643,6 @@ button.danger-outline {
   font-size: 11.5px;
 }
 
-.message-notice.error .error-details {
-  margin-top: 6px;
-  font-size: 11.5px;
-}
-
-.message-notice.error .error-details summary {
-  color: var(--text-tertiary);
-  cursor: pointer;
-  user-select: none;
-  font-size: 11.5px;
-}
-
-.message-notice.error .error-details summary:hover {
-  color: var(--text-secondary);
-}
-
-.message-notice.error .error-details .error-message-raw {
-  margin-top: 5px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  opacity: 0.85;
-}
-
 /* `!` bash 执行卡片 */
 
 .message-bash {

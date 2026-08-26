@@ -7,8 +7,8 @@ import { onHostEvent } from '../lib/host-events';
 import { getActiveChatStore } from '../stores/chat-registry';
 
 const CUSTOM_API_TYPES = [
-  'openai-responses',
   'openai-completions',
+  'openai-responses',
   'anthropic-messages',
   'google-generative-ai',
 ] as const;
@@ -573,7 +573,7 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
-  const [api, setApi] = useState<string>('openai-responses');
+  const [api, setApi] = useState<string>('openai-completions');
   const [apiKey, setApiKey] = useState('');
   const [modelIds, setModelIds] = useState('');
   const [message, setMessage] = useState<string>();
@@ -593,7 +593,7 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
   const resetForm = () => {
     setName('');
     setBaseUrl('');
-    setApi('openai-responses');
+    setApi('openai-completions');
     setApiKey('');
     setModelIds('');
     setMessage(undefined);

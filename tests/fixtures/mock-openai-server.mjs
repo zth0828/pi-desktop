@@ -169,6 +169,17 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    if (!parsed.stream) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        id: "chatcmpl-mock",
+        object: "chat.completion",
+        choices: [{ index: 0, message: { role: "assistant", content: "PONG" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }));
+      return;
+    }
+
     res.writeHead(200, {
       "content-type": "text/event-stream",
       "cache-control": "no-cache",

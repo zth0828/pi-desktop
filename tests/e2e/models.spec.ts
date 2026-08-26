@@ -222,7 +222,7 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
   await expect(form.getByTestId('custom-models')).toHaveCount(0);
   await expect(form.getByRole('button', { name: 'Save provider' })).toBeDisabled();
   await form.getByTestId('probe-custom-provider').click();
-  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-responses', { timeout: 30_000 });
+  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-completions', { timeout: 30_000 });
   await expect(form.getByTestId('probe-models')).toBeVisible();
   await expect(form.getByRole('button', { name: 'Save provider' })).toBeEnabled();
   await form.getByRole('button', { name: 'Save provider' }).click();
@@ -251,7 +251,7 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
 
   await added.locator('.provider-row-header').click();
   await expect(page.getByTestId('provider-request-url-added-provider')).toContainText(
-    `http://127.0.0.1:${mockPort}/v1/responses`,
+    `http://127.0.0.1:${mockPort}/v1/chat/completions`,
   );
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByTestId('delete-provider-added-provider').click();
@@ -345,25 +345,25 @@ test('Models 页：协议探测拒绝 200 HTML，发现 /v1 并选择真实 Open
   await expect(results).toBeVisible({ timeout: 30_000 });
   await expect(form.locator('.probe-result-row')).toHaveCount(4);
   await expect(form.locator('.probe-result-row').first()).toContainText('Unverified');
-  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-responses');
+  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-completions');
   await expect(form.getByTestId('custom-api-select').locator('option')).toHaveText([
-    'openai-responses',
     'openai-completions',
+    'openai-responses',
     'anthropic-messages',
     'google-generative-ai',
   ]);
-  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/responses`);
+  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/chat/completions`);
   // 验证协议：发送最小化测试请求，发现 /v1 并确认 openai 两类协议可用
   await form.getByTestId('verify-protocols').click();
   await expect(results.locator('.probe-result-row').filter({ hasText: 'openai-completions' })).toContainText('Available');
   await expect(results.locator('.probe-result-row').filter({ hasText: 'openai-responses' })).toContainText('Available');
   await expect(results.locator('.probe-result-row').filter({ hasText: 'anthropic-messages' })).toContainText('Unavailable');
-  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-responses');
+  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-completions');
   await expect(form.getByPlaceholder('baseURL')).toHaveValue(`http://127.0.0.1:${mockPort}/v1`);
-  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/responses`);
-  page.once('dialog', (dialog) => dialog.accept());
-  await form.getByTestId('custom-api-select').selectOption('openai-completions');
   await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/chat/completions`);
+  page.once('dialog', (dialog) => dialog.accept());
+  await form.getByTestId('custom-api-select').selectOption('openai-responses');
+  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/responses`);
   // 上下文与最大输出自动管理：目录上报的用目录值；目录未上报且不在
   // pi 内置目录的（mock-2）如实显示未知（—），不再瞎写缺省规格。
   await expect(form.getByTestId('probe-model-spec-mock-discovered')).toContainText('256,000');
@@ -1080,8 +1080,8 @@ test('Models 页：探测前隐藏协议与模型输入，探测失败后才允�
   await form.getByTestId('probe-custom-provider').click();
   await expect(form.getByTestId('custom-models')).toBeVisible({ timeout: 30_000 });
   await expect(form.getByTestId('custom-api-select').locator('option')).toHaveText([
-    'openai-responses',
     'openai-completions',
+    'openai-responses',
     'anthropic-messages',
     'google-generative-ai',
   ]);
