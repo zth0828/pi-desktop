@@ -3127,11 +3127,23 @@ button.danger-outline {
 .settings-number { width: 140px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-raised); color: var(--text); text-align: right; }
 .settings-proxy-url { width: 260px; text-align: left; font-family: var(--font-mono); font-size: 12px; }
 .settings-proxy-error { margin-left: 8px; color: var(--danger, #e5484d); }
+.probe-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 4px; }
+.probe-button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 18px; border-radius: 99px; font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s; }
+.probe-button.outline { border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-primary); }
+.probe-button.outline:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-hover, var(--border)); }
+.probe-button:disabled { opacity: 0.45; cursor: not-allowed; }
 .probe-results { display: flex; flex-direction: column; gap: 6px; padding: 7px 0; }
-.probe-result-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; background: var(--bg-raised); }
+.probe-result-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px 90px; align-items: center; gap: 8px 12px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; background: var(--bg-raised); }
 .probe-protocol-name { min-width: 0; overflow: hidden; font-family: var(--font-mono); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.probe-status-slot { display: flex; align-items: center; justify-content: flex-end; white-space: nowrap; }
+.probe-cache-slot { display: flex; align-items: center; justify-content: flex-end; white-space: nowrap; }
+.probe-status-slot .probe-ok,
+.probe-status-slot .probe-fail,
+.probe-status-slot .hint,
+.probe-cache-slot .probe-ok,
+.probe-cache-slot .hint { margin-left: 0; white-space: nowrap; }
 .probe-rejected-hint { margin: 0; padding: 8px 10px; border: 1px solid var(--warning); border-radius: 7px; color: var(--warning); font-size: 12px; line-height: 1.45; }
-.probe-error { flex-basis: 100%; min-width: 0; color: var(--danger); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; margin-top: 2px; }
+.probe-error { grid-column: 1 / -1; min-width: 0; color: var(--danger); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; margin-top: 2px; }
 .probe-api-choice { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; gap: 7px 12px; margin-top: 5px; padding: 9px; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; }
 .probe-api-choice select { min-width: 0; width: 100%; }
 .probe-request-url { grid-column: 1 / -1; color: var(--text-secondary); font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; }
@@ -3141,15 +3153,14 @@ button.danger-outline {
 .probe-models-fold { margin-top: 6px; }
 .probe-models-fold summary { cursor: pointer; user-select: none; }
 .probe-models-fold summary:hover { color: var(--accent); }
-.probe-model-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) 78px auto; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; cursor: pointer; background: var(--bg-raised); transition: background 0.15s, border-color 0.15s; }
+.probe-model-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) 80px 220px; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; cursor: pointer; background: var(--bg-raised); transition: background 0.15s, border-color 0.15s; }
 .probe-model-row:hover { background: var(--bg-hover); border-color: var(--border-hover, var(--border)); }
 .probe-model-row input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
-.probe-model-id { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-weight: 500; }
-.probe-model-vision-slot { display: flex; align-items: center; justify-content: center; width: 78px; flex-shrink: 0; }
+.probe-model-id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-weight: 500; }
+.probe-model-vision-slot { display: flex; align-items: center; justify-content: center; width: 80px; flex-shrink: 0; }
 .probe-model-spec { color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; justify-self: end; }
-.probe-ok { color: var(--success); white-space: nowrap; margin-left: auto; }
-.probe-fail { color: var(--danger); white-space: nowrap; margin-left: auto; }
-.probe-result-row .hint { white-space: nowrap; margin-left: auto; }
+.probe-ok { color: var(--success); white-space: nowrap; }
+.probe-fail { color: var(--danger); white-space: nowrap; }
 .model-context-status { margin-top: -2px; color: var(--warning); font-size: 11.5px; line-height: 1.45; }
 .model-context-status.detected { color: var(--success); }
 .model-context-default { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 12px; }

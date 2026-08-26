@@ -783,7 +783,7 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
               </button>
               <button
                 type="button"
-                className="probe-button"
+                className="outline probe-button"
                 data-testid="verify-protocols"
                 title={t('models.verifyProtocolHint')}
                 disabled={probing || !probeResult || !baseUrl.trim()}
@@ -810,20 +810,24 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                 {probeResult.protocols.map((protocol) => (
                   <div className="probe-result-row" key={protocol.api}>
                     <span className="probe-protocol-name">{protocol.api}</span>
-                    {protocol.verified ? (
-                      <span className={protocol.available ? 'probe-ok' : 'probe-fail'}>
-                        {protocol.available ? t('models.probeAvailable') : t('models.probeUnavailable')}
-                      </span>
-                    ) : protocol.available ? (
-                      <span className="probe-ok">{t('models.probeAdvertised')}</span>
-                    ) : (
-                      <span className="hint">{t('models.probeUnverified')}</span>
-                    )}
-                    {protocol.verified && protocol.available && (
-                      <span className={protocol.cacheStats ? 'probe-ok' : 'hint'}>
-                        {protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')}
-                      </span>
-                    )}
+                    <span className="probe-status-slot">
+                      {protocol.verified ? (
+                        <span className={protocol.available ? 'probe-ok' : 'probe-fail'}>
+                          {protocol.available ? t('models.probeAvailable') : t('models.probeUnavailable')}
+                        </span>
+                      ) : protocol.available ? (
+                        <span className="probe-ok">{t('models.probeAdvertised')}</span>
+                      ) : (
+                        <span className="hint">{t('models.probeUnverified')}</span>
+                      )}
+                    </span>
+                    <span className="probe-cache-slot">
+                      {protocol.verified && protocol.available ? (
+                        <span className={protocol.cacheStats ? 'probe-ok' : 'hint'}>
+                          {protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')}
+                        </span>
+                      ) : null}
+                    </span>
                     {protocol.verified && protocol.error && (
                       <span className="probe-error" data-testid={`probe-error-${protocol.api}`}>{protocol.error}</span>
                     )}
