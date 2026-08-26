@@ -902,9 +902,23 @@ export const providersApi = {
       'anthropic-messages',
       'google-generative-ai',
     ] as const;
+    const findBestModelForApi = (api: string): string => {
+      if (payload.model) return payload.model;
+      if (!models.length) return 'test-model';
+      if (api === 'anthropic-messages') {
+        return models.find((m) => /claude/i.test(m)) ?? models[0];
+      }
+      if (api === 'google-generative-ai') {
+        return models.find((m) => /gemini/i.test(m)) ?? models[0];
+      }
+      if (api.startsWith('openai')) {
+        return models.find((m) => /(gpt|deepseek|qwen|glm|o1|o3|o4|text|chat|llama|mistral)/i.test(m)) ?? models[0];
+      }
+      return models[0];
+    };
     const protocols: PiProviderProbeResult['protocols'] = [];
     if (payload.verifyProtocols) {
-      // 真实验证：每个协议发一次最小化生成请求（约 1 token）。只取首个成功的候选，
+      // 真实验证：每个协议发一次最小化生成请求（约 1 token）。并发执行以减少等待时间。
       const prioritizedOpenAiBases = modelsBaseUrl
         ? [modelsBaseUrl, ...openAiBases.filter((candidateBase) => candidateBase !== modelsBaseUrl)]
         : (/\/v1$/i.test(base) ? [base] : [`${base}/v1`, base]);
@@ -914,59 +928,67 @@ export const providersApi = {
         {
           api: 'openai-completions',
           candidates: prioritizedOpenAiBases.map((candidateBase) => ({ url: `${candidateBase}/chat/completions`, resolvedBaseUrl: candidateBase })),
-          body: { model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 },
+          body: { model: findBestModelForApi('openai-completions'), messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 },
         },
         {
           api: 'openai-responses',
           candidates: prioritizedOpenAiBases.map((candidateBase) => ({ url: `${candidateBase}/responses`, resolvedBaseUrl: candidateBase })),
-          body: { model, input: 'ping', max_output_tokens: 1 },
+          body: { model: findBestModelForApi('openai-responses'), input: 'ping', max_output_tokens: 1 },
         },
         {
           api: 'anthropic-messages',
           candidates: [{ url: anthropicUrl, resolvedBaseUrl: normalizeBaseUrlForApi(base, 'anthropic-messages') }],
-          body: { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] },
+          body: { model: findBestModelForApi('anthropic-messages'), max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] },
           headers: { ...headers, 'anthropic-version': '2023-06-01' },
         },
         {
           api: 'google-generative-ai',
-          candidates: [{ url: `${base}/models/${encodeURIComponent(model)}:generateContent`, resolvedBaseUrl: base }],
+          candidates: [{ url: `${base}/models/${encodeURIComponent(findBestModelForApi('google-generative-ai'))}:generateContent`, resolvedBaseUrl: base }],
           body: { contents: [{ parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } },
         },
       ];
-      for (const request of requests) {
-        let available = false;
-        let cacheStats = false;
-        let error: string | undefined;
-        let resolvedBaseUrl: string | undefined;
-        for (const candidate of request.candidates) {
-          try {
-            const first = await hostFetch(candidate.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
-            const firstJson = await readJson(first);
-            if (first.ok && isProtocolPayload(first, firstJson)) {
-              available = true;
-              cacheStats = hasCache(firstJson);
-              resolvedBaseUrl = candidate.resolvedBaseUrl;
-              error = undefined;
-              break;
+      const verifiedProtocols = await Promise.all(
+        requests.map(async (request) => {
+          let available = false;
+          let cacheStats = false;
+          let error: string | undefined;
+          let resolvedBaseUrl: string | undefined;
+          for (const candidate of request.candidates) {
+            try {
+              const first = await hostFetch(candidate.url, {
+                method: 'POST',
+                headers: request.headers ?? headers,
+                body: JSON.stringify(request.body),
+                signal: AbortSignal.timeout(12000),
+              });
+              const firstJson = await readJson(first);
+              if (first.ok && isProtocolPayload(first, firstJson)) {
+                available = true;
+                cacheStats = hasCache(firstJson);
+                resolvedBaseUrl = candidate.resolvedBaseUrl;
+                error = undefined;
+                break;
+              }
+              error = first.ok
+                ? (firstJson.error && typeof (firstJson.error as Record<string, unknown>).message === 'string'
+                  ? String((firstJson.error as Record<string, unknown>).message)
+                  : `unexpected content-type: ${first.headers.get('content-type') ?? 'unknown'}`)
+                : `HTTP ${first.status}`;
+            } catch (candidateError) {
+              error = candidateError instanceof Error ? candidateError.message : String(candidateError);
             }
-            error = first.ok
-              ? (firstJson.error && typeof (firstJson.error as Record<string, unknown>).message === 'string'
-                ? String((firstJson.error as Record<string, unknown>).message)
-                : `unexpected content-type: ${first.headers.get('content-type') ?? 'unknown'}`)
-              : `HTTP ${first.status}`;
-          } catch (candidateError) {
-            error = candidateError instanceof Error ? candidateError.message : String(candidateError);
           }
-        }
-        protocols.push({
-          api: request.api,
-          available,
-          verified: true,
-          cacheStats,
-          ...(error ? { error } : {}),
-          ...(resolvedBaseUrl ? { resolvedBaseUrl } : {}),
-        });
-      }
+          return {
+            api: request.api,
+            available,
+            verified: true,
+            cacheStats,
+            ...(error ? { error } : {}),
+            ...(resolvedBaseUrl ? { resolvedBaseUrl } : {}),
+          };
+        }),
+      );
+      protocols.push(...verifiedProtocols);
     } else {
       // 列表探测：不发生成请求，仅标注服务端声明的协议，其余留给用户手动选择。
       for (const api of protocolOrder) {
