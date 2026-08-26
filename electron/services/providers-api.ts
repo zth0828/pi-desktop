@@ -707,8 +707,10 @@ export const providersApi = {
     const isProtocolPayload = (response: Response, json: Record<string, unknown>): boolean => {
       const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
       if (contentType.includes('text/html')) return false;
-      return contentType.includes('text/event-stream')
-        || (contentType.includes('json') && Object.keys(json).length > 0);
+      if (contentType.includes('text/event-stream')) return true;
+      if (typeof json !== 'object' || json === null) return false;
+      if (json.error && !json.choices && !json.candidates && !json.output) return false;
+      return Object.keys(json).length > 0;
     };
     const hasCache = (value: unknown): boolean => {
       if (!value || typeof value !== 'object') return false;
@@ -946,7 +948,9 @@ export const providersApi = {
               break;
             }
             error = first.ok
-              ? `unexpected content-type: ${first.headers.get('content-type') ?? 'unknown'}`
+              ? (firstJson.error && typeof (firstJson.error as Record<string, unknown>).message === 'string'
+                ? String((firstJson.error as Record<string, unknown>).message)
+                : `unexpected content-type: ${first.headers.get('content-type') ?? 'unknown'}`)
               : `HTTP ${first.status}`;
           } catch (candidateError) {
             error = candidateError instanceof Error ? candidateError.message : String(candidateError);
