@@ -431,9 +431,11 @@
       "network": "网络连接问题：无法连接到服务商服务器。请检查网络或代理设置后重试。",
       "timeout": "请求超时：服务商未在时限内响应。请稍后重试。",
       "stream": "响应流中断：生成过程中连接被断开。请重试。",
+      "unsupportedRelay": "服务商不支持 Responses 协议（/v1/responses）。请在模型设置中将该供应商的适配器类型切换为 openai-completions（/v1/chat/completions）。",
       "replacementTimeout": "会话替换超时未确认，请重试或切换会话。",
       "hostInvokeTimeout": "与主进程通信超时（{{action}}），请重试。",
-      "requestId": "请求 ID：{{id}}"
+      "requestId": "请求 ID：{{id}}",
+      "viewRawDetails": "展开原始错误信息"
     }
   },
   "models": {
@@ -858,7 +860,7 @@
       "urlDesc": "自动模式使用此地址；可按你的网络环境修改。",
       "placeholder": "http://127.0.0.1:7897",
       "status": "当前代理",
-      "detected": "已使用：{url}（{source}）",
+      "detected": "已使用：{{url}}（{{source}}）",
       "none": "代理已关闭，直连",
       "source": {
         "app": "Pi Desktop 设置",

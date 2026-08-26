@@ -48,6 +48,15 @@ describe('parseProviderError', () => {
     expect(info.requestId).toBe('202608200648504431362498268d9d6vETrdtOQ');
   });
 
+  it('500 channel type does not support /v1/responses → unsupported-relay', () => {
+    const info = parseProviderError(
+      'OpenAI API error (500): {"message":"channel type 14 does not support /v1/responses (request id: 20260826143056663682910gdf6zrFIVb2rL)","type":"new_api_error","param":"","code":"channel:unsupported_relay_mode"}',
+    );
+    expect(info.category).toBe('unsupported-relay');
+    expect(info.status).toBe(500);
+    expect(info.requestId).toBe('20260826143056663682910gdf6zrFIVb2rL');
+  });
+
   it('503 auth_unavailable（上游认证失效）→ upstream', () => {
     const info = parseProviderError(
       'OpenAI API error (503): {"message":"auth_unavailable: no auth available (providers=codex, model=gpt-5.5)","type":"server_error","param":"","code":"internal_server_error"}',

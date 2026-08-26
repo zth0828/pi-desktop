@@ -12,6 +12,7 @@ import { HostError } from './host-api/errors';
 export type ProviderErrorCategory =
   | 'invalid-key'
   | 'wrong-model'
+  | 'unsupported-relay'
   | 'upstream'
   | 'rate-limit'
   | 'quota'
@@ -25,6 +26,7 @@ export type ProviderErrorCategory =
 export const PROVIDER_ERROR_HINT_KEYS: Record<Exclude<ProviderErrorCategory, 'unknown'>, string> = {
   'invalid-key': 'invalidKey',
   'wrong-model': 'wrongModel',
+  'unsupported-relay': 'unsupportedRelay',
   upstream: 'upstream',
   'rate-limit': 'rateLimit',
   quota: 'quota',
@@ -125,6 +127,8 @@ export function parseProviderError(message: string): ProviderErrorInfo {
   let category: ProviderErrorCategory;
   if (status === 401 || /invalid token|invalid api key|api key is invalid|unauthorized/.test(haystack)) {
     category = 'invalid-key';
+  } else if (/unsupported_relay_mode|does not support \/v1\/responses|does not support \/responses|unsupported endpoint/i.test(haystack)) {
+    category = 'unsupported-relay';
   } else if (/model_not_found/.test(haystack) || /no available channel/.test(haystack) || /model not found|model does not exist|unknown model/.test(haystack)) {
     category = 'wrong-model';
   } else if (status === 402 || /payment required/.test(haystack) || /usage_limit_reached/.test(haystack) || /usage limit|quota|billing|insufficient_?balance/.test(haystack)) {

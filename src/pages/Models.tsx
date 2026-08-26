@@ -319,6 +319,7 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
           )}
           {provider.source === 'config' && (
             <button
+              className="outline"
               data-testid={`edit-provider-${provider.id}`}
               disabled={busy}
               onClick={startEdit}

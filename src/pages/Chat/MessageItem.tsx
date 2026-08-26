@@ -67,15 +67,22 @@ function ErrorNotice({ message, responseId }: { message: string; responseId?: st
       className={`message-notice error${parsed.category !== 'unknown' ? ' known' : ''}`}
       data-testid="message-error"
     >
-      {parsed.category !== 'unknown' && (
-        <div className="error-hint" data-testid={`error-hint-${parsed.category}`}>
-          {t(`chat.errors.${PROVIDER_ERROR_HINT_KEYS[parsed.category]}`)}
-          {requestId && (
-            <span className="error-request-id"> {t('chat.errors.requestId', { id: requestId })}</span>
-          )}
-        </div>
+      {parsed.category !== 'unknown' ? (
+        <>
+          <div className="error-hint" data-testid={`error-hint-${parsed.category}`}>
+            {t(`chat.errors.${PROVIDER_ERROR_HINT_KEYS[parsed.category]}`)}
+            {requestId && (
+              <span className="error-request-id"> {t('chat.errors.requestId', { id: requestId })}</span>
+            )}
+          </div>
+          <details className="error-details" data-testid="error-details">
+            <summary>{t('chat.errors.viewRawDetails')}</summary>
+            <div className="error-message-raw">{message}</div>
+          </details>
+        </>
+      ) : (
+        <div className="error-message-raw">{message}</div>
       )}
-      <div className="error-message-raw">{message}</div>
     </div>
   );
 }

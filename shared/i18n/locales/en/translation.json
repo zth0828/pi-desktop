@@ -430,10 +430,12 @@
       "quota": "Account quota or usage limit reached: contact the provider to top up or renew.",
       "network": "Network issue: couldn't reach the provider. Check your network or proxy settings, then retry.",
       "timeout": "Request timed out: the provider didn't respond in time. Please retry.",
-      "stream": "Stream interrupted: the connection dropped mid-response. Please retry.",
+      "stream": "Stream interrupted: the connection was closed during generation. Please try again.",
+      "unsupportedRelay": "The provider does not support the Responses protocol (/v1/responses). Please switch the provider's adapter type to openai-completions (/v1/chat/completions) in Model Settings.",
       "replacementTimeout": "Session replacement timed out without confirmation. Please retry or switch sessions.",
-      "hostInvokeTimeout": "Timed out communicating with the main process ({{action}}). Please try again.",
-      "requestId": "Request ID: {{id}}"
+      "hostInvokeTimeout": "Main-process communication timed out ({{action}}). Please retry.",
+      "requestId": "Request ID: {{id}}",
+      "viewRawDetails": "View error details"
     }
   },
   "models": {
@@ -858,7 +860,7 @@
       "urlDesc": "Auto mode uses this address; change it for your network.",
       "placeholder": "http://127.0.0.1:7897",
       "status": "Current proxy",
-      "detected": "Using: {url} ({source})",
+      "detected": "Using: {{url}} ({{source}})",
       "none": "Proxy off, direct connection",
       "source": {
         "app": "Pi Desktop settings",
