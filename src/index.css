@@ -3141,12 +3141,12 @@ button.danger-outline {
 .probe-models-fold { margin-top: 6px; }
 .probe-models-fold summary { cursor: pointer; user-select: none; }
 .probe-models-fold summary:hover { color: var(--accent); }
-.probe-model-spec { margin-left: auto; color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
-.probe-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.probe-button { display: inline-flex; align-items: center; gap: 6px; }
-.probe-model-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; cursor: pointer; }
+.probe-model-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) 78px auto; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; cursor: pointer; background: var(--bg-raised); transition: background 0.15s, border-color 0.15s; }
+.probe-model-row:hover { background: var(--bg-hover); border-color: var(--border-hover, var(--border)); }
 .probe-model-row input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
-.probe-model-id { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+.probe-model-id { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-weight: 500; }
+.probe-model-vision-slot { display: flex; align-items: center; justify-content: center; width: 78px; flex-shrink: 0; }
+.probe-model-spec { color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; justify-self: end; }
 .probe-ok { color: var(--success); white-space: nowrap; margin-left: auto; }
 .probe-fail { color: var(--danger); white-space: nowrap; margin-left: auto; }
 .probe-result-row .hint { white-space: nowrap; margin-left: auto; }
@@ -3692,9 +3692,6 @@ button.danger-outline {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-
-/* 探测结果列表里徽标后紧跟规格文本：meta flex gap 不适用，保留间距 */
-.probe-model-spec .provider-model-vision { margin-right: 7px; }
 
 .provider-model-current {
   font-weight: 600;

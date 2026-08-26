@@ -878,13 +878,15 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                                 setModelIds(next.join(', '));
                               }}
                             />
-                            <span className="probe-model-id">{modelId}</span>
-                            <span className="probe-model-spec" data-testid={`probe-model-spec-${modelId}`}>
+                            <span className="probe-model-id" title={modelId}>{modelId}</span>
+                            <span className="probe-model-vision-slot">
                               {detail?.input?.includes('image') && (
                                 <span className="provider-model-vision" data-testid={`probe-model-vision-${modelId}`}>
                                   {t('models.imageSupport')}
                                 </span>
                               )}
+                            </span>
+                            <span className="probe-model-spec" data-testid={`probe-model-spec-${modelId}`}>
                               {t('models.probeSpec', {
                                 contextWindow: detail?.contextWindow?.toLocaleString() ?? '—',
                                 maxOutput: detail?.maxTokens?.toLocaleString() ?? '—',
