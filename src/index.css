@@ -3411,6 +3411,50 @@ button.danger-outline {
   flex-shrink: 0;
 }
 
+.sessions-notice-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 820px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger, #ef4444) 10%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 25%, transparent);
+  color: var(--danger, #ef4444);
+  font-size: 13px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.sessions-notice-banner svg {
+  flex-shrink: 0;
+}
+
+.sessions-notice-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.sessions-notice-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--danger, #ef4444);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.sessions-notice-close:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--danger, #ef4444) 15%, transparent);
+}
+
 .session-export-card {
   display: flex;
   flex-direction: column;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, FileCheck, Folder, FolderOpen } from 'lucide-react';
+import { AlertCircle, ExternalLink, FileCheck, Folder, FolderOpen, X } from 'lucide-react';
 import type { PiSessionExportInfo, PiSessionExportRecord, PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
@@ -243,8 +243,21 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
   const { t, i18n } = useTranslation();
   const [sessions, setSessions] = useState<PiSessionRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
+  const [loadError, setLoadError] = useState<string>();
   const [exportInfo, setExportInfo] = useState<PiSessionExportInfo>();
+
+  const showNotice = useCallback((msg: string) => {
+    setNotice(msg);
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => {
+      setNotice(undefined);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   const formatShellError = (err?: string) => {
     if (!err) return t('sessions.actionFailedPlain');
@@ -260,9 +273,9 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
       .listAll()
       .then((r) => {
         setSessions(r.sessions);
-        setError(undefined);
+        setLoadError(undefined);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .catch((err) => setLoadError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -270,8 +283,8 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
     hostApi.piSessions
       .getExportInfo()
       .then(setExportInfo)
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }, []);
+      .catch((err) => showNotice(err instanceof Error ? err.message : String(err)));
+  }, [showNotice]);
 
   useEffect(refresh, [refresh]);
 
@@ -294,7 +307,7 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
     const result = await action();
     if (!result.success) {
       loadExportInfo();
-      setError(formatShellError(result.error));
+      showNotice(formatShellError(result.error));
     }
   };
 
@@ -309,11 +322,11 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
       const result = await hostApi.piSessions.remove(sessionPath);
       if (!result.success) {
         setSessions(previous);
-        setError(result.error ?? 'unknown');
+        showNotice(result.error ?? t('sessions.actionFailedPlain'));
       }
     } catch (err) {
       setSessions(previous);
-      setError(err instanceof Error ? err.message : String(err));
+      showNotice(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -326,11 +339,11 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
       const result = await hostApi.piSessions.archive(sessionPath, archived);
       if (!result.success) {
         setSessions(previous);
-        setError(result.error ?? 'unknown');
+        showNotice(result.error ?? t('sessions.actionFailedPlain'));
       }
     } catch (err) {
       setSessions(previous);
-      setError(err instanceof Error ? err.message : String(err));
+      showNotice(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -344,10 +357,25 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
           {t('states.loading')}
         </p>
       )}
-      {error && (
-        <div data-testid="sessions-error">
-          <p className="error-text">{error}</p>
-          <button data-testid="sessions-retry" onClick={refresh}>
+      {notice && (
+        <div className="sessions-notice-banner" data-testid="sessions-error">
+          <AlertCircle size={15} />
+          <span className="sessions-notice-text">{notice}</span>
+          <button
+            className="sessions-notice-close"
+            data-testid="sessions-error-dismiss"
+            onClick={() => setNotice(undefined)}
+            title={t('sessions.actionErrorDismiss')}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+      {loadError && (
+        <div className="sessions-notice-banner fatal" data-testid="sessions-load-error">
+          <AlertCircle size={15} />
+          <span className="sessions-notice-text">{loadError}</span>
+          <button data-testid="sessions-retry" className="pill" onClick={refresh}>
             {t('states.retry')}
           </button>
         </div>
@@ -439,7 +467,7 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
           )}
         </div>
       )}
-      {!loading && !error && groups.length === 0 ? (
+      {!loading && !loadError && groups.length === 0 ? (
         <p className="hint" data-testid="sessions-empty">{t('sessions.emptyAll')}</p>
       ) : (
         <div className="session-list">
@@ -472,7 +500,7 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
                   session={s}
                   exportRecord={exportInfo?.records?.[s.path]}
                   onChanged={refresh}
-                  onError={setError}
+                  onError={showNotice}
                   onExported={onExported}
                   onRefreshExportInfo={loadExportInfo}
                   onOpenChat={onOpenChat}
