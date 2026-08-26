@@ -321,6 +321,14 @@ test('导出 HTML → 按项目分类目录并在会话列表中标记已导出�
   await expect(exportInfo).toContainText('Recent exports', { timeout: 15_000 });
   const reExported = (await readdir(projectExportDir)).filter((name) => name.endsWith('.html'));
   expect(reExported).toHaveLength(1);
+
+  // 再次删除文件后切换到其他页面再切回，会话页面自动检测文件不存在并清理导出状态
+  await rm(path.join(projectExportDir, reExported[0]));
+  await page.getByTestId('nav-models').click();
+  await page.getByTestId('nav-sessions').click();
+  // 切换回来后自动检测，无需用户点击，最近导出列表已自动清空且会话行已导出徽标消失
+  await expect(page.getByTestId('sessions-recent-list')).toHaveCount(0);
+  await expect(row.getByTestId('session-exported')).toHaveCount(0);
 });
 
 test('切换会话 → 消息列表恢复目标会话内容', async ({ launchElectronApp }) => {

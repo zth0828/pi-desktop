@@ -236,10 +236,11 @@ function SessionRow({
 }
 
 type SessionsPageProps = {
+  active?: boolean;
   onOpenChat: () => void;
 };
 
-export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
+export default function SessionsPage({ active = true, onOpenChat }: SessionsPageProps) {
   const { t, i18n } = useTranslation();
   const [sessions, setSessions] = useState<PiSessionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -267,6 +268,13 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
     return t('sessions.actionFailed', { error: err });
   };
 
+  const loadExportInfo = useCallback(() => {
+    hostApi.piSessions
+      .getExportInfo()
+      .then(setExportInfo)
+      .catch((err) => showNotice(err instanceof Error ? err.message : String(err)));
+  }, [showNotice]);
+
   const refresh = useCallback(() => {
     setLoading(true);
     hostApi.piSessions
@@ -277,16 +285,26 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
-  }, []);
+    loadExportInfo();
+  }, [loadExportInfo]);
 
-  const loadExportInfo = useCallback(() => {
-    hostApi.piSessions
-      .getExportInfo()
-      .then(setExportInfo)
-      .catch((err) => showNotice(err instanceof Error ? err.message : String(err)));
-  }, [showNotice]);
+  // 当会话页面打开/激活时自动重新检测会话和导出文件状态
+  useEffect(() => {
+    if (active) {
+      refresh();
+    }
+  }, [active, refresh]);
 
-  useEffect(refresh, [refresh]);
+  // 当窗口获得焦点时（例如在 Finder 中删除了文件后切回应用），自动检测更新
+  useEffect(() => {
+    const handleFocus = () => {
+      if (active) {
+        refresh();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [active, refresh]);
 
   useEffect(() => {
     const unbindReplaced = onHostEvent('piRuntime', 'sessionReplaced', refresh);
@@ -298,10 +316,6 @@ export default function SessionsPage({ onOpenChat }: SessionsPageProps) {
       unbindChanged();
     };
   }, [refresh]);
-
-  useEffect(() => {
-    loadExportInfo();
-  }, [loadExportInfo]);
 
   const runShellAction = async (action: () => Promise<{ success: boolean; error?: string }>) => {
     const result = await action();
