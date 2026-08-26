@@ -303,28 +303,36 @@ export async function syncConfiguredProviderModels(options: {
   if (!provider || typeof provider.baseUrl !== 'string') return null;
   const baseUrl = options.auth.baseUrl ?? provider.baseUrl;
   let lastError: Error | undefined;
-  let response: Response | null = null;
+  let directory: unknown = null;
   for (const url of directoryUrlCandidates(baseUrl, options.api)) {
     try {
       const candidate = await (options.fetchImpl ?? fetch)(url, {
         headers: directoryHeaders(options.api, options.auth),
         signal: AbortSignal.timeout(12_000),
       });
-      if (candidate.ok) {
-        response = candidate;
-        break;
+      if (!candidate.ok) {
+        lastError = new Error(`model directory returned HTTP ${candidate.status} (${url})`);
+        continue;
       }
-      lastError = new Error(`model directory returned HTTP ${candidate.status} (${url})`);
+      // 200 但 body 非 JSON（代理/网关错误页、被劫持的 HTML）视为该候选失败，
+      // 继续试下一个候选路径；全部失败走下方官方目录降级，不抛解析错误
+      const json = await candidate.json().catch(() => null);
+      if (json === null) {
+        lastError = new Error(`model directory returned non-JSON response (${url})`);
+        continue;
+      }
+      directory = json;
+      break;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
   }
-  // 目录不可达（网关不开放 /models 或客户端被白名单拒绝）不阻断刷新：
-  // 已有模型仍走内置官方目录纠正历史错值，失败原因经 warning 上报调用方。
-  const warning = response
-    ? undefined
-    : (lastError?.message ?? 'model directory unreachable');
-  const detected = response ? parseProviderModelDirectory(await response.json(), options.api) : [];
+  // 目录不可达（网关不开放 /models、客户端被白名单拒绝或返回错误页）不阻断
+  // 刷新：已有模型仍走内置官方目录纠正历史错值，失败原因经 warning 上报调用方。
+  const warning = directory === null
+    ? (lastError?.message ?? 'model directory unreachable')
+    : undefined;
+  const detected = directory !== null ? parseProviderModelDirectory(directory, options.api) : [];
   const existing = Array.isArray(provider.models) ? provider.models : [];
   const existingIds = new Set(existing.map((model) => normalizeBuiltinModelId(String(record(model)?.id ?? ''))));
   const models = mergeDiscoveredProviderModels(existing, detected, options.catalog ?? new Map());

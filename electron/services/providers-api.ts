@@ -30,6 +30,7 @@ import { loadPiAdapter, type PiModelRuntimeHandle } from './pi-adapter';
 import { isLmStudioProvider, isLocalServer, syncLmStudioModels } from '../utils/lmstudio-models';
 import { compatForOpenAi, placeholderApiKey, resolveServerType, thinkingLevelMapFor } from '../utils/custom-provider-config';
 import { parseMaxOutputTokens, piClientUserAgent, syncConfiguredProviderModels } from '../utils/configured-provider-models';
+import { hostFetch } from '../utils/host-fetch';
 import { findBuiltinModel, loadBuiltinModelCatalog, type BuiltinModelCatalog } from '../utils/builtin-model-catalog';
 import {
   piRuntimeApi,
@@ -126,7 +127,7 @@ async function probeResponsesBaseUrl(options: {
   if (options.apiKey) headers.authorization = `Bearer ${options.apiKey}`;
   for (const candidate of candidates) {
     try {
-      const response = await fetch(`${candidate}/responses`, {
+      const response = await hostFetch(`${candidate}/responses`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ model: options.model, input: 'ping', max_output_tokens: 1 }),
@@ -186,6 +187,10 @@ async function syncConfiguredCatalogs(
           baseUrl: resolution.auth.baseUrl,
           headers,
         },
+        // 目录拉取走壳的应用代理设置（hostFetch）：代理环境下直连网关会被
+        // 劫持返回 HTML 错误页（"Unexpected token '<'"），同步必须与 pi 会话
+        // 一样经代理出网
+        fetchImpl: hostFetch,
         catalog: builtinCatalog,
       });
       if (result) {
@@ -680,7 +685,8 @@ export const providersApi = {
    * - 模型目录（GET /models 等，元数据请求，不产生生成费用）：恒执行。
    * - 协议验证（POST 最小化生成请求，约 1 token）：仅 payload.verifyProtocols=true 时执行，
    *   由用户在 UI 显式触发；未验证的协议仍可在 UI 手动选择。
-   * 全程 raw fetch，刻意不创建 pi session 也不改供应商状态。
+   * 全程经 hostFetch（应用代理设置）直连供应商端点，刻意不创建 pi session
+   * 也不改供应商状态。
    */
   probe: async (payload: PiProviderProbePayload): Promise<PiProviderProbeResult> => {
     const base = payload.baseUrl.replace(/\/+$/, '');
@@ -727,7 +733,7 @@ export const providersApi = {
     };
     for (const candidateBase of openAiBases) {
       try {
-        const response = await fetch(`${candidateBase}/models`, { headers, signal: AbortSignal.timeout(9000) });
+        const response = await hostFetch(`${candidateBase}/models`, { headers, signal: AbortSignal.timeout(9000) });
         if (!response.ok) {
           catalogError ??= `HTTP ${response.status} at ${candidateBase}/models`;
           continue;
@@ -798,7 +804,7 @@ export const providersApi = {
     let serverType: PiProviderServerType = 'generic';
     const nativeBase = base.replace(/\/v1$/, '');
     try {
-      const response = await fetch(`${nativeBase}/api/v1/models`, {
+      const response = await hostFetch(`${nativeBase}/api/v1/models`, {
         headers,
         signal: AbortSignal.timeout(4000),
       });
@@ -840,7 +846,7 @@ export const providersApi = {
     if (serverType === 'generic') {
       try {
         const root = base.replace(/\/v1$/, '');
-        const versionResponse = await fetch(`${root}/version`, { headers, signal: AbortSignal.timeout(3000) });
+        const versionResponse = await hostFetch(`${root}/version`, { headers, signal: AbortSignal.timeout(3000) });
         if (versionResponse.ok) {
           const versionJson = await readJson(versionResponse);
           if (typeof versionJson.version === 'string' && /^vllm/i.test(versionJson.version)) {
@@ -926,7 +932,7 @@ export const providersApi = {
         let resolvedBaseUrl: string | undefined;
         for (const candidate of request.candidates) {
           try {
-            const first = await fetch(candidate.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
+            const first = await hostFetch(candidate.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
             const firstJson = await readJson(first);
             if (first.ok && isProtocolPayload(first, firstJson)) {
               available = true;

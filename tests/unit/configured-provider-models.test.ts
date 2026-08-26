@@ -367,6 +367,60 @@ describe('configured provider model discovery', () => {
     });
   });
 
+  it('treats a 200 HTML body as a failed candidate instead of throwing', async () => {
+    // 代理/网关错误页返回 200 + HTML（"Unexpected token '<'"）时按候选失败
+    // 处理：继续试下一个候选路径，全部失败降级官方目录纠正，不抛解析错误
+    const agentDir = await mkdtemp(path.join(os.tmpdir(), 'pi-provider-discovery-html-'));
+    tempDirs.push(agentDir);
+    const modelsPath = path.join(agentDir, 'models.json');
+    await writeFile(modelsPath, JSON.stringify({
+      providers: {
+        relay: {
+          baseUrl: 'http://relay.example',
+          api: 'openai-completions',
+          models: [{
+            id: 'claude-opus-4.8',
+            reasoning: true,
+            input: ['text'],
+            contextWindow: 200000,
+            maxTokens: 64000,
+          }],
+        },
+      },
+    }));
+    const requestedUrls: string[] = [];
+    const result = await syncConfiguredProviderModels({
+      agentDir,
+      providerId: 'relay',
+      api: 'openai-completions',
+      auth: { apiKey: 'dummy' },
+      fetchImpl: async (input) => {
+        requestedUrls.push(String(input));
+        return new Response('<!doctype html><html><body>gateway error</body></html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        });
+      },
+      catalog: new Map([
+        ['claude-opus-4-8', { id: 'claude-opus-4-8', contextWindow: 1000000, maxTokens: 128000 }],
+      ]),
+    });
+    // 两个候选路径（根 + /v1）都试过，不中断
+    expect(requestedUrls).toEqual([
+      'http://relay.example/models',
+      'http://relay.example/v1/models',
+    ]);
+    expect(result?.warning).toMatch(/non-JSON/);
+    expect(result).toMatchObject({ discovered: 0, added: 0, changed: true });
+    const saved = JSON.parse(await readFile(modelsPath, 'utf8')) as {
+      providers: { relay: { models: Array<{ id: string; contextWindow: number }> } };
+    };
+    expect(saved.providers.relay.models[0]).toMatchObject({
+      id: 'claude-opus-4.8',
+      contextWindow: 1000000,
+    });
+  });
+
   it('requests /models with resolved auth and writes discovered ids to models.json', async () => {
     const agentDir = await mkdtemp(path.join(os.tmpdir(), 'pi-provider-discovery-'));
     tempDirs.push(agentDir);
