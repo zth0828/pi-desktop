@@ -157,20 +157,30 @@ export function parseProviderModelDirectory(payload: unknown, api: string): Dete
 /** 历史兜底 contextWindow：这些值说明记录来自旧版缺省写入而非真实目录/规格数据。 */
 const LEGACY_FALLBACK_CONTEXT_WINDOWS = new Set([DEFAULT_CONTEXT_WINDOW, 128000]);
 
-/** current.input 是否为历史默认（缺失或 ['text']）：可被目录/规格表升级。 */
+/** current.input 是否为历史默认（缺失或 ['text']）：可被目录/内置目录升级。 */
 function isLegacyDefaultInput(current: JsonRecord): boolean {
   const input = current.input;
   if (!Array.isArray(input)) return true;
   return input.length === 1 && input[0] === 'text';
 }
 
+/** cost 是否为旧版"价格未知"占位（全 0）：与官方目录真实免费（有明确条目）区分。 */
+function isPlaceholderZeroCost(value: unknown): boolean {
+  const cost = record(value);
+  if (!cost) return false;
+  return ['input', 'output', 'cacheRead', 'cacheWrite']
+    .every((key) => Number(cost[key] ?? 0) === 0);
+}
+
 /**
- * 已存在模型的陈旧字段刷新：只纠正历史缺省写入的值，用户改过的字段不动。
- * 元数据优先级：网关目录上报 > pi 内置目录（官方规格）> template。
+ * 已存在模型的陈旧字段刷新。
+ * 元数据优先级：网关目录上报 > pi 内置目录（官方规格）> template 兜底。
+ * contextWindow/maxTokens 无 UI 编辑入口、全部为机器写入（旧手写规格表的
+ * 错值也混在其中），因此目录或官方目录命中即直接纠正历史存量；template
+ * （兄弟模型继承）仅在两者都无数据时兜底未知模型。
  * - input：未 pin（inputPinned !== true）且当前为历史默认 → 目录/内置目录升级。
- * - contextWindow：缺失或等于兜底值 → 目录 > template > 内置目录。
- * - maxTokens：缺失 → 目录 > template > 内置目录。
- * reasoning/cost/name 与用户改过的非兜底 contextWindow 保持原样。
+ * - cost：全 0 占位且官方目录有价 → 替换为官方价（$0 与未知价区分）。
+ * reasoning/name 保持原样。
  */
 function refreshStaleModel(
   current: JsonRecord,
@@ -185,18 +195,22 @@ function refreshStaleModel(
     next.input = detectedInput;
   }
   const currentContext = positiveNumber(current.contextWindow);
-  // template（用户/目录写过的真实值）优先；内置目录官方规格最后兜底
-  const betterContext = model?.contextWindow
-    ?? positiveNumber(template.contextWindow)
-    ?? builtin?.contextWindow;
-  if ((!currentContext || LEGACY_FALLBACK_CONTEXT_WINDOWS.has(currentContext)) && betterContext) {
+  const betterContext = model?.contextWindow ?? builtin?.contextWindow;
+  if (betterContext && betterContext !== currentContext) {
     next.contextWindow = betterContext;
+  } else if ((!currentContext || LEGACY_FALLBACK_CONTEXT_WINDOWS.has(currentContext))
+    && positiveNumber(template.contextWindow)) {
+    next.contextWindow = positiveNumber(template.contextWindow);
   }
-  if (!positiveNumber(current.maxTokens)) {
-    const maxTokens = model?.maxTokens
-      ?? positiveNumber(template.maxTokens)
-      ?? builtin?.maxTokens;
-    if (maxTokens) next.maxTokens = maxTokens;
+  const currentMax = positiveNumber(current.maxTokens);
+  const betterMax = model?.maxTokens ?? builtin?.maxTokens;
+  if (betterMax && betterMax !== currentMax) {
+    next.maxTokens = betterMax;
+  } else if (!currentMax && positiveNumber(template.maxTokens)) {
+    next.maxTokens = positiveNumber(template.maxTokens);
+  }
+  if (builtin?.cost && isPlaceholderZeroCost(current.cost)) {
+    next.cost = { ...builtin.cost };
   }
   return next;
 }

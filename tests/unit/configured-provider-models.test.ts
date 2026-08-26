@@ -149,12 +149,73 @@ describe('configured provider model discovery', () => {
       [{ id: 'gateway-model', contextWindow: 1000000, maxTokens: 65536 }],
     );
     expect(merged[0]).toEqual(expect.objectContaining({ contextWindow: 1000000, maxTokens: 65536 }));
-    // 用户改过的非兜底 contextWindow 不动
-    const kept = mergeDiscoveredProviderModels(
-      [{ id: 'gateway-model', reasoning: true, contextWindow: 32000 }],
-      [{ id: 'gateway-model', contextWindow: 1000000 }],
+  });
+
+  it('corrects historical wrong context window and max tokens from the builtin catalog', () => {
+    // 旧手写规格表写入的错值（claude-opus-4.8 ctx 200000/max 64000）在目录
+    // 沉默时由 pi 内置官方目录直接纠正；全 0 价格占位换官方价；纯文本升级多模态
+    const catalog = new Map([
+      ['claude-opus-4-8', {
+        id: 'claude-opus-4-8',
+        contextWindow: 1000000,
+        maxTokens: 128000,
+        input: ['text', 'image'],
+        cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+      }],
+    ]);
+    const merged = mergeDiscoveredProviderModels(
+      [{
+        id: 'claude-opus-4.8',
+        name: 'claude-opus-4.8',
+        reasoning: true,
+        input: ['text'],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200000,
+        maxTokens: 64000,
+      }],
+      [{ id: 'claude-opus-4.8' }],
+      catalog,
     );
-    expect(kept[0]).toEqual(expect.objectContaining({ contextWindow: 32000 }));
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual(expect.objectContaining({
+      id: 'claude-opus-4.8',
+      contextWindow: 1000000,
+      maxTokens: 128000,
+      input: ['text', 'image'],
+      cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+    }));
+  });
+
+  it('keeps pinned input while correcting other stale fields', () => {
+    // inputPinned 的模型 input 不动，但 ctx/maxTokens/价格仍按官方目录纠正
+    const catalog = new Map([
+      ['gpt-5-6-sol', {
+        id: 'gpt-5.6-sol',
+        contextWindow: 272000,
+        maxTokens: 128000,
+        input: ['text', 'image'],
+        cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25 },
+      }],
+    ]);
+    const merged = mergeDiscoveredProviderModels(
+      [{
+        id: 'gpt-5.6-sol',
+        reasoning: true,
+        input: ['text'],
+        inputPinned: true,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 400000,
+        maxTokens: 128000,
+      }],
+      [],
+      catalog,
+    );
+    expect(merged[0]).toEqual(expect.objectContaining({
+      input: ['text'],
+      inputPinned: true,
+      contextWindow: 272000,
+      cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25 },
+    }));
   });
 
   it('parses max output tokens across directory field variants', () => {
@@ -187,7 +248,7 @@ describe('configured provider model discovery', () => {
       catalog,
     );
     expect(merged.find((m) => m.id === 'qwen3-vl-plus'))
-      .toEqual(expect.objectContaining({ input: ['text', 'image'], contextWindow: 128000 }));
+      .toEqual(expect.objectContaining({ input: ['text', 'image'], contextWindow: 131072 }));
   });
 
 
