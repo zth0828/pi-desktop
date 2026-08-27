@@ -848,6 +848,8 @@ export type PiSkillRow = {
   /** pi 的 sourceInfo（source/scope/origin），UI 可直接展示 */
   sourceDetail?: string;
   disableModelInvocation: boolean;
+  /** 是否只读（如 package 内部或无写权限文件，不可切换模式） */
+  isReadOnly?: boolean;
 };
 export type PiSkillListResult = {
   skills: PiSkillRow[];
@@ -895,6 +897,16 @@ export type PiSkillImportResult = {
     action: string;
     error?: string;
   }>;
+};
+
+/** 修改 skill 调用模式（写 SKILL.md 的 disable-model-invocation frontmatter） */
+export type PiSkillSetModePayload = {
+  filePath: string;
+  disableModelInvocation: boolean;
+};
+export type PiSkillSetModeResult = {
+  ok: boolean;
+  error?: string;
 };
 
 // —— piPackages：扩展包管理（SDK PackageManager 的封装）——
@@ -1230,6 +1242,8 @@ export type HostApiContract = {
     scanExternal: (payload?: PiSkillScanExternalPayload) => PiSkillScanExternalResult;
     /** 导入 = 复制目录到 agentDir/skills（不建软链）；同名按 strategy 处理。 */
     import: (payload: PiSkillImportPayload) => PiSkillImportResult;
+    /** 设置 skill 调用模式（更新 SKILL.md frontmatter 并重载 runtime）。 */
+    setInvocationMode: (payload: PiSkillSetModePayload) => PiSkillSetModeResult;
   };
   piPackages: {
     /** settings.json 里配置的扩展包（user + project scope 合并）。 */

@@ -167,6 +167,8 @@ function createHostApi(sessionPath?: string) {
     scanExternal: (extraDirs?: string[]) => invoke('piSkills', 'scanExternal', { extraDirs }),
     import: (skills: Array<{ name: string; dir: string; strategy: 'skip' | 'overwrite' | 'rename' }>) =>
       invoke('piSkills', 'import', { skills }),
+    setInvocationMode: (filePath: string, disableModelInvocation: boolean) =>
+      invoke('piSkills', 'setInvocationMode', { filePath, disableModelInvocation }),
   },
   piFiles: {
     list: (cwd: string) => invoke('piFiles', 'list', { cwd }),
