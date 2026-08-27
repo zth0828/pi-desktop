@@ -755,6 +755,23 @@
       "manual": "仅手动 ({{count}})"
     },
     "countSummary": "共 {{total}} 个技能 · {{auto}} 个自动感知 · {{manual}} 个仅手动",
+    "viewModal": {
+      "modeLabel": "调用模式",
+      "manual": "仅手动调用",
+      "auto": "自动感知",
+      "manualExplanation": "已在 SKILL.md 中声明 disable-model-invocation: true。此技能已从全局系统提示词 (<available_skills>) 彻底剔除（0 全局 Token 消耗）。仅当你在对话中输入 /skill:{{name}} 时按需加载。",
+      "autoExplanation": "此技能的名称与描述已注入全局系统提示词 (<available_skills>)。模型在任意对话中均可自动感知并在需要时自主读取指令。",
+      "switchToAuto": "切换为自动感知",
+      "switchToManual": "切换为仅手动 (省 Token)",
+      "descriptionLabel": "技能描述",
+      "instructionsLabel": "技能指令与正文指南",
+      "emptyInstructions": "该技能无正文指令说明。"
+    },
+    "batchOptimize": {
+      "title": "检测到 {{autoCount}} 个技能处于【自动感知】模式，正在占用全局系统提示词。建议将低频垂直技能设为【仅手动】，需要时按 /skill:名称 触发。",
+      "action": "全部设为仅手动",
+      "optimizing": "正在优化…"
+    },
     "view": "查看内容",
     "close": "关闭",
     "import": "导入",

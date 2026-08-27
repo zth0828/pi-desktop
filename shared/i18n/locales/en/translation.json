@@ -755,6 +755,23 @@
       "manual": "Manual only ({{count}})"
     },
     "countSummary": "{{total}} skills total · {{auto}} auto-detected · {{manual}} manual only",
+    "viewModal": {
+      "modeLabel": "Invocation Mode",
+      "manual": "Manual Only",
+      "auto": "Auto-detected",
+      "manualExplanation": "disable-model-invocation: true is declared in SKILL.md. This skill is omitted from the global system prompt (<available_skills>) with 0 token overhead, and will only load when explicitly invoked via /skill:{{name}}.",
+      "autoExplanation": "This skill's name and description are injected into the global system prompt (<available_skills>). The model will auto-detect and read its instructions when relevant.",
+      "switchToAuto": "Switch to Auto",
+      "switchToManual": "Switch to Manual (Save Tokens)",
+      "descriptionLabel": "Description",
+      "instructionsLabel": "Instructions & Guidelines",
+      "emptyInstructions": "No additional instructions found in this skill."
+    },
+    "batchOptimize": {
+      "title": "{{autoCount}} skills are currently in [Auto] mode and occupying global system prompt tokens. Consider setting specialized skills to [Manual Only] to invoke on-demand with /skill:name.",
+      "action": "Set all to Manual",
+      "optimizing": "Optimizing…"
+    },
     "view": "View content",
     "close": "Close",
     "import": "Import",

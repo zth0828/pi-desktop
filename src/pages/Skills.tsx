@@ -5,6 +5,7 @@ import type {
   PiSkillRow,
   PiSkillScanExternalResult,
 } from '@shared/host-api/contract';
+import { parseSkillDocument } from '@shared/skill-parser';
 import { hostApi } from '../lib/host-api';
 import { Markdown } from '../components/Markdown';
 import { useActiveChatStore } from './Chat/chat-store-context';
@@ -22,13 +23,14 @@ export default function SkillsPage() {
   const [query, setQuery] = useState('');
   const [runtimeActive, setRuntimeActive] = useState(false);
   const [error, setError] = useState<string>();
-  const [viewing, setViewing] = useState<{ name: string; content: string }>();
+  const [viewing, setViewing] = useState<{ skill: PiSkillRow; content: string }>();
   const [viewLoading, setViewLoading] = useState<string>();
   const [importData, setImportData] = useState<PiSkillScanExternalResult>();
   const [importOpen, setImportOpen] = useState(false);
   const [selections, setSelections] = useState<Record<string, ImportSelection>>({});
   const [manualDirs, setManualDirs] = useState<string[]>([]);
   const [importBusy, setImportBusy] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
   const [importSummary, setImportSummary] = useState<string>();
   const [filterMode, setFilterMode] = useState<'all' | 'auto' | 'manual'>('all');
   const [updatingSkill, setUpdatingSkill] = useState<string | null>(null);
@@ -68,11 +70,43 @@ export default function SkillsPage() {
     }
   };
 
+  const handleViewerToggle = async (skill: PiSkillRow) => {
+    await toggleInvocationMode(skill);
+    try {
+      const { content } = await hostApi.piSkills.read(skill.filePath);
+      const nextDisable = !skill.disableModelInvocation;
+      setViewing((prev) =>
+        prev
+          ? {
+              skill: { ...prev.skill, disableModelInvocation: nextDisable },
+              content,
+            }
+          : undefined,
+      );
+    } catch {}
+  };
+
+  const handleBatchSetManual = async () => {
+    const autoSkills = skills.filter((s) => !s.disableModelInvocation && !s.isReadOnly);
+    if (autoSkills.length === 0 || batchBusy) return;
+    setBatchBusy(true);
+    try {
+      for (const s of autoSkills) {
+        await hostApi.piSkills.setInvocationMode(s.filePath, true);
+      }
+      setSkills((prev) => prev.map((s) => (s.isReadOnly ? s : { ...s, disableModelInvocation: true })));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
   const openViewer = async (skill: PiSkillRow) => {
     setViewLoading(skill.name);
     try {
       const { content } = await hostApi.piSkills.read(skill.filePath);
-      setViewing({ name: skill.name, content });
+      setViewing({ skill, content });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -178,6 +212,26 @@ export default function SkillsPage() {
         </button>
       </div>
 
+      {autoCount >= 5 && (
+        <div className="skills-recommendation-banner" data-testid="skills-recommendation-banner">
+          <div className="skills-recommendation-content">
+            <span className="skills-recommendation-icon">💡</span>
+            <span className="skills-recommendation-text">
+              {t('skills.batchOptimize.title', { autoCount })}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="pill primary skills-batch-optimize-btn"
+            data-testid="skills-batch-optimize-btn"
+            disabled={batchBusy}
+            onClick={() => void handleBatchSetManual()}
+          >
+            {batchBusy ? t('skills.batchOptimize.optimizing') : t('skills.batchOptimize.action')}
+          </button>
+        </div>
+      )}
+
       {skills.length > 0 && (
         <div className="skills-summary-bar" data-testid="skills-summary-bar">
           <span className="skills-count-summary hint">
@@ -280,19 +334,79 @@ export default function SkillsPage() {
         </div>
       )}
 
-      {viewing && (
-        <div className="skill-view-overlay" data-testid="skill-view-overlay" onClick={() => setViewing(undefined)}>
-          <div className="skill-view-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="skill-view-header">
-              <strong>{viewing.name}</strong>
-              <button className="pill" data-testid="skill-view-close" onClick={() => setViewing(undefined)}>
-                {t('skills.close')}
-              </button>
+      {viewing && (() => {
+        const parsed = parseSkillDocument(viewing.content);
+        const isManual = viewing.skill.disableModelInvocation ?? parsed.disableModelInvocation;
+        return (
+          <div className="skill-view-overlay" data-testid="skill-view-overlay" onClick={() => setViewing(undefined)}>
+            <div className="skill-view-dialog" onClick={(e) => e.stopPropagation()}>
+              <div className="skill-view-header">
+                <div className="skill-view-title-group">
+                  <strong className="skill-view-title">{viewing.skill.name}</strong>
+                  <span className={`skill-source-badge source-${viewing.skill.source}`}>
+                    {t(`skills.source.${viewing.skill.source}`)}
+                  </span>
+                  {parsed.version && <span className="skill-version-tag">v{parsed.version}</span>}
+                </div>
+                <button className="pill" data-testid="skill-view-close" onClick={() => setViewing(undefined)}>
+                  {t('skills.close')}
+                </button>
+              </div>
+
+              <div className={`skill-view-mode-card ${isManual ? 'mode-manual' : 'mode-auto'}`}>
+                <div className="skill-view-mode-header">
+                  <div className="skill-view-mode-status">
+                    <span className={`skill-mode-dot ${isManual ? 'dot-manual' : 'dot-auto'}`} />
+                    <span className="skill-view-mode-title">
+                      {t('skills.viewModal.modeLabel')}：{isManual ? t('skills.viewModal.manual') : t('skills.viewModal.auto')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="pill skill-view-mode-btn"
+                    disabled={viewing.skill.isReadOnly || updatingSkill === viewing.skill.name}
+                    onClick={() => void handleViewerToggle(viewing.skill)}
+                  >
+                    <span className="skill-mode-text">
+                      {updatingSkill === viewing.skill.name
+                        ? t('skills.mode.switching')
+                        : isManual
+                          ? t('skills.viewModal.switchToAuto')
+                          : t('skills.viewModal.switchToManual')}
+                    </span>
+                  </button>
+                </div>
+                <p className="skill-view-mode-desc">
+                  {isManual
+                    ? t('skills.viewModal.manualExplanation', { name: viewing.skill.name })
+                    : t('skills.viewModal.autoExplanation')}
+                </p>
+                <div className="skill-view-path-box hint">
+                  {viewing.skill.filePath}
+                </div>
+              </div>
+
+              {(parsed.description || viewing.skill.description) && (
+                <div className="skill-view-desc-card">
+                  <div className="skill-view-section-label">{t('skills.viewModal.descriptionLabel')}</div>
+                  <p className="skill-view-desc-text">{parsed.description || viewing.skill.description}</p>
+                </div>
+              )}
+
+              <div className="skill-view-body-section">
+                <div className="skill-view-section-label">{t('skills.viewModal.instructionsLabel')}</div>
+                <div className="skill-view-markdown-wrap">
+                  {parsed.body ? (
+                    <Markdown text={parsed.body} />
+                  ) : (
+                    <p className="hint">{t('skills.viewModal.emptyInstructions')}</p>
+                  )}
+                </div>
+              </div>
             </div>
-            <Markdown text={viewing.content} />
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {importOpen && (
         <div className="skill-view-overlay" data-testid="skills-import-dialog" onClick={() => setImportOpen(false)}>
