@@ -16,24 +16,37 @@ export type ParsedMessageFile = {
   text: string;
 };
 
+export type ParsedSkillBlock = {
+  name: string;
+  location?: string;
+  content: string;
+};
+
 export type ParsedUserMessage = {
   text: string;
   attachments: MessageAttachmentDescriptor[];
   files: ParsedMessageFile[];
+  skills: ParsedSkillBlock[];
 };
 
 const MANIFEST_RE = /<attachments>\n?([\s\S]*?)<\/attachments>\n?/;
 const ATTACHMENT_RE = /<attachment\s+([^>]+)><\/attachment>/g;
 const ATTRIBUTE_RE = /([\w-]+)="([^"]*)"/g;
 const FILE_RE = /<file name="([^"]*)">\n?([\s\S]*?)\n?<\/file>\n?/g;
+const SKILL_RE = /<skill\s+name="([^"]+)"(?:\s+location="([^"]+)")?>\n?([\s\S]*?)\n?<\/skill>\n?/g;
 
 // 标题等纯文本场景用：位置不限、可多处出现（MANIFEST_RE 锚定开头，只服务解析）。
 const ENVELOPE_RE = /<attachments>[\s\S]*?<\/attachments>/g;
 const FILE_BLOCK_RE = /<file name="[^"]*">[\s\S]*?<\/file>/g;
+const SKILL_BLOCK_RE = /<skill\s+[^>]*>[\s\S]*?<\/skill>/g;
 
-/** 去掉附件信封与文件块后剩余的纯文字（会话标题等展示场景用）。 */
+/** 去掉附件信封、文件块与技能块后剩余的纯文字（会话标题等展示场景用）。 */
 export function stripAttachmentEnvelope(text: string): string {
-  return text.replace(ENVELOPE_RE, '').replace(FILE_BLOCK_RE, '').trim();
+  return text
+    .replace(ENVELOPE_RE, '')
+    .replace(FILE_BLOCK_RE, '')
+    .replace(SKILL_BLOCK_RE, '')
+    .trim();
 }
 
 function encodeAttribute(value: string): string {
@@ -77,7 +90,7 @@ export function formatOrderedAttachmentPrompt(
   return `<attachments>\n${rows.join('\n')}\n</attachments>\n${files}${text}`;
 }
 
-/** Extract shell metadata and Pi-compatible file blocks for user presentation. */
+/** Extract shell metadata, Pi-compatible file blocks and skill invocation blocks for user presentation. */
 export function parseUserMessage(text: string): ParsedUserMessage {
   const attachments: MessageAttachmentDescriptor[] = [];
   const manifest = text.match(MANIFEST_RE);
@@ -102,8 +115,16 @@ export function parseUserMessage(text: string): ParsedUserMessage {
   }
 
   const withoutManifest = manifest ? text.replace(manifest[0], '') : text;
+  const skills: ParsedSkillBlock[] = [];
+  const textWithoutSkills = withoutManifest.replace(
+    SKILL_RE,
+    (_block, name: string, location: string | undefined, content: string) => {
+      skills.push({ name, location: location || undefined, content: content.trim() });
+      return '';
+    },
+  );
   const files: ParsedMessageFile[] = [];
-  const visibleText = withoutManifest.replace(FILE_RE, (_block, name: string, fileText: string) => {
+  const visibleText = textWithoutSkills.replace(FILE_RE, (_block, name: string, fileText: string) => {
     files.push({ name, text: fileText });
     return '';
   });
@@ -112,5 +133,6 @@ export function parseUserMessage(text: string): ParsedUserMessage {
     text: visibleText.trim(),
     attachments: attachments.sort((a, b) => a.index - b.index),
     files,
+    skills,
   };
 }

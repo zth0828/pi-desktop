@@ -1025,7 +1025,7 @@ export function contentSummaryText(content: unknown): string {
             .filter(Boolean)
             .join(' ')
         : '';
-  return raw.replace(/\s+/g, ' ').trim().slice(0, 120);
+  return stripAttachmentEnvelope(raw).replace(/\s+/g, ' ').trim().slice(0, 120);
 }
 
 /** 树节点的展示摘要；结构噪音 entry（model/thinking 变更、label 等）返回 null 跳过。 */

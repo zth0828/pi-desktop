@@ -1,4 +1,4 @@
-// Sessions 页的纯展示逻辑（可单测）。
+import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import type { PiSessionRow } from '@shared/host-api/contract';
 
 const TITLE_MAX = 60;
@@ -8,7 +8,7 @@ export function sessionDisplayTitle(
   session: Pick<PiSessionRow, 'name' | 'firstMessage'>,
   max = TITLE_MAX,
 ): string {
-  const source = (session.name ?? session.firstMessage).trim().replace(/\s+/g, ' ');
+  const source = stripAttachmentEnvelope(session.name ?? session.firstMessage).trim().replace(/\s+/g, ' ');
   if (source.length <= max) return source;
   return `${source.slice(0, max)}…`;
 }

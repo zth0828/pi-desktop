@@ -22,6 +22,7 @@ import { hostApi } from '../lib/host-api';
 import { pushGlobalError } from '../stores/global-errors';
 import { onHostEvent } from '../lib/host-events';
 import { groupByProject, type ProjectGroup } from '../lib/session-groups';
+import { sessionDisplayTitle } from '../lib/session-format';
 import {
   clearSessionDragPayload,
   consumeSessionDragCancelled,
@@ -502,7 +503,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                   />
                 )}
                 <span className="sidebar-session-title">
-                  {session.name || session.firstMessage || ''}
+                  {sessionDisplayTitle(session) || t('sessions.untitled')}
                 </span>
               </button>
               <button
@@ -554,7 +555,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                       <button
                         data-testid={`sidebar-session-rename-${session.id}`}
                         onClick={() => {
-                          setRenameValue(session.name || session.firstMessage || '');
+                          setRenameValue(session.name || sessionDisplayTitle(session));
                           setRenamePath(session.path);
                         }}
                         disabled={busy || session.isRunning}
