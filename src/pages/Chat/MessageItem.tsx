@@ -1,7 +1,7 @@
 import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Copy, FileText, GitFork, Pencil, Square } from 'lucide-react';
-import { parseUserMessage } from '@shared/message-attachments';
+import { Check, ChevronRight, Copy, FileText, GitFork, Pencil, Sparkles, Square } from 'lucide-react';
+import { parseUserMessage, type ParsedSkillBlock } from '@shared/message-attachments';
 import { parseProviderError, PROVIDER_ERROR_HINT_KEYS } from '../../lib/provider-error';
 import { Markdown } from '../../components/Markdown';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
@@ -11,6 +11,46 @@ import type { ChatMessage, ContentBlock, TurnStats } from '../../stores/chat';
 import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
+
+/**
+ * 技能指令折叠块：用户指定技能发送时展开的说明书与规则。
+ * 默认单行折叠展示技能徽章与指令查看按钮，点击展开展示具体指南 Markdown。
+ */
+function SkillInvocationBlock({ skill }: { skill: ParsedSkillBlock }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="message-skill-card" data-testid={`message-skill-${skill.name}`}>
+      <button
+        type="button"
+        className="message-skill-header"
+        data-testid={`message-skill-toggle-${skill.name}`}
+        onClick={() => setExpanded((prev) => !prev)}
+        aria-expanded={expanded}
+      >
+        <Sparkles size={13} className="message-skill-icon" />
+        <span className="message-skill-title">
+          {t('chat.skillBlock.title', { name: skill.name })}
+        </span>
+        <span className="message-skill-action">
+          {expanded ? t('chat.skillBlock.collapse') : t('chat.skillBlock.viewDetails')}
+        </span>
+        <ChevronRight size={13} className={`message-skill-chevron${expanded ? ' expanded' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="message-skill-body" data-testid={`message-skill-body-${skill.name}`}>
+          {skill.location && (
+            <div className="message-skill-location hint" title={skill.location}>
+              {skill.location}
+            </div>
+          )}
+          <Markdown text={skill.content} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** bash 执行输出折叠预览的尾部行数（与工具卡 PREVIEW_LINES 同口径） */
 const BASH_PREVIEW_LINES = 5;
@@ -274,6 +314,13 @@ function MessageItemView({
           </div>
         )}
         <div className="message-user-content">
+          {parsed.skills && parsed.skills.length > 0 && (
+            <div className="message-skills" data-testid="message-skills">
+              {parsed.skills.map((skill) => (
+                <SkillInvocationBlock key={`${skill.name}-${skill.location ?? ''}`} skill={skill} />
+              ))}
+            </div>
+          )}
           {orderedAttachments.length > 0 && (
             <div className="message-attachments" data-testid="message-attachments">
               {orderedAttachments.map((attachment) => attachment.kind === 'image' ? (

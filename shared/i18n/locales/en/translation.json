@@ -422,6 +422,14 @@
       "planModeOn": "Plan mode is on (sent messages get /plan prefix)",
       "skillRemove": "Remove skill"
     },
+    "skillBlock": {
+      "title": "Loaded skill: {{name}}",
+      "viewDetails": "View instructions",
+      "collapse": "Collapse"
+    },
+    "tool": {
+      "readingSkill": "Loading skill: {{name}}"
+    },
     "errors": {
       "invalidKey": "API key issue: the key may be invalid, expired or revoked — update it in provider settings.",
       "wrongModel": "Model issue: the selected model is not available for this account — pick another model.",
@@ -729,10 +737,24 @@
   },
   "skills": {
     "title": "Skills",
-    "readonlyHint": "Skills are loaded by pi from the locations below. Enabling/disabling individual skills is managed by pi, not this app.",
+    "readonlyHint": "Skills are discovered and loaded by pi. You can toggle whether each skill enters the global system prompt (auto-detected vs manual only).",
     "noRuntime": "Start a chat session first — skills are read from the active session.",
     "empty": "No skills found.",
     "manualOnly": "manual only",
+    "mode": {
+      "auto": "Auto-detected",
+      "autoDesc": "In system prompt; AI automatically loads instructions when relevant",
+      "manual": "Manual only",
+      "manualDesc": "Out of system prompt (0 tokens); loads only when explicitly invoked via /skill:name",
+      "readOnly": "Read-only (cannot modify)",
+      "switching": "Updating…"
+    },
+    "filter": {
+      "all": "All ({{count}})",
+      "auto": "Auto-detected ({{count}})",
+      "manual": "Manual only ({{count}})"
+    },
+    "countSummary": "{{total}} skills total · {{auto}} auto-detected · {{manual}} manual only",
     "view": "View content",
     "close": "Close",
     "import": "Import",

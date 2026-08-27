@@ -169,3 +169,116 @@ test('Skills 页：从 Claude 目录导入 skill（复制 + 同名唯一性）',
   const original = path.join(agentDir, 'skills', 'conflict-skill', 'SKILL.md');
   await expect(readFile(original, 'utf8')).resolves.toContain('Existing version.');
 });
+
+test('Skills 页：切换调用模式（自动感知 <-> 仅手动）并写入 SKILL.md 与模式过滤', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page = await app.firstWindow();
+  await expect(
+    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  await page.getByTestId('nav-skills').click();
+  const toggleBtn = page.getByTestId('skill-mode-toggle-test-skill');
+  await expect(toggleBtn).toBeVisible({ timeout: 15_000 });
+  await expect(toggleBtn).toHaveClass(/mode-auto/);
+
+  // 点击切换为仅手动
+  await toggleBtn.click();
+  await expect(toggleBtn).toHaveClass(/mode-manual/, { timeout: 10_000 });
+
+  // 验证磁盘写入
+  const skillFile = path.join(workspace, '.pi/skills/test-skill/SKILL.md');
+  const contentAfterDisable = await readFile(skillFile, 'utf8');
+  expect(contentAfterDisable).toContain('disable-model-invocation: true');
+
+  // 测试过滤 Tab
+  await page.getByTestId('skills-filter-manual').click();
+  await expect(page.getByTestId('skill-row-test-skill')).toBeVisible();
+  await page.getByTestId('skills-filter-auto').click();
+  await expect(page.getByTestId('skill-row-test-skill')).toHaveCount(0);
+  await page.getByTestId('skills-filter-all').click();
+  await expect(page.getByTestId('skill-row-test-skill')).toBeVisible();
+
+  const screenshotDir = '/Users/bingking/.gemini/antigravity/brain/41be46fd-736c-4a6a-90b8-64cb5239b5ad';
+  await page.screenshot({ path: path.join(screenshotDir, 'skills_page.png') });
+
+  // 点击切回自动感知
+  await toggleBtn.click();
+  await expect(toggleBtn).toHaveClass(/mode-auto/, { timeout: 10_000 });
+  const contentAfterEnable = await readFile(skillFile, 'utf8');
+  expect(contentAfterEnable).not.toContain('disable-model-invocation: true');
+});
+
+test('Chat 消息流：指定 Skill 触发后渲染折叠指令卡片，且用户气泡无 raw XML', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page = await app.firstWindow();
+  await expect(
+    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  // 发送带 /skill:test-skill 的消息
+  const chatInput = page.getByTestId('chat-input');
+  await chatInput.fill('/skill:test-skill Please help with testing');
+  await page.keyboard.press('Enter');
+
+  // 用户消息应该出现折叠卡片
+  const skillCard = page.getByTestId('message-skill-test-skill');
+  await expect(skillCard).toBeVisible({ timeout: 15_000 });
+  // 用户文本气泡中只包含纯文本，绝无 <skill> 或 </skill>
+  const userText = page.getByTestId('message-user-text');
+  await expect(userText).toContainText('Please help with testing');
+  await expect(userText).not.toContainText('<skill');
+  await expect(userText).not.toContainText('</skill>');
+
+  const screenshotDir = '/Users/bingking/.gemini/antigravity/brain/41be46fd-736c-4a6a-90b8-64cb5239b5ad';
+  await page.screenshot({ path: path.join(screenshotDir, 'chat_skill_invocation_collapsed.png') });
+
+  // 点击展开技能卡片
+  await page.getByTestId('message-skill-toggle-test-skill').click();
+  const skillBody = page.getByTestId('message-skill-body-test-skill');
+  await expect(skillBody).toBeVisible();
+  await expect(skillBody).toContainText('Do the test thing.');
+  await page.screenshot({ path: path.join(screenshotDir, 'chat_skill_invocation.png') });
+});
+
+test('Skills 界面中英文与自动感知视觉验证', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace, language: 'zh' },
+  });
+  const page = await app.firstWindow();
+  await expect(
+    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  await page.getByTestId('nav-skills').click();
+  const toggleBtn = page.getByTestId('skill-mode-toggle-test-skill');
+  await expect(toggleBtn).toBeVisible({ timeout: 15_000 });
+  await expect(toggleBtn).toHaveClass(/mode-auto/);
+
+  const screenshotDir = '/Users/bingking/.gemini/antigravity/brain/41be46fd-736c-4a6a-90b8-64cb5239b5ad';
+  await page.screenshot({ path: path.join(screenshotDir, 'skills_page_zh.png') });
+
+  // 切换至聊天并发送技能指令，验证中文技能卡片
+  await page.getByTestId('nav-chat').click();
+  const chatInput = page.getByTestId('chat-input');
+  await chatInput.fill('/skill:test-skill 请帮我测试');
+  await page.keyboard.press('Enter');
+
+  const skillCard = page.getByTestId('message-skill-test-skill');
+  await expect(skillCard).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('message-skill-toggle-test-skill').click();
+
+  await page.screenshot({ path: path.join(screenshotDir, 'chat_skill_invocation_zh.png') });
+});
+
+

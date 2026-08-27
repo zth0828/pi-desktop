@@ -422,6 +422,14 @@
       "planModeOn": "计划模式已开启（发送时自动加 /plan）",
       "skillRemove": "移除技能"
     },
+    "skillBlock": {
+      "title": "已加载技能：{{name}}",
+      "viewDetails": "查看指令",
+      "collapse": "收起指令"
+    },
+    "tool": {
+      "readingSkill": "读取技能指南：{{name}}"
+    },
     "errors": {
       "invalidKey": "这是 API Key 问题：密钥可能无效、已过期或被禁用，请在供应商设置里更换。",
       "wrongModel": "这是模型配置问题：所选模型在当前账号可用渠道里不存在，请换一个模型。",
@@ -729,10 +737,24 @@
   },
   "skills": {
     "title": "Skills",
-    "readonlyHint": "Skills 由 pi 以下来源加载。单个 skill 的启用/禁用由 pi 自己管理，本应用不提供。",
+    "readonlyHint": "Skills 由 pi 发现并加载。你可以在此切换技能是否进入全局系统提示词（自动感知 vs 仅手动调用）。",
     "noRuntime": "先打开一个聊天会话——skills 从活动会话中读取。",
     "empty": "没有发现任何 skill。",
     "manualOnly": "仅手动调用",
+    "mode": {
+      "auto": "自动感知",
+      "autoDesc": "常驻系统提示词，AI 遇到相关任务时按需自动调用，也可手动指定",
+      "manual": "仅手动调用",
+      "manualDesc": "不进入系统提示词（0 Token 占用），仅在输入框手动选择或输入 /skill:xxx 时临时加载",
+      "readOnly": "只读（不可修改）",
+      "switching": "切换中…"
+    },
+    "filter": {
+      "all": "全部 ({{count}})",
+      "auto": "自动感知 ({{count}})",
+      "manual": "仅手动 ({{count}})"
+    },
+    "countSummary": "共 {{total}} 个技能 · {{auto}} 个自动感知 · {{manual}} 个仅手动",
     "view": "查看内容",
     "close": "关闭",
     "import": "导入",
