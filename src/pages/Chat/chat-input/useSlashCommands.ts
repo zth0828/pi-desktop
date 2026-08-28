@@ -4,6 +4,7 @@ import type { PiCommandRow, PiRuntimeSessionInfo } from '@shared/host-api/contra
 import { hostApi } from '../../../lib/host-api';
 import { navigateToPage } from '../../../lib/app-navigation';
 import type { ChatMessage } from '../../../stores/chat';
+import type { SlashToken } from './types';
 
 export interface UseSlashCommandsOptions {
   value: string;
@@ -76,6 +77,8 @@ export function useSlashCommands({
   const { t } = useTranslation();
   const [commands, setCommands] = useState<PiCommandRow[]>(DEFAULT_BUILTIN_COMMANDS);
   const [selected, setSelected] = useState(0);
+  const [slashToken, setSlashToken] = useState<SlashToken | null>(null);
+  const [slashSuppressed, setSlashSuppressed] = useState(false);
   const commandPanelRef = useRef<HTMLDivElement>(null);
 
   const [hasNavigated, setHasNavigated] = useState(false);
@@ -93,10 +96,7 @@ export function useSlashCommands({
       .catch(() => {});
   }, [paneApi]);
 
-  const trimmedLeading = value.replace(/^\s+/, '');
-  const query = trimmedLeading.startsWith('/') && !trimmedLeading.includes(' ')
-    ? trimmedLeading.slice(1)
-    : null;
+  const query = slashSuppressed || !slashToken ? null : slashToken.query;
   const sourceRank = (source: string) =>
     source === 'built-in' ? 0 : source.startsWith('prompt') ? 1 : 2;
 
@@ -231,26 +231,15 @@ export function useSlashCommands({
   };
 
   const pick = (cmd: PiCommandRow) => {
-    if (cmd.name === 'name') {
-      setValue('/name ');
-      textareaRef.current?.focus();
-      return;
+    if (slashToken) {
+      const before = value.slice(0, slashToken.start);
+      const after = value.slice(slashToken.end);
+      setValue(`${before}/${cmd.name} ${after}`);
+    } else {
+      setValue(`/${cmd.name} `);
     }
-    if (cmd.source === 'built-in') {
-      setValue('');
-      void runBuiltinCommand(cmd.name, '');
-      return;
-    }
-    if (cmd.source === 'skill' || cmd.name.startsWith('skill:')) {
-      const skillName = cmd.name.startsWith('skill:') ? cmd.name.slice(6) : cmd.name;
-      if (setSelectedSkill) {
-        setSelectedSkill(skillName);
-        setValue('');
-        textareaRef.current?.focus();
-        return;
-      }
-    }
-    setValue(`/${cmd.name} `);
+    setSlashToken(null);
+    setSlashSuppressed(true);
     textareaRef.current?.focus();
   };
 
@@ -279,13 +268,21 @@ export function useSlashCommands({
       return true;
     }
     if (e.key === 'Escape') {
-      setValue('');
+      if (slashToken) {
+        setValue((current) => current.slice(0, slashToken.start) + current.slice(slashToken.end));
+        setSlashToken(null);
+      }
+      setSlashSuppressed(true);
       return true;
     }
     return false;
   };
 
   return {
+    slashToken,
+    setSlashToken,
+    slashSuppressed,
+    setSlashSuppressed,
     commands,
     setCommands,
     selected,

@@ -16,6 +16,17 @@ export function detectAtToken(text: string, caret: number): AtToken | null {
   return { start: before.length - query.length - 1, end: caret, query };
 }
 
+/** 光标处的 / token（支持行首、空白、中日韩字符、标点符号后的 / 或 ／） */
+export type SlashToken = { start: number; end: number; query: string };
+
+export function detectSlashToken(text: string, caret: number): SlashToken | null {
+  const before = text.slice(0, caret);
+  const m = before.match(/(?:^|[\s\p{P}\p{S}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[^a-zA-Z0-9_])[/／]([^\s/／]*)$/u);
+  if (!m) return null;
+  const query = m[1];
+  return { start: before.length - query.length - 1, end: caret, query };
+}
+
 export type ChatInputProps = {
   cwd: string;
   onChooseWorkspace: () => Promise<void>;
@@ -76,6 +87,10 @@ export const SHELL_BUILTIN_NAMES = new Set([
   'export',
   'session',
   'settings',
+  'skills',
+  'extensions',
+  'mcp',
+  'models',
   'login',
   'logout',
   'reload',

@@ -16,6 +16,7 @@ import { ImageLightbox } from './ImageLightbox';
 import { QueueList } from './QueueList';
 import {
   detectAtToken,
+  detectSlashToken,
   modelDisplayName,
   resolveStreamBehavior,
   SHELL_BUILTIN_NAMES,
@@ -352,6 +353,9 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   });
 
   const {
+    slashToken,
+    setSlashToken,
+    setSlashSuppressed,
     commands,
     setCommands,
     selected,
@@ -562,7 +566,19 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         return;
       }
 
-      // 非内置命令（如未知指令 /m 或 prompt 模板）：弹出确认对话框，询问用户是否直接发送给 AI
+      const isPromptTemplate = commands.some(
+        (c) => c.name.toLowerCase() === rawName && (c.source === 'prompt' || c.source.startsWith('prompt:') || c.source === 'extension'),
+      );
+      if (isPromptTemplate) {
+        const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+        const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
+        setValue('');
+        setAttachments(() => []);
+        executePrompt(promptText, outgoing, behavior);
+        return;
+      }
+
+      // 未知命令：弹出确认对话框，询问用户是否直接发送给 AI
       const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
       const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
       setValue('');
@@ -1148,11 +1164,16 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
             setSelected(0);
             setFileSelected(0);
             setAtSuppressed(false);
-            setAtToken(detectAtToken(e.target.value, e.target.selectionStart ?? e.target.value.length));
+            setSlashSuppressed(false);
+            const caret = e.target.selectionStart ?? e.target.value.length;
+            setAtToken(detectAtToken(e.target.value, caret));
+            setSlashToken(detectSlashToken(e.target.value, caret));
           }}
           onSelect={(e) => {
             const target = e.currentTarget;
-            setAtToken(detectAtToken(target.value, target.selectionStart ?? target.value.length));
+            const caret = target.selectionStart ?? target.value.length;
+            setAtToken(detectAtToken(target.value, caret));
+            setSlashToken(detectSlashToken(target.value, caret));
           }}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
