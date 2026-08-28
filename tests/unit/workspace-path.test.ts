@@ -34,4 +34,12 @@ describe('resolveWorkspacePath', () => {
     await symlink(path.join(outside, 'secret.txt'), path.join(root, 'link.txt'));
     await expect(resolveWorkspacePath(root, 'link.txt')).rejects.toThrow('escapes workspace');
   });
+
+  it('rejects Windows device and DOS reserved paths', async () => {
+    await expect(resolveWorkspacePath(root, 'CON')).rejects.toThrow('device paths are not allowed');
+    await expect(resolveWorkspacePath(root, 'NUL')).rejects.toThrow('device paths are not allowed');
+    await expect(resolveWorkspacePath(root, 'COM1')).rejects.toThrow('device paths are not allowed');
+    await expect(resolveWorkspacePath(root, '\\\\.\\pipe\\foo')).rejects.toThrow('device paths are not allowed');
+  });
 });
+

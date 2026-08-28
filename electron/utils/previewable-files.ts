@@ -27,11 +27,30 @@ export function normalizePreviewablePath(filePath: string): string {
   }
 }
 
-/** Rebuild the external-file preview grant from pi's native historical messages. */
-export function previewableExternalFilesFromMessages(messages: unknown[], cwd: string): Set<string> {
+/** Rebuild the external-file preview grant from pi's native historical messages (scoped to the last maxTurns turns). */
+export function previewableExternalFilesFromMessages(
+  messages: unknown[],
+  cwd: string,
+  maxTurns = 3,
+): Set<string> {
   const root = normalizePreviewablePath(cwd);
   const files = new Set<string>();
-  for (const message of messages) {
+
+  let userTurnsSeen = 0;
+  const recentMessages: unknown[] = [];
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    recentMessages.unshift(msg);
+    if (msg && typeof msg === 'object' && (msg as { role?: unknown }).role === 'user') {
+      userTurnsSeen++;
+      if (userTurnsSeen >= maxTurns) {
+        break;
+      }
+    }
+  }
+
+  for (const message of recentMessages) {
     if (!message || typeof message !== 'object') continue;
     const candidate = message as { role?: unknown; content?: unknown };
     if (candidate.role !== 'assistant' || !Array.isArray(candidate.content)) continue;

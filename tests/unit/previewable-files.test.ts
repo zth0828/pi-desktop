@@ -61,6 +61,32 @@ describe('previewableExternalFilesFromMessages', () => {
     const normalized = normalizePreviewablePath(lexical);
     expect(normalized).toBe(path.join(normalizePreviewablePath(root), 'missing', 'new.txt'));
   });
+
+  it('restricts external file preview permissions to the last 3 user turns', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'pi-preview-root-'));
+    const external = mkdtempSync(path.join(tmpdir(), 'pi-preview-external-'));
+    roots.push(root, external);
+    const oldFile = path.join(external, 'old-turn.txt');
+    const recentFile = path.join(external, 'recent-turn.txt');
+    writeFileSync(oldFile, 'old');
+    writeFileSync(recentFile, 'recent');
+
+    // 4 user turns: Turn 1 accesses oldFile, Turn 4 accesses recentFile
+    const messages = [
+      { role: 'user', content: 'Turn 1' },
+      { role: 'assistant', content: [{ type: 'toolCall', name: 'read', arguments: { path: oldFile } }] },
+      { role: 'user', content: 'Turn 2' },
+      { role: 'assistant', content: 'No tools' },
+      { role: 'user', content: 'Turn 3' },
+      { role: 'assistant', content: 'No tools' },
+      { role: 'user', content: 'Turn 4' },
+      { role: 'assistant', content: [{ type: 'toolCall', name: 'read', arguments: { path: recentFile } }] },
+    ];
+
+    const result = previewableExternalFilesFromMessages(messages, root, 3);
+    expect(result.has(normalizePreviewablePath(recentFile))).toBe(true);
+    expect(result.has(normalizePreviewablePath(oldFile))).toBe(false);
+  });
 });
 
 function nameFor(file: string): string {
