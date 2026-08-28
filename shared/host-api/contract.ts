@@ -548,7 +548,9 @@ export type SettingsSnapshot = {
   appVersionCheckAssetName?: string;
   appVersionCheckDownloadedPath?: string;
   appVersionCheckNoticedLatest?: string;
+  appVersionCheckNoticedAt?: number;
   piVersionCheckNoticedLatest?: string;
+  piVersionCheckNoticedAt?: number;
   downloadMirror?: string;
 };
 

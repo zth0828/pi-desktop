@@ -33,7 +33,9 @@ export const settingsApi = {
       appVersionCheckAssetName: store.get('appVersionCheckAssetName') as string | undefined,
       appVersionCheckDownloadedPath: store.get('appVersionCheckDownloadedPath') as string | undefined,
       appVersionCheckNoticedLatest: store.get('appVersionCheckNoticedLatest') as string | undefined,
+      appVersionCheckNoticedAt: store.get('appVersionCheckNoticedAt') as number | undefined,
       piVersionCheckNoticedLatest: store.get('piVersionCheckNoticedLatest') as string | undefined,
+      piVersionCheckNoticedAt: store.get('piVersionCheckNoticedAt') as number | undefined,
     };
   },
   get: async <K extends keyof SettingsSnapshot>(

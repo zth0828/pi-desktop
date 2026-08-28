@@ -10,6 +10,8 @@ import { selectAssetName } from './app-update-api';
 
 export const VERSION_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 export const GITHUB_RELEASE_URL = 'https://api.github.com/repos/zth0828/pi-desktop/releases/latest';
+/** 提醒免打扰时长（24 小时：冷启动重新提醒） */
+export const NOTICED_EXPIRATION_MS = 24 * 60 * 60 * 1000;
 
 let inFlight: Promise<VersionCheckSnapshot> | null = null;
 let status: VersionCheckSnapshot = {
@@ -44,14 +46,21 @@ function isCheckDue(options: {
   return false;
 }
 
-/** 检查是否有待向用户提示的新版本通知（且用户尚未点过已读/关闭） */
+/** 检查是否有待向用户提示的新版本通知（且用户尚未在有效期内点过已读/关闭） */
 function isNoticePending(options: {
   current?: string;
   latest?: string;
   noticedLatest?: string;
+  noticedAt?: number;
+  now?: number;
 }): boolean {
-  const { current, latest, noticedLatest } = options;
-  return Boolean(latest && compare(current, latest) && noticedLatest !== latest);
+  const { current, latest, noticedLatest, noticedAt, now = Date.now() } = options;
+  if (!latest || !compare(current, latest)) return false;
+  // 如果从未记录过已读，或者已读的不是当前这个最新版本 -> 需提示
+  if (!noticedLatest || noticedLatest !== latest) return true;
+  // 如果已读过同一版本，但已超过重新提醒时间（临时 1 分钟 / 后续 24 小时）-> 重新提示
+  if (noticedAt && now - noticedAt >= NOTICED_EXPIRATION_MS) return true;
+  return false;
 }
 
 async function checkPi(previous: VersionCheckStatus, now: number): Promise<VersionCheckStatus> {
@@ -202,7 +211,7 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
 
   const appStatusPromise = (appDue ? checkApp(appPrevious, now) : Promise.resolve(appPrevious)).then((appResult) => {
     const current = ('current' in appResult && typeof appResult.current === 'string') ? appResult.current : currentApp;
-    if (isNoticePending({ current, latest: appResult.latest, noticedLatest: saved.appVersionCheckNoticedLatest })) {
+    if (isNoticePending({ current, latest: appResult.latest, noticedLatest: saved.appVersionCheckNoticedLatest, noticedAt: saved.appVersionCheckNoticedAt, now })) {
       sendHostEvent('versionCheck', 'updateAvailable', {
         current,
         latest: appResult.latest!,
@@ -216,7 +225,7 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   const pi = await (piDue ? checkPi(piPrevious, now) : Promise.resolve(piPrevious));
   const appStatus = await appStatusPromise;
 
-  if (isNoticePending({ current: pi.current, latest: pi.latest, noticedLatest: saved.piVersionCheckNoticedLatest })) {
+  if (isNoticePending({ current: pi.current, latest: pi.latest, noticedLatest: saved.piVersionCheckNoticedLatest, noticedAt: saved.piVersionCheckNoticedAt, now })) {
     sendHostEvent('versionCheck', 'updateAvailable', {
       current: pi.current ?? '',
       latest: pi.latest!,
@@ -243,7 +252,8 @@ export const versionCheckApi = {
   getPendingNotice: async () => {
     const saved = await settingsApi.getAll();
     const appCurrent = appApi.version();
-    if (isNoticePending({ current: appCurrent, latest: saved.appVersionCheckLatest, noticedLatest: saved.appVersionCheckNoticedLatest })) {
+    const now = Date.now();
+    if (isNoticePending({ current: appCurrent, latest: saved.appVersionCheckLatest, noticedLatest: saved.appVersionCheckNoticedLatest, noticedAt: saved.appVersionCheckNoticedAt, now })) {
       return {
         current: appCurrent,
         latest: saved.appVersionCheckLatest!,
@@ -252,28 +262,25 @@ export const versionCheckApi = {
       };
     }
     const piCurrent = (await piSystemApi.detect()).pi.version;
-    if (isNoticePending({ current: piCurrent, latest: saved.piVersionCheckLatest, noticedLatest: saved.piVersionCheckNoticedLatest })) {
+    if (isNoticePending({ current: piCurrent, latest: saved.piVersionCheckLatest, noticedLatest: saved.piVersionCheckNoticedLatest, noticedAt: saved.piVersionCheckNoticedAt, now })) {
       return { current: piCurrent ?? '', latest: saved.piVersionCheckLatest!, kind: 'pi' as const };
     }
     return null;
   },
   dismissNotice: async (payload: { kind: 'app' | 'pi'; latest: string }) => {
-    await settingsApi.set({
-      key: payload.kind === 'app' ? 'appVersionCheckNoticedLatest' : 'piVersionCheckNoticedLatest',
-      value: payload.latest,
-    });
+    const now = Date.now();
+    if (payload.kind === 'app') {
+      await settingsApi.set({ key: 'appVersionCheckNoticedLatest', value: payload.latest });
+      await settingsApi.set({ key: 'appVersionCheckNoticedAt', value: now });
+    } else {
+      await settingsApi.set({ key: 'piVersionCheckNoticedLatest', value: payload.latest });
+      await settingsApi.set({ key: 'piVersionCheckNoticedAt', value: now });
+    }
     return { success: true };
   },
 };
 
-let checkTimer: NodeJS.Timeout | null = null;
-
 export function scheduleVersionChecks(): void {
+  // 仅在打开软件（冷启动）时检测一次，运行期间不后台轮询、不发 release 网络请求
   void versionCheckApi.check().catch(() => undefined);
-  if (!checkTimer) {
-    checkTimer = setInterval(() => {
-      void versionCheckApi.check().catch(() => undefined);
-    }, VERSION_CHECK_INTERVAL_MS);
-    checkTimer.unref?.();
-  }
 }

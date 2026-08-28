@@ -12,6 +12,7 @@ import type {
 function resolveAppVersion(): string {
   const version = app.getVersion();
   if (app.isPackaged && version && version !== process.versions.electron) return version;
+  if (process.env.PI_DESKTOP_DEV_VERSION?.trim()) return process.env.PI_DESKTOP_DEV_VERSION.trim();
   // 开发模式：依次尝试根目录、dist-electron/main 上级、以及当前工作区
   const candidatePaths = [
     path.join(app.getAppPath(), 'package.json'),
