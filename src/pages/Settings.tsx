@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen, Lock, Monitor, Moon, Sun } from 'lucide-react';
+import { FolderOpen, Lock, Monitor, Moon, Sun, Terminal } from 'lucide-react';
 import { DEFAULT_DESKTOP_PROXY_URL, PI_BUILTIN_TOOLS, PI_CORE_TOOLS, PI_DEFAULT_TOOLS, type PiCompactionSettings, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
+import logoUrl from '../../resources/icon.png';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { workspaceErrorMessage } from '../lib/workspace-error';
 import { setTheme, type Theme } from '../lib/theme';
 import { usePiSystemStore } from '../stores/pi-system';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '../lib/i18n';
+import { Markdown } from '../components/Markdown';
 
 const THEMES: Array<{ id: Theme; icon: typeof Sun }> = [
   { id: 'light', icon: Sun },
@@ -687,7 +689,9 @@ export default function SettingsPage() {
         <div className="settings-version-card" data-testid="settings-app-version-status" id="settings-app-version-status">
           <div className="settings-version-card-head">
             <div className="settings-version-card-meta">
-              <div className="settings-version-icon">π</div>
+              <div className="settings-version-icon-wrap">
+                <img className="settings-version-icon-img" src={logoUrl} alt="Pi Desktop" draggable={false} />
+              </div>
               <div className="settings-version-meta-text">
                 <div className="settings-version-title-row">
                   <span className="settings-version-name">Pi Desktop</span>
@@ -747,7 +751,7 @@ export default function SettingsPage() {
               </div>
               {appReleaseNotesExpanded && (
                 <div className="settings-changelog-content">
-                  <pre className="settings-changelog-text">{versionStatus.app.releaseNotes!.trim()}</pre>
+                  <Markdown text={versionStatus.app.releaseNotes!.trim()} />
                 </div>
               )}
             </div>
@@ -844,7 +848,9 @@ export default function SettingsPage() {
         <div className="settings-version-card" data-testid="settings-pi-status" id="settings-pi-status">
           <div className="settings-version-card-head">
             <div className="settings-version-card-meta">
-              <div className="settings-version-icon settings-version-icon-pi">⚡</div>
+              <div className="settings-version-icon-wrap settings-version-icon-cli">
+                <Terminal size={18} className="settings-version-cli-icon" />
+              </div>
               <div className="settings-version-meta-text">
                 <div className="settings-version-title-row">
                   <span className="settings-version-name">pi</span>

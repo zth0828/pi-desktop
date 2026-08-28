@@ -147,7 +147,7 @@ test('设置页：下载更新后弹出安装引导对话框，稍后关闭后�
   await expect(downloadBtn).toBeVisible({ timeout: 15_000 });
 
   // 验证 Release Notes 更新内容已展示
-  await expect(page.locator('.settings-changelog-text')).toContainText('Enhanced update cards');
+  await expect(page.locator('.settings-changelog-content .markdown')).toContainText('Enhanced update cards');
 
   await downloadBtn.click();
 

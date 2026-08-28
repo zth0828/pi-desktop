@@ -864,23 +864,35 @@ button.danger-outline {
   min-width: 0;
 }
 
-.settings-version-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+.settings-version-icon-wrap {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--accent);
   flex-shrink: 0;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
-.settings-version-icon.settings-version-icon-pi {
+.settings-version-icon-img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  border-radius: 7px;
+}
+
+.settings-version-icon-wrap.settings-version-icon-cli {
+  background: var(--bg-sunken);
   color: var(--text);
+}
+
+.settings-version-cli-icon {
+  color: var(--text);
+  opacity: 0.85;
 }
 
 .settings-version-meta-text {
@@ -926,7 +938,7 @@ button.danger-outline {
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 9px;
-  padding: 10px 14px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -962,18 +974,61 @@ button.danger-outline {
 .settings-changelog-content {
   padding-top: 8px;
   border-top: 1px dashed var(--border);
-  max-height: 240px;
+  max-height: 260px;
   overflow-y: auto;
 }
 
-.settings-changelog-text {
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 1.6;
+.settings-changelog-content .markdown {
+  font-size: 12.5px;
+  line-height: 1.65;
   color: var(--text-secondary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  margin: 0;
+}
+
+.settings-changelog-content .markdown h1,
+.settings-changelog-content .markdown h2 {
+  font-size: 13px;
+  font-weight: 650;
+  margin: 10px 0 5px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.settings-changelog-content .markdown h3,
+.settings-changelog-content .markdown h4 {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin: 8px 0 4px;
+  color: var(--text);
+}
+
+.settings-changelog-content .markdown p {
+  margin: 0 0 6px;
+  color: var(--text-secondary);
+}
+
+.settings-changelog-content .markdown ul,
+.settings-changelog-content .markdown ol {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+  color: var(--text-secondary);
+}
+
+.settings-changelog-content .markdown li {
+  margin: 3px 0;
+}
+
+.settings-changelog-content .markdown strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.settings-changelog-content .markdown code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
 }
 
 .settings-download-progress-box {
