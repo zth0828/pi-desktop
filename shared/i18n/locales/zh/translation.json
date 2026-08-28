@@ -406,6 +406,12 @@
       "modelNotFound": "找不到模型：{{model}}",
       "commandNotFound": "未知命令：{{command}}"
     },
+    "confirmSlashSend": {
+      "title": "确认发送指令？",
+      "description": "检测到指令「{{command}}」，该指令不是本地内置功能。是否作为消息直接发送给 AI？",
+      "send": "直接发送",
+      "cancel": "取消"
+    },
     "sessionInfo": {
       "title": "会话详情",
       "name": "会话名称",

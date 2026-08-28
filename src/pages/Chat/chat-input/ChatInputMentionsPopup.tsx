@@ -1,6 +1,6 @@
 import type { ReactNode, RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, FileText, Folder } from 'lucide-react';
+import { ChevronRight, FileText, Folder, X } from 'lucide-react';
 
 export interface ChatInputMentionsPopupProps {
   filePanelOpen: boolean;
@@ -16,6 +16,7 @@ export interface ChatInputMentionsPopupProps {
   onPickFile: (file: string) => void;
   onToggleDir: (name: string, parent: string) => void;
   onSelectTreeIndex?: (index: number) => void;
+  onClose: () => void;
 }
 
 export function ChatInputMentionsPopup({
@@ -31,6 +32,7 @@ export function ChatInputMentionsPopup({
   onPickFile,
   onToggleDir,
   onSelectTreeIndex,
+  onClose,
 }: ChatInputMentionsPopupProps) {
   const { t } = useTranslation();
   if (!filePanelOpen) return null;
@@ -112,7 +114,19 @@ export function ChatInputMentionsPopup({
         )}
       </div>
       <div className="command-panel-footer" data-testid="file-panel-footer">
-        {isTreeMode ? t('chat.mentionsHint.tree') : t('chat.mentionsHint.filter')}
+        <span className="command-panel-footer-hint">
+          {isTreeMode ? t('chat.mentionsHint.tree') : t('chat.mentionsHint.filter')}
+        </span>
+        <button
+          type="button"
+          className="command-panel-footer-close"
+          data-testid="file-panel-close"
+          aria-label={t('common.close')}
+          title={t('common.close')}
+          onClick={onClose}
+        >
+          <X size={13} />
+        </button>
       </div>
     </div>
   );

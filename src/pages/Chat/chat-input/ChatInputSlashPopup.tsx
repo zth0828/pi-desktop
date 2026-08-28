@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
+import { X } from 'lucide-react';
 import type { PiCommandRow } from '@shared/host-api/contract';
 
 export interface ChatInputSlashPopupProps {
@@ -9,6 +10,7 @@ export interface ChatInputSlashPopupProps {
   selected: number;
   onPick: (cmd: PiCommandRow) => void;
   commandDescription: (cmd: PiCommandRow) => string;
+  onClose: () => void;
 }
 
 export function ChatInputSlashPopup({
@@ -18,6 +20,7 @@ export function ChatInputSlashPopup({
   selected,
   onPick,
   commandDescription,
+  onClose,
 }: ChatInputSlashPopupProps) {
   const { t } = useTranslation();
   if (!panelOpen) return null;
@@ -43,7 +46,19 @@ export function ChatInputSlashPopup({
         ))}
       </div>
       <div className="command-panel-footer" data-testid="command-panel-footer">
-        {t('chat.mentionsHint.command')}
+        <span className="command-panel-footer-hint">
+          {t('chat.mentionsHint.command')}
+        </span>
+        <button
+          type="button"
+          className="command-panel-footer-close"
+          data-testid="command-panel-close"
+          aria-label={t('common.close')}
+          title={t('common.close')}
+          onClick={onClose}
+        >
+          <X size={13} />
+        </button>
       </div>
     </div>
   );

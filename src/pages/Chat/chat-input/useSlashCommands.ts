@@ -236,9 +236,6 @@ export function useSlashCommands({
     }
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (query !== '' || hasNavigated) {
-        pick(matches[selected] ?? matches[0]);
-      }
       return true;
     }
     if (e.key === 'Escape') {

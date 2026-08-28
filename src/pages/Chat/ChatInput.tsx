@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Copy, FolderOpen, Info, Sparkles, Terminal, X } from 'lucide-react';
+import { AlertTriangle, Check, Copy, FolderOpen, Info, Sparkles, Terminal, X } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
   PiModelRow,
@@ -74,6 +74,12 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const [usageOpen, setUsageOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<PiRuntimeSessionInfo | null>(null);
+  const [confirmSlashModal, setConfirmSlashModal] = useState<{
+    command: string;
+    promptText: string;
+    outgoing: StagedImage[];
+    behavior?: 'steer' | 'followUp';
+  } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [followupBehavior, setFollowupBehavior] = useState<FollowupBehavior>('queue');
 
@@ -482,6 +488,26 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     }
   };
 
+  const executePrompt = (
+    promptText: string,
+    outgoing: StagedImage[],
+    behavior?: 'steer' | 'followUp',
+  ) => {
+    const autoTitle = chatStore.getState().messages.length === 0
+      ? sessionTitleFromQuestion(value.trim(), t('chat.imageSessionTitle'))
+      : null;
+    void prompt(
+      promptText,
+      outgoing.map((img) => ({ type: 'image', data: img.data, mimeType: img.mediaType })),
+      behavior,
+    ).then(async () => {
+      if (!autoTitle) return;
+      const info = await paneApi.piRuntime.getSessionInfo().catch(() => null);
+      const dirtyName = info?.name ? stripAttachmentEnvelope(info.name) !== info.name : false;
+      if (!info?.name || dirtyName) await paneApi.piRuntime.setSessionName(autoTitle, false).catch(() => {});
+    });
+  };
+
   const send = (behavior?: 'steer' | 'followUp') => {
     const text = value.trim();
     if (!text && attachments.length === 0) return;
@@ -536,45 +562,25 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         return;
       }
 
-      const matchedCmd = commands.find((c) => c.name.toLowerCase() === rawName);
-      if (matchedCmd && spaceIndex === -1) {
-        setValue('');
-        setAttachments(() => []);
-        pick(matchedCmd);
-        return;
-      }
-
-      if (spaceIndex === -1) {
-        const prefixMatches = commands.filter((c) => c.name.toLowerCase().startsWith(rawName));
-        if (prefixMatches.length > 0) {
-          setValue('');
-          setAttachments(() => []);
-          pick(prefixMatches[0]);
-          return;
-        }
-        showNotice(t('chat.notice.commandNotFound', { command: text }));
-        return;
-      }
+      // 非内置命令（如未知指令 /m 或 prompt 模板）：弹出确认对话框，询问用户是否直接发送给 AI
+      const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+      const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
+      setValue('');
+      setAttachments(() => []);
+      setConfirmSlashModal({
+        command: rawName,
+        promptText,
+        outgoing,
+        behavior,
+      });
+      return;
     }
 
     const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
     const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
     setValue('');
     setAttachments(() => []);
-
-    const autoTitle = chatStore.getState().messages.length === 0
-      ? sessionTitleFromQuestion(text, t('chat.imageSessionTitle'))
-      : null;
-    void prompt(
-      promptText,
-      outgoing.map((img) => ({ type: 'image', data: img.data, mimeType: img.mediaType })),
-      behavior,
-    ).then(async () => {
-      if (!autoTitle) return;
-      const info = await paneApi.piRuntime.getSessionInfo().catch(() => null);
-      const dirtyName = info?.name ? stripAttachmentEnvelope(info.name) !== info.name : false;
-      if (!info?.name || dirtyName) await paneApi.piRuntime.setSessionName(autoTitle, false).catch(() => {});
-    });
+    executePrompt(promptText, outgoing, behavior);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -598,6 +604,25 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       send(resolveStreamBehavior(followupBehavior, e.altKey));
     }
   };
+
+  useEffect(() => {
+    if (!confirmSlashModal) return;
+    const onKeyDownModal = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setConfirmSlashModal(null);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        const modalData = confirmSlashModal;
+        setConfirmSlashModal(null);
+        executePrompt(modalData.promptText, modalData.outgoing, modalData.behavior);
+      }
+    };
+    window.addEventListener('keydown', onKeyDownModal);
+    return () => window.removeEventListener('keydown', onKeyDownModal);
+  }, [confirmSlashModal]);
 
   useEffect(() => {
     if (!sessionInfo && !modelMenuOpen && !branchMenuOpen && !composerMenuOpen) return;
@@ -799,6 +824,61 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
           </div>
         </div>
       )}
+      {confirmSlashModal && (
+        <div
+          className="tree-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('chat.confirmSlashSend.title')}
+          data-testid="confirm-slash-dialog"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmSlashModal(null);
+          }}
+        >
+          <div className="session-info-modal" style={{ maxWidth: 440 }}>
+            <div className="session-info-header">
+              <div className="session-info-title-wrap">
+                <AlertTriangle size={16} style={{ color: 'var(--accent)' }} />
+                <span>{t('chat.confirmSlashSend.title')}</span>
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                data-testid="confirm-slash-close"
+                onClick={() => setConfirmSlashModal(null)}
+                aria-label={t('common.close')}
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div style={{ padding: '16px 18px', fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>
+              {t('chat.confirmSlashSend.description', { command: `/${confirmSlashModal.command}` })}
+            </div>
+            <div className="confirm-slash-actions">
+              <button
+                type="button"
+                className="confirm-slash-btn-cancel"
+                data-testid="confirm-slash-cancel"
+                onClick={() => setConfirmSlashModal(null)}
+              >
+                {t('chat.confirmSlashSend.cancel')}
+              </button>
+              <button
+                type="button"
+                className="confirm-slash-btn-send"
+                data-testid="confirm-slash-submit"
+                onClick={() => {
+                  const modalData = confirmSlashModal;
+                  setConfirmSlashModal(null);
+                  executePrompt(modalData.promptText, modalData.outgoing, modalData.behavior);
+                }}
+              >
+                {t('chat.confirmSlashSend.send')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <ChatInputSlashPopup
         panelOpen={panelOpen}
         commandPanelRef={commandPanelRef}
@@ -806,6 +886,10 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         selected={selected}
         onPick={pick}
         commandDescription={commandDescription}
+        onClose={() => {
+          setValue('');
+          textareaRef.current?.focus();
+        }}
       />
       <ChatInputMentionsPopup
         filePanelOpen={filePanelOpen}
@@ -821,6 +905,15 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         onPickFile={pickFile}
         onToggleDir={toggleDir}
         onSelectTreeIndex={setTreeSelected}
+        onClose={() => {
+          setAtSuppressed(true);
+          setFilePanelManual(false);
+          if (atToken) {
+            setValue((current) => current.slice(0, atToken.start) + current.slice(atToken.end));
+            setAtToken(null);
+          }
+          textareaRef.current?.focus();
+        }}
       />
       <div className="chat-input-card">
         <ChatInputAttachments

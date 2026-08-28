@@ -246,13 +246,6 @@ export function useFileMentions({
       }
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (atToken?.query || hasNavigated) {
-          const item = visibleTreeItems[treeSelected] ?? visibleTreeItems[0];
-          if (item) {
-            if (item.kind === 'dir') toggleDir(item.name, item.parent);
-            else void pickFile(item.full);
-          }
-        }
         return true;
       }
       if (e.key === 'Escape') {
@@ -290,8 +283,6 @@ export function useFileMentions({
     }
     if (e.key === 'Enter') {
       e.preventDefault();
-      const match = fileMatches[fileSelected] ?? fileMatches[0];
-      if (match) void pickFile(match);
       return true;
     }
     if (e.key === 'Escape') {
