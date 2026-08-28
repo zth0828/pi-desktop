@@ -377,6 +377,8 @@
       "id": "Session ID",
       "file": "File",
       "inMemory": "In-memory",
+      "notSavedYet": "Not saved yet",
+      "notSavedYetHint": "Saved to disk upon sending the first message",
       "model": "Model",
       "messages": "Messages",
       "messagesValue": "{{total}} (user {{user}} / assistant {{assistant}})",

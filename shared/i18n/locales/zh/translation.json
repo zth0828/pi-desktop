@@ -377,6 +377,8 @@
       "id": "会话 ID",
       "file": "存储文件",
       "inMemory": "内存会话",
+      "notSavedYet": "尚未落盘",
+      "notSavedYetHint": "发送首条消息后保存到本地磁盘",
       "model": "生效模型",
       "messages": "消息数",
       "messagesValue": "{{total}}（用户 {{user}} / 助手 {{assistant}}）",

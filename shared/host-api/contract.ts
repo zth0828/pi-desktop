@@ -357,6 +357,7 @@ export type PiRuntimeSessionInfo = {
   name?: string;
   sessionId: string;
   sessionFile?: string;
+  isSaved?: boolean;
   model?: PiRuntimeModelInfo;
   totalMessages: number;
   userMessages: number;

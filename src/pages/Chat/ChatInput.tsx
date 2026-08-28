@@ -604,9 +604,21 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
                 <div className="usage-row">
                   <span>{t('chat.sessionInfo.file')}</span>
                   <div className="session-info-val-wrap">
+                    {sessionInfo.isSaved === false && (
+                      <span
+                        className="session-info-badge session-info-unsaved-badge"
+                        title={t('chat.sessionInfo.notSavedYetHint')}
+                      >
+                        {t('chat.sessionInfo.notSavedYet')}
+                      </span>
+                    )}
                     <code
                       className="session-info-id session-info-file-path"
-                      title={sessionInfo.sessionFile ?? cwd}
+                      title={
+                        sessionInfo.isSaved === false
+                          ? `${sessionInfo.sessionFile ?? cwd} (${t('chat.sessionInfo.notSavedYetHint')})`
+                          : (sessionInfo.sessionFile ?? cwd)
+                      }
                     >
                       {sessionInfo.sessionFile ?? cwd}
                     </code>
@@ -621,7 +633,11 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
                     <button
                       type="button"
                       className="session-info-action-btn"
-                      title={t('chat.sessionInfo.showInFolder')}
+                      title={
+                        sessionInfo.isSaved === false
+                          ? t('chat.sessionInfo.notSavedYetHint')
+                          : t('chat.sessionInfo.showInFolder')
+                      }
                       onClick={() => {
                         void hostApi.shell.showInFolder(sessionInfo.sessionFile ?? cwd);
                       }}

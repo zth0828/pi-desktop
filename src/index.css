@@ -5986,6 +5986,13 @@ button.danger-outline {
   color: var(--text);
 }
 
+.session-info-unsaved-badge {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  background: var(--bg-hover);
+  border-style: dashed;
+}
+
 /* Review 面板（会话改动评审）：overlay 复用 tree-overlay/tree-title */
 
 .review-dialog {

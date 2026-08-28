@@ -1,6 +1,7 @@
 // pi 会话运行时：壳与 pi SDK 的唯一接触面之一（会话生命周期 + 事件桥）。
 // 事件映射在 shared/pi-event-map.ts（单点）。会话替换（new/switch/fork）后
 // 必须重新 subscribe + bindExtensions（SDK 约定）。
+import { existsSync } from 'node:fs';
 import {
   mapPiSessionEvent,
   type PiEventDropCallback,
@@ -1529,10 +1530,13 @@ export const piRuntimeApi = {
     const stats = session.getSessionStats();
     // pi 自动命名可能把附件信封带进会话名，标题栏展示前剥离（与列表出口 toRow 一致）
     const name = session.sessionManager.getSessionName();
+    const sessionFile = stats.sessionFile;
+    const isSaved = Boolean(sessionFile && existsSync(sessionFile));
     return {
       name: name ? stripAttachmentEnvelope(name) || undefined : name,
       sessionId: stats.sessionId,
-      sessionFile: stats.sessionFile,
+      sessionFile,
+      isSaved,
       model: session.model
         ? { provider: session.model.provider, id: session.model.id, name: session.model.name }
         : undefined,
