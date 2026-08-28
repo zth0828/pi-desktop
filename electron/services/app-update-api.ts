@@ -1,8 +1,7 @@
 import { app, shell } from 'electron';
 import { createHash } from 'node:crypto';
-import { createWriteStream } from 'node:fs';
-import { mkdir, rename, rm } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { AppUpdateDownloadResult, HostSuccess } from '@shared/host-api/contract';
 import { settingsApi } from './settings-api';
@@ -18,7 +17,10 @@ export function platformName(platform = process.platform): string {
 }
 
 export function platformAssetArch(platform = process.platform, arch = process.arch): string[] {
-  if (platform === 'linux' && arch === 'x64') return ['x86_64', 'amd64'];
+  if (platform === 'linux') {
+    if (arch === 'x64') return ['x64', 'x86_64', 'amd64'];
+    if (arch === 'arm64') return ['arm64', 'aarch64'];
+  }
   return [arch];
 }
 
@@ -42,70 +44,119 @@ export function selectAsset(
   return asset ? { name: asset.name, url: asset.browser_download_url } : null;
 }
 
+export function selectAssetName(
+  assets: Array<{ name?: string }>,
+  platform = process.platform,
+  arch = process.arch,
+): string | undefined {
+  const validAssets = assets
+    .filter((a): a is { name: string } => typeof a.name === 'string' && Boolean(a.name))
+    .map((a) => ({ name: a.name, browser_download_url: '' }));
+  return selectAsset(validAssets, platform, arch)?.name;
+}
+
+async function getFileSize(filePath: string): Promise<number> {
+  try {
+    const s = await stat(filePath);
+    return s.size;
+  } catch {
+    return 0;
+  }
+}
+
 async function downloadToFile(
   primaryUrl: string,
   mirrorPrefix: string | undefined,
   destinationPath: string,
   onProgress: (downloaded: number, total: number) => void,
 ): Promise<void> {
-  const tryDownload = async (url: string) => {
-    const response = await hostFetch(url, { signal: AbortSignal.timeout(120000) });
-    if (!response.ok || !response.body) throw new Error(`Download failed (${response.status})`);
-    const total = Number(response.headers.get('content-length') ?? 0);
-    let downloaded = 0;
-    await rm(destinationPath, { force: true }).catch(() => undefined);
-    const writer = createWriteStream(destinationPath);
-    onProgress(0, total);
-    try {
-      for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
-        writer.write(Buffer.from(chunk));
-        downloaded += chunk.byteLength;
-        onProgress(downloaded, total);
-      }
-      await new Promise<void>((resolve, reject) => {
-        writer.end(() => resolve());
-        writer.on('error', reject);
-      });
-    } catch (error) {
-      writer.destroy();
-      await rm(destinationPath, { force: true }).catch(() => undefined);
-      throw error;
-    }
-  };
+  const mirror = mirrorPrefix?.trim();
+  const mirrorUrl = mirror
+    ? (mirror.endsWith('/') ? `${mirror}${primaryUrl}` : `${mirror}/${primaryUrl}`)
+    : undefined;
 
-  try {
-    await tryDownload(primaryUrl);
-  } catch (directError) {
-    const mirror = mirrorPrefix?.trim();
-    if (mirror) {
-      const mirrorUrl = mirror.endsWith('/') ? `${mirror}${primaryUrl}` : `${mirror}/${primaryUrl}`;
-      await tryDownload(mirrorUrl);
-    } else {
-      throw directError;
+  // 用户显式配置加速镜像时优先走镜像通道，否则走官方主链接
+  const channels = mirrorUrl ? [mirrorUrl, primaryUrl] : [primaryUrl];
+  let lastError: unknown;
+
+  for (const channelUrl of channels) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
+      }
+      try {
+        const existingBytes = await getFileSize(destinationPath);
+        const headers: Record<string, string> = { 'user-agent': 'Pi-Desktop' };
+        if (existingBytes > 0) {
+          headers['Range'] = `bytes=${existingBytes}-`;
+        }
+
+        const response = await hostFetch(channelUrl, {
+          headers,
+          signal: AbortSignal.timeout(120000),
+        });
+
+        if (!response.ok || !response.body) {
+          if (response.status === 416 && existingBytes > 0) {
+            onProgress(existingBytes, existingBytes);
+            return;
+          }
+          throw new Error(`Download failed (${response.status})`);
+        }
+
+        const isPartial = response.status === 206;
+        const contentLength = Number(response.headers.get('content-length') ?? 0);
+        const total = isPartial ? existingBytes + contentLength : (contentLength || existingBytes);
+        let downloaded = isPartial ? existingBytes : 0;
+
+        const writer = createWriteStream(destinationPath, { flags: isPartial ? 'a' : 'w' });
+        onProgress(downloaded, total);
+
+        try {
+          for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
+            writer.write(Buffer.from(chunk));
+            downloaded += chunk.byteLength;
+            onProgress(downloaded, total);
+          }
+          await new Promise<void>((resolve, reject) => {
+            writer.end(() => resolve());
+            writer.on('error', reject);
+          });
+          return;
+        } catch (streamError) {
+          writer.destroy();
+          // 网络断开不删除已下载的部分文件，保留断点用于重试或跨通道接替
+          throw streamError;
+        }
+      } catch (err) {
+        lastError = err;
+      }
     }
   }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'Download failed'));
 }
 
 async function fetchChecksumText(
   primaryUrl: string,
   mirrorPrefix: string | undefined,
 ): Promise<string> {
-  const tryFetch = async (url: string) => {
-    const res = await hostFetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) throw new Error(`Checksum download failed (${res.status})`);
-    return res.text();
-  };
+  const mirror = mirrorPrefix?.trim();
+  const mirrorUrl = mirror
+    ? (mirror.endsWith('/') ? `${mirror}${primaryUrl}` : `${mirror}/${primaryUrl}`)
+    : undefined;
+  const channels = mirrorUrl ? [mirrorUrl, primaryUrl] : [primaryUrl];
+  let lastError: unknown;
 
-  try {
-    return await tryFetch(primaryUrl);
-  } catch (directError) {
-    const mirror = mirrorPrefix?.trim();
-    if (mirror) {
-      const mirrorUrl = mirror.endsWith('/') ? `${mirror}${primaryUrl}` : `${mirror}/${primaryUrl}`;
-      return await tryFetch(mirrorUrl);
+  for (const url of channels) {
+    try {
+      const res = await hostFetch(url, { signal: AbortSignal.timeout(10000) });
+      if (res.ok) return await res.text();
+    } catch (err) {
+      lastError = err;
     }
-    throw directError;
   }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'Checksum download failed'));
 }
 
 export const appUpdateApi = {
@@ -114,8 +165,24 @@ export const appUpdateApi = {
     inFlight = (async () => {
       let tempPath: string | undefined;
       try {
-        const releaseResponse = await hostFetch(githubUrl(), { signal: AbortSignal.timeout(10000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
-        const release = await releaseResponse.json() as { assets?: Array<{ name: string; browser_download_url: string }> };
+        const mirrorPrefix = (await settingsApi.get({ key: 'downloadMirror' })) as string | undefined;
+        let release: { assets?: Array<{ name: string; browser_download_url: string }> };
+        try {
+          const res = await hostFetch(githubUrl(), { signal: AbortSignal.timeout(10000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
+          if (!res.ok) throw new Error(`Release request failed (${res.status})`);
+          release = (await res.json()) as { assets?: Array<{ name: string; browser_download_url: string }> };
+        } catch (directErr) {
+          const mirror = mirrorPrefix?.trim();
+          if (mirror) {
+            const mirrorUrl = mirror.endsWith('/') ? `${mirror}${githubUrl()}` : `${mirror}/${githubUrl()}`;
+            const res = await hostFetch(mirrorUrl, { signal: AbortSignal.timeout(10000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
+            if (!res.ok) throw new Error(`Release request failed (${res.status})`);
+            release = (await res.json()) as { assets?: Array<{ name: string; browser_download_url: string }> };
+          } else {
+            throw directErr;
+          }
+        }
+
         const asset = selectAsset(release.assets ?? []);
         if (!asset) throw new Error(`No supported ${platformName()} update asset found`);
         const sumsName = `SHA256SUMS-${platformName()}.txt`;
@@ -123,8 +190,7 @@ export const appUpdateApi = {
         if (!sums) throw new Error(`Missing ${sumsName}`);
         const downloadsDir = app.getPath('downloads');
         await mkdir(downloadsDir, { recursive: true });
-        tempPath = path.join(downloadsDir, `.${asset.name}.part`);
-        const mirrorPrefix = (await settingsApi.get({ key: 'downloadMirror' })) as string | undefined;
+        tempPath = path.join(downloadsDir, `${asset.name}.part`);
 
         sendHostEvent('appUpdate', 'progress', { phase: 'started' });
         await downloadToFile(asset.url, mirrorPrefix, tempPath, (downloaded, total) => {
@@ -136,14 +202,18 @@ export const appUpdateApi = {
         if (!expected) throw new Error(`Checksum for ${asset.name} not found`);
         const hash = createHash('sha256');
         for await (const chunk of createReadStream(tempPath)) hash.update(chunk);
-        if (hash.digest('hex').toLowerCase() !== expected.toLowerCase()) throw new Error('Checksum mismatch');
+        if (hash.digest('hex').toLowerCase() !== expected.toLowerCase()) {
+          await rm(tempPath, { force: true }).catch(() => undefined);
+          throw new Error('Checksum mismatch');
+        }
         const finalPath = path.join(downloadsDir, asset.name);
-        await rm(finalPath, { force: true }); await rename(tempPath, finalPath); tempPath = undefined;
+        await rm(finalPath, { force: true }).catch(() => undefined);
+        await rename(tempPath, finalPath);
+        tempPath = undefined;
         await settingsApi.set({ key: 'appVersionCheckDownloadedPath', value: finalPath });
         sendHostEvent('appUpdate', 'progress', { phase: 'completed', path: finalPath });
         return { success: true, path: finalPath, assetName: asset.name };
       } catch (error) {
-        if (tempPath) await rm(tempPath, { force: true }).catch(() => undefined);
         const message = error instanceof Error ? error.message : String(error);
         sendHostEvent('appUpdate', 'progress', { phase: 'failed', error: message });
         return { success: false, error: message };

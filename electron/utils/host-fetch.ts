@@ -39,10 +39,15 @@ export async function hostFetch(url: string | URL | Request, init?: RequestInit)
     // 不认项目 undici 包构造的 ProxyAgent（UND_ERR_INVALID_ARG），代理分支
     // 必须用 undici 包自己的 fetch 才能真正走代理。
     const dispatcher = new ProxyAgent(resolved.url);
-    return undiciFetch(
-      url as Parameters<typeof undiciFetch>[0],
-      { ...init, dispatcher } as Parameters<typeof undiciFetch>[1],
-    ) as unknown as Promise<Response>;
+    try {
+      return (await undiciFetch(
+        url as Parameters<typeof undiciFetch>[0],
+        { ...init, dispatcher } as Parameters<typeof undiciFetch>[1],
+      )) as unknown as Response;
+    } catch {
+      // 本地代理未启动（ECONNREFUSED / 连接超时等）时降级为直连，避免阻塞业务
+      return fetch(url, init);
+    }
   }
   return fetch(url, init);
 }

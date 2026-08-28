@@ -132,4 +132,32 @@ describe('version-check-api', () => {
       expect.objectContaining({ kind: 'app', latest: 'v0.5.0' }),
     );
   });
+
+  it('falls back to mirror and HTML redirect probe when direct GitHub API fails', async () => {
+    settingsApiMock.getAll.mockResolvedValue({});
+    settingsApiMock.get.mockImplementation(async ({ key }: { key: string }) => {
+      if (key === 'downloadMirror') return 'https://mirror.example.com/';
+      return undefined;
+    });
+
+    hostFetchMock.hostFetch.mockImplementation(async (url: string) => {
+      if (url === 'https://api.github.com/repos/zth0828/pi-desktop/releases/latest') {
+        throw new Error('connect ETIMEDOUT');
+      }
+      if (url.includes('mirror.example.com/https://api.github.com')) {
+        return new Response(JSON.stringify({
+          tag_name: 'v1.1.0',
+          draft: false,
+          prerelease: false,
+          html_url: 'https://github.com/zth0828/pi-desktop/releases/tag/v1.1.0',
+          assets: [{ name: 'Pi.Desktop-1.1.0-arm64.dmg' }],
+        }));
+      }
+      throw new Error(`Unhandled URL: ${url}`);
+    });
+
+    const result = await versionCheckApi.check({ force: true });
+    expect(result.app.updateAvailable).toBe(true);
+    expect(result.app.latest).toBe('v1.1.0');
+  });
 });

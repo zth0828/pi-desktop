@@ -6,6 +6,8 @@ import { compareSemver, parseSemver } from '../utils/semver';
 import { hostFetch } from '../utils/host-fetch';
 import { sendHostEvent } from '../main/ipc/host-events';
 
+import { selectAssetName } from './app-update-api';
+
 export const VERSION_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 export const GITHUB_RELEASE_URL = 'https://api.github.com/repos/zth0828/pi-desktop/releases/latest';
 
@@ -23,14 +25,6 @@ function updateStatus(current: VersionCheckSnapshot): VersionCheckSnapshot {
 function compare(current: string | undefined, latest: string | undefined): boolean {
   if (!current || !latest || !parseSemver(current) || !parseSemver(latest)) return false;
   return compareSemver(current, latest) < 0;
-}
-
-function selectAssetName(assets: Array<{ name?: string }>): string | undefined {
-  const arch = process.arch === 'arm64' ? 'arm64' : process.arch === 'x64' ? 'x64' : process.arch;
-  const names = assets.map((asset) => asset.name).filter((name): name is string => Boolean(name && name.includes(`-${arch}.`)));
-  if (process.platform === 'darwin') return names.find((name) => name.endsWith('.dmg'));
-  if (process.platform === 'win32') return names.find((name) => name.includes('-Setup-') && name.endsWith('.exe'));
-  return names.find((name) => name.endsWith('.AppImage')) ?? names.find((name) => name.endsWith('.deb'));
 }
 
 async function checkPi(previous: VersionCheckStatus, now: number): Promise<VersionCheckStatus> {
@@ -53,13 +47,74 @@ async function checkPi(previous: VersionCheckStatus, now: number): Promise<Versi
   }
 }
 
+async function fetchReleaseMetadata(url: string, mirrorPrefix?: string) {
+  const tryFetch = async (targetUrl: string) => {
+    const response = await hostFetch(targetUrl, {
+      signal: AbortSignal.timeout(5000),
+      headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' },
+    });
+    if (!response.ok) throw new Error(`Release request failed (${response.status})`);
+    return (await response.json()) as {
+      tag_name?: string;
+      draft?: boolean;
+      prerelease?: boolean;
+      html_url?: string;
+      assets?: Array<{ name?: string }>;
+    };
+  };
+
+  try {
+    return await tryFetch(url);
+  } catch (directError) {
+    const mirror = mirrorPrefix?.trim();
+    if (mirror) {
+      const mirrorUrl = mirror.endsWith('/') ? `${mirror}${url}` : `${mirror}/${url}`;
+      try {
+        return await tryFetch(mirrorUrl);
+      } catch {
+        // 忽略并继续尝试 HTML 探测
+      }
+    }
+
+    try {
+      const htmlUrl = 'https://github.com/zth0828/pi-desktop/releases/latest';
+      const redirectUrl = mirror
+        ? (mirror.endsWith('/') ? `${mirror}${htmlUrl}` : `${mirror}/${htmlUrl}`)
+        : htmlUrl;
+      const probeRes = await hostFetch(redirectUrl, {
+        method: 'HEAD',
+        redirect: 'manual',
+        signal: AbortSignal.timeout(5000),
+        headers: { 'user-agent': 'Pi-Desktop' },
+      });
+      const location = probeRes.headers.get('location');
+      if (location) {
+        const match = /\/releases\/tag\/(v?[\d.]+.*)$/.exec(location);
+        if (match) {
+          const tag = match[1];
+          return {
+            tag_name: tag,
+            draft: false,
+            prerelease: false,
+            html_url: `https://github.com/zth0828/pi-desktop/releases/tag/${tag}`,
+            assets: [],
+          };
+        }
+      }
+    } catch {
+      // 忽略
+    }
+
+    throw directError;
+  }
+}
+
 async function checkApp(previous: VersionCheckStatus & { releaseUrl?: string; assetName?: string }, now: number) {
   const current = appApi.version();
   const url = process.env.PI_DESKTOP_GITHUB_API_URL ?? GITHUB_RELEASE_URL;
   try {
-    const response = await hostFetch(url, { signal: AbortSignal.timeout(5000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
-    if (!response.ok) throw new Error(`Release request failed (${response.status})`);
-    const release = await response.json() as { tag_name?: string; draft?: boolean; prerelease?: boolean; html_url?: string; assets?: Array<{ name?: string }> };
+    const mirrorPrefix = (await settingsApi.get({ key: 'downloadMirror' })) as string | undefined;
+    const release = await fetchReleaseMetadata(url, mirrorPrefix);
     if (release.draft || release.prerelease || !release.tag_name || !parseSemver(release.tag_name)) throw new Error('No stable release found');
     await settingsApi.set({ key: 'appVersionCheckLastSuccessAt', value: now });
     await settingsApi.set({ key: 'appVersionCheckLatest', value: release.tag_name });
@@ -79,8 +134,8 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   const now = Date.now();
   const piPrevious: VersionCheckStatus = { latest: saved.piVersionCheckLatest, updateAvailable: false, lastAttemptAt: saved.piVersionCheckLastAttemptAt, lastSuccessAt: saved.piVersionCheckLastSuccessAt, error: saved.piVersionCheckError };
   const appPrevious = { latest: saved.appVersionCheckLatest, updateAvailable: false, lastAttemptAt: saved.appVersionCheckLastAttemptAt, lastSuccessAt: saved.appVersionCheckLastSuccessAt, error: saved.appVersionCheckError, releaseUrl: saved.appVersionCheckReleaseUrl, assetName: saved.appVersionCheckAssetName };
-  const piDue = force || !saved.piVersionCheckLastAttemptAt || now - saved.piVersionCheckLastAttemptAt >= VERSION_CHECK_INTERVAL_MS;
-  const appDue = force || !saved.appVersionCheckLastAttemptAt || now - saved.appVersionCheckLastAttemptAt >= VERSION_CHECK_INTERVAL_MS;
+  const piDue = force || !saved.piVersionCheckLastAttemptAt || Boolean(saved.piVersionCheckError) || now - saved.piVersionCheckLastAttemptAt >= VERSION_CHECK_INTERVAL_MS;
+  const appDue = force || !saved.appVersionCheckLastAttemptAt || Boolean(saved.appVersionCheckError) || now - saved.appVersionCheckLastAttemptAt >= VERSION_CHECK_INTERVAL_MS;
   if (!piDue && !appDue) return updateStatus({ pi: { ...piPrevious, current: (await piSystemApi.detect()).pi.version, updateAvailable: compare((await piSystemApi.detect()).pi.version, piPrevious.latest) }, app: { ...appPrevious, current: appApi.version(), updateAvailable: compare(appApi.version(), appPrevious.latest), downloadedPath: saved.appVersionCheckDownloadedPath } });
   if (piDue) await settingsApi.set({ key: 'piVersionCheckLastAttemptAt', value: now });
   if (appDue) await settingsApi.set({ key: 'appVersionCheckLastAttemptAt', value: now });

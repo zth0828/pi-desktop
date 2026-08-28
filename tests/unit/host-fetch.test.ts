@@ -70,4 +70,15 @@ describe('hostFetch', () => {
     expect(undiciMock.fetch).not.toHaveBeenCalled();
     globalFetchSpy.mockRestore();
   });
+
+  it('falls back to direct fetch when proxy connection throws', async () => {
+    proxyApiMock.resolveProxy.mockResolvedValue({ url: DEFAULT_DESKTOP_PROXY_URL, source: 'app' });
+    const globalFetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('direct-fallback'));
+    undiciMock.fetch.mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:7897'));
+
+    const res = await hostFetch('https://example.com/test');
+    expect(await res.text()).toBe('direct-fallback');
+    expect(globalFetchSpy).toHaveBeenCalledWith('https://example.com/test', undefined);
+    globalFetchSpy.mockRestore();
+  });
 });
