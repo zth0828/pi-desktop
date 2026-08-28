@@ -24,22 +24,24 @@ export function ChatInputSlashPopup({
 
   return (
     <div ref={commandPanelRef} className="command-panel" data-testid="command-panel">
-      {matches.map((cmd, i) => (
-        <button
-          key={cmd.name}
-          type="button"
-          className={i === selected ? 'command-item selected' : 'command-item'}
-          data-testid={`command-${cmd.name}`}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            onPick(cmd);
-          }}
-        >
-          <span className="command-name">/{cmd.name}</span>
-          <span className="command-desc">{commandDescription(cmd)}</span>
-          <span className="command-source">{cmd.source}</span>
-        </button>
-      ))}
+      <div className="command-panel-body">
+        {matches.map((cmd, i) => (
+          <button
+            key={cmd.name}
+            type="button"
+            className={i === selected ? 'command-item selected' : 'command-item'}
+            data-testid={`command-${cmd.name}`}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onPick(cmd);
+            }}
+          >
+            <span className="command-name">/{cmd.name}</span>
+            <span className="command-desc">{commandDescription(cmd)}</span>
+            <span className="command-source">{cmd.source}</span>
+          </button>
+        ))}
+      </div>
       <div className="command-panel-footer" data-testid="command-panel-footer">
         {t('chat.mentionsHint.command')}
       </div>

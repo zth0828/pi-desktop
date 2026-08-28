@@ -90,25 +90,27 @@ export function ChatInputMentionsPopup({
 
   return (
     <div ref={filePanelRef} className="command-panel" data-testid="file-panel">
-      {isTreeMode ? (
-        dirTree ? renderDirTree('', dirTree, 0) : null
-      ) : (
-        fileMatches.map((file, i) => (
-          <button
-            key={file}
-            type="button"
-            className={i === fileSelected ? 'command-item selected' : 'command-item'}
-            data-testid="file-option"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              onPickFile(file);
-            }}
-          >
-            <FileText size={13} />
-            <span className="command-name">@{file}</span>
-          </button>
-        ))
-      )}
+      <div className="command-panel-body">
+        {isTreeMode ? (
+          dirTree ? renderDirTree('', dirTree, 0) : null
+        ) : (
+          fileMatches.map((file, i) => (
+            <button
+              key={file}
+              type="button"
+              className={i === fileSelected ? 'command-item selected' : 'command-item'}
+              data-testid="file-option"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onPickFile(file);
+              }}
+            >
+              <FileText size={13} />
+              <span className="command-name">@{file}</span>
+            </button>
+          ))
+        )}
+      </div>
       <div className="command-panel-footer" data-testid="file-panel-footer">
         {isTreeMode ? t('chat.mentionsHint.tree') : t('chat.mentionsHint.filter')}
       </div>

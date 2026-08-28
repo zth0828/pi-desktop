@@ -244,17 +244,6 @@ export function useFileMentions({
         }
         return true;
       }
-      if (e.key === 'Enter') {
-        const item = visibleTreeItems[treeSelected] ?? visibleTreeItems[0];
-        if (!item) return false;
-        e.preventDefault();
-        if (item.kind === 'dir') {
-          toggleDir(item.name, item.parent);
-        } else {
-          void pickFile(item.full);
-        }
-        return true;
-      }
       if (e.key === 'Escape') {
         e.preventDefault();
         if (atToken) {
@@ -287,18 +276,6 @@ export function useFileMentions({
       e.preventDefault();
       void pickFile(match);
       return true;
-    }
-    if (e.key === 'Enter') {
-      if (hasNavigated) {
-        const match = fileMatches[fileSelected] ?? fileMatches[0];
-        if (!match) return false;
-        e.preventDefault();
-        void pickFile(match);
-        return true;
-      }
-      setAtSuppressed(true);
-      setFilePanelManual(false);
-      return false;
     }
     if (e.key === 'Escape') {
       e.preventDefault();

@@ -371,6 +371,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     setSessionInfo,
     contextPercent,
     textareaRef,
+    setSelectedSkill,
   });
 
   const {

@@ -21,6 +21,7 @@ export interface UseSlashCommandsOptions {
   setSessionInfo: (info: PiRuntimeSessionInfo) => void;
   contextPercent: number | null;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
+  setSelectedSkill?: (skill: string | null | ((curr: string | null) => string | null)) => void;
 }
 
 function lastAssistantText(messages: ChatMessage[]): string | null {
@@ -52,6 +53,7 @@ export function useSlashCommands({
   setSessionInfo,
   contextPercent,
   textareaRef,
+  setSelectedSkill,
 }: UseSlashCommandsOptions) {
   const { t } = useTranslation();
   const [commands, setCommands] = useState<PiCommandRow[]>([]);
@@ -205,6 +207,15 @@ export function useSlashCommands({
       void runBuiltinCommand(cmd.name, '');
       return;
     }
+    if (cmd.source === 'skill' || cmd.name.startsWith('skill:')) {
+      const skillName = cmd.name.startsWith('skill:') ? cmd.name.slice(6) : cmd.name;
+      if (setSelectedSkill) {
+        setSelectedSkill(skillName);
+        setValue('');
+        textareaRef.current?.focus();
+        return;
+      }
+    }
     setValue(`/${cmd.name} `);
     textareaRef.current?.focus();
   };
@@ -228,14 +239,6 @@ export function useSlashCommands({
       e.preventDefault();
       pick(matches[selected] ?? matches[0]);
       return true;
-    }
-    if (e.key === 'Enter') {
-      if (hasNavigated) {
-        e.preventDefault();
-        pick(matches[selected] ?? matches[0]);
-        return true;
-      }
-      return false;
     }
     if (e.key === 'Escape') {
       setValue('');

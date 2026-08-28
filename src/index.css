@@ -3865,10 +3865,7 @@ button.danger-outline {
   left: 24px;
   right: 24px;
   max-height: min(320px, calc(100vh - 180px));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scroll-padding-block: 8px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
@@ -3877,22 +3874,30 @@ button.danger-outline {
   box-shadow: var(--shadow-panel);
   z-index: 10;
 }
+.command-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scroll-padding-block: 8px;
+  display: flex;
+  flex-direction: column;
+}
 /* 长列表滚动：flex 子项默认不压缩，否则条目被压扁且溢出无法滚动 */
+.command-panel-body .command-item,
 .command-panel .command-item { flex-shrink: 0; }
 .command-panel-footer {
-  position: sticky;
-  bottom: 0;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
+  padding: 6px 12px;
   font-size: 11px;
   color: var(--text-tertiary);
   background: var(--bg-sunken);
   border-top: 1px solid var(--border);
   user-select: none;
   flex-shrink: 0;
-  z-index: 1;
 }
 /* 手动文件面板的目录节点：展开箭头 + 手型 */
 .file-dir { cursor: pointer; gap: 6px; color: var(--text); }
