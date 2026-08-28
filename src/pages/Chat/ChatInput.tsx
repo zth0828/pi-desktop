@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Sparkles, Terminal, X } from 'lucide-react';
+import { Check, Copy, FolderOpen, Info, Sparkles, Terminal, X } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
   PiModelRow,
@@ -74,7 +74,14 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const [usageOpen, setUsageOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<PiRuntimeSessionInfo | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [followupBehavior, setFollowupBehavior] = useState<FollowupBehavior>('queue');
+
+  const copyText = (key: string, text: string) => {
+    void navigator.clipboard.writeText(text);
+    setCopiedField(key);
+    setTimeout(() => setCopiedField((curr) => (curr === key ? null : curr)), 1500);
+  };
   const [sendWith, setSendWith] = useState<SendWith>('enter');
   const [gitBranch, setGitBranch] = useState<string | null>(null);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
@@ -549,9 +556,17 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
             if (e.target === e.currentTarget) setSessionInfo(null);
           }}
         >
-          <div className="tree-modal session-info-modal" data-testid="session-info-modal">
-            <div className="tree-header">
-              <span className="tree-title">{t('chat.sessionInfo.title')}</span>
+          <div className="session-info-modal" data-testid="session-info-modal">
+            <div className="session-info-header">
+              <div className="session-info-title-wrap">
+                <Info size={16} style={{ color: 'var(--accent)' }} />
+                <span>{t('chat.sessionInfo.title')}</span>
+                {sessionInfo.name && (
+                  <span className="session-info-name-chip" title={sessionInfo.name}>
+                    {sessionInfo.name}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 className="btn-icon"
@@ -559,72 +574,115 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
                 onClick={() => setSessionInfo(null)}
                 aria-label={t('common.close')}
               >
-                ✕
+                <X size={15} />
               </button>
             </div>
             <div className="session-info-body">
-              {sessionInfo.name && (
+              <div className="session-info-section">
+                {sessionInfo.name && (
+                  <div className="usage-row">
+                    <span>{t('chat.sessionInfo.name')}</span>
+                    <strong>{sessionInfo.name}</strong>
+                  </div>
+                )}
                 <div className="usage-row">
-                  <span>{t('chat.sessionInfo.name')}</span>
-                  <strong>{sessionInfo.name}</strong>
+                  <span>{t('chat.sessionInfo.id')}</span>
+                  <div className="session-info-val-wrap">
+                    <code className="session-info-id" title={sessionInfo.sessionId}>
+                      {sessionInfo.sessionId}
+                    </code>
+                    <button
+                      type="button"
+                      className={`session-info-action-btn${copiedField === 'id' ? ' copied' : ''}`}
+                      title={copiedField === 'id' ? t('chat.sessionInfo.copied') : t('chat.sessionInfo.copyId')}
+                      onClick={() => copyText('id', sessionInfo.sessionId)}
+                    >
+                      {copiedField === 'id' ? <Check size={13} /> : <Copy size={13} />}
+                    </button>
+                  </div>
                 </div>
-              )}
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.id')}</span>
-                <code className="session-info-id">{sessionInfo.sessionId}</code>
-              </div>
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.file')}</span>
-                <code className="session-info-id" title={sessionInfo.sessionFile ?? cwd}>
-                  {sessionInfo.sessionFile ?? cwd}
-                </code>
-              </div>
-              {sessionInfo.model && (
                 <div className="usage-row">
-                  <span>{t('chat.sessionInfo.model')}</span>
+                  <span>{t('chat.sessionInfo.file')}</span>
+                  <div className="session-info-val-wrap">
+                    <code
+                      className="session-info-id session-info-file-path"
+                      title={sessionInfo.sessionFile ?? cwd}
+                    >
+                      {sessionInfo.sessionFile ?? cwd}
+                    </code>
+                    <button
+                      type="button"
+                      className={`session-info-action-btn${copiedField === 'file' ? ' copied' : ''}`}
+                      title={copiedField === 'file' ? t('chat.sessionInfo.copied') : t('chat.sessionInfo.copyPath')}
+                      onClick={() => copyText('file', sessionInfo.sessionFile ?? cwd)}
+                    >
+                      {copiedField === 'file' ? <Check size={13} /> : <Copy size={13} />}
+                    </button>
+                    <button
+                      type="button"
+                      className="session-info-action-btn"
+                      title={t('chat.sessionInfo.showInFolder')}
+                      onClick={() => {
+                        void hostApi.shell.showInFolder(sessionInfo.sessionFile ?? cwd);
+                      }}
+                    >
+                      <FolderOpen size={13} />
+                    </button>
+                  </div>
+                </div>
+                {sessionInfo.model && (
+                  <div className="usage-row">
+                    <span>{t('chat.sessionInfo.model')}</span>
+                    <span className="session-info-badge">
+                      {sessionInfo.model.name ??
+                        `${sessionInfo.model.provider}/${sessionInfo.model.id}`}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="session-info-section">
+                <div className="usage-row">
+                  <span>{t('chat.sessionInfo.messages')}</span>
                   <strong>
-                    {sessionInfo.model.name ??
-                      `${sessionInfo.model.provider}/${sessionInfo.model.id}`}
+                    {t('chat.sessionInfo.messagesValue', {
+                      total: sessionInfo.totalMessages,
+                      user: sessionInfo.userMessages,
+                      assistant: sessionInfo.assistantMessages,
+                    })}
                   </strong>
                 </div>
-              )}
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.messages')}</span>
-                <strong>
-                  {t('chat.sessionInfo.messagesValue', {
-                    total: sessionInfo.totalMessages,
-                    user: sessionInfo.userMessages,
-                    assistant: sessionInfo.assistantMessages,
-                  })}
-                </strong>
-              </div>
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.tools')}</span>
-                <strong>
-                  {t('chat.sessionInfo.toolsValue', {
-                    calls: sessionInfo.toolCalls,
-                    results: sessionInfo.toolResults,
-                  })}
-                </strong>
-              </div>
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.input')}</span>
-                <strong>{formatTokens(sessionInfo.tokens.input)}</strong>
-              </div>
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.output')}</span>
-                <strong>{formatTokens(sessionInfo.tokens.output)}</strong>
-              </div>
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.total')}</span>
-                <strong>{formatTokens(sessionInfo.tokens.total)}</strong>
-              </div>
-              {sessionInfo.cost > 0 && (
                 <div className="usage-row">
-                  <span>{t('chat.sessionInfo.cost')}</span>
-                  <strong>{formatCost(sessionInfo.cost)}</strong>
+                  <span>{t('chat.sessionInfo.tools')}</span>
+                  <strong>
+                    {t('chat.sessionInfo.toolsValue', {
+                      calls: sessionInfo.toolCalls,
+                      results: sessionInfo.toolResults,
+                    })}
+                  </strong>
                 </div>
-              )}
+              </div>
+
+              <div className="session-info-section">
+                <div className="usage-row">
+                  <span>{t('chat.sessionInfo.input')}</span>
+                  <strong>{formatTokens(sessionInfo.tokens.input)}</strong>
+                </div>
+                <div className="usage-row">
+                  <span>{t('chat.sessionInfo.output')}</span>
+                  <strong>{formatTokens(sessionInfo.tokens.output)}</strong>
+                </div>
+                <div className="usage-row">
+                  <span>{t('chat.sessionInfo.total')}</span>
+                  <strong style={{ color: 'var(--accent)' }}>{formatTokens(sessionInfo.tokens.total)}</strong>
+                </div>
+                {sessionInfo.cost > 0 && (
+                  <div className="usage-row">
+                    <span>{t('chat.sessionInfo.cost')}</span>
+                    <strong>{formatCost(sessionInfo.cost)}</strong>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
