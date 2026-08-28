@@ -34,6 +34,11 @@ export function useFileMentions({
   const filePanelOpen = filePanelManual || (atActive && fileMatches.length > 0);
 
   useEffect(() => {
+    if (!cwd) return;
+    void hostApi.piFiles.list(cwd).then((r) => setFileList(r.files)).catch(() => {});
+  }, [cwd]);
+
+  useEffect(() => {
     if (!atActive && !filePanelManual) return;
     void hostApi.piFiles.list(cwd).then((r) => setFileList(r.files)).catch(() => {});
   }, [atActive, filePanelManual, cwd]);
@@ -49,14 +54,17 @@ export function useFileMentions({
       ?.scrollIntoView({ block: 'nearest' });
   }, [atToken?.query, filePanelOpen, fileSelected]);
 
-  /** 选中文件：把光标处的 @query 替换为附件 */
+  /** 选中文件：把光标处的 @query 替换为附件（若文件读取暂未就绪则插入 @path） */
   const pickFile = async (relPath: string) => {
     const result = await hostApi.workspace.readFile(relPath).catch(() => null);
     if (!result) {
       if (filePanelManual) setFilePanelManual(false);
+      const inserted = relPath.includes(' ') ? `@"${relPath}" ` : `@${relPath} `;
       if (atToken) {
-        setValue(value.slice(0, atToken.start) + value.slice(atToken.end));
+        setValue(value.slice(0, atToken.start) + inserted + value.slice(atToken.end));
         setAtToken(null);
+      } else {
+        setValue((prev) => (typeof prev === 'string' ? prev + inserted : inserted));
       }
       setAtSuppressed(true);
       textareaRef.current?.focus();

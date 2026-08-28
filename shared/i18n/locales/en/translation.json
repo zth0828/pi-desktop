@@ -88,8 +88,8 @@
     "settings": "Settings"
   },
   "chat": {
-    "placeholder": "Message pi…  (Enter to send, Shift+Enter for newline)",
-    "placeholderCmdEnter": "Message pi…  (Cmd/Ctrl+Enter to send, Enter for newline)",
+    "placeholder": "Message pi… (type @ for files, / for commands, drag & drop files; Enter to send)",
+    "placeholderCmdEnter": "Message pi… (type @ for files, / for commands, drag & drop files; ⌘Enter to send)",
     "send": "Send",
     "stop": "Stop",
     "sendTip": "Send (Enter)",
@@ -301,7 +301,36 @@
     "cacheHitRateLast": "Last turn hit rate",
     "totalCost": "Session cost",
     "tokenUnknown": "—",
-    "greeting": "What can I do for you?",
+    "greeting": "What would you like to build today",
+    "greetingRotating": [
+      "What would you like to build today",
+      "Refactor codebase architecture",
+      "Develop a brand new feature",
+      "Diagnose and fix failing tests",
+      "Analyze core module structure"
+    ],
+    "greetingCards": {
+      "architecture": {
+        "title": "Explore Architecture",
+        "desc": "Overview of core structure and modules",
+        "prompt": "Please give an overview of this project's core architecture, directory structure, and key modules."
+      },
+      "inspect": {
+        "title": "Code Review & Audit",
+        "desc": "Check recent changes and potential issues",
+        "prompt": "Please inspect recent code changes or potential issues in this project and provide suggestions."
+      },
+      "feature": {
+        "title": "Develop New Feature",
+        "desc": "Describe needs and let pi implement",
+        "prompt": "I want to add a new feature to this project: "
+      },
+      "test": {
+        "title": "Run Tests & Debug",
+        "desc": "Run project test suites and diagnose errors",
+        "prompt": "Please run the project test suite and help diagnose any failures."
+      }
+    },
     "scrollToBottom": "Scroll to bottom",
     "untitled": "Untitled session",
     "imageSessionTitle": "Image conversation",

@@ -17,9 +17,12 @@ let fdPathPromise: Promise<string | null> | null = null;
 
 /** fd 路径解析只试一次（含下载）；失败缓存 null，不每次 @ 都重试。 */
 function resolveFd(): Promise<string | null> {
-  fdPathPromise ??= loadPiAdapter()
-    .then((adapter) => adapter.paths.ensureTool('fd', true))
-    .catch(() => null);
+  fdPathPromise ??= Promise.race([
+    loadPiAdapter()
+      .then((adapter) => adapter.paths.ensureTool('fd', true))
+      .catch(() => null),
+    new Promise<null>((r) => setTimeout(() => r(null), 1000)),
+  ]);
   return fdPathPromise;
 }
 

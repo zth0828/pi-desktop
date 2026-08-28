@@ -1757,16 +1757,147 @@ button.danger-outline {
 
 .chat-greeting {
   flex: 1;
+  min-height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: 32px 20px;
+  gap: 28px;
+  max-width: 680px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.chat-greeting h1 {
+.chat-greeting-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.chat-greeting-logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  user-select: none;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.08));
+}
+
+.chat-greeting-title {
   font-family: var(--font-serif);
   font-weight: 400;
   font-size: 30px;
+  line-height: 42px;
+  height: 42px;
   color: var(--text-secondary);
+  margin: 0;
+  letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.chat-greeting-cursor {
+  display: inline-block;
+  width: 2.5px;
+  height: 24px;
+  background: var(--accent);
+  border-radius: 1.5px;
+  animation: chat-cursor-blink 0.55s ease-in-out infinite alternate;
+}
+
+@keyframes chat-cursor-blink {
+  0%, 25% {
+    opacity: 1;
+  }
+  75%, 100% {
+    opacity: 0.1;
+  }
+}
+
+.chat-greeting-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .chat-greeting-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chat-greeting-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+}
+
+.chat-greeting-card:hover {
+  background: var(--bg-hover);
+}
+
+.chat-greeting-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.chat-greeting-card .greeting-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  width: 100%;
+}
+
+.chat-greeting-card .greeting-card-icon {
+  flex-shrink: 0;
+}
+
+.chat-greeting-card .icon-architecture {
+  color: #3b82f6;
+}
+
+.chat-greeting-card .icon-inspect {
+  color: #f97316;
+}
+
+.chat-greeting-card .icon-feature {
+  color: #8b5cf6;
+}
+
+.chat-greeting-card .icon-test {
+  color: #10b981;
+}
+
+.chat-greeting-card .greeting-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chat-greeting-card .greeting-card-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
 }
 
 .message-list {

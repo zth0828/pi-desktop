@@ -16,6 +16,7 @@ import { groupLogicalTurns, groupTurnStages, turnDurationMs, turnFinalResponseIn
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
 import { PaneLayout } from '../../components/PaneLayout';
 import { ExtensionUiDialog } from '../../components/ExtensionUiDialog';
+import { ChatGreeting } from './ChatGreeting';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
 import { MessageNavRail, truncateRailText, type RailAnchor } from './MessageNavRail';
@@ -791,9 +792,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               <div className="chat-starting" data-testid="chat-starting">{t('chat.starting')}</div>
             )}
             {started && displayMessages.length === 0 && (
-              <div className="chat-greeting" data-testid="chat-greeting">
-                <h1>{t('chat.greeting')}</h1>
-              </div>
+              <ChatGreeting cwd={effectiveCwd} />
             )}
             {displayMessages.slice(0, logicalTurns[0]?.startIndex ?? displayMessages.length).map((message, i) => (
               <MessageItem

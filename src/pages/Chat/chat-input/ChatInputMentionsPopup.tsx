@@ -88,6 +88,7 @@ export function ChatInputMentionsPopup({
               onPickFile(file);
             }}
           >
+            <FileText size={13} />
             <span className="command-name">@{file}</span>
           </button>
         ))

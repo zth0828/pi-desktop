@@ -88,8 +88,8 @@
     "settings": "设置"
   },
   "chat": {
-    "placeholder": "给 pi 发消息…（Enter 发送，Shift+Enter 换行）",
-    "placeholderCmdEnter": "给 pi 发消息…（Cmd/Ctrl+Enter 发送，Enter 换行）",
+    "placeholder": "给 pi 发消息…（输入 @ 引用文件，/ 调用命令，支持拖入图片与文件；Enter 发送）",
+    "placeholderCmdEnter": "给 pi 发消息…（输入 @ 引用文件，/ 调用命令，支持拖入图片与文件；⌘Enter 发送）",
     "send": "发送",
     "stop": "停止",
     "sendTip": "发送（Enter）",
@@ -301,7 +301,36 @@
     "cacheHitRateLast": "本轮命中率",
     "totalCost": "累计成本",
     "tokenUnknown": "—",
-    "greeting": "我能为你做些什么？",
+    "greeting": "今天想构建什么",
+    "greetingRotating": [
+      "今天想构建什么",
+      "帮我重构代码结构",
+      "开发一个全新功能",
+      "排查并修复测试问题",
+      "分析项目核心架构"
+    ],
+    "greetingCards": {
+      "architecture": {
+        "title": "探索项目架构",
+        "desc": "概括项目的核心结构与关键模块",
+        "prompt": "请简要概括一下当前项目的核心架构、目录结构和关键模块的功能。"
+      },
+      "inspect": {
+        "title": "代码审查与体检",
+        "desc": "检查最近修改或潜在的代码问题",
+        "prompt": "请检查当前项目的代码变更或潜在问题，并给出优化建议。"
+      },
+      "feature": {
+        "title": "开发新功能",
+        "desc": "描述需求，让 pi 规划并编写实现",
+        "prompt": "我想在当前项目中添加一个新功能："
+      },
+      "test": {
+        "title": "运行测试与排错",
+        "desc": "运行项目的测试用例并分析结果",
+        "prompt": "请运行本项目的测试用例，并帮我排查分析失败的问题。"
+      }
+    },
     "scrollToBottom": "回到底部",
     "untitled": "未命名会话",
     "imageSessionTitle": "图片会话",
