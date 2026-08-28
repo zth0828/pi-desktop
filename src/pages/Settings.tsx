@@ -56,6 +56,7 @@ export default function SettingsPage() {
   const [appVersion, setAppVersion] = useState('');
   const [versionStatus, setVersionStatus] = useState<Awaited<ReturnType<typeof hostApi.versionCheck.getStatus>>>();
   const [versionChecking, setVersionChecking] = useState(false);
+  const [checkFeedback, setCheckFeedback] = useState<'idle' | 'upToDate'>('idle');
   const [appDownloading, setAppDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadMetrics, setDownloadMetrics] = useState<{
@@ -198,8 +199,14 @@ export default function SettingsPage() {
 
   const checkVersions = async () => {
     setVersionChecking(true);
+    setCheckFeedback('idle');
     try {
-      setVersionStatus(await hostApi.versionCheck.check(true));
+      const result = await hostApi.versionCheck.check(true);
+      setVersionStatus(result);
+      if (!result.app.updateAvailable && !result.pi.updateAvailable && !result.app.error && !result.pi.error) {
+        setCheckFeedback('upToDate');
+        setTimeout(() => setCheckFeedback('idle'), 3000);
+      }
     } finally {
       setVersionChecking(false);
     }
@@ -721,7 +728,11 @@ export default function SettingsPage() {
                 disabled={versionChecking || appDownloading}
                 onClick={() => void checkVersions()}
               >
-                {t(versionChecking ? 'settings.version.checking' : 'settings.version.checkNow')}
+                {versionChecking
+                  ? t('settings.version.checking')
+                  : checkFeedback === 'upToDate'
+                    ? t('settings.version.alreadyLatest')
+                    : t('settings.version.checkNow')}
               </button>
               {versionStatus?.app.updateAvailable && !versionStatus.app.downloadedPath && !appDownloading && (
                 <button
@@ -892,7 +903,11 @@ export default function SettingsPage() {
                 disabled={versionChecking}
                 onClick={() => void checkVersions()}
               >
-                {t(versionChecking ? 'settings.version.checking' : 'settings.version.checkNow')}
+                {versionChecking
+                  ? t('settings.version.checking')
+                  : checkFeedback === 'upToDate'
+                    ? t('settings.version.alreadyLatest')
+                    : t('settings.version.checkNow')}
               </button>
               {versionStatus?.pi.updateAvailable && (
                 <button

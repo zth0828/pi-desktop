@@ -832,7 +832,9 @@
       "remainingSeconds": "剩余 {{sec}} 秒",
       "remainingMinutes": "剩余 {{min}} 分钟",
       "newAvailable": "发现新版本",
-      "mirrorActive": "镜像加速中"
+      "mirrorActive": "镜像加速中",
+      "alreadyLatest": "已是最新 ✓",
+      "alreadyLatestHint": "当前已是最新版本，无需更新"
     },
     "downloadMirror": {
       "title": "下载镜像加速",

@@ -832,7 +832,9 @@
       "remainingSeconds": "{{sec}}s remaining",
       "remainingMinutes": "{{min}}m remaining",
       "newAvailable": "New version available",
-      "mirrorActive": "Mirror active"
+      "mirrorActive": "Mirror active",
+      "alreadyLatest": "Up to date ✓",
+      "alreadyLatestHint": "Already running the latest version"
     },
     "downloadMirror": {
       "title": "Download Mirror",
