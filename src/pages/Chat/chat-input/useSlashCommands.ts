@@ -58,6 +58,8 @@ export function useSlashCommands({
   const [selected, setSelected] = useState(0);
   const commandPanelRef = useRef<HTMLDivElement>(null);
 
+  const [hasNavigated, setHasNavigated] = useState(false);
+
   const query = value.startsWith('/') && !value.includes(' ') ? value.slice(1) : null;
   const sourceRank = (source: string) =>
     source === 'built-in' ? 0 : source.startsWith('prompt') ? 1 : 2;
@@ -83,6 +85,7 @@ export function useSlashCommands({
 
   useEffect(() => {
     setSelected(0);
+    setHasNavigated(false);
   }, [query]);
 
   useEffect(() => {
@@ -105,9 +108,11 @@ export function useSlashCommands({
   const runBuiltinCommand = async (name: string, arg: string) => {
     switch (name) {
       case 'new':
-        return void newSession();
+        newSession();
+        return;
       case 'tree':
-        return void setTreeOpen(true);
+        setTreeOpen(true);
+        return;
       case 'compact':
         return void paneApi.piRuntime.compact(arg || undefined);
       case 'model': {
@@ -117,13 +122,12 @@ export function useSlashCommands({
           return;
         }
         const needle = arg.toLowerCase();
-        const target =
-          models.find((m) => `${m.provider}/${m.id}`.toLowerCase() === needle) ??
-          models.find(
-            (m) =>
-              `${m.provider}/${m.id}`.toLowerCase().includes(needle) ||
-              (m.name ?? '').toLowerCase().includes(needle),
-          );
+        const target = models.find(
+          (m) =>
+            `${m.provider}/${m.id}`.toLowerCase() === needle ||
+            m.id.toLowerCase() === needle ||
+            (m.name && m.name.toLowerCase().includes(needle)),
+        );
         if (!target) {
           showNotice(t('chat.notice.modelNotFound', { model: arg }));
           return;
@@ -206,21 +210,32 @@ export function useSlashCommands({
   };
 
   const handleCommandKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return false;
     if (!panelOpen) return false;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
+      setHasNavigated(true);
       setSelected((i) => Math.min(i + 1, matches.length - 1));
       return true;
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
+      setHasNavigated(true);
       setSelected((i) => Math.max(i - 1, 0));
       return true;
     }
-    if (e.key === 'Tab' || (e.key === 'Enter' && query !== '')) {
+    if (e.key === 'Tab') {
       e.preventDefault();
       pick(matches[selected] ?? matches[0]);
       return true;
+    }
+    if (e.key === 'Enter') {
+      if (hasNavigated) {
+        e.preventDefault();
+        pick(matches[selected] ?? matches[0]);
+        return true;
+      }
+      return false;
     }
     if (e.key === 'Escape') {
       setValue('');

@@ -56,6 +56,7 @@ export function useFileMentions({
   const [fileList, setFileList] = useState<string[]>([]);
   const [fileSelected, setFileSelected] = useState(0);
   const [treeSelected, setTreeSelected] = useState(0);
+  const [hasNavigated, setHasNavigated] = useState(false);
   const [filePanelManual, setFilePanelManual] = useState(false);
   const [dirTree, setDirTree] = useState<{ dir: string; dirs: string[]; files: string[] } | null>(null);
   const [dirContents, setDirContents] = useState<Record<string, { dirs: string[]; files: string[] }>>({});
@@ -85,6 +86,7 @@ export function useFileMentions({
   useEffect(() => {
     setFileSelected(0);
     setTreeSelected(0);
+    setHasNavigated(false);
   }, [atToken?.query, cwd]);
 
   useEffect(() => {
@@ -160,19 +162,22 @@ export function useFileMentions({
   };
 
   const handleFileKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return false;
     if (!filePanelOpen) return false;
     if (isTreeMode) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
+        setHasNavigated(true);
         setTreeSelected((i) => Math.min(i + 1, Math.max(0, visibleTreeItems.length - 1)));
         return true;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
+        setHasNavigated(true);
         setTreeSelected((i) => Math.max(i - 1, 0));
         return true;
       }
-      if (e.key === 'Tab' || e.key === 'Enter') {
+      if (e.key === 'Tab') {
         const item = visibleTreeItems[treeSelected] ?? visibleTreeItems[0];
         if (!item) return false;
         e.preventDefault();
@@ -182,6 +187,22 @@ export function useFileMentions({
           void pickFile(item.full);
         }
         return true;
+      }
+      if (e.key === 'Enter') {
+        if (hasNavigated) {
+          const item = visibleTreeItems[treeSelected] ?? visibleTreeItems[0];
+          if (!item) return false;
+          e.preventDefault();
+          if (item.kind === 'dir') {
+            toggleDir(item.name, item.parent);
+          } else {
+            void pickFile(item.full);
+          }
+          return true;
+        }
+        setAtSuppressed(true);
+        setFilePanelManual(false);
+        return false;
       }
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -194,20 +215,34 @@ export function useFileMentions({
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
+      setHasNavigated(true);
       setFileSelected((i) => Math.min(i + 1, Math.max(0, fileMatches.length - 1)));
       return true;
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
+      setHasNavigated(true);
       setFileSelected((i) => Math.max(i - 1, 0));
       return true;
     }
-    if (e.key === 'Tab' || e.key === 'Enter') {
+    if (e.key === 'Tab') {
       const match = fileMatches[fileSelected] ?? fileMatches[0];
       if (!match) return false;
       e.preventDefault();
       void pickFile(match);
       return true;
+    }
+    if (e.key === 'Enter') {
+      if (hasNavigated) {
+        const match = fileMatches[fileSelected] ?? fileMatches[0];
+        if (!match) return false;
+        e.preventDefault();
+        void pickFile(match);
+        return true;
+      }
+      setAtSuppressed(true);
+      setFilePanelManual(false);
+      return false;
     }
     if (e.key === 'Escape') {
       e.preventDefault();

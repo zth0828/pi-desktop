@@ -525,9 +525,10 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (handleCommandKeyDown(e)) return;
     if (handleFileKeyDown(e)) return;
-    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+    if (e.key !== 'Enter') return;
     if (sendWith === 'cmdEnter') {
       if (!e.metaKey && !e.ctrlKey) return;
       e.preventDefault();
