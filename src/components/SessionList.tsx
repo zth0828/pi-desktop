@@ -609,7 +609,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                         <button
                           className="session-context-danger"
                           onClick={() => void deleteSession(session.path)}
-                          disabled={busy || session.isRunning}
+                          disabled={busy}
                         >
                           <Trash2 size={14} />
                           {t('sessions.confirmDelete')}
@@ -618,7 +618,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
                         <button
                           className="session-context-danger"
                           onClick={() => setConfirmDelete(session.path)}
-                          disabled={busy || session.isRunning}
+                          disabled={busy}
                         >
                           <Trash2 size={14} />
                           {t('sessions.delete')}
