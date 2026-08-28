@@ -214,7 +214,8 @@
       "truncatedLines": "Truncated: showing {{outputLines}} of {{totalLines}} lines",
       "truncatedBytes": "Output exceeded size limit, showing {{outputLines}} lines",
       "matchLimit": "Match limit reached ({{limit}})",
-      "linesTruncated": "Some long lines were truncated"
+      "linesTruncated": "Some long lines were truncated",
+      "readingSkill": "Loading skill: {{name}}"
     },
     "turnChanges": {
       "title": "Edited {{count}} files",
@@ -426,9 +427,6 @@
       "title": "Loaded skill: {{name}}",
       "viewDetails": "View instructions",
       "collapse": "Collapse"
-    },
-    "tool": {
-      "readingSkill": "Loading skill: {{name}}"
     },
     "errors": {
       "invalidKey": "API key issue: the key may be invalid, expired or revoked — update it in provider settings.",
