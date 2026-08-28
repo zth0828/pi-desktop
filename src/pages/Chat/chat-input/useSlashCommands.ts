@@ -37,6 +37,25 @@ function lastAssistantText(messages: ChatMessage[]): string | null {
   return null;
 }
 
+const DEFAULT_BUILTIN_COMMANDS: PiCommandRow[] = [
+  { name: 'new', description: 'Start a new session', source: 'built-in' },
+  { name: 'tree', description: 'View session branches', source: 'built-in' },
+  { name: 'compact', description: 'Compact conversation context', source: 'built-in' },
+  { name: 'model', description: 'Select active model', source: 'built-in' },
+  { name: 'name', description: 'Set session name', source: 'built-in' },
+  { name: 'session', description: 'Show session details', source: 'built-in' },
+  { name: 'plan', description: 'Toggle plan mode', source: 'built-in' },
+  { name: 'copy', description: 'Copy last assistant response', source: 'built-in' },
+  { name: 'export', description: 'Export session to markdown', source: 'built-in' },
+  { name: 'settings', description: 'Open settings', source: 'built-in' },
+  { name: 'skills', description: 'Manage skills', source: 'built-in' },
+  { name: 'extensions', description: 'Manage extensions', source: 'built-in' },
+  { name: 'mcp', description: 'Manage MCP servers', source: 'built-in' },
+  { name: 'models', description: 'Manage models & providers', source: 'built-in' },
+  { name: 'resume', description: 'Switch sessions', source: 'built-in' },
+  { name: 'reload', description: 'Reload extensions and skills', source: 'built-in' },
+];
+
 export function useSlashCommands({
   value,
   setValue,
@@ -55,13 +74,29 @@ export function useSlashCommands({
   setSelectedSkill,
 }: UseSlashCommandsOptions) {
   const { t } = useTranslation();
-  const [commands, setCommands] = useState<PiCommandRow[]>([]);
+  const [commands, setCommands] = useState<PiCommandRow[]>(DEFAULT_BUILTIN_COMMANDS);
   const [selected, setSelected] = useState(0);
   const commandPanelRef = useRef<HTMLDivElement>(null);
 
   const [hasNavigated, setHasNavigated] = useState(false);
 
-  const query = value.startsWith('/') && !value.includes(' ') ? value.slice(1) : null;
+  useEffect(() => {
+    void paneApi.piRuntime.getCommands()
+      .then((r) => {
+        if (r.commands && r.commands.length > 0) {
+          const map = new Map<string, PiCommandRow>();
+          for (const c of DEFAULT_BUILTIN_COMMANDS) map.set(c.name, c);
+          for (const c of r.commands) map.set(c.name, c);
+          setCommands(Array.from(map.values()));
+        }
+      })
+      .catch(() => {});
+  }, [paneApi]);
+
+  const trimmedLeading = value.replace(/^\s+/, '');
+  const query = trimmedLeading.startsWith('/') && !trimmedLeading.includes(' ')
+    ? trimmedLeading.slice(1)
+    : null;
   const sourceRank = (source: string) =>
     source === 'built-in' ? 0 : source.startsWith('prompt') ? 1 : 2;
 
@@ -196,6 +231,11 @@ export function useSlashCommands({
   };
 
   const pick = (cmd: PiCommandRow) => {
+    if (cmd.name === 'name') {
+      setValue('/name ');
+      textareaRef.current?.focus();
+      return;
+    }
     if (cmd.source === 'built-in') {
       setValue('');
       void runBuiltinCommand(cmd.name, '');

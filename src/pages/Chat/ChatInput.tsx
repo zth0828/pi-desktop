@@ -657,11 +657,6 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   }, [attachments, selectedSkill, commandMode, planMode]);
 
   const cancelLastStagedItem = (): boolean => {
-    if (value !== '') {
-      setValue('');
-      return true;
-    }
-
     for (let i = stagedStack.length - 1; i >= 0; i--) {
       const item = stagedStack[i];
       if (item.type === 'skill' && selectedSkill) {
@@ -700,6 +695,11 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     }
     if (planMode) {
       setPlanMode(false);
+      return true;
+    }
+
+    if (value !== '') {
+      setValue('');
       return true;
     }
 
