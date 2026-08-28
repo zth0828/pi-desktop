@@ -57,6 +57,19 @@ export function VersionInstallDialog() {
     setShowRunningWarning(false);
   };
 
+  useEffect(() => {
+    if (!failedError && !completedPath) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleDismiss();
+      }
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [failedError, completedPath]);
+
   if (failedError) {
     return (
       <div className="version-install-overlay" data-testid="version-download-failed-overlay">

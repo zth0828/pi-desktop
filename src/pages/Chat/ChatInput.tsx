@@ -578,6 +578,40 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     }
   };
 
+  useEffect(() => {
+    if (!sessionInfo && !modelMenuOpen && !branchMenuOpen && !composerMenuOpen) return;
+    const onEsc = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (sessionInfo) {
+          e.preventDefault();
+          e.stopPropagation();
+          setSessionInfo(null);
+          return;
+        }
+        if (modelMenuOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          setModelMenuOpen(false);
+          return;
+        }
+        if (branchMenuOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          setBranchMenuOpen(false);
+          return;
+        }
+        if (composerMenuOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          setComposerMenuOpen(false);
+          return;
+        }
+      }
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [sessionInfo, modelMenuOpen, branchMenuOpen, composerMenuOpen]);
+
   return (
     <div className="chat-input">
       <QueueList />

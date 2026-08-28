@@ -32,6 +32,25 @@ export function TreeDialog() {
       .catch(() => setNodes([]));
   }, [open, paneApi]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (step.kind !== 'summarizing') {
+          if (step.kind !== 'list') {
+            setStep({ kind: 'list' });
+          } else {
+            setTreeOpen(false);
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [open, step.kind, setTreeOpen]);
+
   if (!open) return null;
 
   // TUI 跳分支语义：skipPrompt 时直接跳（不摘要）；否则先问是否摘要被弃分支

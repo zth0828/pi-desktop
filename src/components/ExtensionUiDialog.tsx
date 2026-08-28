@@ -35,6 +35,19 @@ export function ExtensionUiDialog() {
     return () => clearInterval(id);
   }, [requestId, timeoutMs]);
 
+  useEffect(() => {
+    if (!req) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        void respondUi(req.requestId);
+      }
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [req, respondUi]);
+
   if (!req) return null;
   const cancel = () => void respondUi(req.requestId);
 
