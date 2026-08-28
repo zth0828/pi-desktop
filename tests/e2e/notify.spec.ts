@@ -273,9 +273,10 @@ test('多窗口：焦点按会话窗口判定（B 窗口完成弹、A 窗口完�
     const betaPath = await sessionPathOf(page, 'main BETA');
     await focusSessionWindow(page, betaPath);
     // 前置确认：主窗口聚焦、独立窗口失焦（环境聚焦失效时显式失败而非静默跳过）
-    const listed = await listHostWindows(page);
-    expect(listed.find((entry) => entry.isMain)?.focused).toBe(true);
-    expect(listed.find((entry) => !entry.isMain)?.focused).toBe(false);
+    await expect.poll(async () => {
+      const listed = await listHostWindows(page);
+      return listed.find((entry) => entry.isMain)?.focused === true && listed.find((entry) => !entry.isMain)?.focused === false;
+    }, { timeout: 10_000 }).toBe(true);
 
     await expect(detached.getByTestId('message-assistant').last()).toContainText('chunk29', {
       timeout: 30_000,

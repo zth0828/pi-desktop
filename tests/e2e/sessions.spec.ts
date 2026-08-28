@@ -595,8 +595,8 @@ test('流式中删除会话 → 菜单项禁用且后端防御拦截，流结束
       action: 'remove',
       payload: { path: targetPath },
     });
-  }, sessionPath);
-  expect(deleteResult).toEqual({ success: false, error: 'session is running' });
+  }, sessionPath) as { ok: boolean; data: { success: boolean; error?: string } };
+  expect(deleteResult.data).toEqual({ success: false, error: 'session is running' });
 
   // 3. 等慢速流自然结束（stop 按钮消失），再删 → 成功
   await expect(page.getByTestId('chat-stop')).toHaveCount(0, { timeout: 30_000 });
