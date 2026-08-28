@@ -585,9 +585,11 @@ test('流式中删除会话 → 菜单项禁用且后端防御拦截，流结束
   await page.keyboard.press('Escape');
 
   // 2. 后端保护：即使绕过 UI 直接调 remove IPC，main 也会拒绝
-  const sessionPath = await sessionPathOf(page, 'delete while streaming HERON');
+  const sessionPath = await row.locator('.sidebar-session').getAttribute('title');
+  expect(sessionPath).toBeTruthy();
   const deleteResult = await page.evaluate(async (targetPath) => {
-    return await window.pidesktop.hostInvoke({
+    const pidesktop = (globalThis as unknown as { pidesktop: { hostInvoke: (args: unknown) => Promise<unknown> } }).pidesktop;
+    return await pidesktop.hostInvoke({
       id: 'test-delete-running',
       module: 'piSessions',
       action: 'remove',
