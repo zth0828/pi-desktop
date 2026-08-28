@@ -583,10 +583,139 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     executePrompt(promptText, outgoing, behavior);
   };
 
+  type StagedItemType =
+    | { type: 'attachment'; id: string }
+    | { type: 'skill'; name: string }
+    | { type: 'command' }
+    | { type: 'plan' };
+
+  const [stagedStack, setStagedStack] = useState<StagedItemType[]>([]);
+  const prevAttachmentsRef = useRef(attachments);
+  const prevSkillRef = useRef(selectedSkill);
+  const prevCommandRef = useRef(commandMode);
+  const prevPlanRef = useRef(planMode);
+
+  useEffect(() => {
+    if (attachments.length > prevAttachmentsRef.current.length) {
+      const addedCount = attachments.length - prevAttachmentsRef.current.length;
+      const newItems: StagedItemType[] = Array.from({ length: addedCount }, () => ({
+        type: 'attachment' as const,
+        id: Math.random().toString(36).slice(2),
+      }));
+      setStagedStack((prev) => [...prev, ...newItems]);
+    } else if (attachments.length < prevAttachmentsRef.current.length) {
+      setStagedStack((prev) => {
+        let toRemove = prevAttachmentsRef.current.length - attachments.length;
+        const next: StagedItemType[] = [];
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].type === 'attachment' && toRemove > 0) {
+            toRemove--;
+          } else {
+            next.unshift(prev[i]);
+          }
+        }
+        return next;
+      });
+    }
+    prevAttachmentsRef.current = attachments;
+
+    if (selectedSkill !== prevSkillRef.current) {
+      if (selectedSkill) {
+        setStagedStack((prev) => [
+          ...prev.filter((it) => it.type !== 'skill'),
+          { type: 'skill' as const, name: selectedSkill },
+        ]);
+      } else {
+        setStagedStack((prev) => prev.filter((it) => it.type !== 'skill'));
+      }
+      prevSkillRef.current = selectedSkill;
+    }
+
+    if (commandMode !== prevCommandRef.current) {
+      if (commandMode) {
+        setStagedStack((prev) => [
+          ...prev.filter((it) => it.type !== 'command'),
+          { type: 'command' as const },
+        ]);
+      } else {
+        setStagedStack((prev) => prev.filter((it) => it.type !== 'command'));
+      }
+      prevCommandRef.current = commandMode;
+    }
+
+    if (planMode !== prevPlanRef.current) {
+      if (planMode) {
+        setStagedStack((prev) => [
+          ...prev.filter((it) => it.type !== 'plan'),
+          { type: 'plan' as const },
+        ]);
+      } else {
+        setStagedStack((prev) => prev.filter((it) => it.type !== 'plan'));
+      }
+      prevPlanRef.current = planMode;
+    }
+  }, [attachments, selectedSkill, commandMode, planMode]);
+
+  const cancelLastStagedItem = (): boolean => {
+    if (value !== '') {
+      setValue('');
+      return true;
+    }
+
+    for (let i = stagedStack.length - 1; i >= 0; i--) {
+      const item = stagedStack[i];
+      if (item.type === 'skill' && selectedSkill) {
+        setSelectedSkill(null);
+        setStagedStack((prev) => prev.filter((_, idx) => idx !== i));
+        return true;
+      }
+      if (item.type === 'attachment' && attachments.length > 0) {
+        setAttachments((prev) => prev.slice(0, -1));
+        setStagedStack((prev) => prev.filter((_, idx) => idx !== i));
+        return true;
+      }
+      if (item.type === 'command' && commandMode) {
+        setCommandMode(false);
+        setStagedStack((prev) => prev.filter((_, idx) => idx !== i));
+        return true;
+      }
+      if (item.type === 'plan' && planMode) {
+        setPlanMode(false);
+        setStagedStack((prev) => prev.filter((_, idx) => idx !== i));
+        return true;
+      }
+    }
+
+    if (selectedSkill) {
+      setSelectedSkill(null);
+      return true;
+    }
+    if (attachments.length > 0) {
+      setAttachments((prev) => prev.slice(0, -1));
+      return true;
+    }
+    if (commandMode) {
+      setCommandMode(false);
+      return true;
+    }
+    if (planMode) {
+      setPlanMode(false);
+      return true;
+    }
+
+    return false;
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (handleCommandKeyDown(e)) return;
     if (handleFileKeyDown(e)) return;
+    if (e.key === 'Escape') {
+      if (cancelLastStagedItem()) {
+        e.preventDefault();
+        return;
+      }
+    }
     if (e.key !== 'Enter') return;
     const trimmed = value.trim();
     if (trimmed === '/' || trimmed === '@') {
@@ -625,38 +754,71 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   }, [confirmSlashModal]);
 
   useEffect(() => {
-    if (!sessionInfo && !modelMenuOpen && !branchMenuOpen && !composerMenuOpen) return;
     const onEsc = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (sessionInfo) {
-          e.preventDefault();
-          e.stopPropagation();
-          setSessionInfo(null);
-          return;
-        }
-        if (modelMenuOpen) {
-          e.preventDefault();
-          e.stopPropagation();
-          setModelMenuOpen(false);
-          return;
-        }
-        if (branchMenuOpen) {
-          e.preventDefault();
-          e.stopPropagation();
-          setBranchMenuOpen(false);
-          return;
-        }
-        if (composerMenuOpen) {
-          e.preventDefault();
-          e.stopPropagation();
-          setComposerMenuOpen(false);
-          return;
-        }
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (confirmSlashModal) {
+        e.preventDefault();
+        e.stopPropagation();
+        setConfirmSlashModal(null);
+        return;
+      }
+      if (sessionInfo) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSessionInfo(null);
+        return;
+      }
+      if (previewImage) {
+        e.preventDefault();
+        e.stopPropagation();
+        setPreviewImage(null);
+        return;
+      }
+      if (modelMenuOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setModelMenuOpen(false);
+        return;
+      }
+      if (branchMenuOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setBranchMenuOpen(false);
+        return;
+      }
+      if (composerMenuOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setComposerMenuOpen(false);
+        return;
+      }
+      if (panelOpen || filePanelOpen) {
+        return;
+      }
+
+      if (cancelLastStagedItem()) {
+        e.preventDefault();
+        e.stopPropagation();
       }
     };
     window.addEventListener('keydown', onEsc);
     return () => window.removeEventListener('keydown', onEsc);
-  }, [sessionInfo, modelMenuOpen, branchMenuOpen, composerMenuOpen]);
+  }, [
+    confirmSlashModal,
+    sessionInfo,
+    previewImage,
+    modelMenuOpen,
+    branchMenuOpen,
+    composerMenuOpen,
+    panelOpen,
+    filePanelOpen,
+    value,
+    stagedStack,
+    selectedSkill,
+    attachments,
+    commandMode,
+    planMode,
+  ]);
 
   return (
     <div className="chat-input">
