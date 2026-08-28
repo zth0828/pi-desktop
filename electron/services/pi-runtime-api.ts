@@ -137,6 +137,8 @@ let active: ActiveRuntime | null = null;
 const runtimes = new Set<ActiveRuntime>();
 /** 因运行中而暂缓回收的孤儿 runtime，等 run.ended / 窗口销毁清扫兜底。 */
 const pendingDisposeRuntimes = new Set<ActiveRuntime>();
+const pendingDisposeTimers = new Map<ActiveRuntime, NodeJS.Timeout>();
+const PENDING_DISPOSE_TIMEOUT_MS = 60_000;
 let runtimeSequence = 0;
 let generationSequence = 0;
 let startInFlight: Promise<PiRuntimeStateResult> | null = null;
@@ -262,7 +264,16 @@ export function activateSessionRuntime(runtime: ActiveRuntime): PiRuntimeStateRe
   return state;
 }
 
+function clearPendingDisposeTimer(runtime: ActiveRuntime): void {
+  const timer = pendingDisposeTimers.get(runtime);
+  if (timer) {
+    clearTimeout(timer);
+    pendingDisposeTimers.delete(runtime);
+  }
+}
+
 function disposeRuntime(runtime: ActiveRuntime): void {
+  clearPendingDisposeTimer(runtime);
   runtime.unsubscribe();
   cancelPendingUiForContext({ sessionId: runtime.sessionId, generation: runtime.generation });
   if (runtime.running) {
@@ -283,13 +294,37 @@ function disposeRuntime(runtime: ActiveRuntime): void {
  */
 function maybeDisposeRuntime(runtime: ActiveRuntime): boolean {
   if (runtime === active) {
+    clearPendingDisposeTimer(runtime);
     pendingDisposeRuntimes.delete(runtime);
     return false;
   }
   if (runtime.running || runtime.adapterRuntime.session.view.isStreaming) {
     pendingDisposeRuntimes.add(runtime);
+    if (!pendingDisposeTimers.has(runtime)) {
+      const timer = setTimeout(() => {
+        pendingDisposeTimers.delete(runtime);
+        if (!pendingDisposeRuntimes.has(runtime)) return;
+        writePiDiagnostic({
+          level: 'warning',
+          event: 'runtime.pending-dispose-timeout',
+          module: 'runtime',
+          action: 'force-dispose',
+          detail: runtime.instanceId,
+          sessionId: runtime.sessionId,
+        });
+        try {
+          runtime.adapterRuntime.session.abort();
+        } catch {
+          // abort 失败忽略，直接进入物理回收
+        }
+        disposeRuntime(runtime);
+      }, PENDING_DISPOSE_TIMEOUT_MS);
+      if (typeof timer.unref === 'function') timer.unref();
+      pendingDisposeTimers.set(runtime, timer);
+    }
     return false;
   }
+  clearPendingDisposeTimer(runtime);
   pendingDisposeRuntimes.delete(runtime);
   const sessionFile = runtime.adapterRuntime.session.view.sessionFile;
   if (sessionFile && findWindowBySession(sessionFile) !== null) return false;
@@ -313,6 +348,9 @@ try {
   if (typeof app?.on === 'function') {
     app.on('browser-window-created', (_event, win) => {
       win.once('closed', () => sweepPendingDisposeRuntimes());
+    });
+    app.on('before-quit', () => {
+      disposeAllRuntimes();
     });
   }
 } catch {

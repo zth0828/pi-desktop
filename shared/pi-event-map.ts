@@ -110,7 +110,7 @@ export function mapPiSessionEvent(value: unknown, onDrop?: PiEventDropCallback):
     }
     case 'message_update': {
       const update = record(event.assistantMessageEvent);
-      const partial = normalizeMessage(update?.partial);
+      const partial = normalizeMessage(update?.partial ?? event.message);
       if (!partial) {
         // 流式 partial 结构不符：整条事件丢弃（pi 端结构变化时流式输出会静默停止，需要留痕）
         onDrop?.('malformed-payload', 'message_update');
