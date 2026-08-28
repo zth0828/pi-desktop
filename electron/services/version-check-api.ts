@@ -217,6 +217,14 @@ export const versionCheckApi = {
   },
 };
 
+let checkTimer: NodeJS.Timeout | null = null;
+
 export function scheduleVersionChecks(): void {
   void versionCheckApi.check().catch(() => undefined);
+  if (!checkTimer) {
+    checkTimer = setInterval(() => {
+      void versionCheckApi.check().catch(() => undefined);
+    }, 24 * 60 * 60 * 1000);
+    checkTimer.unref?.();
+  }
 }
