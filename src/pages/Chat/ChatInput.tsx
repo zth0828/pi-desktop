@@ -484,19 +484,21 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const send = (behavior?: 'steer' | 'followUp') => {
     const text = value.trim();
     if (!text && attachments.length === 0) return;
+    if (text === '/' || text === '@') return;
     if (commandMode && bashing) return;
     const outgoingAttachments = attachments;
     const outgoing = outgoingAttachments.filter((attachment): attachment is StagedImage => attachment.kind === 'image');
-    const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
-    const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
-    setValue('');
-    setAttachments(() => []);
+
     if (commandMode) {
+      setValue('');
+      setAttachments(() => []);
       setCommandMode(false);
       if (text && !bashing) void runBash(text, commandExcludeFromContext);
       return;
     }
     if ((text.startsWith('!') || text.startsWith('！')) && outgoingAttachments.length === 0) {
+      setValue('');
+      setAttachments(() => []);
       const isExcluded = text.startsWith('!!') || text.startsWith('！！');
       const command = (isExcluded ? text.slice(2) : text.slice(1)).trim();
       if (command) void runBash(command, isExcluded);
@@ -504,12 +506,41 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     }
     if (text.startsWith('/') && outgoingAttachments.length === 0) {
       const spaceIndex = text.indexOf(' ');
-      const name = (spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex)).toLowerCase();
-      if (SHELL_BUILTIN_NAMES.has(name)) {
-        void runBuiltinCommand(name, spaceIndex === -1 ? '' : text.slice(spaceIndex + 1).trim());
+      const rawName = (spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex)).toLowerCase();
+      const arg = spaceIndex === -1 ? '' : text.slice(spaceIndex + 1).trim();
+
+      if (!rawName) return;
+
+      if (rawName === 'plan' || rawName === 'plan-mode') {
+        setValue('');
+        setAttachments(() => []);
+        setPlanMode((prev) => !prev);
+        return;
+      }
+
+      if (rawName.startsWith('skill:') || rawName === 'skill') {
+        const skillName = rawName.startsWith('skill:') ? rawName.slice(6) : arg;
+        if (skillName) {
+          setValue('');
+          setAttachments(() => []);
+          setSelectedSkill(skillName);
+          return;
+        }
+      }
+
+      if (SHELL_BUILTIN_NAMES.has(rawName)) {
+        setValue('');
+        setAttachments(() => []);
+        void runBuiltinCommand(rawName, arg);
         return;
       }
     }
+
+    const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+    const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
+    setValue('');
+    setAttachments(() => []);
+
     const autoTitle = chatStore.getState().messages.length === 0
       ? sessionTitleFromQuestion(text, t('chat.imageSessionTitle'))
       : null;
@@ -530,6 +561,11 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     if (handleCommandKeyDown(e)) return;
     if (handleFileKeyDown(e)) return;
     if (e.key !== 'Enter') return;
+    const trimmed = value.trim();
+    if (trimmed === '/' || trimmed === '@') {
+      e.preventDefault();
+      return;
+    }
     if (sendWith === 'cmdEnter') {
       if (!e.metaKey && !e.ctrlKey) return;
       e.preventDefault();
