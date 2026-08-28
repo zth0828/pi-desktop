@@ -544,6 +544,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
           role="dialog"
           aria-modal="true"
           aria-label={t('chat.sessionInfo.title')}
+          data-testid="session-info-dialog"
           onClick={(e) => {
             if (e.target === e.currentTarget) setSessionInfo(null);
           }}

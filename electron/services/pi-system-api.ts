@@ -1,7 +1,7 @@
 // piSystem 服务：环境检测（带缓存）、最新版本查询、安装引导。
 // 初次安装跟随 npm latest；fallback 只用于兼容失败后的恢复，不限制运行时最高版本。
 import { spawn } from 'node:child_process';
-import { PI_PACKAGE_NAME, getPiRegistryUrl } from '@shared/pi-compat';
+import { PI_PACKAGE_NAME, PI_NPMMIRROR_REGISTRY_URL, getPiRegistryUrl } from '@shared/pi-compat';
 import type {
   PiEnvironment,
   PiInstallResult,
@@ -12,6 +12,7 @@ import { detectPiEnvironment, invalidatePiDetectCache } from '../utils/pi-detect
 import { invalidatePiSdkCache } from '../utils/pi-loader';
 import { inspectPiCompatibility } from './pi-adapter';
 import { envWithUserPath } from '../utils/shell-env';
+import { hostFetch } from '../utils/host-fetch';
 
 const DETECT_TTL_MS = 5 * 60 * 1000;
 let detectCache: { at: number; env: PiEnvironment } | null = null;
@@ -50,17 +51,26 @@ export const piSystemApi = {
 
   checkLatest: async (): Promise<PiLatestVersionResult> => {
     const checkedAt = Date.now();
-    try {
-      const res = await fetch(getPiRegistryUrl(), {
+    const tryFetch = async (url: string) => {
+      const res = await hostFetch(url, {
         signal: AbortSignal.timeout(5000),
         headers: { accept: 'application/json' },
       });
-      if (!res.ok) return { checkedAt };
+      if (!res.ok) throw new Error(`Status ${res.status}`);
       const data = (await res.json()) as { version?: string };
-      return { latest: data.version, checkedAt };
+      return data.version;
+    };
+
+    try {
+      const latest = await tryFetch(getPiRegistryUrl());
+      return { latest, checkedAt };
     } catch {
-      // 网络失败静默
-      return { checkedAt };
+      try {
+        const latest = await tryFetch(PI_NPMMIRROR_REGISTRY_URL);
+        return { latest, checkedAt };
+      } catch {
+        return { checkedAt };
+      }
     }
   },
 

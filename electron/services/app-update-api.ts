@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
-import type { AppUpdateDownloadResult, HostSuccess } from '@shared/host-api/contract';
+import { DEFAULT_DOWNLOAD_MIRROR, type AppUpdateDownloadResult, type HostSuccess } from '@shared/host-api/contract';
 import { settingsApi } from './settings-api';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { hostFetch } from '../utils/host-fetch';
@@ -70,13 +70,11 @@ async function downloadToFile(
   destinationPath: string,
   onProgress: (downloaded: number, total: number) => void,
 ): Promise<void> {
-  const mirror = mirrorPrefix?.trim();
-  const mirrorUrl = mirror
-    ? (mirror.endsWith('/') ? `${mirror}${primaryUrl}` : `${mirror}/${primaryUrl}`)
-    : undefined;
-
-  // 用户显式配置加速镜像时优先走镜像通道，否则走官方主链接
-  const channels = mirrorUrl ? [mirrorUrl, primaryUrl] : [primaryUrl];
+  const customMirror = mirrorPrefix?.trim();
+  const mirrorUrl = (prefix: string) => (prefix.endsWith('/') ? `${prefix}${primaryUrl}` : `${prefix}/${primaryUrl}`);
+  const channels = customMirror
+    ? [mirrorUrl(customMirror), primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)]
+    : [primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)];
   let lastError: unknown;
 
   for (const channelUrl of channels) {
@@ -141,11 +139,11 @@ async function fetchChecksumText(
   primaryUrl: string,
   mirrorPrefix: string | undefined,
 ): Promise<string> {
-  const mirror = mirrorPrefix?.trim();
-  const mirrorUrl = mirror
-    ? (mirror.endsWith('/') ? `${mirror}${primaryUrl}` : `${mirror}/${primaryUrl}`)
-    : undefined;
-  const channels = mirrorUrl ? [mirrorUrl, primaryUrl] : [primaryUrl];
+  const customMirror = mirrorPrefix?.trim();
+  const mirrorUrl = (prefix: string) => (prefix.endsWith('/') ? `${prefix}${primaryUrl}` : `${prefix}/${primaryUrl}`);
+  const channels = customMirror
+    ? [mirrorUrl(customMirror), primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)]
+    : [primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)];
   let lastError: unknown;
 
   for (const url of channels) {
@@ -166,22 +164,27 @@ export const appUpdateApi = {
       let tempPath: string | undefined;
       try {
         const mirrorPrefix = (await settingsApi.get({ key: 'downloadMirror' })) as string | undefined;
-        let release: { assets?: Array<{ name: string; browser_download_url: string }> };
-        try {
-          const res = await hostFetch(githubUrl(), { signal: AbortSignal.timeout(10000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
-          if (!res.ok) throw new Error(`Release request failed (${res.status})`);
-          release = (await res.json()) as { assets?: Array<{ name: string; browser_download_url: string }> };
-        } catch (directErr) {
-          const mirror = mirrorPrefix?.trim();
-          if (mirror) {
-            const mirrorUrl = mirror.endsWith('/') ? `${mirror}${githubUrl()}` : `${mirror}/${githubUrl()}`;
-            const res = await hostFetch(mirrorUrl, { signal: AbortSignal.timeout(10000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
-            if (!res.ok) throw new Error(`Release request failed (${res.status})`);
-            release = (await res.json()) as { assets?: Array<{ name: string; browser_download_url: string }> };
-          } else {
-            throw directErr;
+        const isCustomUrl = Boolean(process.env.PI_DESKTOP_GITHUB_API_URL);
+        const customMirror = mirrorPrefix?.trim();
+        const releaseUrl = (prefix: string) => (prefix.endsWith('/') ? `${prefix}${githubUrl()}` : `${prefix}/${githubUrl()}`);
+        const releaseChannels = customMirror
+          ? [releaseUrl(customMirror), githubUrl(), ...(isCustomUrl ? [] : [releaseUrl(DEFAULT_DOWNLOAD_MIRROR)])]
+          : (isCustomUrl ? [githubUrl()] : [githubUrl(), releaseUrl(DEFAULT_DOWNLOAD_MIRROR)]);
+        let release: { assets?: Array<{ name: string; browser_download_url: string }> } | undefined;
+        let lastReleaseError: unknown;
+
+        for (const rUrl of releaseChannels) {
+          try {
+            const res = await hostFetch(rUrl, { signal: AbortSignal.timeout(10000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
+            if (res.ok) {
+              release = (await res.json()) as { assets?: Array<{ name: string; browser_download_url: string }> };
+              break;
+            }
+          } catch (err) {
+            lastReleaseError = err;
           }
         }
+        if (!release) throw lastReleaseError instanceof Error ? lastReleaseError : new Error('Release request failed');
 
         const asset = selectAsset(release.assets ?? []);
         if (!asset) throw new Error(`No supported ${platformName()} update asset found`);

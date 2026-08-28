@@ -1,4 +1,4 @@
-import type { VersionCheckSnapshot, VersionCheckStatus } from '@shared/host-api/contract';
+import { DEFAULT_DOWNLOAD_MIRROR, type VersionCheckSnapshot, type VersionCheckStatus } from '@shared/host-api/contract';
 import { settingsApi } from './settings-api';
 import { piSystemApi } from './pi-system-api';
 import { appApi } from './app-api';
@@ -48,6 +48,7 @@ async function checkPi(previous: VersionCheckStatus, now: number): Promise<Versi
 }
 
 async function fetchReleaseMetadata(url: string, mirrorPrefix?: string) {
+  const isCustomUrl = Boolean(process.env.PI_DESKTOP_GITHUB_API_URL);
   const tryFetch = async (targetUrl: string) => {
     const response = await hostFetch(targetUrl, {
       signal: AbortSignal.timeout(5000),
@@ -63,50 +64,57 @@ async function fetchReleaseMetadata(url: string, mirrorPrefix?: string) {
     };
   };
 
-  try {
-    return await tryFetch(url);
-  } catch (directError) {
-    const mirror = mirrorPrefix?.trim();
-    if (mirror) {
-      const mirrorUrl = mirror.endsWith('/') ? `${mirror}${url}` : `${mirror}/${url}`;
-      try {
-        return await tryFetch(mirrorUrl);
-      } catch {
-        // 忽略并继续尝试 HTML 探测
-      }
-    }
+  const customMirror = mirrorPrefix?.trim();
+  const mirrorUrl = (prefix: string, base: string) => (prefix.endsWith('/') ? `${prefix}${base}` : `${prefix}/${base}`);
+  const apiChannels = customMirror
+    ? [mirrorUrl(customMirror, url), url, ...(isCustomUrl ? [] : [mirrorUrl(DEFAULT_DOWNLOAD_MIRROR, url)])]
+    : (isCustomUrl ? [url] : [url, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR, url)]);
 
+  let lastError: unknown;
+  for (const apiUrl of apiChannels) {
     try {
-      const htmlUrl = 'https://github.com/zth0828/pi-desktop/releases/latest';
-      const redirectUrl = mirror
-        ? (mirror.endsWith('/') ? `${mirror}${htmlUrl}` : `${mirror}/${htmlUrl}`)
-        : htmlUrl;
-      const probeRes = await hostFetch(redirectUrl, {
-        method: 'HEAD',
-        redirect: 'manual',
-        signal: AbortSignal.timeout(5000),
-        headers: { 'user-agent': 'Pi-Desktop' },
-      });
-      const location = probeRes.headers.get('location');
-      if (location) {
-        const match = /\/releases\/tag\/(v?[\d.]+.*)$/.exec(location);
-        if (match) {
-          const tag = match[1];
-          return {
-            tag_name: tag,
-            draft: false,
-            prerelease: false,
-            html_url: `https://github.com/zth0828/pi-desktop/releases/tag/${tag}`,
-            assets: [],
-          };
-        }
-      }
-    } catch {
-      // 忽略
+      return await tryFetch(apiUrl);
+    } catch (err) {
+      lastError = err;
     }
-
-    throw directError;
   }
+
+  // 仅在默认官方 GitHub 地址场景下探测 HTML 302 重定向
+  if (!isCustomUrl) {
+    const htmlUrl = 'https://github.com/zth0828/pi-desktop/releases/latest';
+    const htmlChannels = customMirror
+      ? [mirrorUrl(customMirror, htmlUrl), htmlUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR, htmlUrl)]
+      : [htmlUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR, htmlUrl)];
+
+    for (const redirectUrl of htmlChannels) {
+      try {
+        const probeRes = await hostFetch(redirectUrl, {
+          method: 'HEAD',
+          redirect: 'manual',
+          signal: AbortSignal.timeout(5000),
+          headers: { 'user-agent': 'Pi-Desktop' },
+        });
+        const location = probeRes.headers.get('location');
+        if (location) {
+          const match = /\/releases\/tag\/(v?[\d.]+.*)$/.exec(location);
+          if (match) {
+            const tag = match[1];
+            return {
+              tag_name: tag,
+              draft: false,
+              prerelease: false,
+              html_url: `https://github.com/zth0828/pi-desktop/releases/tag/${tag}`,
+              assets: [],
+            };
+          }
+        }
+      } catch {
+        // 忽略单个重定向探测错误
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'Release request failed'));
 }
 
 async function checkApp(previous: VersionCheckStatus & { releaseUrl?: string; assetName?: string }, now: number) {

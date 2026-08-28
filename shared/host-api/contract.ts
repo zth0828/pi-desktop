@@ -498,6 +498,9 @@ export type WorkspaceReadResult = {
 /** 默认由 Pi Desktop 管理的本地代理地址。 */
 export const DEFAULT_DESKTOP_PROXY_URL = 'http://127.0.0.1:7897';
 
+/** 默认公共 GitHub 下载加速镜像前缀。 */
+export const DEFAULT_DOWNLOAD_MIRROR = 'https://ghproxy.net/';
+
 /** 网络代理模式：auto=启用 Pi Desktop 中配置的代理地址（默认），off=直连。 */
 export type ProxyMode = 'auto' | 'off';
 
