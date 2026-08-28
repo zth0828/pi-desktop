@@ -434,7 +434,7 @@ test('富文本答复渲染任务卡、表格、代码块和外链', async ({ la
   await expect(renderedCode).toContainText('console.log(answer)');
   // streamdown 用 block 级 span 分行：textContent 不含换行，须按 innerText 语义断言并自动重试
   await expect(renderedCode).toContainText('const answer = 42;\nif (answer)', { useInnerText: true });
-  expect(await renderedCode.evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).whiteSpace)).toBe('pre');
+  await expect(renderedCode).toHaveCSS('white-space', /pre/);
   await expect(page.locator('.markdown blockquote')).toBeVisible();
   await expect(page.locator('.markdown a[href="https://example.com/docs"]')).toBeVisible();
   await page.screenshot({ path: 'output/playwright/rich-text-light.png', fullPage: false });
