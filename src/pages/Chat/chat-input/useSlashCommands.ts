@@ -234,6 +234,13 @@ export function useSlashCommands({
       pick(matches[selected] ?? matches[0]);
       return true;
     }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (query !== '' || hasNavigated) {
+        pick(matches[selected] ?? matches[0]);
+      }
+      return true;
+    }
     if (e.key === 'Escape') {
       setValue('');
       return true;

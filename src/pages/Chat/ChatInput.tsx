@@ -346,6 +346,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   });
 
   const {
+    commands,
     setCommands,
     selected,
     setSelected,
@@ -532,6 +533,26 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         setValue('');
         setAttachments(() => []);
         void runBuiltinCommand(rawName, arg);
+        return;
+      }
+
+      const matchedCmd = commands.find((c) => c.name.toLowerCase() === rawName);
+      if (matchedCmd && spaceIndex === -1) {
+        setValue('');
+        setAttachments(() => []);
+        pick(matchedCmd);
+        return;
+      }
+
+      if (spaceIndex === -1) {
+        const prefixMatches = commands.filter((c) => c.name.toLowerCase().startsWith(rawName));
+        if (prefixMatches.length > 0) {
+          setValue('');
+          setAttachments(() => []);
+          pick(prefixMatches[0]);
+          return;
+        }
+        showNotice(t('chat.notice.commandNotFound', { command: text }));
         return;
       }
     }

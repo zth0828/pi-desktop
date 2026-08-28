@@ -403,7 +403,8 @@
       "reloaded": "Reloaded extensions, skills, prompts and context files",
       "reloadFailed": "Reload failed: {{message}}",
       "modelSet": "Model set: {{model}}",
-      "modelNotFound": "Model not found: {{model}}"
+      "modelNotFound": "Model not found: {{model}}",
+      "commandNotFound": "Unknown command: {{command}}"
     },
     "sessionInfo": {
       "title": "Session Info",

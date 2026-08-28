@@ -403,7 +403,8 @@
       "reloaded": "已重新加载扩展、技能、提示词与上下文文件",
       "reloadFailed": "重新加载失败：{{message}}",
       "modelSet": "模型已切换：{{model}}",
-      "modelNotFound": "找不到模型：{{model}}"
+      "modelNotFound": "找不到模型：{{model}}",
+      "commandNotFound": "未知命令：{{command}}"
     },
     "sessionInfo": {
       "title": "会话详情",
