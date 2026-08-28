@@ -570,11 +570,11 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
                 </div>
               )}
               <div className="usage-row">
-                <span>{t('chat.sessionInfo.sessionId')}</span>
+                <span>{t('chat.sessionInfo.id')}</span>
                 <code className="session-info-id">{sessionInfo.sessionId}</code>
               </div>
               <div className="usage-row">
-                <span>{t('chat.sessionInfo.cwd')}</span>
+                <span>{t('chat.sessionInfo.file')}</span>
                 <code className="session-info-id" title={sessionInfo.sessionFile ?? cwd}>
                   {sessionInfo.sessionFile ?? cwd}
                 </code>
