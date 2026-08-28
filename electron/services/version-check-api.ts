@@ -8,7 +8,7 @@ import { sendHostEvent } from '../main/ipc/host-events';
 
 import { selectAssetName } from './app-update-api';
 
-export const VERSION_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+export const VERSION_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 export const GITHUB_RELEASE_URL = 'https://api.github.com/repos/zth0828/pi-desktop/releases/latest';
 
 let inFlight: Promise<VersionCheckSnapshot> | null = null;
@@ -140,11 +140,21 @@ async function checkApp(previous: VersionCheckStatus & { releaseUrl?: string; as
 async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   const saved = await settingsApi.getAll();
   const now = Date.now();
+  const currentApp = appApi.version();
+  const currentPi = (await piSystemApi.detect()).pi.version;
   const piPrevious: VersionCheckStatus = { latest: saved.piVersionCheckLatest, updateAvailable: false, lastAttemptAt: saved.piVersionCheckLastAttemptAt, lastSuccessAt: saved.piVersionCheckLastSuccessAt, error: saved.piVersionCheckError };
   const appPrevious = { latest: saved.appVersionCheckLatest, updateAvailable: false, lastAttemptAt: saved.appVersionCheckLastAttemptAt, lastSuccessAt: saved.appVersionCheckLastSuccessAt, error: saved.appVersionCheckError, releaseUrl: saved.appVersionCheckReleaseUrl, assetName: saved.appVersionCheckAssetName };
-  const piDue = force || !saved.piVersionCheckLastAttemptAt || Boolean(saved.piVersionCheckError) || now - saved.piVersionCheckLastAttemptAt >= VERSION_CHECK_INTERVAL_MS;
-  const appDue = force || !saved.appVersionCheckLastAttemptAt || Boolean(saved.appVersionCheckError) || now - saved.appVersionCheckLastAttemptAt >= VERSION_CHECK_INTERVAL_MS;
-  if (!piDue && !appDue) return updateStatus({ pi: { ...piPrevious, current: (await piSystemApi.detect()).pi.version, updateAvailable: compare((await piSystemApi.detect()).pi.version, piPrevious.latest) }, app: { ...appPrevious, current: appApi.version(), updateAvailable: compare(appApi.version(), appPrevious.latest), downloadedPath: saved.appVersionCheckDownloadedPath } });
+  const piDue = force
+    || !saved.piVersionCheckLastAttemptAt
+    || Boolean(saved.piVersionCheckError)
+    || (now - (saved.piVersionCheckLastAttemptAt ?? 0) >= VERSION_CHECK_INTERVAL_MS)
+    || (Boolean(saved.piVersionCheckLatest) && !compare(currentPi, saved.piVersionCheckLatest));
+  const appDue = force
+    || !saved.appVersionCheckLastAttemptAt
+    || Boolean(saved.appVersionCheckError)
+    || (now - (saved.appVersionCheckLastAttemptAt ?? 0) >= VERSION_CHECK_INTERVAL_MS)
+    || (Boolean(saved.appVersionCheckLatest) && !compare(currentApp, saved.appVersionCheckLatest));
+  if (!piDue && !appDue) return updateStatus({ pi: { ...piPrevious, current: currentPi, updateAvailable: compare(currentPi, piPrevious.latest) }, app: { ...appPrevious, current: currentApp, updateAvailable: compare(currentApp, appPrevious.latest), downloadedPath: saved.appVersionCheckDownloadedPath } });
   if (piDue) await settingsApi.set({ key: 'piVersionCheckLastAttemptAt', value: now });
   if (appDue) await settingsApi.set({ key: 'appVersionCheckLastAttemptAt', value: now });
   // app 检查一完成就发通知，不等 pi 检查（npm 网络探测慢时不拖住 app 更新提示）。

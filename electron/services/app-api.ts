@@ -11,17 +11,22 @@ import type {
 
 function resolveAppVersion(): string {
   const version = app.getVersion();
-  // 开发模式（electron <entry> 启动）下 app path 指向 dist-electron/main，
-  // getVersion() 会回退成 Electron 自身版本——此时读壳的 package.json
-  if (version && version !== process.versions.electron) return version;
-  try {
-    const manifest = JSON.parse(
-      readFileSync(path.join(app.getAppPath(), '../../package.json'), 'utf8'),
-    ) as { version?: string };
-    return manifest.version ?? version;
-  } catch {
-    return version;
+  if (app.isPackaged && version && version !== process.versions.electron) return version;
+  // 开发模式：依次尝试根目录、dist-electron/main 上级、以及当前工作区
+  const candidatePaths = [
+    path.join(app.getAppPath(), 'package.json'),
+    path.join(app.getAppPath(), '../../package.json'),
+    path.join(process.cwd(), 'package.json'),
+  ];
+  for (const p of candidatePaths) {
+    try {
+      const manifest = JSON.parse(readFileSync(p, 'utf8')) as { version?: string };
+      if (manifest.version) return manifest.version;
+    } catch {
+      // 尝试下一个候选路径
+    }
   }
+  return version || '0.0.0';
 }
 
 export const appApi = {
