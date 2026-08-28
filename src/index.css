@@ -545,6 +545,7 @@ button.danger-outline {
   background: color-mix(in srgb, var(--danger, #e5484d) 12%, var(--bg-elevated, #fff));
   box-shadow: 0 6px 22px rgb(0 0 0 / 22%);
   pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
 
 .global-error-text {
@@ -562,6 +563,7 @@ button.danger-outline {
   background: transparent;
   color: inherit;
   cursor: pointer;
+  -webkit-app-region: no-drag;
 }
 
 .global-error-item button:hover {

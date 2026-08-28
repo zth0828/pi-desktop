@@ -588,7 +588,7 @@ test('流式中删除会话 → 被拒绝且给出可读提示，流结束后可
   await expect(row).toHaveCount(1);
 
   // 提示可关闭：点 X 后消失，删除入口仍可用
-  await notice.getByTestId('global-error-dismiss').click();
+  await page.getByTestId('global-error-dismiss').first().click();
   await expect(notice).toHaveCount(0);
 
   // 等慢速流自然结束（stop 按钮消失），再删 → 成功
