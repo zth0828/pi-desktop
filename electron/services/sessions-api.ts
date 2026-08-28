@@ -2,7 +2,7 @@
 // 列表/切换/重命名/分叉走 pi SDK（SessionManager 静态方法 + runtime.switchSession）；
 // 删除 pi 无 SDK API（已确认），对齐 pi `/resume`：优先移入系统废纸篓。
 // 会话替换后必须 afterSessionReplaced（重订阅 + 重绑扩展 + 推 sessionReplaced）。
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { readFile, rm, rmdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { shell } from 'electron';
@@ -196,6 +196,37 @@ function branchSearchableMessages(sessions: PiSessionCatalogPort, sessionPath: s
     }
   }
   return texts;
+}
+
+type BranchMessagesCacheEntry = {
+  mtimeMs: number;
+  size: number;
+  texts: string[];
+};
+
+const branchMessagesCache = new Map<string, BranchMessagesCacheEntry>();
+
+export function getCachedBranchSearchableMessages(sessions: PiSessionCatalogPort, sessionPath: string): string[] {
+  try {
+    const stats = statSync(sessionPath);
+    const cached = branchMessagesCache.get(sessionPath);
+    if (cached && cached.mtimeMs === stats.mtimeMs && cached.size === stats.size) {
+      return cached.texts;
+    }
+    const texts = branchSearchableMessages(sessions, sessionPath);
+    branchMessagesCache.set(sessionPath, {
+      mtimeMs: stats.mtimeMs,
+      size: stats.size,
+      texts,
+    });
+    if (branchMessagesCache.size > 500) {
+      const oldestKey = branchMessagesCache.keys().next().value;
+      if (oldestKey) branchMessagesCache.delete(oldestKey);
+    }
+    return texts;
+  } catch {
+    return branchSearchableMessages(sessions, sessionPath);
+  }
 }
 
 /** runtime 未启动（用户还没开过 Chat 页）时回退 settings.workspaceCwd。 */
@@ -445,7 +476,7 @@ export const sessionsApi = {
       }
       try {
         const candidatePath = candidate.session.path;
-        const messageTexts = branchSearchableMessages(adapter.sessions, candidatePath);
+        const messageTexts = getCachedBranchSearchableMessages(adapter.sessions, candidatePath);
         preciseCandidates.push(searchSessions([{ ...candidate.session, messageTexts }], query, 1)[0] ?? candidate);
       } catch (err) {
         // 会话文件损坏时丢弃该候选（点开也会失败），不影响其余结果

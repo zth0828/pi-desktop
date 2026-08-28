@@ -104,7 +104,33 @@ export async function applyProxyToPi(): Promise<ProxyApplyResult> {
   }
 }
 
+/** 构造注入给子进程（如 bash）的代理环境变量集合。 */
+export function buildProxyEnv(proxyUrl?: string): NodeJS.ProcessEnv {
+  if (!proxyUrl) return {};
+  const loopback = '127.0.0.1,localhost,::1';
+  return {
+    HTTP_PROXY: proxyUrl,
+    HTTPS_PROXY: proxyUrl,
+    ALL_PROXY: proxyUrl,
+    http_proxy: proxyUrl,
+    https_proxy: proxyUrl,
+    all_proxy: proxyUrl,
+    NO_PROXY: loopback,
+    no_proxy: loopback,
+  };
+}
+
+/** 获取当前应注入到子进程（如 bash）中的代理环境变量集合（关闭时返回空对象）。 */
+export async function getActiveSubprocessProxyEnv(): Promise<NodeJS.ProcessEnv> {
+  const resolved = await resolveProxy();
+  if (resolved.source === 'off' || !resolved.url) {
+    return {};
+  }
+  return buildProxyEnv(resolved.url);
+}
+
 export const proxyApi = {
   detect: async (): Promise<ProxyDetection> => detectProxy(),
   apply: async (): Promise<ProxyApplyResult> => applyProxyToPi(),
 };
+

@@ -64,3 +64,34 @@ describe('loopback proxy bypass', () => {
     delete process.env.no_proxy;
   });
 });
+
+describe('subprocess proxy env injection', () => {
+  it('buildProxyEnv formats all proxy keys with loopback bypass', async () => {
+    const { buildProxyEnv } = await import('../../electron/services/proxy-api');
+    expect(buildProxyEnv()).toEqual({});
+    const env = buildProxyEnv('http://127.0.0.1:7897');
+    expect(env.HTTP_PROXY).toBe('http://127.0.0.1:7897');
+    expect(env.HTTPS_PROXY).toBe('http://127.0.0.1:7897');
+    expect(env.ALL_PROXY).toBe('http://127.0.0.1:7897');
+    expect(env.http_proxy).toBe('http://127.0.0.1:7897');
+    expect(env.https_proxy).toBe('http://127.0.0.1:7897');
+    expect(env.all_proxy).toBe('http://127.0.0.1:7897');
+    expect(env.NO_PROXY).toBe('127.0.0.1,localhost,::1');
+    expect(env.no_proxy).toBe('127.0.0.1,localhost,::1');
+  });
+
+  it('getActiveSubprocessProxyEnv returns empty object when mode is off', async () => {
+    const { getActiveSubprocessProxyEnv } = await import('../../electron/services/proxy-api');
+    settingsApiMock.getAll.mockResolvedValue({ httpProxyMode: 'off' });
+    expect(await getActiveSubprocessProxyEnv()).toEqual({});
+  });
+
+  it('getActiveSubprocessProxyEnv returns proxy env when auto mode is enabled', async () => {
+    const { getActiveSubprocessProxyEnv } = await import('../../electron/services/proxy-api');
+    settingsApiMock.getAll.mockResolvedValue({ httpProxyMode: 'auto', httpProxyUrl: 'http://127.0.0.1:8888' });
+    const env = await getActiveSubprocessProxyEnv();
+    expect(env.HTTP_PROXY).toBe('http://127.0.0.1:8888');
+    expect(env.NO_PROXY).toBe('127.0.0.1,localhost,::1');
+  });
+});
+
