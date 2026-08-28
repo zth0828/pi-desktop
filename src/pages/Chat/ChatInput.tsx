@@ -320,8 +320,11 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     atToken,
     setAtToken,
     setAtSuppressed,
+    isTreeMode,
     fileSelected,
     setFileSelected,
+    treeSelected,
+    setTreeSelected,
     fileMatches,
     filePanelOpen,
     filePanelManual,
@@ -714,14 +717,17 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       <ChatInputMentionsPopup
         filePanelOpen={filePanelOpen}
         filePanelManual={filePanelManual}
+        isTreeMode={isTreeMode}
         filePanelRef={filePanelRef}
         fileMatches={fileMatches}
         fileSelected={fileSelected}
+        treeSelected={treeSelected}
         dirTree={dirTree}
         dirContents={dirContents}
         expandedDirs={expandedDirs}
         onPickFile={pickFile}
         onToggleDir={toggleDir}
+        onSelectTreeIndex={setTreeSelected}
       />
       <div className="chat-input-card">
         <ChatInputAttachments
