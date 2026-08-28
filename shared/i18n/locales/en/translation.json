@@ -881,7 +881,8 @@
     },
     "tools": {
       "title": "Available tools",
-      "desc": "Built-in tools the model can call in new sessions. Core tools (read/bash/edit/write) are always enabled; read-only search tools (grep/find/ls) can be toggled. Changes apply to new sessions (the current session keeps the toolset from startup)."
+      "desc": "Built-in tools the model can call in new sessions. Core tools (read/bash/edit/write) are always enabled; read-only search tools (grep/find/ls) can be toggled. Changes apply to new sessions (the current session keeps the toolset from startup).",
+      "coreLocked": "Core tools are always enabled"
     },
     "defaultThinking": {
       "title": "Default thinking level",

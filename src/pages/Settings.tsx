@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen, Monitor, Moon, Sun } from 'lucide-react';
+import { FolderOpen, Lock, Monitor, Moon, Sun } from 'lucide-react';
 import { DEFAULT_DESKTOP_PROXY_URL, PI_BUILTIN_TOOLS, PI_CORE_TOOLS, PI_DEFAULT_TOOLS, type PiCompactionSettings, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
@@ -417,7 +417,7 @@ export default function SettingsPage() {
           </div>
           <input className="settings-number" data-testid="compaction-keep-recent" type="number" min="0" step="256" value={compaction.keepRecentTokens} onChange={(e) => setCompaction((v) => ({ ...v, keepRecentTokens: Number(e.target.value) || 0 }))} onBlur={() => void hostApi.providers.setCompaction({ keepRecentTokens: compaction.keepRecentTokens })} />
         </div>
-        <p className="settings-section-hint">{modelWindow ? t('settings.compaction.recommendation', { window: modelWindow.toLocaleString(), tokens: Math.round(modelWindow * 0.25).toLocaleString() }) : t('settings.compaction.recommendationGeneric')}</p>
+        <p className="settings-section-hint settings-section-footnote">{modelWindow ? t('settings.compaction.recommendation', { window: modelWindow.toLocaleString(), tokens: Math.round(modelWindow * 0.25).toLocaleString() }) : t('settings.compaction.recommendationGeneric')}</p>
       </section>
 
       <section className="settings-section">
@@ -493,12 +493,12 @@ export default function SettingsPage() {
       <section className="settings-section" data-testid="settings-agent-defaults">
         <h2>{t('settings.agentDefaults.title')}</h2>
         <p className="settings-section-hint">{t('settings.agentDefaults.desc')}</p>
-        <div className="settings-row">
+        <div className="settings-row settings-row-stacked">
           <div className="settings-row-label">
             <div>{t('settings.tools.title')}</div>
             <div className="settings-row-desc">{t('settings.tools.desc')}</div>
           </div>
-          <div className="pill-group" data-testid="settings-default-tools">
+          <div className="pill-group settings-tools-group" data-testid="settings-default-tools">
             {PI_BUILTIN_TOOLS.map((tool) => {
               const core = (PI_CORE_TOOLS as readonly string[]).includes(tool);
               const on = core || defaultTools.includes(tool);
@@ -506,8 +506,9 @@ export default function SettingsPage() {
                 <button
                   key={tool}
                   data-testid={`tool-toggle-${tool}`}
-                  className={on ? 'pill active' : 'pill'}
+                  className={on ? `pill active${core ? ' pill-locked' : ''}` : 'pill'}
                   disabled={core}
+                  title={core ? t('settings.tools.coreLocked') : undefined}
                   onClick={() => {
                     // 核心工具 disabled 挡住点击，这里只处理只读检索工具的开/关
                     const next = on
@@ -523,6 +524,7 @@ export default function SettingsPage() {
                     void hostApi.providers.setDefaultTools(effective);
                   }}
                 >
+                  {core && <Lock size={11} className="pill-lock-icon" aria-hidden="true" />}
                   {tool}
                 </button>
               );
@@ -534,7 +536,7 @@ export default function SettingsPage() {
             <div>{t('settings.defaultThinking.title')}</div>
             <div className="settings-row-desc">{t('settings.defaultThinking.desc')}</div>
           </div>
-          <div className="pill-group" data-testid="settings-default-thinking">
+          <div className="pill-group pill-group-segmented" data-testid="settings-default-thinking">
             {THINKING_LEVELS.map((level) => (
               <button
                 key={level}
@@ -571,7 +573,7 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
-        <div className="settings-row">
+        <div className={`settings-row${retry.enabled ? '' : ' settings-row-muted'}`}>
           <div className="settings-row-label">
             <div>{t('settings.retry.maxRetries')}</div>
             <div className="settings-row-desc">{t('settings.retry.maxRetriesDesc')}</div>
@@ -587,7 +589,7 @@ export default function SettingsPage() {
             onBlur={() => void hostApi.providers.setRetry({ maxRetries: retry.maxRetries })}
           />
         </div>
-        <div className="settings-row">
+        <div className={`settings-row${retry.enabled ? '' : ' settings-row-muted'}`}>
           <div className="settings-row-label">
             <div>{t('settings.retry.baseDelay')}</div>
             <div className="settings-row-desc">{t('settings.retry.baseDelayDesc')}</div>
@@ -609,7 +611,7 @@ export default function SettingsPage() {
         <h2>{t('settings.trust.title')}</h2>
         <p className="settings-section-hint">{t('settings.trust.desc')}</p>
         {trustEntries.length === 0 ? (
-          <p className="settings-section-hint" data-testid="trust-empty">{t('settings.trust.empty')}</p>
+          <div className="settings-empty-state" data-testid="trust-empty">{t('settings.trust.empty')}</div>
         ) : (
           trustEntries.map((entry) => (
             <div className="settings-row" key={entry.path} data-testid="trust-entry">

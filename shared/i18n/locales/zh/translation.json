@@ -881,7 +881,8 @@
     },
     "tools": {
       "title": "可用工具",
-      "desc": "新会话中模型可调用的内置工具；核心工具（read/bash/edit/write）始终启用，只读检索工具（grep/find/ls）可按需开关。改动对新建会话生效（当前会话沿用启动时的工具集）。"
+      "desc": "新会话中模型可调用的内置工具；核心工具（read/bash/edit/write）始终启用，只读检索工具（grep/find/ls）可按需开关。改动对新建会话生效（当前会话沿用启动时的工具集）。",
+      "coreLocked": "核心工具始终启用"
     },
     "defaultThinking": {
       "title": "默认思考深度",
