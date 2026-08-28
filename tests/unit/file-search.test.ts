@@ -57,8 +57,8 @@ describe('getVisibleTreeItems', () => {
     expect(items).toEqual([
       { kind: 'dir', name: 'docs', full: 'docs', parent: '', depth: 0, open: false },
       { kind: 'dir', name: 'src', full: 'src', parent: '', depth: 0, open: false },
-      { kind: 'file', name: 'package.json', full: 'package.json', depth: 0 },
-      { kind: 'file', name: 'README.md', full: 'README.md', depth: 0 },
+      { kind: 'file', name: 'package.json', full: 'package.json', parent: '', depth: 0 },
+      { kind: 'file', name: 'README.md', full: 'README.md', parent: '', depth: 0 },
     ]);
   });
 
@@ -84,10 +84,10 @@ describe('getVisibleTreeItems', () => {
     expect(items).toEqual([
       { kind: 'dir', name: 'src', full: 'src', parent: '', depth: 0, open: true },
       { kind: 'dir', name: 'components', full: 'src/components', parent: 'src', depth: 1, open: true },
-      { kind: 'file', name: 'Button.tsx', full: 'src/components/Button.tsx', depth: 2 },
-      { kind: 'file', name: 'App.tsx', full: 'src/App.tsx', depth: 1 },
-      { kind: 'file', name: 'main.ts', full: 'src/main.ts', depth: 1 },
-      { kind: 'file', name: 'package.json', full: 'package.json', depth: 0 },
+      { kind: 'file', name: 'Button.tsx', full: 'src/components/Button.tsx', parent: 'src/components', depth: 2 },
+      { kind: 'file', name: 'App.tsx', full: 'src/App.tsx', parent: 'src', depth: 1 },
+      { kind: 'file', name: 'main.ts', full: 'src/main.ts', parent: 'src', depth: 1 },
+      { kind: 'file', name: 'package.json', full: 'package.json', parent: '', depth: 0 },
     ]);
   });
 

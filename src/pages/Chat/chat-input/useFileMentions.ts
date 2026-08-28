@@ -6,7 +6,7 @@ import type { AtToken, StagedAttachment } from './types';
 
 export type VisibleTreeItem =
   | { kind: 'dir'; name: string; full: string; parent: string; depth: number; open: boolean }
-  | { kind: 'file'; name: string; full: string; depth: number };
+  | { kind: 'file'; name: string; full: string; parent: string; depth: number };
 
 export function getVisibleTreeItems(
   dirTree: { dir: string; dirs: string[]; files: string[] } | null,
@@ -28,7 +28,7 @@ export function getVisibleTreeItems(
     }
     for (const name of content.files) {
       const full = dir ? `${dir}/${name}` : name;
-      items.push({ kind: 'file', name, full, depth });
+      items.push({ kind: 'file', name, full, parent: dir, depth });
     }
   }
 
@@ -146,18 +146,32 @@ export function useFileMentions({
   const toggleDir = (name: string, parent: string) => {
     const full = parent ? `${parent}/${name}` : name;
     if (expandedDirs.has(full)) {
+      collapseDir(name, parent);
+    } else {
+      expandDir(name, parent);
+    }
+  };
+
+  const expandDir = (name: string, parent: string) => {
+    const full = parent ? `${parent}/${name}` : name;
+    if (!expandedDirs.has(full)) {
+      setExpandedDirs((prev) => new Set(prev).add(full));
+      if (!dirContents[full]) {
+        void hostApi.piFiles.listDir(cwd, full).then((r) => {
+          setDirContents((prev) => ({ ...prev, [full]: r }));
+        }).catch(() => {});
+      }
+    }
+  };
+
+  const collapseDir = (name: string, parent: string) => {
+    const full = parent ? `${parent}/${name}` : name;
+    if (expandedDirs.has(full)) {
       setExpandedDirs((prev) => {
         const next = new Set(prev);
         next.delete(full);
         return next;
       });
-      return;
-    }
-    setExpandedDirs((prev) => new Set(prev).add(full));
-    if (!dirContents[full]) {
-      void hostApi.piFiles.listDir(cwd, full).then((r) => {
-        setDirContents((prev) => ({ ...prev, [full]: r }));
-      }).catch(() => {});
     }
   };
 
@@ -177,7 +191,60 @@ export function useFileMentions({
         setTreeSelected((i) => Math.max(i - 1, 0));
         return true;
       }
+      if (e.key === 'ArrowRight') {
+        const item = visibleTreeItems[treeSelected];
+        if (!item) return false;
+        e.preventDefault();
+        setHasNavigated(true);
+        if (item.kind === 'dir') {
+          if (!item.open) {
+            expandDir(item.name, item.parent);
+          } else if (treeSelected + 1 < visibleTreeItems.length) {
+            const nextItem = visibleTreeItems[treeSelected + 1];
+            if (nextItem && nextItem.depth > item.depth) {
+              setTreeSelected(treeSelected + 1);
+            }
+          }
+        }
+        return true;
+      }
+      if (e.key === 'ArrowLeft') {
+        const item = visibleTreeItems[treeSelected];
+        if (!item) return false;
+        e.preventDefault();
+        setHasNavigated(true);
+        if (item.kind === 'dir' && item.open) {
+          collapseDir(item.name, item.parent);
+        } else if (item.parent !== '') {
+          const parentIndex = visibleTreeItems.findIndex(
+            (candidate) => candidate.kind === 'dir' && candidate.full === item.parent,
+          );
+          if (parentIndex !== -1) {
+            setTreeSelected(parentIndex);
+          }
+        }
+        return true;
+      }
       if (e.key === 'Tab') {
+        const item = visibleTreeItems[treeSelected] ?? visibleTreeItems[0];
+        if (!item) return false;
+        e.preventDefault();
+        setHasNavigated(true);
+        if (item.kind === 'dir') {
+          if (!item.open) {
+            expandDir(item.name, item.parent);
+          } else if (treeSelected + 1 < visibleTreeItems.length) {
+            const nextItem = visibleTreeItems[treeSelected + 1];
+            if (nextItem && nextItem.depth > item.depth) {
+              setTreeSelected(treeSelected + 1);
+            }
+          }
+        } else {
+          void pickFile(item.full);
+        }
+        return true;
+      }
+      if (e.key === 'Enter') {
         const item = visibleTreeItems[treeSelected] ?? visibleTreeItems[0];
         if (!item) return false;
         e.preventDefault();
@@ -187,22 +254,6 @@ export function useFileMentions({
           void pickFile(item.full);
         }
         return true;
-      }
-      if (e.key === 'Enter') {
-        if (hasNavigated) {
-          const item = visibleTreeItems[treeSelected] ?? visibleTreeItems[0];
-          if (!item) return false;
-          e.preventDefault();
-          if (item.kind === 'dir') {
-            toggleDir(item.name, item.parent);
-          } else {
-            void pickFile(item.full);
-          }
-          return true;
-        }
-        setAtSuppressed(true);
-        setFilePanelManual(false);
-        return false;
       }
       if (e.key === 'Escape') {
         e.preventDefault();
