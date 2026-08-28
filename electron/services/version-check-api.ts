@@ -27,6 +27,33 @@ function compare(current: string | undefined, latest: string | undefined): boole
   return compareSemver(current, latest) < 0;
 }
 
+/** 检查是否已到期（需发起新一次联网检测） */
+function isCheckDue(options: {
+  force: boolean;
+  lastAttemptAt?: number;
+  error?: string;
+  latest?: string;
+  current?: string;
+  now: number;
+}): boolean {
+  const { force, lastAttemptAt, error, latest, current, now } = options;
+  if (force || !lastAttemptAt || Boolean(error)) return true;
+  if (now - lastAttemptAt >= VERSION_CHECK_INTERVAL_MS) return true;
+  // 存储中的最新版本比当前本地版本还旧或相等（说明缓存陈旧，需联网重新刷新）
+  if (Boolean(latest) && !compare(current, latest)) return true;
+  return false;
+}
+
+/** 检查是否有待向用户提示的新版本通知（且用户尚未点过已读/关闭） */
+function isNoticePending(options: {
+  current?: string;
+  latest?: string;
+  noticedLatest?: string;
+}): boolean {
+  const { current, latest, noticedLatest } = options;
+  return Boolean(latest && compare(current, latest) && noticedLatest !== latest);
+}
+
 async function checkPi(previous: VersionCheckStatus, now: number): Promise<VersionCheckStatus> {
   const current = (await piSystemApi.detect()).pi.version;
   try {
@@ -144,41 +171,59 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   const currentPi = (await piSystemApi.detect()).pi.version;
   const piPrevious: VersionCheckStatus = { latest: saved.piVersionCheckLatest, updateAvailable: false, lastAttemptAt: saved.piVersionCheckLastAttemptAt, lastSuccessAt: saved.piVersionCheckLastSuccessAt, error: saved.piVersionCheckError };
   const appPrevious = { latest: saved.appVersionCheckLatest, updateAvailable: false, lastAttemptAt: saved.appVersionCheckLastAttemptAt, lastSuccessAt: saved.appVersionCheckLastSuccessAt, error: saved.appVersionCheckError, releaseUrl: saved.appVersionCheckReleaseUrl, assetName: saved.appVersionCheckAssetName };
-  const piDue = force
-    || !saved.piVersionCheckLastAttemptAt
-    || Boolean(saved.piVersionCheckError)
-    || (now - (saved.piVersionCheckLastAttemptAt ?? 0) >= VERSION_CHECK_INTERVAL_MS)
-    || (Boolean(saved.piVersionCheckLatest) && !compare(currentPi, saved.piVersionCheckLatest));
-  const appDue = force
-    || !saved.appVersionCheckLastAttemptAt
-    || Boolean(saved.appVersionCheckError)
-    || (now - (saved.appVersionCheckLastAttemptAt ?? 0) >= VERSION_CHECK_INTERVAL_MS)
-    || (Boolean(saved.appVersionCheckLatest) && !compare(currentApp, saved.appVersionCheckLatest));
-  if (!piDue && !appDue) return updateStatus({ pi: { ...piPrevious, current: currentPi, updateAvailable: compare(currentPi, piPrevious.latest) }, app: { ...appPrevious, current: currentApp, updateAvailable: compare(currentApp, appPrevious.latest), downloadedPath: saved.appVersionCheckDownloadedPath } });
+
+  const piDue = isCheckDue({
+    force,
+    lastAttemptAt: saved.piVersionCheckLastAttemptAt,
+    error: saved.piVersionCheckError,
+    latest: saved.piVersionCheckLatest,
+    current: currentPi,
+    now,
+  });
+
+  const appDue = isCheckDue({
+    force,
+    lastAttemptAt: saved.appVersionCheckLastAttemptAt,
+    error: saved.appVersionCheckError,
+    latest: saved.appVersionCheckLatest,
+    current: currentApp,
+    now,
+  });
+
+  if (!piDue && !appDue) {
+    return updateStatus({
+      pi: { ...piPrevious, current: currentPi, updateAvailable: compare(currentPi, piPrevious.latest) },
+      app: { ...appPrevious, current: currentApp, updateAvailable: compare(currentApp, appPrevious.latest), downloadedPath: saved.appVersionCheckDownloadedPath },
+    });
+  }
+
   if (piDue) await settingsApi.set({ key: 'piVersionCheckLastAttemptAt', value: now });
   if (appDue) await settingsApi.set({ key: 'appVersionCheckLastAttemptAt', value: now });
-  // app 检查一完成就发通知，不等 pi 检查（npm 网络探测慢时不拖住 app 更新提示）。
-  // 推送是尽力送达：渲染层可能尚未订阅，已读标记移到 getPendingNotice/dismissNotice。
+
   const appStatusPromise = (appDue ? checkApp(appPrevious, now) : Promise.resolve(appPrevious)).then((appResult) => {
-    if (appResult.updateAvailable && appResult.latest && appResult.latest !== saved.appVersionCheckNoticedLatest) {
+    const current = ('current' in appResult && typeof appResult.current === 'string') ? appResult.current : currentApp;
+    if (isNoticePending({ current, latest: appResult.latest, noticedLatest: saved.appVersionCheckNoticedLatest })) {
       sendHostEvent('versionCheck', 'updateAvailable', {
-        current: ('current' in appResult && typeof appResult.current === 'string') ? appResult.current : appApi.version(),
-        latest: appResult.latest,
+        current,
+        latest: appResult.latest!,
         releaseUrl: appResult.releaseUrl,
         kind: 'app',
       });
     }
     return appResult;
   });
+
   const pi = await (piDue ? checkPi(piPrevious, now) : Promise.resolve(piPrevious));
   const appStatus = await appStatusPromise;
-  if (pi.updateAvailable && pi.latest && pi.latest !== saved.piVersionCheckNoticedLatest) {
+
+  if (isNoticePending({ current: pi.current, latest: pi.latest, noticedLatest: saved.piVersionCheckNoticedLatest })) {
     sendHostEvent('versionCheck', 'updateAvailable', {
       current: pi.current ?? '',
-      latest: pi.latest,
+      latest: pi.latest!,
       kind: 'pi',
     });
   }
+
   return updateStatus({ pi, app: { ...appStatus, downloadedPath: saved.appVersionCheckDownloadedPath } });
 }
 
@@ -195,26 +240,20 @@ export const versionCheckApi = {
       app: { current: appApi.version(), latest: saved.appVersionCheckLatest, updateAvailable: compare(appApi.version(), saved.appVersionCheckLatest), lastAttemptAt: saved.appVersionCheckLastAttemptAt, lastSuccessAt: saved.appVersionCheckLastSuccessAt, error: saved.appVersionCheckError, releaseUrl: saved.appVersionCheckReleaseUrl, assetName: saved.appVersionCheckAssetName, downloadedPath: saved.appVersionCheckDownloadedPath },
     });
   },
-  // 已读只在用户关闭/点击通知时写（dismissNotice）；拉取不写——组件挂载竞争可能丢弃
-  // 首次拉取结果，写已读会让通知永久丢失。重启后未关闭的通知重弹是符合预期的。
   getPendingNotice: async () => {
     const saved = await settingsApi.getAll();
     const appCurrent = appApi.version();
-    if (saved.appVersionCheckLatest
-      && compare(appCurrent, saved.appVersionCheckLatest)
-      && saved.appVersionCheckNoticedLatest !== saved.appVersionCheckLatest) {
+    if (isNoticePending({ current: appCurrent, latest: saved.appVersionCheckLatest, noticedLatest: saved.appVersionCheckNoticedLatest })) {
       return {
         current: appCurrent,
-        latest: saved.appVersionCheckLatest,
+        latest: saved.appVersionCheckLatest!,
         releaseUrl: saved.appVersionCheckReleaseUrl,
         kind: 'app' as const,
       };
     }
     const piCurrent = (await piSystemApi.detect()).pi.version;
-    if (saved.piVersionCheckLatest
-      && compare(piCurrent, saved.piVersionCheckLatest)
-      && saved.piVersionCheckNoticedLatest !== saved.piVersionCheckLatest) {
-      return { current: piCurrent ?? '', latest: saved.piVersionCheckLatest, kind: 'pi' as const };
+    if (isNoticePending({ current: piCurrent, latest: saved.piVersionCheckLatest, noticedLatest: saved.piVersionCheckNoticedLatest })) {
+      return { current: piCurrent ?? '', latest: saved.piVersionCheckLatest!, kind: 'pi' as const };
     }
     return null;
   },
@@ -234,7 +273,7 @@ export function scheduleVersionChecks(): void {
   if (!checkTimer) {
     checkTimer = setInterval(() => {
       void versionCheckApi.check().catch(() => undefined);
-    }, 24 * 60 * 60 * 1000);
+    }, VERSION_CHECK_INTERVAL_MS);
     checkTimer.unref?.();
   }
 }
