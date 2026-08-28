@@ -115,14 +115,10 @@ test('Skills 页：查看 skill 内容弹窗与模式切换', async ({ launchEle
   await expect(overlay).toContainText('Do the test thing.');
   await expect(overlay).toContainText('自动感知');
 
-  const screenshotDir = '/Users/bingking/.gemini/antigravity/brain/41be46fd-736c-4a6a-90b8-64cb5239b5ad';
-  await page.screenshot({ path: path.join(screenshotDir, 'skill_view_modal_auto.png') });
-
   // 在弹窗内点击切换为仅手动
   const modalToggle = overlay.locator('.skill-view-mode-btn');
   await modalToggle.click();
   await expect(overlay).toContainText('仅手动调用', { timeout: 10_000 });
-  await page.screenshot({ path: path.join(screenshotDir, 'skill_view_modal_manual.png') });
 
   await page.getByTestId('skill-view-close').click();
   await expect(overlay).toHaveCount(0);
@@ -154,9 +150,6 @@ test('Skills 页：5个以上技能在自动感知模式时显示智能优化横
   const banner = page.getByTestId('skills-recommendation-banner');
   await expect(banner).toBeVisible({ timeout: 15_000 });
   await expect(banner).toContainText('检测到 6 个技能处于【自动感知】模式');
-
-  const screenshotDir = '/Users/bingking/.gemini/antigravity/brain/41be46fd-736c-4a6a-90b8-64cb5239b5ad';
-  await page.screenshot({ path: path.join(screenshotDir, 'skills_batch_banner.png') });
 
   // 点击一键全部设为仅手动
   const batchBtn = page.getByTestId('skills-batch-optimize-btn');
@@ -260,9 +253,6 @@ test('Skills 页：切换调用模式（自动感知 <-> 仅手动）并写入 S
   await page.getByTestId('skills-filter-all').click();
   await expect(page.getByTestId('skill-row-test-skill')).toBeVisible();
 
-  const screenshotDir = '/Users/bingking/.gemini/antigravity/brain/41be46fd-736c-4a6a-90b8-64cb5239b5ad';
-  await page.screenshot({ path: path.join(screenshotDir, 'skills_page.png') });
-
   // 点击切回自动感知
   await toggleBtn.click();
   await expect(toggleBtn).toHaveClass(/mode-auto/, { timeout: 10_000 });
@@ -295,15 +285,11 @@ test('Chat 消息流：指定 Skill 触发后渲染折叠指令卡片，且用�
   await expect(userText).not.toContainText('<skill');
   await expect(userText).not.toContainText('</skill>');
 
-  const screenshotDir = '/Users/bingking/.gemini/antigravity/brain/41be46fd-736c-4a6a-90b8-64cb5239b5ad';
-  await page.screenshot({ path: path.join(screenshotDir, 'chat_skill_invocation_collapsed.png') });
-
   // 点击展开技能卡片
   await page.getByTestId('message-skill-toggle-test-skill').click();
   const skillBody = page.getByTestId('message-skill-body-test-skill');
   await expect(skillBody).toBeVisible();
   await expect(skillBody).toContainText('Do the test thing.');
-  await page.screenshot({ path: path.join(screenshotDir, 'chat_skill_invocation.png') });
 });
 
 test('Skills 界面中英文与自动感知视觉验证', async ({ launchElectronApp }) => {
@@ -322,9 +308,6 @@ test('Skills 界面中英文与自动感知视觉验证', async ({ launchElectro
   await expect(toggleBtn).toBeVisible({ timeout: 15_000 });
   await expect(toggleBtn).toHaveClass(/mode-auto/);
 
-  const screenshotDir = '/Users/bingking/.gemini/antigravity/brain/41be46fd-736c-4a6a-90b8-64cb5239b5ad';
-  await page.screenshot({ path: path.join(screenshotDir, 'skills_page_zh.png') });
-
   // 切换至聊天并发送技能指令，验证中文技能卡片
   await page.getByTestId('nav-chat').click();
   const chatInput = page.getByTestId('chat-input');
@@ -334,8 +317,6 @@ test('Skills 界面中英文与自动感知视觉验证', async ({ launchElectro
   const skillCard = page.getByTestId('message-skill-test-skill');
   await expect(skillCard).toBeVisible({ timeout: 15_000 });
   await page.getByTestId('message-skill-toggle-test-skill').click();
-
-  await page.screenshot({ path: path.join(screenshotDir, 'chat_skill_invocation_zh.png') });
 });
 
 

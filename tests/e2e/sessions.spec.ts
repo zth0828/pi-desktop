@@ -576,6 +576,7 @@ test('流式中删除会话 → 被拒绝且给出可读提示，流结束后可
   // SLOW_END：30 chunk × 100ms 慢速流（3s 后自然结束）；趁流式进行中发起删除
   await page.getByTestId('chat-input').fill('SLOW_END delete while streaming');
   await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 10_000 });
   await row.locator('.sidebar-session-menu-trigger').click();
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();

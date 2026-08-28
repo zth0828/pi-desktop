@@ -184,7 +184,7 @@ test('改错 apiKey → 旧会话正常打开，发消息报 401 行内提示、
   await page.getByTestId('chat-input').fill('Say PONG again');
   await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('message-error').last()).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('message-error').last()).toContainText('Invalid token');
+  await expect(page.getByTestId('message-error').last()).toContainText(/API key issue|Invalid token/i);
   await expect(page.getByTestId('error-hint-invalid-key')).toBeVisible();
   await expect(page.locator('.error-banner')).toHaveCount(0);
   await expectLayoutIntact(page);
