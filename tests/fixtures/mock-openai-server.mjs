@@ -432,22 +432,23 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // SLOW_END：慢速流但会自然结束（30 chunk × 100ms 后 stop + [DONE]），
+    // SLOW_END：慢速流但会自然结束（50 chunk × 120ms ≈ 6s 后 stop + [DONE]），
     // 用于「排队消息在 run 结束后自动投递」类断言；须放在 SLOW 分支之前，否则被 "SLOW" 前缀命中。
     if (lastUser.includes("SLOW_END")) {
       let i = 0;
+      const totalChunks = 50;
       const timer = setInterval(() => {
         if (i === 0) send({ role: "assistant", content: "" });
-        if (i < 30) {
+        if (i < totalChunks) {
           send({ content: `chunk${i} ` });
           i++;
         } else {
           clearInterval(timer);
-          send({}, "stop", { prompt_tokens: 10, completion_tokens: 30, total_tokens: 40 });
+          send({}, "stop", { prompt_tokens: 10, completion_tokens: totalChunks, total_tokens: 10 + totalChunks });
           res.write("data: [DONE]\n\n");
           res.end();
         }
-      }, 100);
+      }, 120);
       // 同 HANG 分支：用 res 的 close 清理（客户端 abort 时触发），req 的 close 在 body 收完即触发，会提前掐断
       res.on("close", () => clearInterval(timer));
       return;
