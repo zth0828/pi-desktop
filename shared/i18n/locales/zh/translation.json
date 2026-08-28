@@ -824,12 +824,21 @@
       "open": "打开安装包",
       "showInFolder": "显示文件位置",
       "upgradePi": "升级 pi",
-      "downloadFailedHint": "下载失败。如果在国内网络环境下，可在下方配置 GitHub 下载镜像加速（如 https://ghproxy.net/）后重试。"
+      "downloadFailedHint": "下载失败。如果在国内网络环境下，可在下方配置 GitHub 下载镜像加速（如 https://ghproxy.net/）后重试。",
+      "releaseNotesTitle": "✨ {{version}} 更新内容与特性",
+      "expand": "展开 ▾",
+      "collapse": "收起 ▴",
+      "downloadingStatus": "正在下载更新安装包…",
+      "remainingSeconds": "剩余 {{sec}} 秒",
+      "remainingMinutes": "剩余 {{min}} 分钟",
+      "newAvailable": "发现新版本",
+      "mirrorActive": "镜像加速中"
     },
     "downloadMirror": {
       "title": "下载镜像加速",
       "desc": "GitHub 下载加速镜像前缀，如 https://ghproxy.net/",
-      "placeholder": "https://ghproxy.net/"
+      "placeholder": "https://ghproxy.net/",
+      "activeBadge": "镜像加速已启用"
     },
     "exportLocation": "保存位置",
     "themeOptions": {
@@ -1069,6 +1078,8 @@
     "cancel": "取消",
     "failed": "下载更新失败：{{error}}",
     "waitingInstall": "已下载安装包，等待安装",
-    "waitingInstallVersion": "已下载 v{{version}}，等待安装"
+    "waitingInstallVersion": "已下载 v{{version}}，等待安装",
+    "readyTitle": "安装包下载完成，准备就绪",
+    "readyDesc": "点击即可打开安装包完成升级"
   }
 }

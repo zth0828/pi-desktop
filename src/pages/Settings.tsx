@@ -30,6 +30,25 @@ type ProxyStatus = { url?: string; source?: string };
 
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const;
 
+function formatBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '0 B';
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatSpeed(bytesPerSec?: number): string {
+  if (!bytesPerSec || bytesPerSec <= 0) return '0 KB/s';
+  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
+  return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+}
+
+function formatEta(received: number, total: number, speed: number, t: (k: string, opts?: Record<string, unknown>) => string): string {
+  if (!speed || speed <= 0 || total <= received) return '';
+  const remainingSec = Math.round((total - received) / speed);
+  if (remainingSec < 60) return t('settings.version.remainingSeconds', { sec: Math.max(1, remainingSec) });
+  return t('settings.version.remainingMinutes', { min: Math.ceil(remainingSec / 60) });
+}
+
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const [appVersion, setAppVersion] = useState('');
@@ -37,6 +56,12 @@ export default function SettingsPage() {
   const [versionChecking, setVersionChecking] = useState(false);
   const [appDownloading, setAppDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadMetrics, setDownloadMetrics] = useState<{
+    receivedBytes: number;
+    totalBytes: number;
+    speedBytesPerSec: number;
+  }>({ receivedBytes: 0, totalBytes: 0, speedBytesPerSec: 0 });
+  const [appReleaseNotesExpanded, setAppReleaseNotesExpanded] = useState(true);
   const [cwd, setCwd] = useState<string | undefined>();
   const [workspaceError, setWorkspaceError] = useState<string>();
   const [theme, setThemeState] = useState<Theme>('system');
@@ -120,8 +145,21 @@ export default function SettingsPage() {
     void hostApi.proxy.detect().then(setProxyStatus).catch(() => {});
     const offTrustChanged = onHostEvent('piTrust', 'changed', (r) => setTrustEntries(r.entries));
     const offUpdateProgress = onHostEvent('appUpdate', 'progress', (event) => {
-      if (event.totalBytes) setDownloadProgress(Math.round((event.downloadedBytes ?? 0) / event.totalBytes * 100));
-      if (event.phase === 'completed' || event.phase === 'failed') setAppDownloading(false);
+      if (event.totalBytes) {
+        setDownloadProgress(Math.min(100, Math.round(((event.downloadedBytes ?? 0) / event.totalBytes) * 100)));
+      }
+      setDownloadMetrics({
+        receivedBytes: event.downloadedBytes ?? 0,
+        totalBytes: event.totalBytes ?? 0,
+        speedBytesPerSec: event.speedBytesPerSec ?? 0,
+      });
+      if (event.phase === 'completed') {
+        setAppDownloading(false);
+        void hostApi.versionCheck.getStatus().then(setVersionStatus);
+      }
+      if (event.phase === 'failed') {
+        setAppDownloading(false);
+      }
     });
     void Promise.all([hostApi.providers.listModels(), hostApi.providers.getDefaultModel()]).then(([available, current]) => {
       const model = current.model ? available.models.find((candidate) => candidate.provider === current.model?.provider && candidate.id === current.model?.id) : undefined;
@@ -644,38 +682,149 @@ export default function SettingsPage() {
 
       <section className="settings-section" data-testid="settings-about" id="settings-about">
         <h2>{t('settings.about')}</h2>
-        <div className="settings-row" data-testid="settings-app-version-status" id="settings-app-version-status">
-          <div className="settings-row-label">
-            <div>Pi Desktop</div>
-            <div className="settings-row-desc">{t('settings.version.current', { version: appVersion })}</div>
-            {versionStatus?.app.error ? (
-              <div className="error-text" data-testid="settings-app-check-error">
-                {t('settings.version.checkFailed')}
-                <div className="settings-row-desc">{t('settings.version.downloadFailedHint')}</div>
+
+        {/* 独立卡片 1：Pi Desktop 桌面客户端 */}
+        <div className="settings-version-card" data-testid="settings-app-version-status" id="settings-app-version-status">
+          <div className="settings-version-card-head">
+            <div className="settings-version-card-meta">
+              <div className="settings-version-icon">π</div>
+              <div className="settings-version-meta-text">
+                <div className="settings-version-title-row">
+                  <span className="settings-version-name">Pi Desktop</span>
+                  <span className="settings-version-badge">
+                    {versionStatus?.app.latest
+                      ? (versionStatus.app.updateAvailable
+                          ? `${t('settings.version.newAvailable')} ${versionStatus.app.latest}`
+                          : t('settings.version.upToDate', { version: versionStatus.app.latest.replace(/^v/, '') }))
+                      : t('settings.version.current', { version: appVersion })}
+                  </span>
+                  {Boolean(downloadMirror?.trim()) && (
+                    <span className="settings-version-badge settings-badge-mirror">
+                      {t('settings.downloadMirror.activeBadge')}
+                    </span>
+                  )}
+                </div>
+                <div className="settings-row-desc">
+                  {t('settings.version.current', { version: appVersion })}
+                  {versionStatus?.app.assetName && ` · ${versionStatus.app.assetName}`}
+                </div>
               </div>
-            ) : (
-              <div className="settings-row-desc">
-                {versionStatus?.app.latest ? t(versionStatus.app.updateAvailable ? 'settings.version.updateAvailable' : 'settings.version.upToDate', { version: versionStatus.app.latest.replace(/^v/, '') }) : t('settings.version.notChecked')}
-              </div>
-            )}
-            {versionStatus?.app.downloadedPath && (
-              <div className="settings-row-desc text-accent" data-testid="settings-app-downloaded-status">
-                {t('versionInstall.waitingInstall')}
-              </div>
-            )}
+            </div>
+            <div className="pill-group">
+              <button
+                className="pill"
+                data-testid="settings-app-check"
+                disabled={versionChecking || appDownloading}
+                onClick={() => void checkVersions()}
+              >
+                {t(versionChecking ? 'settings.version.checking' : 'settings.version.checkNow')}
+              </button>
+              {versionStatus?.app.updateAvailable && !versionStatus.app.downloadedPath && !appDownloading && (
+                <button
+                  className="pill active"
+                  data-testid="settings-app-download"
+                  onClick={() => void downloadAppUpdate()}
+                >
+                  {t('settings.version.download')}
+                </button>
+              )}
+            </div>
           </div>
-          <div className="pill-group">
-            <button className="pill" data-testid="settings-app-check" disabled={versionChecking} onClick={() => void checkVersions()}>{t(versionChecking ? 'settings.version.checking' : 'settings.version.checkNow')}</button>
-            {versionStatus?.app.updateAvailable && !versionStatus.app.downloadedPath && <button className="pill" data-testid="settings-app-download" disabled={appDownloading} onClick={() => void downloadAppUpdate()}>{t(appDownloading ? 'settings.version.downloading' : 'settings.version.download')}{appDownloading && ` ${downloadProgress}%`}</button>}
-            {versionStatus?.app.downloadedPath && (
-              <>
-                <button className="pill active" data-testid="settings-app-install" onClick={() => void hostApi.appUpdate.installDownloaded()}>{t('versionInstall.installAndQuit')}</button>
-                <button className="pill" data-testid="settings-app-open" onClick={() => void hostApi.appUpdate.openDownloaded()}>{t('settings.version.open')}</button>
-                <button className="pill" data-testid="settings-app-show" onClick={() => void hostApi.appUpdate.showDownloaded()}>{t('settings.version.showInFolder')}</button>
-              </>
-            )}
-          </div>
+
+          {/* Release Notes 展开/收起预览 */}
+          {versionStatus?.app.updateAvailable && Boolean(versionStatus.app.releaseNotes?.trim()) && (
+            <div className="settings-changelog-box">
+              <div
+                className="settings-changelog-head"
+                onClick={() => setAppReleaseNotesExpanded(!appReleaseNotesExpanded)}
+              >
+                <div className="settings-changelog-title">
+                  {t('settings.version.releaseNotesTitle', { version: versionStatus.app.latest ?? '' })}
+                </div>
+                <span className="settings-changelog-toggle">
+                  {appReleaseNotesExpanded ? t('settings.version.collapse') : t('settings.version.expand')}
+                </span>
+              </div>
+              {appReleaseNotesExpanded && (
+                <div className="settings-changelog-content">
+                  <pre className="settings-changelog-text">{versionStatus.app.releaseNotes!.trim()}</pre>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 下载进行中：动态进度条与指标 */}
+          {appDownloading && (
+            <div className="settings-download-progress-box">
+              <div className="settings-download-progress-info">
+                <span className="settings-download-status">
+                  <div className="settings-spinner" />
+                  {t('settings.version.downloadingStatus')}
+                </span>
+                <span className="settings-download-metrics-text">
+                  {downloadMetrics.speedBytesPerSec > 0 && `${formatSpeed(downloadMetrics.speedBytesPerSec)} · `}
+                  {downloadMetrics.totalBytes > 0 && downloadMetrics.speedBytesPerSec > 0 &&
+                    formatEta(downloadMetrics.receivedBytes, downloadMetrics.totalBytes, downloadMetrics.speedBytesPerSec, t)}
+                </span>
+              </div>
+              <div className="settings-download-track">
+                <div
+                  className="settings-download-fill"
+                  style={{ width: `${downloadProgress}%` }}
+                />
+              </div>
+              <div className="settings-download-metrics-bottom">
+                <span>{formatBytes(downloadMetrics.receivedBytes)} / {formatBytes(downloadMetrics.totalBytes)}</span>
+                <span className="settings-download-percent">{downloadProgress}%</span>
+              </div>
+            </div>
+          )}
+
+          {/* 下载完成：准备安装引导横幅 */}
+          {versionStatus?.app.downloadedPath && (
+            <div className="settings-ready-banner" data-testid="settings-app-downloaded-status">
+              <div className="settings-ready-meta">
+                <div className="settings-ready-icon">✓</div>
+                <div>
+                  <div className="settings-ready-title">{t('versionInstall.readyTitle')}</div>
+                  <div className="settings-ready-desc">{t('versionInstall.readyDesc')}</div>
+                </div>
+              </div>
+              <div className="pill-group">
+                <button
+                  className="pill"
+                  data-testid="settings-app-show"
+                  onClick={() => void hostApi.appUpdate.showDownloaded()}
+                >
+                  {t('settings.version.showInFolder')}
+                </button>
+                <button
+                  className="pill"
+                  data-testid="settings-app-open"
+                  onClick={() => void hostApi.appUpdate.openDownloaded()}
+                >
+                  {t('settings.version.open')}
+                </button>
+                <button
+                  className="pill active"
+                  data-testid="settings-app-install"
+                  onClick={() => void hostApi.appUpdate.installDownloaded()}
+                >
+                  {t('versionInstall.installAndQuit')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {versionStatus?.app.error && (
+            <div className="error-text" data-testid="settings-app-check-error">
+              {t('settings.version.checkFailed')}
+              <div className="settings-row-desc">{t('settings.version.downloadFailedHint')}</div>
+            </div>
+          )}
         </div>
+
+        {/* 镜像加速配置行 */}
         <div className="settings-row" data-testid="settings-download-mirror-row" id="settings-download-mirror-row">
           <div className="settings-row-label">
             <div>{t('settings.downloadMirror.title')}</div>
@@ -690,32 +839,71 @@ export default function SettingsPage() {
             onChange={(e) => void changeDownloadMirror(e.target.value)}
           />
         </div>
-        <div className="settings-row" data-testid="settings-pi-status" id="settings-pi-status">
-          <div className="settings-row-label">
-            <div>pi</div>
-            <div className="settings-row-desc">
-              <div>
-                {t('status.ready', { version: env?.pi.version ?? '?' })}
-                {versionStatus?.pi.latest && versionStatus.pi.updateAvailable
-                  ? ` · ${t('status.latestAvailable', { version: versionStatus.pi.latest })}`
-                  : ''}
+
+        {/* 独立卡片 2：pi 核心 CLI 引擎（独立解耦） */}
+        <div className="settings-version-card" data-testid="settings-pi-status" id="settings-pi-status">
+          <div className="settings-version-card-head">
+            <div className="settings-version-card-meta">
+              <div className="settings-version-icon settings-version-icon-pi">⚡</div>
+              <div className="settings-version-meta-text">
+                <div className="settings-version-title-row">
+                  <span className="settings-version-name">pi</span>
+                  <span className="settings-version-badge">
+                    {versionStatus?.pi.latest && versionStatus.pi.updateAvailable
+                      ? `${t('status.latestAvailable', { version: versionStatus.pi.latest })}`
+                      : t('status.ready', { version: env?.pi.version ?? '?' })}
+                  </span>
+                </div>
+                <div className="settings-row-desc">
+                  <div>
+                    {t('status.ready', { version: env?.pi.version ?? '?' })}
+                    {versionStatus?.pi.latest && versionStatus.pi.updateAvailable
+                      ? ` · ${t('status.latestAvailable', { version: versionStatus.pi.latest })}`
+                      : ''}
+                  </div>
+                  <div>
+                    {versionStatus?.pi.error
+                      ? t('settings.version.checkFailed')
+                      : t('settings.version.lastChecked', {
+                          time: versionStatus?.pi.lastSuccessAt
+                            ? new Date(versionStatus.pi.lastSuccessAt).toLocaleString()
+                            : t('settings.version.notChecked'),
+                        })}
+                  </div>
+                  {env?.compatibility?.status === 'compatible-untested' && (
+                    <div className="warning">{t('status.compatibleUntested')}</div>
+                  )}
+                </div>
               </div>
-              <div>{versionStatus?.pi.error ? t('settings.version.checkFailed') : t('settings.version.lastChecked', { time: versionStatus?.pi.lastSuccessAt ? new Date(versionStatus.pi.lastSuccessAt).toLocaleString() : t('settings.version.notChecked') })}</div>
-              {env?.compatibility?.status === 'compatible-untested' && (
-                <div className="warning">{t('status.compatibleUntested')}</div>
-              )}
             </div>
-          </div>
-          <div className="pill-group">
-            <button className="pill" data-testid="settings-recheck" onClick={() => void detect(true)}>{t('onboarding.recheck')}</button>
-            <button className="pill" data-testid="settings-pi-check" disabled={versionChecking} onClick={() => void checkVersions()}>{t(versionChecking ? 'settings.version.checking' : 'settings.version.checkNow')}</button>
-            {versionStatus?.pi.updateAvailable && <button className="pill" data-testid="settings-pi-upgrade" onClick={() => void usePiSystemStore.getState().install()}>{t('settings.version.upgradePi')}</button>}
-            <button
-              className="pill"
-              onClick={() => void hostApi.shell.openExternal('https://github.com/badlogic/pi-mono')}
-            >
-              GitHub
-            </button>
+            <div className="pill-group">
+              <button className="pill" data-testid="settings-recheck" onClick={() => void detect(true)}>
+                {t('onboarding.recheck')}
+              </button>
+              <button
+                className="pill"
+                data-testid="settings-pi-check"
+                disabled={versionChecking}
+                onClick={() => void checkVersions()}
+              >
+                {t(versionChecking ? 'settings.version.checking' : 'settings.version.checkNow')}
+              </button>
+              {versionStatus?.pi.updateAvailable && (
+                <button
+                  className="pill active"
+                  data-testid="settings-pi-upgrade"
+                  onClick={() => void usePiSystemStore.getState().install()}
+                >
+                  {t('settings.version.upgradePi')}
+                </button>
+              )}
+              <button
+                className="pill"
+                onClick={() => void hostApi.shell.openExternal('https://github.com/badlogic/pi-mono')}
+              >
+                GitHub
+              </button>
+            </div>
           </div>
         </div>
       </section>

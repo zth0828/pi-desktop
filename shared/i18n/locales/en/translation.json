@@ -824,12 +824,21 @@
       "open": "Open installer",
       "showInFolder": "Show in folder",
       "upgradePi": "Upgrade pi",
-      "downloadFailedHint": "Download failed. You can configure a GitHub download mirror (e.g. https://ghproxy.net/) below and retry."
+      "downloadFailedHint": "Download failed. You can configure a GitHub download mirror (e.g. https://ghproxy.net/) below and retry.",
+      "releaseNotesTitle": "✨ What's new in {{version}}",
+      "expand": "Expand ▾",
+      "collapse": "Collapse ▴",
+      "downloadingStatus": "Downloading update package…",
+      "remainingSeconds": "{{sec}}s remaining",
+      "remainingMinutes": "{{min}}m remaining",
+      "newAvailable": "New version available",
+      "mirrorActive": "Mirror active"
     },
     "downloadMirror": {
       "title": "Download Mirror",
       "desc": "GitHub download acceleration mirror prefix, e.g. https://ghproxy.net/",
-      "placeholder": "https://ghproxy.net/"
+      "placeholder": "https://ghproxy.net/",
+      "activeBadge": "Download mirror enabled"
     },
     "exportLocation": "Location",
     "themeOptions": {
@@ -1068,7 +1077,9 @@
     "confirmQuit": "Quit and Install",
     "cancel": "Cancel",
     "failed": "Failed to download update: {{error}}",
-    "waitingInstall": "Update downloaded, ready to install",
-    "waitingInstallVersion": "Downloaded v{{version}}, ready to install"
+    "waitingInstall": "Installer downloaded, waiting to install",
+    "waitingInstallVersion": "Downloaded v{{version}}, waiting to install",
+    "readyTitle": "Update downloaded and ready",
+    "readyDesc": "Click to open installer and finish updating"
   }
 }

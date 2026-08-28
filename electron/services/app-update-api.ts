@@ -68,7 +68,7 @@ async function downloadToFile(
   primaryUrl: string,
   mirrorPrefix: string | undefined,
   destinationPath: string,
-  onProgress: (downloaded: number, total: number) => void,
+  onProgress: (downloaded: number, total: number, speed: number) => void,
 ): Promise<void> {
   const customMirror = mirrorPrefix?.trim();
   const mirrorUrl = (prefix: string) => (prefix.endsWith('/') ? `${prefix}${primaryUrl}` : `${prefix}/${primaryUrl}`);
@@ -96,7 +96,7 @@ async function downloadToFile(
 
         if (!response.ok || !response.body) {
           if (response.status === 416 && existingBytes > 0) {
-            onProgress(existingBytes, existingBytes);
+            onProgress(existingBytes, existingBytes, 0);
             return;
           }
           throw new Error(`Download failed (${response.status})`);
@@ -108,18 +108,34 @@ async function downloadToFile(
         let downloaded = isPartial ? existingBytes : 0;
 
         const writer = createWriteStream(destinationPath, { flags: isPartial ? 'a' : 'w' });
-        onProgress(downloaded, total);
+        let lastSpeedSampleAt = Date.now();
+        let lastSpeedSampleBytes = downloaded;
+        let currentSpeed = 0;
+        let lastProgressEmitAt = 0;
+
+        onProgress(downloaded, total, 0);
 
         try {
           for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
             writer.write(Buffer.from(chunk));
             downloaded += chunk.byteLength;
-            onProgress(downloaded, total);
+            const now = Date.now();
+            if (now - lastSpeedSampleAt >= 400) {
+              const elapsedSec = (now - lastSpeedSampleAt) / 1000;
+              currentSpeed = elapsedSec > 0 ? Math.round((downloaded - lastSpeedSampleBytes) / elapsedSec) : currentSpeed;
+              lastSpeedSampleAt = now;
+              lastSpeedSampleBytes = downloaded;
+            }
+            if (now - lastProgressEmitAt >= 80 || downloaded === total) {
+              lastProgressEmitAt = now;
+              onProgress(downloaded, total, currentSpeed);
+            }
           }
           await new Promise<void>((resolve, reject) => {
             writer.end(() => resolve());
             writer.on('error', reject);
           });
+          onProgress(downloaded, total, 0);
           return;
         } catch (streamError) {
           writer.destroy();
@@ -184,7 +200,7 @@ export const appUpdateApi = {
             lastReleaseError = err;
           }
         }
-        if (!release) throw lastReleaseError instanceof Error ? lastReleaseError : new Error('Release request failed');
+        if (!release) throw lastReleaseError instanceof Error ? lastReleaseError : new Error(String(lastReleaseError ?? 'Release metadata fetch failed'));
 
         const asset = selectAsset(release.assets ?? []);
         if (!asset) throw new Error(`No supported ${platformName()} update asset found`);
@@ -196,8 +212,13 @@ export const appUpdateApi = {
         tempPath = path.join(downloadsDir, `${asset.name}.part`);
 
         sendHostEvent('appUpdate', 'progress', { phase: 'started' });
-        await downloadToFile(asset.url, mirrorPrefix, tempPath, (downloaded, total) => {
-          sendHostEvent('appUpdate', 'progress', { phase: 'progress', downloadedBytes: downloaded, totalBytes: total });
+        await downloadToFile(asset.url, mirrorPrefix, tempPath, (downloaded, total, speed) => {
+          sendHostEvent('appUpdate', 'progress', {
+            phase: 'progress',
+            downloadedBytes: downloaded,
+            totalBytes: total,
+            speedBytesPerSec: speed,
+          });
         });
 
         const checksumText = await fetchChecksumText(sums.browser_download_url, mirrorPrefix);

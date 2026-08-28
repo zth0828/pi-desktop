@@ -96,6 +96,7 @@ async function fetchReleaseMetadata(url: string, mirrorPrefix?: string) {
       draft?: boolean;
       prerelease?: boolean;
       html_url?: string;
+      body?: string;
       assets?: Array<{ name?: string }>;
     };
   };
@@ -153,7 +154,7 @@ async function fetchReleaseMetadata(url: string, mirrorPrefix?: string) {
   throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'Release request failed'));
 }
 
-async function checkApp(previous: VersionCheckStatus & { releaseUrl?: string; assetName?: string }, now: number) {
+async function checkApp(previous: VersionCheckStatus & { releaseUrl?: string; releaseNotes?: string; assetName?: string }, now: number) {
   const current = appApi.version();
   const url = process.env.PI_DESKTOP_GITHUB_API_URL ?? GITHUB_RELEASE_URL;
   try {
@@ -163,9 +164,10 @@ async function checkApp(previous: VersionCheckStatus & { releaseUrl?: string; as
     await settingsApi.set({ key: 'appVersionCheckLastSuccessAt', value: now });
     await settingsApi.set({ key: 'appVersionCheckLatest', value: release.tag_name });
     await settingsApi.set({ key: 'appVersionCheckReleaseUrl', value: release.html_url });
+    await settingsApi.set({ key: 'appVersionCheckReleaseNotes', value: release.body });
     await settingsApi.set({ key: 'appVersionCheckAssetName', value: selectAssetName(release.assets ?? []) });
     await settingsApi.set({ key: 'appVersionCheckError', value: undefined });
-    return { ...previous, current, latest: release.tag_name, updateAvailable: compare(current, release.tag_name), lastAttemptAt: now, lastSuccessAt: now, releaseUrl: release.html_url, error: undefined };
+    return { ...previous, current, latest: release.tag_name, updateAvailable: compare(current, release.tag_name), lastAttemptAt: now, lastSuccessAt: now, releaseUrl: release.html_url, releaseNotes: release.body, error: undefined };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await settingsApi.set({ key: 'appVersionCheckError', value: message });
@@ -179,7 +181,7 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   const currentApp = appApi.version();
   const currentPi = (await piSystemApi.detect()).pi.version;
   const piPrevious: VersionCheckStatus = { latest: saved.piVersionCheckLatest, updateAvailable: false, lastAttemptAt: saved.piVersionCheckLastAttemptAt, lastSuccessAt: saved.piVersionCheckLastSuccessAt, error: saved.piVersionCheckError };
-  const appPrevious = { latest: saved.appVersionCheckLatest, updateAvailable: false, lastAttemptAt: saved.appVersionCheckLastAttemptAt, lastSuccessAt: saved.appVersionCheckLastSuccessAt, error: saved.appVersionCheckError, releaseUrl: saved.appVersionCheckReleaseUrl, assetName: saved.appVersionCheckAssetName };
+  const appPrevious = { latest: saved.appVersionCheckLatest, updateAvailable: false, lastAttemptAt: saved.appVersionCheckLastAttemptAt, lastSuccessAt: saved.appVersionCheckLastSuccessAt, error: saved.appVersionCheckError, releaseUrl: saved.appVersionCheckReleaseUrl, releaseNotes: saved.appVersionCheckReleaseNotes, assetName: saved.appVersionCheckAssetName };
 
   const piDue = isCheckDue({
     force,
@@ -246,7 +248,7 @@ export const versionCheckApi = {
     const currentPi = (await piSystemApi.detect()).pi.version;
     return updateStatus({
       pi: { current: currentPi, latest: saved.piVersionCheckLatest, updateAvailable: compare(currentPi, saved.piVersionCheckLatest), lastAttemptAt: saved.piVersionCheckLastAttemptAt, lastSuccessAt: saved.piVersionCheckLastSuccessAt, error: saved.piVersionCheckError },
-      app: { current: appApi.version(), latest: saved.appVersionCheckLatest, updateAvailable: compare(appApi.version(), saved.appVersionCheckLatest), lastAttemptAt: saved.appVersionCheckLastAttemptAt, lastSuccessAt: saved.appVersionCheckLastSuccessAt, error: saved.appVersionCheckError, releaseUrl: saved.appVersionCheckReleaseUrl, assetName: saved.appVersionCheckAssetName, downloadedPath: saved.appVersionCheckDownloadedPath },
+      app: { current: appApi.version(), latest: saved.appVersionCheckLatest, updateAvailable: compare(appApi.version(), saved.appVersionCheckLatest), lastAttemptAt: saved.appVersionCheckLastAttemptAt, lastSuccessAt: saved.appVersionCheckLastSuccessAt, error: saved.appVersionCheckError, releaseUrl: saved.appVersionCheckReleaseUrl, releaseNotes: saved.appVersionCheckReleaseNotes, assetName: saved.appVersionCheckAssetName, downloadedPath: saved.appVersionCheckDownloadedPath },
     });
   },
   getPendingNotice: async () => {

@@ -30,6 +30,7 @@ export const settingsApi = {
       appVersionCheckLatest: store.get('appVersionCheckLatest') as string | undefined,
       appVersionCheckError: store.get('appVersionCheckError') as string | undefined,
       appVersionCheckReleaseUrl: store.get('appVersionCheckReleaseUrl') as string | undefined,
+      appVersionCheckReleaseNotes: store.get('appVersionCheckReleaseNotes') as string | undefined,
       appVersionCheckAssetName: store.get('appVersionCheckAssetName') as string | undefined,
       appVersionCheckDownloadedPath: store.get('appVersionCheckDownloadedPath') as string | undefined,
       appVersionCheckNoticedLatest: store.get('appVersionCheckNoticedLatest') as string | undefined,

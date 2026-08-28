@@ -37,6 +37,7 @@ test.beforeAll(async () => {
         draft: false,
         prerelease: false,
         html_url: 'https://github.com/zth0828/pi-desktop/releases/tag/v9.9.9',
+        body: '✨ Enhanced update cards and metrics\n🐛 Bug fix for path resolution',
         assets: [
           {
             name: assetName,
@@ -144,6 +145,10 @@ test('设置页：下载更新后弹出安装引导对话框，稍后关闭后�
   await page.getByTestId('settings-app-check').click();
   const downloadBtn = page.getByTestId('settings-app-download');
   await expect(downloadBtn).toBeVisible({ timeout: 15_000 });
+
+  // 验证 Release Notes 更新内容已展示
+  await expect(page.locator('.settings-changelog-text')).toContainText('Enhanced update cards');
+
   await downloadBtn.click();
 
   // 下载完成后弹出全局模态引导对话框

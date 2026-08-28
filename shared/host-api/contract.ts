@@ -157,6 +157,7 @@ export type VersionCheckSnapshot = {
   pi: VersionCheckStatus;
   app: VersionCheckStatus & {
     releaseUrl?: string;
+    releaseNotes?: string;
     assetName?: string;
     downloadedPath?: string;
   };
@@ -179,6 +180,7 @@ export type AppUpdateProgressEvent = {
   phase: 'started' | 'progress' | 'completed' | 'failed';
   downloadedBytes?: number;
   totalBytes?: number;
+  speedBytesPerSec?: number;
   path?: string;
   error?: string;
 };
@@ -545,6 +547,7 @@ export type SettingsSnapshot = {
   appVersionCheckLatest?: string;
   appVersionCheckError?: string;
   appVersionCheckReleaseUrl?: string;
+  appVersionCheckReleaseNotes?: string;
   appVersionCheckAssetName?: string;
   appVersionCheckDownloadedPath?: string;
   appVersionCheckNoticedLatest?: string;
