@@ -642,9 +642,9 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section className="settings-section" data-testid="settings-about">
+      <section className="settings-section" data-testid="settings-about" id="settings-about">
         <h2>{t('settings.about')}</h2>
-        <div className="settings-row" data-testid="settings-app-version-status">
+        <div className="settings-row" data-testid="settings-app-version-status" id="settings-app-version-status">
           <div className="settings-row-label">
             <div>Pi Desktop</div>
             <div className="settings-row-desc">{t('settings.version.current', { version: appVersion })}</div>
@@ -676,7 +676,7 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
-        <div className="settings-row" data-testid="settings-download-mirror-row">
+        <div className="settings-row" data-testid="settings-download-mirror-row" id="settings-download-mirror-row">
           <div className="settings-row-label">
             <div>{t('settings.downloadMirror.title')}</div>
             <div className="settings-row-desc">{t('settings.downloadMirror.desc')}</div>
@@ -690,7 +690,7 @@ export default function SettingsPage() {
             onChange={(e) => void changeDownloadMirror(e.target.value)}
           />
         </div>
-        <div className="settings-row" data-testid="settings-pi-status">
+        <div className="settings-row" data-testid="settings-pi-status" id="settings-pi-status">
           <div className="settings-row-label">
             <div>pi</div>
             <div className="settings-row-desc">

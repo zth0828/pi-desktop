@@ -83,6 +83,11 @@ export function VersionUpdateToast({ onNavigate }: { onNavigate: (page: AppPageI
           onClick={() => {
             onNavigate('settings');
             dismiss();
+            setTimeout(() => {
+              const targetId = info.kind === 'app' ? 'settings-app-version-status' : 'settings-pi-status';
+              const el = document.getElementById(targetId) ?? document.getElementById('settings-about');
+              el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 50);
           }}
         >
           {t(info.kind === 'app' ? 'versionUpdate.download' : 'versionUpdate.upgradePi')}
