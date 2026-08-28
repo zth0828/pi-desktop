@@ -224,7 +224,7 @@ export function useSlashCommands({
       setSelected((i) => Math.max(i - 1, 0));
       return true;
     }
-    if (e.key === 'Tab') {
+    if (e.key === 'Tab' || e.key === ' ') {
       e.preventDefault();
       pick(matches[selected] ?? matches[0]);
       return true;

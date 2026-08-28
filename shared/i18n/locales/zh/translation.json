@@ -370,6 +370,11 @@
     "planMode": "计划模式",
     "planModeUnavailable": "安装 plan-mode 扩展后可用",
     "cacheStatsNote": "部分本地模型不会上报缓存统计。",
+    "mentionsHint": {
+      "tree": "↑↓ 移动 · ←→ 层级 · 空格/Tab 选择 · Esc 取消",
+      "filter": "↑↓ 移动 · 空格/Tab 选择 · Esc 取消",
+      "command": "↑↓ 移动 · 空格/Tab 选择 · Esc 取消"
+    },
     "commands": {
       "new": "开始新会话",
       "compact": "压缩当前会话的上下文（已用 {{percent}}%）",

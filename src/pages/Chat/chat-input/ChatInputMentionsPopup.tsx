@@ -1,4 +1,5 @@
 import type { ReactNode, RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronRight, FileText, Folder } from 'lucide-react';
 
 export interface ChatInputMentionsPopupProps {
@@ -31,6 +32,7 @@ export function ChatInputMentionsPopup({
   onToggleDir,
   onSelectTreeIndex,
 }: ChatInputMentionsPopupProps) {
+  const { t } = useTranslation();
   if (!filePanelOpen) return null;
 
   let currentIndex = 0;
@@ -107,6 +109,9 @@ export function ChatInputMentionsPopup({
           </button>
         ))
       )}
+      <div className="command-panel-footer" data-testid="file-panel-footer">
+        {isTreeMode ? t('chat.mentionsHint.tree') : t('chat.mentionsHint.filter')}
+      </div>
     </div>
   );
 }

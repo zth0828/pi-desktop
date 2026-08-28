@@ -225,7 +225,7 @@ export function useFileMentions({
         }
         return true;
       }
-      if (e.key === 'Tab') {
+      if (e.key === 'Tab' || e.key === ' ') {
         const item = visibleTreeItems[treeSelected] ?? visibleTreeItems[0];
         if (!item) return false;
         e.preventDefault();
@@ -257,8 +257,13 @@ export function useFileMentions({
       }
       if (e.key === 'Escape') {
         e.preventDefault();
+        if (atToken) {
+          setValue((current) => current.slice(0, atToken.start) + current.slice(atToken.end));
+          setAtToken(null);
+        }
         setAtSuppressed(true);
         setFilePanelManual(false);
+        textareaRef.current?.focus();
         return true;
       }
       return false;
@@ -276,7 +281,7 @@ export function useFileMentions({
       setFileSelected((i) => Math.max(i - 1, 0));
       return true;
     }
-    if (e.key === 'Tab') {
+    if (e.key === 'Tab' || e.key === ' ') {
       const match = fileMatches[fileSelected] ?? fileMatches[0];
       if (!match) return false;
       e.preventDefault();
@@ -297,8 +302,13 @@ export function useFileMentions({
     }
     if (e.key === 'Escape') {
       e.preventDefault();
+      if (atToken) {
+        setValue((current) => current.slice(0, atToken.start) + current.slice(atToken.end));
+        setAtToken(null);
+      }
       setAtSuppressed(true);
       setFilePanelManual(false);
+      textareaRef.current?.focus();
       return true;
     }
     return false;

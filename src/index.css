@@ -3879,6 +3879,21 @@ button.danger-outline {
 }
 /* 长列表滚动：flex 子项默认不压缩，否则条目被压扁且溢出无法滚动 */
 .command-panel .command-item { flex-shrink: 0; }
+.command-panel-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: var(--bg-sunken);
+  border-top: 1px solid var(--border);
+  user-select: none;
+  flex-shrink: 0;
+  z-index: 1;
+}
 /* 手动文件面板的目录节点：展开箭头 + 手型 */
 .file-dir { cursor: pointer; gap: 6px; color: var(--text); }
 .file-dir-chevron { transition: transform 120ms ease; color: var(--text-tertiary); flex-shrink: 0; }

@@ -370,6 +370,11 @@
     "planMode": "Plan mode",
     "planModeUnavailable": "Install the plan-mode extension to enable this",
     "cacheStatsNote": "Some local models do not report cache statistics.",
+    "mentionsHint": {
+      "tree": "↑↓ Navigate · ←→ Folders · Space/Tab Pick · Esc Cancel",
+      "filter": "↑↓ Navigate · Space/Tab Pick · Esc Cancel",
+      "command": "↑↓ Navigate · Space/Tab Pick · Esc Cancel"
+    },
     "commands": {
       "new": "Start a new session",
       "compact": "Compact this chat's context ({{percent}}% full)",

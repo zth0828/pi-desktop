@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { PiCommandRow } from '@shared/host-api/contract';
 
 export interface ChatInputSlashPopupProps {
@@ -18,6 +19,7 @@ export function ChatInputSlashPopup({
   onPick,
   commandDescription,
 }: ChatInputSlashPopupProps) {
+  const { t } = useTranslation();
   if (!panelOpen) return null;
 
   return (
@@ -38,6 +40,9 @@ export function ChatInputSlashPopup({
           <span className="command-source">{cmd.source}</span>
         </button>
       ))}
+      <div className="command-panel-footer" data-testid="command-panel-footer">
+        {t('chat.mentionsHint.command')}
+      </div>
     </div>
   );
 }
