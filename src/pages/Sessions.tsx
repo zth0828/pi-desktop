@@ -212,7 +212,7 @@ function SessionRow({
               <button
                 className="danger-outline"
                 data-testid="session-delete-confirm"
-                disabled={busy}
+                disabled={busy || session.isRunning}
                 onClick={() => void remove()}
               >
                 {t('sessions.confirmDelete')}
@@ -223,7 +223,7 @@ function SessionRow({
             <button
               className="danger-outline"
               data-testid="session-delete"
-              disabled={busy}
+              disabled={busy || session.isRunning}
               onClick={() => setConfirmingDelete(true)}
             >
               {t('sessions.delete')}

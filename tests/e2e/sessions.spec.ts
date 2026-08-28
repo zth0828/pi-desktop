@@ -564,7 +564,7 @@ test('侧栏会话菜单 → 复制 ID、重命名、在新聊天中继续', asy
   await expect(page.locator('.sidebar-session-row')).toHaveCount(2, { timeout: 15_000 });
 });
 
-test('流式中删除会话 → 被拒绝且给出可读提示，流结束后可删除', async ({ launchElectronApp }) => {
+test('流式中删除会话 → 菜单项禁用且后端防御拦截，流结束后可删除', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
@@ -573,26 +573,30 @@ test('流式中删除会话 → 被拒绝且给出可读提示，流结束后可
   const row = page.locator('.sidebar-session-row').filter({ hasText: 'delete while streaming HERON' });
   await expect(row).toBeVisible({ timeout: 15_000 });
 
-  // SLOW_END：慢速流（6s 后自然结束）；趁流式进行中发起删除
+  // SLOW_END：慢速流；趁流式进行中验证删除保护
   await page.getByTestId('chat-input').fill('SLOW_END delete while streaming');
   await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 10_000 });
+
+  // 1. UI 保护：流式进行中，菜单内 Delete 按钮为 disabled
   await row.hover();
   await row.locator('.sidebar-session-menu-trigger').click();
-  await page.getByRole('button', { name: 'Delete', exact: true }).click();
-  await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await page.keyboard.press('Escape');
 
-  // main 拒绝删除（session is running）：列表回滚 + 顶部全局错误提示（而非静默复活）
-  const notice = page.getByTestId('global-error-stack');
-  await expect(notice).toBeVisible({ timeout: 15_000 });
-  await expect(notice).toContainText('This session is running');
-  await expect(row).toHaveCount(1);
+  // 2. 后端保护：即使绕过 UI 直接调 remove IPC，main 也会拒绝
+  const sessionPath = await sessionPathOf(page, 'delete while streaming HERON');
+  const deleteResult = await page.evaluate(async (targetPath) => {
+    return await window.pidesktop.hostInvoke({
+      id: 'test-delete-running',
+      module: 'piSessions',
+      action: 'remove',
+      payload: { path: targetPath },
+    });
+  }, sessionPath);
+  expect(deleteResult).toEqual({ success: false, error: 'session is running' });
 
-  // 提示可关闭：点 X 后消失，删除入口仍可用
-  await page.getByTestId('global-error-dismiss').first().click();
-  await expect(notice).toHaveCount(0);
-
-  // 等慢速流自然结束（stop 按钮消失），再删 → 成功
+  // 3. 等慢速流自然结束（stop 按钮消失），再删 → 成功
   await expect(page.getByTestId('chat-stop')).toHaveCount(0, { timeout: 30_000 });
   await row.hover();
   await row.locator('.sidebar-session-menu-trigger').click();
