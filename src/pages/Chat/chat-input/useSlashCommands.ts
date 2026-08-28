@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import type { PiCommandRow, PiRuntimeSessionInfo } from '@shared/host-api/contract';
 import { hostApi } from '../../../lib/host-api';
 import { navigateToPage } from '../../../lib/app-navigation';
-import { ARG_BUILTIN_COMMANDS } from './types';
 import type { ChatMessage } from '../../../stores/chat';
 
 export interface UseSlashCommandsOptions {
@@ -198,11 +197,6 @@ export function useSlashCommands({
 
   const pick = (cmd: PiCommandRow) => {
     if (cmd.source === 'built-in') {
-      if (ARG_BUILTIN_COMMANDS.has(cmd.name)) {
-        setValue(`/${cmd.name} `);
-        textareaRef.current?.focus();
-        return;
-      }
       setValue('');
       void runBuiltinCommand(cmd.name, '');
       return;

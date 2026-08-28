@@ -81,6 +81,3 @@ export const SHELL_BUILTIN_NAMES = new Set([
   'reload',
   'resume',
 ]);
-
-/** 带参数的命令：补全面板选中后填入输入框补参数，不直接执行 */
-export const ARG_BUILTIN_COMMANDS = new Set(['model', 'name', 'export', 'compact']);
