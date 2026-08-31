@@ -160,9 +160,10 @@ test('/ 命令补全：键盘切换时高亮命令始终滚入可视区域', asy
   const count = await panel.locator('.command-item').count();
   expect(count).toBeGreaterThan(16);
 
+  const scrollBody = panel.locator('.command-panel-body');
   for (let index = 1; index < count; index += 1) await input.press('ArrowDown');
-  await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-  const bottomSelection = await panel.evaluate((element) => {
+  await expect.poll(() => scrollBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  const bottomSelection = await scrollBody.evaluate((element) => {
     const selected = element.querySelector('.command-item.selected');
     if (!selected) return null;
     const panelRect = element.getBoundingClientRect();
@@ -176,7 +177,7 @@ test('/ 命令补全：键盘切换时高亮命令始终滚入可视区域', asy
   expect(bottomSelection?.bottom).toBeGreaterThanOrEqual(0);
 
   for (let index = 1; index < count; index += 1) await input.press('ArrowUp');
-  await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBe(0);
+  await expect.poll(() => scrollBody.evaluate((element) => element.scrollTop)).toBe(0);
 });
 
 test('/settings → 导航到设置页', async ({ launchElectronApp }) => {

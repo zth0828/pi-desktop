@@ -51,6 +51,7 @@ export const piSystemApi = {
 
   checkLatest: async (): Promise<PiLatestVersionResult> => {
     const checkedAt = Date.now();
+    const isCustomUrl = Boolean(process.env.PI_DESKTOP_PI_REGISTRY_URL);
     const tryFetch = async (url: string) => {
       const res = await hostFetch(url, {
         signal: AbortSignal.timeout(5000),
@@ -65,6 +66,7 @@ export const piSystemApi = {
       const latest = await tryFetch(getPiRegistryUrl());
       return { latest, checkedAt };
     } catch {
+      if (isCustomUrl) return { checkedAt };
       try {
         const latest = await tryFetch(PI_NPMMIRROR_REGISTRY_URL);
         return { latest, checkedAt };
