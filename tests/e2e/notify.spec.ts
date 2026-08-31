@@ -271,12 +271,12 @@ test('多窗口：焦点按会话窗口判定（B 窗口完成弹、A 窗口完�
     await detached.getByTestId('chat-input').fill('Say SLOW_END B-notify');
     await detached.getByTestId('chat-send').click();
     const betaPath = await sessionPathOf(page, 'main BETA');
-    await focusSessionWindow(page, betaPath);
     // 前置确认：主窗口聚焦、独立窗口失焦（环境聚焦失效时显式失败而非静默跳过）
     await expect.poll(async () => {
+      await focusSessionWindow(page, betaPath);
       const listed = await listHostWindows(page);
       return listed.find((entry) => entry.isMain)?.focused === true && listed.find((entry) => !entry.isMain)?.focused === false;
-    }, { timeout: 10_000 }).toBe(true);
+    }, { timeout: 15_000 }).toBe(true);
 
     await expect(detached.getByTestId('message-assistant').last()).toContainText('chunk29', {
       timeout: 30_000,
@@ -292,7 +292,11 @@ test('多窗口：焦点按会话窗口判定（B 窗口完成弹、A 窗口完�
 
     // 独立窗口自身聚焦时完成 run → 会话窗口聚焦 → 不弹通知
     const before = (await readEntries(logPath)).length;
-    await focusSessionWindow(detached, alphaPath);
+    await expect.poll(async () => {
+      await focusSessionWindow(detached, alphaPath);
+      const listed = await listHostWindows(detached);
+      return listed.find((entry) => !entry.isMain)?.focused === true && listed.find((entry) => entry.isMain)?.focused === false;
+    }, { timeout: 15_000 }).toBe(true);
     await detached.getByTestId('chat-input').fill('Say SLOW_END B-focused');
     await detached.getByTestId('chat-send').click();
     await expect(detached.getByTestId('message-assistant').last()).toContainText('chunk29', {
