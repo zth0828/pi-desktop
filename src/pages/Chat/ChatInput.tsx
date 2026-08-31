@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Check, Copy, FolderOpen, Info, Sparkles, Terminal, X } from 'lucide-react';
+import { Check, Copy, FolderOpen, Info, Sparkles, Terminal, X } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
   PiModelRow,
@@ -75,12 +75,6 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const [usageOpen, setUsageOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<PiRuntimeSessionInfo | null>(null);
-  const [confirmSlashModal, setConfirmSlashModal] = useState<{
-    command: string;
-    promptText: string;
-    outgoing: StagedImage[];
-    behavior?: 'steer' | 'followUp';
-  } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [followupBehavior, setFollowupBehavior] = useState<FollowupBehavior>('queue');
 
@@ -515,7 +509,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const send = (behavior?: 'steer' | 'followUp') => {
     const text = value.trim();
     if (!text && attachments.length === 0) return;
-    if (text === '/' || text === '@') return;
+    if (text === '/' || text === '／' || text === '@') return;
     if (commandMode && bashing) return;
     const outgoingAttachments = attachments;
     const outgoing = outgoingAttachments.filter((attachment): attachment is StagedImage => attachment.kind === 'image');
@@ -535,10 +529,12 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       if (command) void runBash(command, isExcluded);
       return;
     }
-    if (text.startsWith('/') && outgoingAttachments.length === 0) {
-      const spaceIndex = text.indexOf(' ');
-      const rawName = (spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex)).toLowerCase();
-      const arg = spaceIndex === -1 ? '' : text.slice(spaceIndex + 1).trim();
+    const isSlash = (text.startsWith('/') || text.startsWith('／')) && outgoingAttachments.length === 0;
+    if (isSlash) {
+      const normalizedText = text.startsWith('／') ? '/' + text.slice(1) : text;
+      const spaceIndex = normalizedText.search(/\s/);
+      const rawName = (spaceIndex === -1 ? normalizedText.slice(1) : normalizedText.slice(1, spaceIndex)).toLowerCase();
+      const arg = spaceIndex === -1 ? '' : normalizedText.slice(spaceIndex + 1).trim();
 
       if (!rawName) return;
 
@@ -578,17 +574,10 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         return;
       }
 
-      // 未知命令：弹出确认对话框，询问用户是否直接发送给 AI
-      const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
-      const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
+      // 未知命令：拦截并不向 AI 发送请求，给出轻量提示并清空输入
       setValue('');
       setAttachments(() => []);
-      setConfirmSlashModal({
-        command: rawName,
-        promptText,
-        outgoing,
-        behavior,
-      });
+      showNotice(t('chat.notice.commandNotFound', { command: '/' + rawName }));
       return;
     }
 
@@ -734,7 +723,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     }
     if (e.key !== 'Enter') return;
     const trimmed = value.trim();
-    if (trimmed === '/' || trimmed === '@') {
+    if (trimmed === '/' || trimmed === '／' || trimmed === '@') {
       e.preventDefault();
       return;
     }
@@ -751,33 +740,8 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   };
 
   useEffect(() => {
-    if (!confirmSlashModal) return;
-    const onKeyDownModal = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        setConfirmSlashModal(null);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        const modalData = confirmSlashModal;
-        setConfirmSlashModal(null);
-        executePrompt(modalData.promptText, modalData.outgoing, modalData.behavior);
-      }
-    };
-    window.addEventListener('keydown', onKeyDownModal);
-    return () => window.removeEventListener('keydown', onKeyDownModal);
-  }, [confirmSlashModal]);
-
-  useEffect(() => {
     const onEsc = (e: globalThis.KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (confirmSlashModal) {
-        e.preventDefault();
-        e.stopPropagation();
-        setConfirmSlashModal(null);
-        return;
-      }
       if (sessionInfo) {
         e.preventDefault();
         e.stopPropagation();
@@ -820,7 +784,6 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     window.addEventListener('keydown', onEsc);
     return () => window.removeEventListener('keydown', onEsc);
   }, [
-    confirmSlashModal,
     sessionInfo,
     previewImage,
     modelMenuOpen,
@@ -998,61 +961,6 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {confirmSlashModal && (
-        <div
-          className="tree-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label={t('chat.confirmSlashSend.title')}
-          data-testid="confirm-slash-dialog"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setConfirmSlashModal(null);
-          }}
-        >
-          <div className="session-info-modal" style={{ maxWidth: 440 }}>
-            <div className="session-info-header">
-              <div className="session-info-title-wrap">
-                <AlertTriangle size={16} style={{ color: 'var(--accent)' }} />
-                <span>{t('chat.confirmSlashSend.title')}</span>
-              </div>
-              <button
-                type="button"
-                className="btn-icon"
-                data-testid="confirm-slash-close"
-                onClick={() => setConfirmSlashModal(null)}
-                aria-label={t('common.close')}
-              >
-                <X size={15} />
-              </button>
-            </div>
-            <div style={{ padding: '16px 18px', fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>
-              {t('chat.confirmSlashSend.description', { command: `/${confirmSlashModal.command}` })}
-            </div>
-            <div className="confirm-slash-actions">
-              <button
-                type="button"
-                className="confirm-slash-btn-cancel"
-                data-testid="confirm-slash-cancel"
-                onClick={() => setConfirmSlashModal(null)}
-              >
-                {t('chat.confirmSlashSend.cancel')}
-              </button>
-              <button
-                type="button"
-                className="confirm-slash-btn-send"
-                data-testid="confirm-slash-submit"
-                onClick={() => {
-                  const modalData = confirmSlashModal;
-                  setConfirmSlashModal(null);
-                  executePrompt(modalData.promptText, modalData.outgoing, modalData.behavior);
-                }}
-              >
-                {t('chat.confirmSlashSend.send')}
-              </button>
             </div>
           </div>
         </div>

@@ -210,6 +210,13 @@ export function useSlashCommands({
       }
       case 'settings':
         return navigateToPage('settings');
+      case 'skills':
+        return navigateToPage('skills');
+      case 'extensions':
+        return navigateToPage('extensions');
+      case 'mcp':
+        return navigateToPage('mcp');
+      case 'models':
       case 'login':
       case 'logout':
         return navigateToPage('models');
@@ -231,6 +238,23 @@ export function useSlashCommands({
   };
 
   const pick = (cmd: PiCommandRow) => {
+    if (cmd.source === 'skill' || cmd.name.startsWith('skill:')) {
+      const skillName = cmd.name.startsWith('skill:') ? cmd.name.slice(6) : cmd.name;
+      if (setSelectedSkill) {
+        setSelectedSkill(skillName);
+        if (slashToken) {
+          const before = value.slice(0, slashToken.start);
+          const after = value.slice(slashToken.end);
+          setValue(`${before}${after}`.trim());
+        } else {
+          setValue('');
+        }
+        setSlashToken(null);
+        setSlashSuppressed(true);
+        textareaRef.current?.focus();
+        return;
+      }
+    }
     if (slashToken) {
       const before = value.slice(0, slashToken.start);
       const after = value.slice(slashToken.end);
@@ -264,8 +288,17 @@ export function useSlashCommands({
       return true;
     }
     if (e.key === 'Enter') {
-      e.preventDefault();
-      return true;
+      if (hasNavigated) {
+        e.preventDefault();
+        const cmd = matches[selected] ?? matches[0];
+        if (cmd) {
+          pick(cmd);
+        }
+        return true;
+      }
+      setSlashToken(null);
+      setSlashSuppressed(true);
+      return false;
     }
     if (e.key === 'Escape') {
       if (slashToken) {

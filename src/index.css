@@ -3924,41 +3924,6 @@ button.danger-outline {
   color: var(--text);
   background: var(--bg-hover);
 }
-.confirm-slash-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-raised);
-}
-.confirm-slash-btn-cancel {
-  padding: 6px 14px;
-  font-size: 12.5px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-hover);
-  color: var(--text);
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-.confirm-slash-btn-cancel:hover {
-  background: var(--bg-active, var(--border));
-}
-.confirm-slash-btn-send {
-  padding: 6px 14px;
-  font-size: 12.5px;
-  border-radius: 8px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-  transition: opacity 120ms ease;
-}
-.confirm-slash-btn-send:hover {
-  opacity: 0.9;
-}
 /* 手动文件面板的目录节点：展开箭头 + 手型 */
 .file-dir { cursor: pointer; gap: 6px; color: var(--text); }
 .file-dir-chevron { transition: transform 120ms ease; color: var(--text-tertiary); flex-shrink: 0; }
