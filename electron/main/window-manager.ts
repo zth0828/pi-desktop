@@ -147,6 +147,8 @@ export function focusWindowForSession(sessionPath: string): boolean {
   const win = findWindowBySession(sessionPath);
   if (!win) return false;
   if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  app.focus({ steal: true });
   win.focus();
   return true;
 }
