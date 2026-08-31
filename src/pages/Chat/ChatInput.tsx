@@ -750,27 +750,6 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     }
   };
 
-  useEffect(() => {
-    if (!confirmSlashModal) return;
-    const onKeyDownModal = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        setConfirmSlashModal(null);
-        textareaRef.current?.focus();
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        const modalData = confirmSlashModal;
-        setValue('');
-        setAttachments(() => []);
-        setConfirmSlashModal(null);
-        executePrompt(modalData.promptText, modalData.outgoing, modalData.behavior);
-      }
-    };
-    window.addEventListener('keydown', onKeyDownModal);
-    return () => window.removeEventListener('keydown', onKeyDownModal);
-  }, [confirmSlashModal]);
 
   useEffect(() => {
     const onEsc = (e: globalThis.KeyboardEvent) => {
@@ -1047,6 +1026,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
                 type="button"
                 className="confirm-slash-btn-cancel"
                 data-testid="confirm-slash-cancel"
+                autoFocus
                 onClick={() => {
                   setConfirmSlashModal(null);
                   textareaRef.current?.focus();
