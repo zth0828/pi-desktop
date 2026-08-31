@@ -146,9 +146,9 @@ export function focusOrCreateMainWindow(): BrowserWindow {
 export function focusWindowForSession(sessionPath: string): boolean {
   const win = findWindowBySession(sessionPath);
   if (!win) return false;
-  if (win.isMinimized()) win.restore();
-  if (!win.isVisible()) win.show();
-  app.focus({ steal: true });
+  if (typeof win.isMinimized === 'function' && win.isMinimized()) win.restore();
+  if (typeof win.isVisible === 'function' && !win.isVisible()) win.show();
+  if (typeof app.focus === 'function') app.focus({ steal: true });
   win.focus();
   return true;
 }

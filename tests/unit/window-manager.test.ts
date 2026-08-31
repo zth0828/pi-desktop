@@ -8,6 +8,7 @@ class FakeBrowserWindow {
   destroyed = false;
   minimized = false;
   focused = false;
+  visible = true;
   bounds: { x: number; y: number; width: number; height: number };
   constructor(options: { x?: number; y?: number; width?: number; height?: number } = {}) {
     this.bounds = {
@@ -33,6 +34,12 @@ class FakeBrowserWindow {
   isMinimized(): boolean {
     return this.minimized;
   }
+  isVisible(): boolean {
+    return this.visible;
+  }
+  show(): void {
+    this.visible = true;
+  }
   getBounds(): { x: number; y: number; width: number; height: number } {
     return { ...this.bounds };
   }
@@ -54,7 +61,7 @@ vi.mock('electron', () => ({
     getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }),
     getDisplayNearestPoint: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 875 } }),
   },
-  app: { isPackaged: false },
+  app: { isPackaged: false, focus: () => {} },
 }));
 
 type WindowManager = typeof import('@electron/main/window-manager');
