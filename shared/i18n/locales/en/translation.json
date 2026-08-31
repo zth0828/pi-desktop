@@ -412,6 +412,12 @@
       "send": "Send anyway",
       "cancel": "Cancel"
     },
+    "confirmMentionSend": {
+      "title": "Send file mention?",
+      "description": "Detected file reference \"{{mention}}\", but no matching file was found in the workspace. Do you want to send it to the AI as plain text?",
+      "send": "Send anyway",
+      "cancel": "Cancel"
+    },
     "sessionInfo": {
       "title": "Session Info",
       "name": "Name",

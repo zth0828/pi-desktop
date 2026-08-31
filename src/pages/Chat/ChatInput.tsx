@@ -75,8 +75,9 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const [usageOpen, setUsageOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<PiRuntimeSessionInfo | null>(null);
-  const [confirmSlashModal, setConfirmSlashModal] = useState<{
-    command: string;
+  const [confirmDialog, setConfirmDialog] = useState<{
+    type: 'slash' | 'mention';
+    target: string;
     promptText: string;
     outgoing: StagedImage[];
     behavior?: 'steer' | 'followUp';
@@ -327,6 +328,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     atToken,
     setAtToken,
     setAtSuppressed,
+    fileList,
     isTreeMode,
     fileSelected,
     setFileSelected,
@@ -535,6 +537,28 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       if (command) void runBash(command, isExcluded);
       return;
     }
+    const isAt = (text.startsWith('@') || text.startsWith('＠')) && outgoingAttachments.length === 0;
+    if (isAt) {
+      const normalizedAt = text.startsWith('＠') ? '@' + text.slice(1) : text;
+      const rawMention = normalizedAt.slice(1).split(/\s/)[0]?.replace(/^["']|["']$/g, '') ?? '';
+      if (!rawMention) return;
+
+      const exactFile = fileList.find(
+        (f) => f === rawMention || f.toLowerCase() === rawMention.toLowerCase() || f.endsWith('/' + rawMention),
+      );
+      if (!exactFile) {
+        const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+        const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
+        setConfirmDialog({
+          type: 'mention',
+          target: rawMention,
+          promptText,
+          outgoing,
+          behavior,
+        });
+        return;
+      }
+    }
     const isSlash = (text.startsWith('/') || text.startsWith('／')) && outgoingAttachments.length === 0;
     if (isSlash) {
       const normalizedText = text.startsWith('／') ? '/' + text.slice(1) : text;
@@ -583,8 +607,9 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       // 未知命令：弹出确认对话框，询问用户是否作为提示词直接发送给 AI
       const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
       const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
-      setConfirmSlashModal({
-        command: rawName,
+      setConfirmDialog({
+        type: 'slash',
+        target: rawName,
         promptText,
         outgoing,
         behavior,
@@ -754,10 +779,10 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   useEffect(() => {
     const onEsc = (e: globalThis.KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (confirmSlashModal) {
+      if (confirmDialog) {
         e.preventDefault();
         e.stopPropagation();
-        setConfirmSlashModal(null);
+        setConfirmDialog(null);
         textareaRef.current?.focus();
         return;
       }
@@ -803,7 +828,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     window.addEventListener('keydown', onEsc);
     return () => window.removeEventListener('keydown', onEsc);
   }, [
-    confirmSlashModal,
+    confirmDialog,
     sessionInfo,
     previewImage,
     modelMenuOpen,
@@ -985,16 +1010,20 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
           </div>
         </div>
       )}
-      {confirmSlashModal && (
+      {confirmDialog && (
         <div
           className="tree-overlay"
           role="dialog"
           aria-modal="true"
-          aria-label={t('chat.confirmSlashSend.title')}
-          data-testid="confirm-slash-dialog"
+          aria-label={
+            confirmDialog.type === 'slash'
+              ? t('chat.confirmSlashSend.title')
+              : t('chat.confirmMentionSend.title')
+          }
+          data-testid={confirmDialog.type === 'slash' ? 'confirm-slash-dialog' : 'confirm-mention-dialog'}
           onClick={(e) => {
             if (e.target === e.currentTarget) {
-              setConfirmSlashModal(null);
+              setConfirmDialog(null);
               textareaRef.current?.focus();
             }
           }}
@@ -1003,14 +1032,18 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
             <div className="session-info-header">
               <div className="session-info-title-wrap">
                 <AlertTriangle size={16} style={{ color: 'var(--accent)' }} />
-                <span>{t('chat.confirmSlashSend.title')}</span>
+                <span>
+                  {confirmDialog.type === 'slash'
+                    ? t('chat.confirmSlashSend.title')
+                    : t('chat.confirmMentionSend.title')}
+                </span>
               </div>
               <button
                 type="button"
                 className="btn-icon"
-                data-testid="confirm-slash-close"
+                data-testid="confirm-dialog-close"
                 onClick={() => {
-                  setConfirmSlashModal(null);
+                  setConfirmDialog(null);
                   textareaRef.current?.focus();
                 }}
                 aria-label={t('common.close')}
@@ -1019,34 +1052,40 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
               </button>
             </div>
             <div style={{ padding: '16px 18px', fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>
-              {t('chat.confirmSlashSend.description', { command: `/${confirmSlashModal.command}` })}
+              {confirmDialog.type === 'slash'
+                ? t('chat.confirmSlashSend.description', { command: `/${confirmDialog.target}` })
+                : t('chat.confirmMentionSend.description', { mention: `@${confirmDialog.target}` })}
             </div>
             <div className="confirm-slash-actions">
               <button
                 type="button"
                 className="confirm-slash-btn-cancel"
-                data-testid="confirm-slash-cancel"
+                data-testid="confirm-dialog-cancel"
                 autoFocus
                 onClick={() => {
-                  setConfirmSlashModal(null);
+                  setConfirmDialog(null);
                   textareaRef.current?.focus();
                 }}
               >
-                {t('chat.confirmSlashSend.cancel')}
+                {confirmDialog.type === 'slash'
+                  ? t('chat.confirmSlashSend.cancel')
+                  : t('chat.confirmMentionSend.cancel')}
               </button>
               <button
                 type="button"
                 className="confirm-slash-btn-send"
-                data-testid="confirm-slash-submit"
+                data-testid="confirm-dialog-submit"
                 onClick={() => {
-                  const modalData = confirmSlashModal;
+                  const modalData = confirmDialog;
                   setValue('');
                   setAttachments(() => []);
-                  setConfirmSlashModal(null);
+                  setConfirmDialog(null);
                   executePrompt(modalData.promptText, modalData.outgoing, modalData.behavior);
                 }}
               >
-                {t('chat.confirmSlashSend.send')}
+                {confirmDialog.type === 'slash'
+                  ? t('chat.confirmSlashSend.send')
+                  : t('chat.confirmMentionSend.send')}
               </button>
             </div>
           </div>

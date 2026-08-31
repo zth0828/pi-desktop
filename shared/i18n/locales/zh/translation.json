@@ -412,6 +412,12 @@
       "send": "直接发送",
       "cancel": "取消"
     },
+    "confirmMentionSend": {
+      "title": "确认发送文件引用？",
+      "description": "检测到文件引用「{{mention}}」，但在当前工作区中未找到匹配的文件。是否作为普通文本直接发送给 AI？",
+      "send": "直接发送",
+      "cancel": "取消"
+    },
     "sessionInfo": {
       "title": "会话详情",
       "name": "会话名称",

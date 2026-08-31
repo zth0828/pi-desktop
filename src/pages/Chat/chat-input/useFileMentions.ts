@@ -245,8 +245,21 @@ export function useFileMentions({
         return true;
       }
       if (e.key === 'Enter') {
-        e.preventDefault();
-        return true;
+        if (hasNavigated) {
+          const item = visibleTreeItems[treeSelected] ?? visibleTreeItems[0];
+          if (item) {
+            e.preventDefault();
+            if (item.kind === 'dir') {
+              toggleDir(item.name, item.parent);
+            } else {
+              void pickFile(item.full);
+            }
+            return true;
+          }
+        }
+        setAtToken(null);
+        setAtSuppressed(true);
+        return false;
       }
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -282,8 +295,17 @@ export function useFileMentions({
       return true;
     }
     if (e.key === 'Enter') {
-      e.preventDefault();
-      return true;
+      if (hasNavigated) {
+        const match = fileMatches[fileSelected] ?? fileMatches[0];
+        if (match) {
+          e.preventDefault();
+          void pickFile(match);
+          return true;
+        }
+      }
+      setAtToken(null);
+      setAtSuppressed(true);
+      return false;
     }
     if (e.key === 'Escape') {
       e.preventDefault();
