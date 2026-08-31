@@ -116,7 +116,7 @@ async function downloadToFile(
         onProgress(downloaded, total, 0);
 
         try {
-          for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
+          for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
             writer.write(Buffer.from(chunk));
             downloaded += chunk.byteLength;
             const now = Date.now();

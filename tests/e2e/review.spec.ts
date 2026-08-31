@@ -365,11 +365,12 @@ test('右侧工作台：Markdown、PDF、Word、Excel 和 CSV 使用专用预览
   const canvas = pdf.locator('canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await expect(pdf).toContainText('Page 1 of 2', { timeout: 20_000 });
-  await expect.poll(async () => canvas.evaluate((element) => element.width * element.height)).toBeGreaterThan(100_000);
+  await expect.poll(async () => canvas.evaluate((element) => (element as HTMLCanvasElement).width * (element as HTMLCanvasElement).height)).toBeGreaterThan(100_000);
   const nonWhitePixels = await canvas.evaluate((element) => {
-    const context = element.getContext('2d');
+    const canvasElement = element as HTMLCanvasElement;
+    const context = canvasElement.getContext('2d');
     if (!context) return 0;
-    const pixels = context.getImageData(0, 0, element.width, element.height).data;
+    const pixels = context.getImageData(0, 0, canvasElement.width, canvasElement.height).data;
     let count = 0;
     for (let index = 0; index < pixels.length; index += 400) {
       if (pixels[index + 3] > 0 && (pixels[index] < 245 || pixels[index + 1] < 245 || pixels[index + 2] < 245)) count += 1;
