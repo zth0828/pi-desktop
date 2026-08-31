@@ -406,6 +406,12 @@
       "modelNotFound": "Model not found: {{model}}",
       "commandNotFound": "Unknown command: {{command}}"
     },
+    "confirmSlashSend": {
+      "title": "Send slash command?",
+      "description": "Detected unknown slash command \"{{command}}\", which is not a local built-in command. Do you want to send it to the AI as a prompt?",
+      "send": "Send anyway",
+      "cancel": "Cancel"
+    },
     "sessionInfo": {
       "title": "Session Info",
       "name": "Name",
