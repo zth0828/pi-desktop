@@ -576,11 +576,14 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       }
 
       if (rawName.startsWith('skill:') || rawName === 'skill') {
-        const skillName = rawName.startsWith('skill:') ? rawName.slice(6) : arg;
-        if (skillName) {
-          setValue('');
-          setAttachments(() => []);
-          setSelectedSkill(skillName);
+        const skillName = rawName.startsWith('skill:') ? rawName.slice(6) : (arg.split(/\s/)[0] ?? '');
+        const promptAfterSkill = rawName.startsWith('skill:') ? arg : arg.slice(skillName.length).trim();
+        if (!promptAfterSkill) {
+          if (skillName) {
+            setValue('');
+            setAttachments(() => []);
+            setSelectedSkill(skillName);
+          }
           return;
         }
       }
@@ -592,10 +595,12 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         return;
       }
 
-      const isPromptTemplate = commands.some(
-        (c) => c.name.toLowerCase() === rawName && (c.source === 'prompt' || c.source.startsWith('prompt:') || c.source === 'extension'),
-      );
-      if (isPromptTemplate) {
+      const isKnownCommand =
+        rawName.startsWith('skill:') ||
+        rawName === 'skill' ||
+        commands.some((c) => c.name.toLowerCase() === rawName);
+
+      if (isKnownCommand) {
         const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
         const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
         setValue('');
