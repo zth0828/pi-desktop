@@ -457,7 +457,13 @@
       "search": "搜索模型…",
       "noResults": "无匹配模型",
       "expandProvider": "展开 {{provider}}",
-      "collapseProvider": "折叠 {{provider}}"
+      "collapseProvider": "折叠 {{provider}}",
+      "currentLimit": "当前设置",
+      "quickPresets": "快捷梯度",
+      "resetMax": "恢复最大默认",
+      "usedTokens": "当前已用",
+      "compactionWarning": "低于当前已用量，将在下一轮对话时自动触发会话压缩 (Compaction)",
+      "maxSupported": "模型原生支持上限 {{max}}"
     },
     "bash": {
       "excluded": "不入上下文",

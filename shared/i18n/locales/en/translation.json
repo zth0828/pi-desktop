@@ -457,7 +457,13 @@
       "search": "Search models…",
       "noResults": "No matching models",
       "expandProvider": "Expand {{provider}}",
-      "collapseProvider": "Collapse {{provider}}"
+      "collapseProvider": "Collapse {{provider}}",
+      "currentLimit": "Current limit",
+      "quickPresets": "Quick presets",
+      "resetMax": "Reset to max",
+      "usedTokens": "Currently used",
+      "compactionWarning": "Below current usage; compaction will trigger automatically on the next turn",
+      "maxSupported": "Model native max: {{max}}"
     },
     "bash": {
       "excluded": "excluded from context",

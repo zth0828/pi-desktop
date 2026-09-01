@@ -3369,6 +3369,14 @@ button.danger-outline {
   white-space: nowrap;
 }
 
+.model-menu-trigger-context {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
 .model-menu {
   position: absolute;
   right: 0;
@@ -3550,6 +3558,198 @@ button.danger-outline {
 }
 
 .model-submenu::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+.model-context-submenu {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.model-context-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.model-context-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.model-context-badge {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-muted, rgba(79, 140, 255, 0.12));
+  padding: 2px 7px;
+  border-radius: 9999px;
+  border: 1px solid rgba(79, 140, 255, 0.25);
+  white-space: nowrap;
+}
+
+.model-context-slider-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.model-context-slider-bounds {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, monospace);
+}
+
+.model-context-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--bg-hover);
+  outline: none;
+  cursor: pointer;
+  margin: 4px 0;
+}
+
+.model-context-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-raised);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.model-context-slider::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.15);
+}
+
+.model-context-presets-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.model-context-presets-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.model-context-reset-btn {
+  font-size: 10.5px;
+  color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  border: none;
+}
+
+.model-context-reset-btn:hover {
+  opacity: 0.85;
+}
+
+.model-context-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.model-context-preset-chip {
+  padding: 5px 4px;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-secondary);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.model-context-preset-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.model-context-preset-chip.active {
+  background: var(--accent-muted, rgba(79, 140, 255, 0.12));
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.model-context-usage-bar {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.model-context-usage-bar.warning {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #f59e0b;
+}
+
+.model-context-usage-stats {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+}
+
+.model-context-usage-track {
+  width: 100%;
+  height: 5px;
+  border-radius: 9999px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+
+.model-context-usage-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.model-context-usage-bar.warning .model-context-usage-fill {
+  background: #f59e0b;
+}
+
+.model-context-warning-note {
+  font-size: 10px;
+  line-height: 1.35;
+  color: #f59e0b;
+  margin-top: 2px;
+}
+
+.model-context-max-note {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
 
 .chat-input-card textarea {
   width: 100%;

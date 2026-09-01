@@ -17,11 +17,13 @@ import { QueueList } from './QueueList';
 import {
   detectAtToken,
   detectSlashToken,
+  formatPercent,
   modelDisplayName,
   resolveStreamBehavior,
   SHELL_BUILTIN_NAMES,
   type ChatInputProps,
   type FollowupBehavior,
+  type ModelMenuSection,
   type SendWith,
   type StagedAttachment,
   type StagedImage,
@@ -101,7 +103,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const [planMode, setPlanMode] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const [modelMenuSection, setModelMenuSection] = useState<'models' | 'thinking' | null>(null);
+  const [modelMenuSection, setModelMenuSection] = useState<ModelMenuSection>(null);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
   const [modelQueries, setModelQueries] = useState<Record<string, string>>({});
   const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
@@ -301,7 +303,9 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       : null;
   const contextLabel = compacting || transcriptSyncing
     ? t('chat.contextSyncing')
-    : contextPercent == null ? t('chat.tokenUnknown') : `${Math.round(contextPercent)}%`;
+    : contextPercent == null
+      ? t('chat.tokenUnknown')
+      : formatPercent(contextPercent);
   const formatTokens = (val: number | null | undefined) =>
     val == null ? t('chat.tokenUnknown') : val.toLocaleString();
 
@@ -1267,6 +1271,11 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
           applyModelSelection={applyModelSelection}
           onSelectThinkingLevel={(level) => {
             void paneApi.piRuntime.setThinkingLevel(level).then((result) => {
+              chatStore.getState().applyModelUpdate(result);
+            });
+          }}
+          onSelectContextWindow={(cw) => {
+            void paneApi.piRuntime.setContextWindow(cw).then((result) => {
               chatStore.getState().applyModelUpdate(result);
             });
           }}

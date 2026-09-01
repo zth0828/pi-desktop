@@ -17,9 +17,17 @@ import {
   Sparkles,
   Terminal,
 } from 'lucide-react';
-import type { PiModelRow } from '@shared/host-api/contract';
+import { DEFAULT_CONTEXT_WINDOW, type PiModelRow } from '@shared/host-api/contract';
 import { formatCost, formatHitRate } from '../../../lib/usage-stats';
-import { modelDisplayName, type SendWith, type StagedAttachment } from './types';
+import {
+  formatPercent,
+  formatTokenK,
+  getContextPresetsForModel,
+  modelDisplayName,
+  type ModelMenuSection,
+  type SendWith,
+  type StagedAttachment,
+} from './types';
 
 export interface ChatInputControlsProps {
   cwd: string;
@@ -47,14 +55,14 @@ export interface ChatInputControlsProps {
   isBranchDirty: boolean;
   onSwitchBranch: (branch: string) => void;
   models: PiModelRow[];
-  model: { name?: string; id?: string; maxTokens?: number } | null | undefined;
+  model: { name?: string; id?: string; maxTokens?: number; contextWindow?: number } | null | undefined;
   selectedModel?: PiModelRow;
   modelKey: string;
   modelMenuRef: RefObject<HTMLDivElement | null>;
   modelMenuOpen: boolean;
   setModelMenuOpen: (open: boolean | ((open: boolean) => boolean)) => void;
-  modelMenuSection: 'models' | 'thinking' | null;
-  setModelMenuSection: (s: 'models' | 'thinking' | null | ((s: 'models' | 'thinking' | null) => 'models' | 'thinking' | null)) => void;
+  modelMenuSection: ModelMenuSection;
+  setModelMenuSection: (s: ModelMenuSection | ((s: ModelMenuSection) => ModelMenuSection)) => void;
   modelGroups: Map<string, PiModelRow[]>;
   collapsedProviders: Set<string>;
   toggleProviderCollapse: (provider: string) => void;
@@ -63,6 +71,7 @@ export interface ChatInputControlsProps {
   groupVisibleModels: (provider: string, models: PiModelRow[]) => PiModelRow[];
   applyModelSelection: (key: string) => void;
   onSelectThinkingLevel: (level: string) => void;
+  onSelectContextWindow?: (contextWindow: number) => void;
   reasoning: boolean;
   thinkingLevel: string | undefined;
   effectiveThinkingLevels: string[];
@@ -134,6 +143,7 @@ export function ChatInputControls({
   groupVisibleModels,
   applyModelSelection,
   onSelectThinkingLevel,
+  onSelectContextWindow,
   reasoning,
   thinkingLevel,
   effectiveThinkingLevels,
@@ -163,6 +173,11 @@ export function ChatInputControls({
   onFocusTextarea,
 }: ChatInputControlsProps) {
   const { t } = useTranslation();
+
+  const maxContextWindow = selectedModel?.contextWindow ?? model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+  const presets = getContextPresetsForModel(maxContextWindow);
+  const minContext = presets[0]?.value ?? 8_000;
+  const isCompactingWarning = contextTokens != null && contextTokens > contextWindow;
 
   const renderModelOption = (m: PiModelRow) => {
     const optionValue = `${m.provider}/${m.id}`;
@@ -403,6 +418,9 @@ export function ChatInputControls({
                 · {t(`chat.thinkingLevels.${thinkingLevel}`, { defaultValue: thinkingLevel })}
               </span>
             )}
+            <span className="model-menu-trigger-context" data-testid="model-trigger-context">
+              · {formatTokenK(contextWindow)}
+            </span>
             <ChevronDown size={13} />
           </button>
           {modelMenuOpen && (
@@ -477,6 +495,87 @@ export function ChatInputControls({
                   ))}
                 </div>
               )}
+              {modelMenuSection === 'context' && (
+                <div className="model-submenu model-context-submenu" data-testid="model-submenu-context">
+                  <div className="model-context-header">
+                    <span className="model-context-title">{t('chat.contextWindow')}</span>
+                    <span className="model-context-badge" data-testid="context-window-current-badge">
+                      {formatTokenK(contextWindow)} ({formatTokens(contextWindow)})
+                    </span>
+                  </div>
+                  <div className="model-context-slider-wrap">
+                    <div className="model-context-slider-bounds">
+                      <span>{formatTokenK(minContext)}</span>
+                      <span>{t('chat.modelMenu.currentLimit')}: {formatTokenK(contextWindow)}</span>
+                      <span>{formatTokenK(maxContextWindow)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      className="model-context-slider"
+                      data-testid="context-window-slider"
+                      min={minContext}
+                      max={maxContextWindow}
+                      step={maxContextWindow > 500_000 ? 16_384 : 4_096}
+                      value={contextWindow}
+                      onChange={(e) => onSelectContextWindow?.(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="model-context-presets-wrap">
+                    <div className="model-context-presets-header">
+                      <span>{t('chat.modelMenu.quickPresets')}</span>
+                      <button
+                        type="button"
+                        className="model-context-reset-btn"
+                        data-testid="context-window-reset"
+                        onClick={() => onSelectContextWindow?.(maxContextWindow)}
+                      >
+                        {t('chat.modelMenu.resetMax')}
+                      </button>
+                    </div>
+                    <div className="model-context-presets-grid">
+                      {presets.map((preset) => {
+                        const isCurrent = Math.abs(contextWindow - preset.value) < 1000;
+                        return (
+                          <button
+                            key={preset.value}
+                            type="button"
+                            className={`model-context-preset-chip${isCurrent ? ' active' : ''}`}
+                            data-testid={`context-preset-${preset.label.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}
+                            onClick={() => onSelectContextWindow?.(preset.value)}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className={`model-context-usage-bar${isCompactingWarning ? ' warning' : ''}`}>
+                    <div className="model-context-usage-stats">
+                      <span>{t('chat.modelMenu.usedTokens')}: {formatTokens(contextTokens ?? 0)}</span>
+                      <span className="model-context-usage-pct">
+                        {formatPercent(contextTokens != null && contextWindow > 0 ? (contextTokens / contextWindow) * 100 : 0)}
+                      </span>
+                    </div>
+                    <div className="model-context-usage-track">
+                      <div
+                        className="model-context-usage-fill"
+                        style={{
+                          width: `${contextTokens != null && contextWindow > 0 ? Math.min(100, (contextTokens / contextWindow) * 100) : 0}%`,
+                        }}
+                      />
+                    </div>
+                    {isCompactingWarning ? (
+                      <div className="model-context-warning-note" data-testid="context-compacting-warning">
+                        {t('chat.modelMenu.compactionWarning')}
+                      </div>
+                    ) : (
+                      <div className="model-context-max-note">
+                        {t('chat.modelMenu.maxSupported', { max: formatTokenK(maxContextWindow) })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="model-menu-main">
                 <button
                   type="button"
@@ -503,6 +602,16 @@ export function ChatInputControls({
                     <ChevronLeft size={13} />
                   </button>
                 )}
+                <button
+                  type="button"
+                  className={`model-menu-row${modelMenuSection === 'context' ? ' active' : ''}`}
+                  data-testid="model-menu-context"
+                  onClick={() => setModelMenuSection((s) => (s === 'context' ? null : 'context'))}
+                >
+                  <span>{t('chat.contextWindow')}</span>
+                  <span className="model-menu-value">{formatTokenK(contextWindow)}</span>
+                  <ChevronLeft size={13} />
+                </button>
               </div>
             </div>
           )}

@@ -73,6 +73,68 @@ export function fileToStagedImage(file: File): Promise<StagedImage> {
   });
 }
 
+export type ModelMenuSection = 'models' | 'thinking' | 'context' | null;
+
+export function formatTokenK(val: number | null | undefined): string {
+  if (val == null || val <= 0) return '0';
+  if (val >= 1_000_000) {
+    if (val % 1_048_576 === 0) {
+      return `${Math.round(val / 1_048_576)}M`;
+    }
+    if (val % 1_000_000 === 0) {
+      return `${Math.round(val / 1_000_000)}M`;
+    }
+    const m = (val / 1_000_000).toFixed(1);
+    return m.endsWith('.0') ? `${m.slice(0, -2)}M` : `${m}M`;
+  }
+  if (val >= 1_000) {
+    return `${Math.round(val / 1_000)}k`;
+  }
+  return String(val);
+}
+
+export function formatPercent(percent: number | null | undefined): string {
+  if (percent == null || !Number.isFinite(percent) || percent <= 0) return '0%';
+  if (percent >= 100) return '100%';
+  const rounded1 = Number(percent.toFixed(1));
+  if (rounded1 % 1 === 0) {
+    return `${rounded1.toFixed(0)}%`;
+  }
+  return `${rounded1}%`;
+}
+
+export type ContextPreset = { label: string; value: number };
+
+export function getContextPresetsForModel(maxContext: number): ContextPreset[] {
+  const max = Math.max(8_000, maxContext);
+  let candidateValues: number[];
+  if (max >= 800_000) {
+    candidateValues = [200_000, 256_000, 272_000, 400_000, 500_000, max];
+  } else if (max >= 200_000) {
+    candidateValues = [64_000, 128_000, 160_000, max];
+  } else if (max >= 100_000) {
+    candidateValues = [32_000, 64_000, 96_000, max];
+  } else if (max >= 48_000) {
+    candidateValues = [16_000, 32_000, max];
+  } else {
+    candidateValues = [8_000, 16_000, max];
+  }
+
+  const result: ContextPreset[] = [];
+  const seen = new Set<number>();
+  for (const val of candidateValues) {
+    if (val <= max && !seen.has(val)) {
+      seen.add(val);
+      const isMax = val === max;
+      result.push({
+        label: isMax ? `${formatTokenK(val)} (Max)` : formatTokenK(val),
+        value: val,
+      });
+    }
+  }
+  return result;
+}
+
 /**
  * 壳内建斜杠命令（与 main 侧 SHELL_BUILTIN_COMMANDS 对齐；pi TUI onSubmit 分发的壳映射）。
  * 不在此集合里的 /xxx 原样发给 pi（prompt 模板 / skill / 扩展命令由 pi 展开执行）。
