@@ -5,13 +5,7 @@ import {
   ChevronRight,
   Columns2,
   AppWindow,
-  File,
-  FileArchive,
   FileCode2,
-  FileImage,
-  FileJson,
-  FileSpreadsheet,
-  FileText,
   Files,
   Folder,
   FolderOpen,
@@ -37,6 +31,7 @@ import type {
   WorkspaceReadResult,
 } from '@shared/host-api/contract';
 import { hostApi } from '../../lib/host-api';
+import { FileIcon } from '../../components/FileIcon';
 import {
   buildHunkPatch,
   buildSplitDiffRows,
@@ -102,16 +97,6 @@ function rankApplications(applications: ShellApplication[]): ShellApplication[] 
   return [...applications].sort((a, b) => priority(a.name) - priority(b.name) || a.name.localeCompare(b.name));
 }
 
-function WorkspaceFileIcon({ name, size = 14 }: { name: string; size?: number }) {
-  const extension = name.toLowerCase().split('.').pop() ?? '';
-  if (['js', 'jsx', 'ts', 'tsx', 'css', 'html', 'py', 'rb', 'go', 'rs', 'java', 'swift', 'sh'].includes(extension)) return <FileCode2 size={size} />;
-  if (['json', 'jsonl', 'yaml', 'yml', 'toml', 'xml', 'plist'].includes(extension)) return <FileJson size={size} />;
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'svg'].includes(extension)) return <FileImage size={size} />;
-  if (['csv', 'tsv', 'xls', 'xlsx', 'numbers'].includes(extension)) return <FileSpreadsheet size={size} />;
-  if (['zip', 'tar', 'gz', 'tgz', 'bz2', '7z', 'rar'].includes(extension)) return <FileArchive size={size} />;
-  if (['md', 'markdown', 'txt', 'log', 'pdf', 'doc', 'docx', 'rtf'].includes(extension)) return <FileText size={size} />;
-  return <File size={size} />;
-}
 
 function UnifiedDiff({ parsed, onRevert }: { parsed: ParsedFileDiff; onRevert?: (index: number) => void }) {
   const { t } = useTranslation();
@@ -223,7 +208,7 @@ function FileExplorer({ selected, onSelect, onRootCount }: { selected: string | 
           >
             {entry.kind === 'directory' ? (
               <>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{open ? <FolderOpen size={14} /> : <Folder size={14} />}</>
-            ) : <><span className="workspace-tree-indent" /><WorkspaceFileIcon name={entry.name} /></>}
+            ) : <><span className="workspace-tree-indent" /><FileIcon name={entry.name} size={14} /></>}
             <span>{entry.name}</span>
           </button>
           {entry.kind === 'directory' && open && renderEntries(entry.path, depth + 1)}
@@ -342,7 +327,7 @@ function FilePreview({ path }: { path: string }) {
     <div className="workspace-file-view">
       <header className="workspace-file-header">
         <div className="workspace-file-title">
-          <WorkspaceFileIcon name={result.name} size={15} />
+          <FileIcon name={result.name} size={16} />
           <span title={result.path}>{result.name}</span>
           <small>{formatBytes(result.size)}</small>
         </div>
@@ -589,6 +574,7 @@ function ReviewWorkspace() {
                       className="review-file-main"
                       onClick={() => setSelected({ group: 'session', path: file.path })}
                     >
+                      <FileIcon name={file.path} size={14} />
                       <span className="review-file-name" title={file.path}>{file.path}</span>
                       <span className="review-file-status" data-testid="review-file-scope">{t('review.sessionScope')}</span>
                       <span className="review-file-stats">
@@ -623,6 +609,7 @@ function ReviewWorkspace() {
                         className="review-file-main"
                         onClick={() => setSelected({ group: 'workspace', path: file.path })}
                       >
+                        <FileIcon name={file.path} size={14} />
                         <span className="review-file-name" title={file.path}>{file.path}</span>
                         {!baselineFile && <span className="review-file-status" data-testid="review-file-status">{t('review.readOnly')}</span>}
                         {file.status === 'conflicted' && <span className="review-file-status status-conflicted" data-testid="review-file-status">{t('review.status.conflicted')}</span>}
@@ -994,6 +981,7 @@ export function ReviewPanel() {
             <button className={`workspace-tab${tab === 'files' ? ' active' : ''}`} role="tab" aria-selected={tab === 'files'} data-testid="workspace-files-tab" onClick={() => { setWorkspaceOpen(true); setTab('files'); setFileTreeOpen(true); setUserToggledInNarrow(null); }}><Files size={14} />{t('workspace.files')}</button>
             {openFiles.map((path) => (
               <div className={`workspace-file-tab${tab === `file:${path}` ? ' active' : ''}`} data-testid="workspace-file-tab" key={path} title={path}>
+                <FileIcon name={path} size={14} />
                 <button className="workspace-file-tab-main" role="tab" aria-selected={tab === `file:${path}`} onClick={() => { setWorkspaceOpen(true); setSelectedFile(path); setTab(`file:${path}`); }}>{titleFor(path)}</button>
                 <button className="workspace-file-tab-close" aria-label={t('workspace.closeFile', { name: titleFor(path) })} onClick={() => closeFile(path)}><X size={12} /></button>
               </div>

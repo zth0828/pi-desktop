@@ -1,6 +1,7 @@
 import type { ReactNode, RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, FileText, Folder, X } from 'lucide-react';
+import { ChevronRight, Folder, X } from 'lucide-react';
+import { FileIcon } from '../../../components/FileIcon';
 
 export interface ChatInputMentionsPopupProps {
   filePanelOpen: boolean;
@@ -82,7 +83,7 @@ export function ChatInputMentionsPopup({
             onPickFile(full);
           }}
         >
-          <FileText size={13} />
+          <FileIcon name={name} size={14} />
           <span className="command-name">{name}</span>
         </button>,
       );
@@ -107,7 +108,7 @@ export function ChatInputMentionsPopup({
                 onPickFile(file);
               }}
             >
-              <FileText size={13} />
+              <FileIcon name={file} size={14} />
               <span className="command-name">@{file}</span>
             </button>
           ))

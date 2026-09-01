@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { FileText } from 'lucide-react';
+import { FileIcon, getFileBadgeText } from '../../../components/FileIcon';
 import type { StagedAttachment } from './types';
 
 export interface ChatInputAttachmentsProps {
@@ -54,8 +54,11 @@ export function ChatInputAttachments({
             data-attachment-index={index + 1}
           >
             <span className="attachment-order">{index + 1}</span>
-            <FileText size={14} />
-            <span className="staged-file-name">{attachment.name}</span>
+            <span className="staged-file-icon">
+              <FileIcon name={attachment.name} size={15} />
+            </span>
+            <span className="staged-file-name" title={attachment.name}>{attachment.name}</span>
+            <span className="file-ext-badge">{getFileBadgeText(attachment.name)}</span>
             <button
               type="button"
               className="staged-remove"

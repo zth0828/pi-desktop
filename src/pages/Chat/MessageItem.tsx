@@ -1,9 +1,10 @@
 import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, Copy, FileText, GitFork, Pencil, Sparkles, Square } from 'lucide-react';
+import { Check, ChevronRight, Copy, GitFork, Pencil, Sparkles, Square } from 'lucide-react';
 import { parseUserMessage, type ParsedSkillBlock } from '@shared/message-attachments';
 import { parseProviderError, PROVIDER_ERROR_HINT_KEYS } from '../../lib/provider-error';
 import { Markdown } from '../../components/Markdown';
+import { FileIcon, getFileBadgeText } from '../../components/FileIcon';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
 import { formatDuration, tailLines } from '../../lib/tool-display';
 import { hostApi } from '../../lib/host-api';
@@ -334,8 +335,15 @@ function MessageItemView({
               ) : (
                 <div className="message-attachment message-file-attachment" data-testid="message-attachment" data-attachment-index={attachment.index} key={`${attachment.index}-${attachment.name}`}>
                   <span className="attachment-order">{attachment.index}</span>
-                  <FileText size={18} />
-                  <span className="message-attachment-name" data-testid="message-file" title={attachment.name}>{attachment.name}</span>
+                  <div className="message-file-icon">
+                    <FileIcon name={attachment.name} size={18} />
+                  </div>
+                  <div className="message-file-info">
+                    <div className="message-file-header">
+                      <span className="message-attachment-name" data-testid="message-file" title={attachment.name}>{attachment.name}</span>
+                      <span className="file-ext-badge">{getFileBadgeText(attachment.name)}</span>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

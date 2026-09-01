@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { collectTurnChanges } from '../../lib/turn-changes';
+import { FileIcon } from '../../components/FileIcon';
 import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 
 /**
@@ -112,6 +113,7 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
       <div className="turn-changes-files">
         {visibleFiles.map((file) => (
           <div className="turn-changes-file" data-testid="turn-changes-file" key={file.path}>
+            <FileIcon name={file.path} size={14} />
             <button
               className="turn-changes-path"
               data-testid="turn-changes-open-file"
