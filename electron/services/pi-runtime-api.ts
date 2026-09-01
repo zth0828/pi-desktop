@@ -1643,6 +1643,14 @@ export const piRuntimeApi = {
     return modelUpdate(active.adapterRuntime.session, active);
   },
 
+  setContextWindow: async (payload: { contextWindow: number }, ctx?: HostActionContext) => {
+    const active = resolveRuntimeForContext(ctx);
+    if (!active) return { success: false, error: 'session not started' };
+    const target = Math.max(1024, Math.round(payload.contextWindow));
+    active.adapterRuntime.session.setContextWindow(target);
+    return modelUpdate(active.adapterRuntime.session, active);
+  },
+
   setModel: async (payload: { provider: string; id: string }, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };

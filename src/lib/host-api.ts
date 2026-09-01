@@ -83,6 +83,7 @@ function createHostApi(sessionPath?: string) {
     navigateTree: (targetId: string, options?: { summarize?: boolean; customInstructions?: string }) =>
       invoke('piRuntime', 'navigateTree', { targetId, ...options }),
     setThinkingLevel: (level: string) => invoke('piRuntime', 'setThinkingLevel', { level }),
+    setContextWindow: (contextWindow: number) => invoke('piRuntime', 'setContextWindow', { contextWindow }),
     setModel: (provider: string, id: string) => invoke('piRuntime', 'setModel', { provider, id }),
     setSessionName: (name: string, notify = true) => invoke('piRuntime', 'setSessionName', { name, notify }),
     getSessionInfo: () => invoke('piRuntime', 'getSessionInfo'),

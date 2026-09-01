@@ -226,6 +226,10 @@ export function createGenericPiAdapter(input: AdapterInput): PiRuntimeAdapter {
     port.waitForIdle = () => raw.waitForIdle();
     port.setSessionName = (name) => raw.setSessionName(name);
     port.setThinkingLevel = (level) => raw.setThinkingLevel(level);
+    port.setContextWindow = (contextWindow) => {
+      if (raw.model) raw.model.contextWindow = contextWindow;
+      if (raw.agent?.model) raw.agent.model.contextWindow = contextWindow;
+    };
     port.setModel = async (model) => {
       const entry = models.get(model.identity);
       if (!entry) throw new Error('stale-model');

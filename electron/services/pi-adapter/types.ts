@@ -140,6 +140,7 @@ export type PiSessionPort = {
   waitForIdle(): Promise<void>;
   setSessionName(name: string): void;
   setThinkingLevel(level: string): void;
+  setContextWindow(contextWindow: number): void;
   setModel(model: PiModelHandle): Promise<void>;
   exportToHtml(outputPath?: string): Promise<string>;
   getAvailableThinkingLevels(): string[];

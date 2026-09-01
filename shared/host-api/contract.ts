@@ -1133,6 +1133,7 @@ export type HostApiContract = {
     /** 同会话文件内跳分支（session.navigateTree，TUI /tree 语义）。 */
     navigateTree: (payload: PiRuntimeNavigatePayload) => PiRuntimeNavigateResult;
     setThinkingLevel: (payload: { level: string }) => PiRuntimeModelUpdateResult;
+    setContextWindow: (payload: { contextWindow: number }) => PiRuntimeModelUpdateResult;
     setModel: (payload: { provider: string; id: string }) => PiRuntimeModelUpdateResult;
     /** /name <text>：重命名当前会话（session.setSessionName；返回 pi 规范化后的名字）。 */
     setSessionName: (payload: { name: string; notify?: boolean }) => HostSuccess & { name?: string };
