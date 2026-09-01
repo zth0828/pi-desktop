@@ -11,6 +11,7 @@ import { onHostEvent } from '../../lib/host-events';
 import { SESSION_REPLACEMENT_TIMEOUT } from '../../lib/session-binding';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
 import { workspaceErrorMessage } from '../../lib/workspace-error';
+import { formatErrorMessage } from '../../lib/error-formatter';
 import { timingMark } from '../../lib/timing';
 import { groupLogicalTurns, groupTurnStages, turnDurationMs, turnFinalResponseIndex } from '../../lib/turn-changes';
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
@@ -689,7 +690,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               <X size={16} />
             </button>
           )}
-          <p data-testid="chat-attaching">{startError === 'start-timeout' ? t('chat.startTimeout') : workspaceErrorMessage(startError, t) ?? t('chat.starting')}</p>
+          <p data-testid="chat-attaching">{formatErrorMessage(startError, t) ?? t('chat.starting')}</p>
           {startError && attachRetry && (
             <button className="primary" data-testid="attach-retry" onClick={attachRetry}>
               {t('chat.startRetry')}
@@ -737,16 +738,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               <span>
                 {modelUnavailable
                   ? t('chat.error.modelUnavailable', { provider: unavailableProvider, model: unavailableModelId })
-                  : startError === 'start-timeout'
-                    ? t('chat.startTimeout')
-                    : (() => {
-                      // 通道级超时（如切换请求 30s 无响应）翻译成可读文案；
-                      // 其余 main 侧错误保留原文（有诊断价值，且来源多样无法穷举）
-                      const timeoutAction = matchHostInvokeTimeout(startError);
-                      return timeoutAction
-                        ? t('chat.errors.hostInvokeTimeout', { action: timeoutAction })
-                        : workspaceErrorMessage(startError, t);
-                    })()}
+                  : formatErrorMessage(startError, t)}
               </span>
               {lastFailedSwitch && started && (
                 <span className="error-banner-note" data-testid="switch-failed-note">
@@ -850,20 +842,17 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
         </div>
 
         {runtimeError && (() => {
-          // store 保持 node-safe 不能引 i18n：替换超时以哨兵值入 state，这里翻译。
+          // store 保持 node-safe 不能引 i18n：替换超时与后端错误以哨兵/错误码入 state，这里统一翻译。
           // 通道超时同理按 message 形态识别；供应商类错误附归属 hint（与消息流内一致）。
           const timeoutAction = matchHostInvokeTimeout(runtimeError);
           const parsed = parseProviderError(runtimeError);
+          const formatted = formatErrorMessage(runtimeError, t);
           return (
             <div className="runtime-error-notice" data-testid="runtime-error-notice" role="alert">
               <span className="runtime-error-text">
                 <span className="runtime-error-title">{t('chat.runtimeErrorTitle')}</span>
-                {runtimeError === SESSION_REPLACEMENT_TIMEOUT
-                  ? t('chat.errors.replacementTimeout')
-                  : timeoutAction
-                    ? t('chat.errors.hostInvokeTimeout', { action: timeoutAction })
-                    : runtimeError}
-                {/* 哨兵/通道超时已有专属文案（且非供应商错误），不再叠供应商归属提示 */}
+                {formatted}
+                {/* 哨兵/通道/已映射错误已有专属文案（且非供应商错误），不再叠供应商归属提示 */}
                 {parsed.category !== 'unknown' && !timeoutAction && runtimeError !== SESSION_REPLACEMENT_TIMEOUT && (
                   <div className="error-hint" data-testid={`runtime-error-hint-${parsed.category}`}>
                     {t(`chat.errors.${PROVIDER_ERROR_HINT_KEYS[parsed.category]}`)}

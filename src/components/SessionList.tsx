@@ -20,6 +20,7 @@ import {
 import type { PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { pushGlobalError } from '../stores/global-errors';
+import { formatErrorMessage } from '../lib/error-formatter';
 import { onHostEvent } from '../lib/host-events';
 import { groupByProject, type ProjectGroup } from '../lib/session-groups';
 import { sessionDisplayTitle } from '../lib/session-format';
@@ -272,9 +273,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
         // 列表回滚之外必须给出失败原因，否则用户只看到会话「删了又回来」
         pushGlobalError(result.error === 'session is running'
           ? t('sessions.deleteRunning')
-          : result.error
-            ? t('sessions.actionFailed', { error: result.error })
-            : t('sessions.actionFailedPlain'));
+          : formatErrorMessage(result.error, t) ?? t('sessions.actionFailedPlain'));
         setSessions(previous);
         refresh();
       }
@@ -297,9 +296,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     try {
       const result = await hostApi.piSessions.archive(sessionPath, archived);
       if (!result.success) {
-        pushGlobalError(result.error
-          ? t('sessions.actionFailed', { error: result.error })
-          : t('sessions.actionFailedPlain'));
+        pushGlobalError(formatErrorMessage(result.error, t) ?? t('sessions.actionFailedPlain'));
         setSessions(previous);
         refresh();
       }
@@ -322,9 +319,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     try {
       const result = await hostApi.piSessions.archiveProject(cwd, archived);
       if (!result.success) {
-        pushGlobalError(result.error
-          ? t('sessions.actionFailed', { error: result.error })
-          : t('sessions.actionFailedPlain'));
+        pushGlobalError(formatErrorMessage(result.error, t) ?? t('sessions.actionFailedPlain'));
         setSessions(previous);
         refresh();
       }
