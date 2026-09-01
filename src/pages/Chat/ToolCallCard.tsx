@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Eye } from 'lucide-react';
+import { Eye, Sparkles } from 'lucide-react';
 import {
   collectToolWarnings,
   editPreviewDiff,
   extractResultText,
   formatDuration,
   parseDiffLines,
+  previewPathFor,
   resultDetails,
   tailLines,
   toolSummary,
@@ -14,6 +15,12 @@ import {
 } from '../../lib/tool-display';
 import type { ToolExecution } from '../../stores/chat';
 import { usePaneChatStore } from './chat-store-context';
+
+function getSkillNameFromPath(filePath?: string): string | null {
+  if (!filePath) return null;
+  const match = filePath.match(/(?:^|[\\/])([a-zA-Z0-9_-]+)[\\/]SKILL\.md$/i);
+  return match ? match[1] : null;
+}
 
 /** 折叠态输出预览保留的尾部行数（pi bash 折叠态口径） */
 const PREVIEW_LINES = 5;
@@ -99,7 +106,7 @@ export function ToolCallCard({
   // 动词化一行文案（Codex 范式）：进行/完成/中止三态成对，如
   // "Running command…" / "Ran $ ls in 1.2s" / "Stopped"；error 复用 done 模板（pill 标红）。
   const lineState = execution.interrupted ? 'stopped' : execution.status === 'running' ? 'running' : 'done';
-  const verbTool = ['bash', 'edit', 'write', 'read', 'grep'].includes(execution.toolName)
+  const verbTool = ['bash', 'edit', 'write', 'read', 'grep', 'find', 'ls'].includes(execution.toolName)
     ? execution.toolName
     : 'default';
   const line = t(`chat.tool.line.${verbTool}.${lineState}`, {
@@ -118,13 +125,28 @@ export function ToolCallCard({
     : null;
   const writeTotalLines = writeTail ? writeTail.lines.length + writeTail.hidden : 0;
   const preview = !expanded && !diff && writeContent === null && outputText ? tailLines(outputText, PREVIEW_LINES) : null;
-  const previewPath = ['read', 'edit', 'write'].includes(execution.toolName) ? summary : null;
+  const previewPath = previewPathFor(execution.toolName, execution.args);
+  const readPath =
+    execution.toolName === 'read' && typeof execution.args === 'object' && execution.args !== null
+      ? ((execution.args as { path?: string; file_path?: string }).path ??
+         (execution.args as { file_path?: string }).file_path)
+      : undefined;
+  const skillName = getSkillNameFromPath(readPath);
 
   return (
     <div className={`tool-card tool-${execution.status}`} data-testid="tool-card">
       <div className="tool-card-header-row">
         <button className="tool-card-header" onClick={() => setLocalExpanded(!expanded)}>
-          <span className="tool-line" data-testid="tool-line">{line}</span>
+          <span className="tool-line" data-testid="tool-line">
+            {skillName ? (
+              <span className="tool-skill-badge" title={readPath}>
+                <Sparkles size={12} className="tool-skill-sparkle" />
+                {t('chat.tool.readingSkill', { name: skillName })}
+              </span>
+            ) : (
+              line
+            )}
+          </span>
           <span className={`tool-status tool-status-${execution.status}`}>{statusLabel}</span>
         </button>
         {previewPath && (

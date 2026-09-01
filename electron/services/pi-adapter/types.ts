@@ -140,6 +140,7 @@ export type PiSessionPort = {
   waitForIdle(): Promise<void>;
   setSessionName(name: string): void;
   setThinkingLevel(level: string): void;
+  setContextWindow(contextWindow: number): void;
   setModel(model: PiModelHandle): Promise<void>;
   exportToHtml(outputPath?: string): Promise<string>;
   getAvailableThinkingLevels(): string[];
@@ -242,7 +243,7 @@ export type PiProviderPort = {
   getAvailable(runtime: PiModelRuntimeHandle): Promise<PiModelDescriptor[]>;
   getModel(runtime: PiModelRuntimeHandle, provider: string, id: string): PiModelHandle | null;
   getAuth(runtime: PiModelRuntimeHandle, providerOrModel: string | PiModelHandle): Promise<PiAuthResolution | null>;
-  login(runtime: PiModelRuntimeHandle, provider: string, method: 'api_key' | 'oauth', callbacks: { prompt: () => Promise<string>; notify: (event: unknown) => void }): Promise<void>;
+  login(runtime: PiModelRuntimeHandle, provider: string, method: 'api_key' | 'oauth', callbacks: { prompt: (request: unknown) => Promise<string>; notify: (event: unknown) => void }): Promise<void>;
   logout(runtime: PiModelRuntimeHandle, provider: string): Promise<void>;
   refresh(runtime: PiModelRuntimeHandle, input: { allowNetwork: boolean; force?: boolean; signal?: AbortSignal }): Promise<{ aborted?: boolean; errors: Map<string, Error> }>;
 };
@@ -253,6 +254,7 @@ export type PiSettingsPort = {
   getRetry(handle: PiSettingsHandle): PiRetrySettingsResult;
   getDefaultModel(handle: PiSettingsHandle): PiDefaultModel | null;
   getDefaultThinking(handle: PiSettingsHandle): string | null;
+  getDefaultTools(handle: PiSettingsHandle): string[] | null;
   getBranchSummarySkipPrompt(handle: PiSettingsHandle): boolean;
   isProjectTrusted(handle: PiSettingsHandle): boolean;
   setDefaultModel(handle: PiSettingsHandle, model: PiDefaultModel): void;

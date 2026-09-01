@@ -1,0 +1,160 @@
+import type { ComposerAttachment } from '../../../stores/chat';
+import type { PiModelRow } from '@shared/host-api/contract';
+
+export type StagedImage = Extract<ComposerAttachment, { kind: 'image' }>;
+export type StagedFile = Extract<ComposerAttachment, { kind: 'file' }>;
+export type StagedAttachment = ComposerAttachment;
+
+/** 光标处的 @ token（支持行首、空白、中日韩字符、标点符号后的 @，避免合法 email 误触） */
+export type AtToken = { start: number; end: number; query: string };
+
+export function detectAtToken(text: string, caret: number): AtToken | null {
+  const before = text.slice(0, caret);
+  const m = before.match(/(?:^|[\s\p{P}\p{S}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[^a-zA-Z0-9_])@([^\s@]*)$/u);
+  if (!m) return null;
+  const query = m[1];
+  return { start: before.length - query.length - 1, end: caret, query };
+}
+
+/** 光标处的 / token（支持行首、空白、中日韩字符、标点符号后的 / 或 ／） */
+export type SlashToken = { start: number; end: number; query: string };
+
+export function detectSlashToken(text: string, caret: number): SlashToken | null {
+  const before = text.slice(0, caret);
+  const m = before.match(/(?:^|[\s\p{P}\p{S}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[^a-zA-Z0-9_])[/／]([^\s/／]*)$/u);
+  if (!m) return null;
+  const query = m[1];
+  return { start: before.length - query.length - 1, end: caret, query };
+}
+
+export type ChatInputProps = {
+  cwd: string;
+  onChooseWorkspace: () => Promise<void>;
+  /** 「选择模型」入口信号（nonce 递增触发打开模型菜单；0 = 无请求） */
+  openModelMenuNonce?: number;
+};
+
+export type FollowupBehavior = 'queue' | 'steer';
+export type SendWith = 'enter' | 'cmdEnter';
+
+export function modelDisplayName(model: PiModelRow): string {
+  let name = model.name ?? model.id;
+  for (const suffix of [model.provider, model.providerLabel]) {
+    if (!suffix) continue;
+    if (name.toLowerCase().endsWith(` (${suffix.toLowerCase()})`)) {
+      name = name.slice(0, -(suffix.length + 3));
+    }
+  }
+  return name;
+}
+
+/** 流式中提交的排队方式：设置决定默认行为，Alt 反转（queue ↔ steer） */
+export function resolveStreamBehavior(followupBehavior: FollowupBehavior, alt: boolean): 'steer' | 'followUp' {
+  const base: 'steer' | 'followUp' = followupBehavior === 'steer' ? 'steer' : 'followUp';
+  if (!alt) return base;
+  return base === 'steer' ? 'followUp' : 'steer';
+}
+
+export function fileToStagedImage(file: File): Promise<StagedImage> {
+  return new Promise((resolveFile, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      resolveFile({
+        kind: 'image',
+        name: file.name,
+        data: dataUrl.split(',')[1] ?? '',
+        mediaType: file.type || 'image/png',
+        previewUrl: dataUrl,
+      });
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+export type ModelMenuSection = 'models' | 'thinking' | 'context' | null;
+
+export function formatTokenK(val: number | null | undefined): string {
+  if (val == null || val <= 0) return '0';
+  if (val >= 1_000_000) {
+    if (val % 1_048_576 === 0) {
+      return `${Math.round(val / 1_048_576)}M`;
+    }
+    if (val % 1_000_000 === 0) {
+      return `${Math.round(val / 1_000_000)}M`;
+    }
+    const m = (val / 1_000_000).toFixed(1);
+    return m.endsWith('.0') ? `${m.slice(0, -2)}M` : `${m}M`;
+  }
+  if (val >= 1_000) {
+    return `${Math.round(val / 1_000)}k`;
+  }
+  return String(val);
+}
+
+export function formatPercent(percent: number | null | undefined): string {
+  if (percent == null || !Number.isFinite(percent) || percent <= 0) return '0%';
+  if (percent >= 100) return '100%';
+  const rounded1 = Number(percent.toFixed(1));
+  if (rounded1 % 1 === 0) {
+    return `${rounded1.toFixed(0)}%`;
+  }
+  return `${rounded1}%`;
+}
+
+export type ContextPreset = { label: string; value: number };
+
+export function getContextPresetsForModel(maxContext: number): ContextPreset[] {
+  const max = Math.max(8_000, maxContext);
+  let candidateValues: number[];
+  if (max >= 800_000) {
+    candidateValues = [200_000, 256_000, 272_000, 400_000, 500_000, max];
+  } else if (max >= 200_000) {
+    candidateValues = [64_000, 128_000, 160_000, max];
+  } else if (max >= 100_000) {
+    candidateValues = [32_000, 64_000, 96_000, max];
+  } else if (max >= 48_000) {
+    candidateValues = [16_000, 32_000, max];
+  } else {
+    candidateValues = [8_000, 16_000, max];
+  }
+
+  const result: ContextPreset[] = [];
+  const seen = new Set<number>();
+  for (const val of candidateValues) {
+    if (val <= max && !seen.has(val)) {
+      seen.add(val);
+      const isMax = val === max;
+      result.push({
+        label: isMax ? `${formatTokenK(val)} (Max)` : formatTokenK(val),
+        value: val,
+      });
+    }
+  }
+  return result;
+}
+
+/**
+ * 壳内建斜杠命令（与 main 侧 SHELL_BUILTIN_COMMANDS 对齐；pi TUI onSubmit 分发的壳映射）。
+ * 不在此集合里的 /xxx 原样发给 pi（prompt 模板 / skill / 扩展命令由 pi 展开执行）。
+ */
+export const SHELL_BUILTIN_NAMES = new Set([
+  'new',
+  'compact',
+  'tree',
+  'model',
+  'name',
+  'copy',
+  'export',
+  'session',
+  'settings',
+  'skills',
+  'extensions',
+  'mcp',
+  'models',
+  'login',
+  'logout',
+  'reload',
+  'resume',
+]);

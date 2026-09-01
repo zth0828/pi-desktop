@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen, Monitor, Moon, Sun } from 'lucide-react';
-import { DEFAULT_DESKTOP_PROXY_URL, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
+import { FolderOpen, Lock, Monitor, Moon, Sun, Terminal } from 'lucide-react';
+import { DEFAULT_DESKTOP_PROXY_URL, PI_BUILTIN_TOOLS, PI_CORE_TOOLS, PI_DEFAULT_TOOLS, type PiCompactionSettings, type PiSessionExportInfo, type PiTrustEntry } from '@shared/host-api/contract';
+import logoUrl from '../../resources/icon.png';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
+import { workspaceErrorMessage } from '../lib/workspace-error';
 import { setTheme, type Theme } from '../lib/theme';
 import { usePiSystemStore } from '../stores/pi-system';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '../lib/i18n';
+import { Markdown } from '../components/Markdown';
 
 const THEMES: Array<{ id: Theme; icon: typeof Sun }> = [
   { id: 'light', icon: Sun },
@@ -29,30 +32,60 @@ type ProxyStatus = { url?: string; source?: string };
 
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const;
 
+function formatBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '0 B';
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatSpeed(bytesPerSec?: number): string {
+  if (!bytesPerSec || bytesPerSec <= 0) return '0 KB/s';
+  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
+  return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+}
+
+function formatEta(received: number, total: number, speed: number, t: (k: string, opts?: Record<string, unknown>) => string): string {
+  if (!speed || speed <= 0 || total <= received) return '';
+  const remainingSec = Math.round((total - received) / speed);
+  if (remainingSec < 60) return t('settings.version.remainingSeconds', { sec: Math.max(1, remainingSec) });
+  return t('settings.version.remainingMinutes', { min: Math.ceil(remainingSec / 60) });
+}
+
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const [appVersion, setAppVersion] = useState('');
   const [versionStatus, setVersionStatus] = useState<Awaited<ReturnType<typeof hostApi.versionCheck.getStatus>>>();
   const [versionChecking, setVersionChecking] = useState(false);
+  const [checkFeedback, setCheckFeedback] = useState<'idle' | 'upToDate'>('idle');
   const [appDownloading, setAppDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadMetrics, setDownloadMetrics] = useState<{
+    receivedBytes: number;
+    totalBytes: number;
+    speedBytesPerSec: number;
+  }>({ receivedBytes: 0, totalBytes: 0, speedBytesPerSec: 0 });
+  const [appReleaseNotesExpanded, setAppReleaseNotesExpanded] = useState(true);
   const [cwd, setCwd] = useState<string | undefined>();
+  const [workspaceError, setWorkspaceError] = useState<string>();
   const [theme, setThemeState] = useState<Theme>('system');
   const [notifyMode, setNotifyMode] = useState<NotifyMode>('unfocused');
   const [followupBehavior, setFollowupBehavior] = useState<FollowupBehavior>('queue');
   const [sendWith, setSendWith] = useState<SendWith>('enter');
   const [preventSleep, setPreventSleep] = useState(false);
   const [notifyUiRequest, setNotifyUiRequest] = useState(true);
-  const [compaction, setCompaction] = useState({ reserveTokens: 16384, keepRecentTokens: 20000, enabled: true });
+  const [compaction, setCompaction] = useState<PiCompactionSettings>({ reserveTokens: 16384, keepRecentTokens: 20000, enabled: true });
   const [modelWindow, setModelWindow] = useState<number>();
+  const modelWindowRef = useRef<number | undefined>(undefined);
   const [exportInfo, setExportInfo] = useState<PiSessionExportInfo>();
   const [trustEntries, setTrustEntries] = useState<PiTrustEntry[]>([]);
   const [defaultThinking, setDefaultThinking] = useState<string | null>(null);
+  const [defaultTools, setDefaultTools] = useState<string[]>([...PI_DEFAULT_TOOLS]);
   const [retry, setRetry] = useState({ enabled: true, maxRetries: 3, baseDelayMs: 2000 });
   const [proxyMode, setProxyMode] = useState<ProxyMode>('auto');
   const [proxyUrl, setProxyUrl] = useState(DEFAULT_DESKTOP_PROXY_URL);
   const [proxyStatus, setProxyStatus] = useState<ProxyStatus>();
   const [proxyMessage, setProxyMessage] = useState<string>();
+  const [downloadMirror, setDownloadMirror] = useState('');
   const env = usePiSystemStore((s) => s.env);
   const detect = usePiSystemStore((s) => s.detect);
 
@@ -68,13 +101,36 @@ export default function SettingsPage() {
     void hostApi.settings.get('sendWith').then((v) => setSendWith(v === 'cmdEnter' ? 'cmdEnter' : 'enter'));
     void hostApi.settings.get('preventSleep').then((v) => setPreventSleep(v === true));
     void hostApi.settings.get('notifyUiRequest').then((v) => setNotifyUiRequest(v !== false));
-    void hostApi.providers.getCompaction().then(setCompaction).catch(() => {});
+    let compactionLoaded: PiCompactionSettings | undefined;
+    const applyRecommendedCompaction = () => {
+      // 未显式配置过 compaction 时，按当前模型窗口套用推荐值
+      // （保留最近上下文 ≈ 窗口 25%），让输入框与下方推荐文案一致。
+      if (!compactionLoaded || compactionLoaded.configured) return;
+      const windowSize = modelWindowRef.current;
+      if (!windowSize) return;
+      const recommendedKeep = Math.round(windowSize * 0.25);
+      if (recommendedKeep === compactionLoaded.keepRecentTokens) return;
+      compactionLoaded = { ...compactionLoaded, keepRecentTokens: recommendedKeep };
+      setCompaction(compactionLoaded);
+      void hostApi.providers.setCompaction({ keepRecentTokens: recommendedKeep }).catch(() => {});
+    };
+    const setModelWindowFrom = (windowSize: number) => {
+      modelWindowRef.current = windowSize;
+      setModelWindow(windowSize);
+      applyRecommendedCompaction();
+    };
+    void hostApi.providers.getCompaction().then((s) => {
+      compactionLoaded = s;
+      setCompaction(s);
+      applyRecommendedCompaction();
+    }).catch(() => {});
     void hostApi.piRuntime.getUsage().then((usage) => {
-      if (usage?.model?.contextWindow) setModelWindow(usage.model.contextWindow);
+      if (usage?.model?.contextWindow) setModelWindowFrom(usage.model.contextWindow);
     }).catch(() => {});
     void hostApi.piSessions.getExportInfo().then(setExportInfo).catch(() => {});
     void hostApi.piTrust.list().then((r) => setTrustEntries(r.entries)).catch(() => {});
     void hostApi.providers.getDefaultThinking().then((r) => setDefaultThinking(r.level)).catch(() => {});
+    void hostApi.providers.getDefaultTools().then((r) => setDefaultTools(r.tools)).catch(() => {});
     void hostApi.providers.getRetry().then(setRetry).catch(() => {});
     void hostApi.settings.get('httpProxyMode').then((v) => {
       const mode: ProxyMode = v === 'off' ? 'off' : 'auto';
@@ -86,15 +142,31 @@ export default function SettingsPage() {
       setProxyUrl(url);
       if (v !== url) void hostApi.settings.set('httpProxyUrl', url);
     }).catch(() => {});
+    void hostApi.settings.get('downloadMirror').then((v) => {
+      if (typeof v === 'string') setDownloadMirror(v);
+    }).catch(() => {});
     void hostApi.proxy.detect().then(setProxyStatus).catch(() => {});
     const offTrustChanged = onHostEvent('piTrust', 'changed', (r) => setTrustEntries(r.entries));
     const offUpdateProgress = onHostEvent('appUpdate', 'progress', (event) => {
-      if (event.totalBytes) setDownloadProgress(Math.round((event.downloadedBytes ?? 0) / event.totalBytes * 100));
-      if (event.phase === 'completed' || event.phase === 'failed') setAppDownloading(false);
+      if (event.totalBytes) {
+        setDownloadProgress(Math.min(100, Math.round(((event.downloadedBytes ?? 0) / event.totalBytes) * 100)));
+      }
+      setDownloadMetrics({
+        receivedBytes: event.downloadedBytes ?? 0,
+        totalBytes: event.totalBytes ?? 0,
+        speedBytesPerSec: event.speedBytesPerSec ?? 0,
+      });
+      if (event.phase === 'completed') {
+        setAppDownloading(false);
+        void hostApi.versionCheck.getStatus().then(setVersionStatus);
+      }
+      if (event.phase === 'failed') {
+        setAppDownloading(false);
+      }
     });
     void Promise.all([hostApi.providers.listModels(), hostApi.providers.getDefaultModel()]).then(([available, current]) => {
       const model = current.model ? available.models.find((candidate) => candidate.provider === current.model?.provider && candidate.id === current.model?.id) : undefined;
-      if (model?.contextWindow) setModelWindow((previous) => previous ?? model.contextWindow);
+      if (model?.contextWindow && modelWindowRef.current === undefined) setModelWindowFrom(model.contextWindow);
     }).catch(() => {});
     return () => {
       offTrustChanged();
@@ -115,14 +187,26 @@ export default function SettingsPage() {
   const changeWorkspace = async () => {
     const result = await hostApi.dialog.openDirectory(t('chat.workspace.choose'));
     if (result.canceled || !result.filePaths[0]) return;
-    await hostApi.settings.set('workspaceCwd', result.filePaths[0]);
+    // 工作区安全：主目录/盘符根被 main 侧拒绝，这里提示且不更新显示值
+    const saved = await hostApi.settings.set('workspaceCwd', result.filePaths[0]);
+    if (!saved.success) {
+      setWorkspaceError(workspaceErrorMessage(saved.error, t));
+      return;
+    }
+    setWorkspaceError(undefined);
     setCwd(result.filePaths[0]);
   };
 
   const checkVersions = async () => {
     setVersionChecking(true);
+    setCheckFeedback('idle');
     try {
-      setVersionStatus(await hostApi.versionCheck.check(true));
+      const result = await hostApi.versionCheck.check(true);
+      setVersionStatus(result);
+      if (!result.app.updateAvailable && !result.pi.updateAvailable && !result.app.error && !result.pi.error) {
+        setCheckFeedback('upToDate');
+        setTimeout(() => setCheckFeedback('idle'), 3000);
+      }
     } finally {
       setVersionChecking(false);
     }
@@ -155,6 +239,11 @@ export default function SettingsPage() {
     setProxyUrl(url);
     await hostApi.settings.set('httpProxyUrl', url);
     await refreshProxy();
+  };
+
+  const changeDownloadMirror = async (mirror: string): Promise<void> => {
+    setDownloadMirror(mirror);
+    await hostApi.settings.set('downloadMirror', mirror.trim() || undefined);
   };
 
   return (
@@ -215,6 +304,11 @@ export default function SettingsPage() {
           <button className="pill" onClick={() => void changeWorkspace()}>
             {t('chat.workspace.change')}
           </button>
+          {workspaceError && (
+            <div className="error-text settings-workspace-error" data-testid="settings-workspace-error">
+              {workspaceError}
+            </div>
+          )}
         </div>
 
         <div className="settings-row">
@@ -370,7 +464,7 @@ export default function SettingsPage() {
           </div>
           <input className="settings-number" data-testid="compaction-keep-recent" type="number" min="0" step="256" value={compaction.keepRecentTokens} onChange={(e) => setCompaction((v) => ({ ...v, keepRecentTokens: Number(e.target.value) || 0 }))} onBlur={() => void hostApi.providers.setCompaction({ keepRecentTokens: compaction.keepRecentTokens })} />
         </div>
-        <p className="settings-section-hint">{modelWindow ? t('settings.compaction.recommendation', { window: modelWindow.toLocaleString(), tokens: Math.round(modelWindow * 0.25).toLocaleString() }) : t('settings.compaction.recommendationGeneric')}</p>
+        <p className="settings-section-hint settings-section-footnote">{modelWindow ? t('settings.compaction.recommendation', { window: modelWindow.toLocaleString(), tokens: Math.round(modelWindow * 0.25).toLocaleString() }) : t('settings.compaction.recommendationGeneric')}</p>
       </section>
 
       <section className="settings-section">
@@ -446,12 +540,50 @@ export default function SettingsPage() {
       <section className="settings-section" data-testid="settings-agent-defaults">
         <h2>{t('settings.agentDefaults.title')}</h2>
         <p className="settings-section-hint">{t('settings.agentDefaults.desc')}</p>
+        <div className="settings-row settings-row-stacked">
+          <div className="settings-row-label">
+            <div>{t('settings.tools.title')}</div>
+            <div className="settings-row-desc">{t('settings.tools.desc')}</div>
+          </div>
+          <div className="pill-group settings-tools-group" data-testid="settings-default-tools">
+            {PI_BUILTIN_TOOLS.map((tool) => {
+              const core = (PI_CORE_TOOLS as readonly string[]).includes(tool);
+              const on = core || defaultTools.includes(tool);
+              return (
+                <button
+                  key={tool}
+                  data-testid={`tool-toggle-${tool}`}
+                  className={on ? `pill active${core ? ' pill-locked' : ''}` : 'pill'}
+                  disabled={core}
+                  title={core ? t('settings.tools.coreLocked') : undefined}
+                  onClick={() => {
+                    // 核心工具 disabled 挡住点击，这里只处理只读检索工具的开/关
+                    const next = on
+                      ? defaultTools.filter((name) => name !== tool)
+                      : [...defaultTools, tool];
+                    // 写回始终包含核心四工具：settings.json 由其他入口（如 pi CLI）
+                    // 写入 read-only 模式时，壳 UI 仍保证核心工具可用
+                    const effective = [
+                      ...PI_CORE_TOOLS,
+                      ...next.filter((name) => !(PI_CORE_TOOLS as readonly string[]).includes(name)),
+                    ];
+                    setDefaultTools(effective);
+                    void hostApi.providers.setDefaultTools(effective);
+                  }}
+                >
+                  {core && <Lock size={11} className="pill-lock-icon" aria-hidden="true" />}
+                  {tool}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="settings-row">
           <div className="settings-row-label">
             <div>{t('settings.defaultThinking.title')}</div>
             <div className="settings-row-desc">{t('settings.defaultThinking.desc')}</div>
           </div>
-          <div className="pill-group" data-testid="settings-default-thinking">
+          <div className="pill-group pill-group-segmented" data-testid="settings-default-thinking">
             {THINKING_LEVELS.map((level) => (
               <button
                 key={level}
@@ -488,7 +620,7 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
-        <div className="settings-row">
+        <div className={`settings-row${retry.enabled ? '' : ' settings-row-muted'}`}>
           <div className="settings-row-label">
             <div>{t('settings.retry.maxRetries')}</div>
             <div className="settings-row-desc">{t('settings.retry.maxRetriesDesc')}</div>
@@ -504,7 +636,7 @@ export default function SettingsPage() {
             onBlur={() => void hostApi.providers.setRetry({ maxRetries: retry.maxRetries })}
           />
         </div>
-        <div className="settings-row">
+        <div className={`settings-row${retry.enabled ? '' : ' settings-row-muted'}`}>
           <div className="settings-row-label">
             <div>{t('settings.retry.baseDelay')}</div>
             <div className="settings-row-desc">{t('settings.retry.baseDelayDesc')}</div>
@@ -526,7 +658,7 @@ export default function SettingsPage() {
         <h2>{t('settings.trust.title')}</h2>
         <p className="settings-section-hint">{t('settings.trust.desc')}</p>
         {trustEntries.length === 0 ? (
-          <p className="settings-section-hint" data-testid="trust-empty">{t('settings.trust.empty')}</p>
+          <div className="settings-empty-state" data-testid="trust-empty">{t('settings.trust.empty')}</div>
         ) : (
           trustEntries.map((entry) => (
             <div className="settings-row" key={entry.path} data-testid="trust-entry">
@@ -557,47 +689,242 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section className="settings-section" data-testid="settings-about">
+      <section className="settings-section" data-testid="settings-about" id="settings-about">
         <h2>{t('settings.about')}</h2>
-        <div className="settings-row" data-testid="settings-app-version-status">
-          <div className="settings-row-label">
-            <div>Pi Desktop</div>
-            <div className="settings-row-desc">{t('settings.version.current', { version: appVersion })}</div>
-            <div className="settings-row-desc">{versionStatus?.app.latest ? t(versionStatus.app.updateAvailable ? 'settings.version.updateAvailable' : 'settings.version.upToDate', { version: versionStatus.app.latest.replace(/^v/, '') }) : t('settings.version.notChecked')}</div>
-            {versionStatus?.app.error && <div className="error-text">{t('settings.version.checkFailed')}</div>}
-          </div>
-          <div className="pill-group">
-            <button className="pill" data-testid="settings-app-check" disabled={versionChecking} onClick={() => void checkVersions()}>{t(versionChecking ? 'settings.version.checking' : 'settings.version.checkNow')}</button>
-            {versionStatus?.app.updateAvailable && <button className="pill" data-testid="settings-app-download" disabled={appDownloading} onClick={() => void downloadAppUpdate()}>{t(appDownloading ? 'settings.version.downloading' : 'settings.version.download')}{appDownloading && ` ${downloadProgress}%`}</button>}
-            {versionStatus?.app.downloadedPath && <><button className="pill" data-testid="settings-app-open" onClick={() => void hostApi.appUpdate.openDownloaded()}>{t('settings.version.open')}</button><button className="pill" data-testid="settings-app-show" onClick={() => void hostApi.appUpdate.showDownloaded()}>{t('settings.version.showInFolder')}</button></>}
-          </div>
-        </div>
-        <div className="settings-row" data-testid="settings-pi-status">
-          <div className="settings-row-label">
-            <div>pi</div>
-            <div className="settings-row-desc">
-              <div>
-                {t('status.ready', { version: env?.pi.version ?? '?' })}
-                {versionStatus?.pi.latest && versionStatus.pi.updateAvailable
-                  ? ` · ${t('status.latestAvailable', { version: versionStatus.pi.latest })}`
-                  : ''}
+
+        {/* 独立卡片 1：Pi Desktop 桌面客户端 */}
+        <div className="settings-version-card" data-testid="settings-app-version-status" id="settings-app-version-status">
+          <div className="settings-version-card-head">
+            <div className="settings-version-card-meta">
+              <div className="settings-version-icon-wrap">
+                <img className="settings-version-icon-img" src={logoUrl} alt="Pi Desktop" draggable={false} />
               </div>
-              <div>{versionStatus?.pi.error ? t('settings.version.checkFailed') : t('settings.version.lastChecked', { time: versionStatus?.pi.lastSuccessAt ? new Date(versionStatus.pi.lastSuccessAt).toLocaleString() : t('settings.version.notChecked') })}</div>
-              {env?.compatibility?.status === 'compatible-untested' && (
-                <div className="warning">{t('status.compatibleUntested')}</div>
+              <div className="settings-version-meta-text">
+                <div className="settings-version-title-row">
+                  <span className="settings-version-name">Pi Desktop</span>
+                  <span className="settings-version-badge">
+                    {versionStatus?.app.latest
+                      ? (versionStatus.app.updateAvailable
+                          ? `${t('settings.version.newAvailable')} ${versionStatus.app.latest}`
+                          : t('settings.version.upToDate', { version: versionStatus.app.latest.replace(/^v/, '') }))
+                      : t('settings.version.current', { version: appVersion })}
+                  </span>
+                  {Boolean(downloadMirror?.trim()) && (
+                    <span className="settings-version-badge settings-badge-mirror">
+                      {t('settings.downloadMirror.activeBadge')}
+                    </span>
+                  )}
+                </div>
+                <div className="settings-row-desc">
+                  {t('settings.version.current', { version: appVersion })}
+                  {versionStatus?.app.assetName && ` · ${versionStatus.app.assetName}`}
+                </div>
+              </div>
+            </div>
+            <div className="pill-group">
+              <button
+                className="pill"
+                data-testid="settings-app-check"
+                disabled={versionChecking || appDownloading}
+                onClick={() => void checkVersions()}
+              >
+                {versionChecking
+                  ? t('settings.version.checking')
+                  : checkFeedback === 'upToDate'
+                    ? t('settings.version.alreadyLatest')
+                    : t('settings.version.checkNow')}
+              </button>
+              {versionStatus?.app.updateAvailable && !versionStatus.app.downloadedPath && !appDownloading && (
+                <button
+                  className="pill active"
+                  data-testid="settings-app-download"
+                  onClick={() => void downloadAppUpdate()}
+                >
+                  {t('settings.version.download')}
+                </button>
               )}
             </div>
           </div>
-          <div className="pill-group">
-            <button className="pill" data-testid="settings-recheck" onClick={() => void detect(true)}>{t('onboarding.recheck')}</button>
-            <button className="pill" data-testid="settings-pi-check" disabled={versionChecking} onClick={() => void checkVersions()}>{t(versionChecking ? 'settings.version.checking' : 'settings.version.checkNow')}</button>
-            {versionStatus?.pi.updateAvailable && <button className="pill" data-testid="settings-pi-upgrade" onClick={() => void usePiSystemStore.getState().install()}>{t('settings.version.upgradePi')}</button>}
-            <button
-              className="pill"
-              onClick={() => void hostApi.shell.openExternal('https://github.com/badlogic/pi-mono')}
-            >
-              GitHub
-            </button>
+
+          {/* Release Notes 展开/收起预览 */}
+          {versionStatus?.app.updateAvailable && Boolean(versionStatus.app.releaseNotes?.trim()) && (
+            <div className="settings-changelog-box">
+              <div
+                className="settings-changelog-head"
+                onClick={() => setAppReleaseNotesExpanded(!appReleaseNotesExpanded)}
+              >
+                <div className="settings-changelog-title">
+                  {t('settings.version.releaseNotesTitle', { version: versionStatus.app.latest ?? '' })}
+                </div>
+                <span className="settings-changelog-toggle">
+                  {appReleaseNotesExpanded ? t('settings.version.collapse') : t('settings.version.expand')}
+                </span>
+              </div>
+              {appReleaseNotesExpanded && (
+                <div className="settings-changelog-content">
+                  <Markdown text={versionStatus.app.releaseNotes!.trim()} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 下载进行中：动态进度条与指标 */}
+          {appDownloading && (
+            <div className="settings-download-progress-box">
+              <div className="settings-download-progress-info">
+                <span className="settings-download-status">
+                  <div className="settings-spinner" />
+                  {t('settings.version.downloadingStatus')}
+                </span>
+                <span className="settings-download-metrics-text">
+                  {downloadMetrics.speedBytesPerSec > 0 && `${formatSpeed(downloadMetrics.speedBytesPerSec)} · `}
+                  {downloadMetrics.totalBytes > 0 && downloadMetrics.speedBytesPerSec > 0 &&
+                    formatEta(downloadMetrics.receivedBytes, downloadMetrics.totalBytes, downloadMetrics.speedBytesPerSec, t)}
+                </span>
+              </div>
+              <div className="settings-download-track">
+                <div
+                  className="settings-download-fill"
+                  style={{ width: `${downloadProgress}%` }}
+                />
+              </div>
+              <div className="settings-download-metrics-bottom">
+                <span>{formatBytes(downloadMetrics.receivedBytes)} / {formatBytes(downloadMetrics.totalBytes)}</span>
+                <span className="settings-download-percent">{downloadProgress}%</span>
+              </div>
+            </div>
+          )}
+
+          {/* 下载完成：准备安装引导横幅 */}
+          {versionStatus?.app.downloadedPath && (
+            <div className="settings-ready-banner" data-testid="settings-app-downloaded-status">
+              <div className="settings-ready-meta">
+                <div className="settings-ready-icon">✓</div>
+                <div>
+                  <div className="settings-ready-title">{t('versionInstall.readyTitle')}</div>
+                  <div className="settings-ready-desc">{t('versionInstall.readyDesc')}</div>
+                </div>
+              </div>
+              <div className="pill-group">
+                <button
+                  className="pill"
+                  data-testid="settings-app-show"
+                  onClick={() => void hostApi.appUpdate.showDownloaded()}
+                >
+                  {t('settings.version.showInFolder')}
+                </button>
+                <button
+                  className="pill"
+                  data-testid="settings-app-open"
+                  onClick={() => void hostApi.appUpdate.openDownloaded()}
+                >
+                  {t('settings.version.open')}
+                </button>
+                <button
+                  className="pill active"
+                  data-testid="settings-app-install"
+                  onClick={() => void hostApi.appUpdate.installDownloaded()}
+                >
+                  {t('versionInstall.installAndQuit')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {versionStatus?.app.error && (
+            <div className="error-text" data-testid="settings-app-check-error">
+              {t('settings.version.checkFailed')}
+              <div className="settings-row-desc">{t('settings.version.downloadFailedHint')}</div>
+            </div>
+          )}
+        </div>
+
+        {/* 镜像加速配置行 */}
+        <div className="settings-row" data-testid="settings-download-mirror-row" id="settings-download-mirror-row">
+          <div className="settings-row-label">
+            <div>{t('settings.downloadMirror.title')}</div>
+            <div className="settings-row-desc">{t('settings.downloadMirror.desc')}</div>
+          </div>
+          <input
+            className="settings-number settings-proxy-url"
+            data-testid="settings-download-mirror"
+            type="text"
+            placeholder={t('settings.downloadMirror.placeholder')}
+            value={downloadMirror}
+            onChange={(e) => void changeDownloadMirror(e.target.value)}
+          />
+        </div>
+
+        {/* 独立卡片 2：pi 核心 CLI 引擎（独立解耦） */}
+        <div className="settings-version-card" data-testid="settings-pi-status" id="settings-pi-status">
+          <div className="settings-version-card-head">
+            <div className="settings-version-card-meta">
+              <div className="settings-version-icon-wrap settings-version-icon-cli">
+                <Terminal size={18} className="settings-version-cli-icon" />
+              </div>
+              <div className="settings-version-meta-text">
+                <div className="settings-version-title-row">
+                  <span className="settings-version-name">pi</span>
+                  <span className="settings-version-badge">
+                    {versionStatus?.pi.latest && versionStatus.pi.updateAvailable
+                      ? `${t('status.latestAvailable', { version: versionStatus.pi.latest })}`
+                      : t('status.ready', { version: env?.pi.version ?? '?' })}
+                  </span>
+                </div>
+                <div className="settings-row-desc">
+                  <div>
+                    {t('status.ready', { version: env?.pi.version ?? '?' })}
+                    {versionStatus?.pi.latest && versionStatus.pi.updateAvailable
+                      ? ` · ${t('status.latestAvailable', { version: versionStatus.pi.latest })}`
+                      : ''}
+                  </div>
+                  <div>
+                    {versionStatus?.pi.error
+                      ? t('settings.version.checkFailed')
+                      : t('settings.version.lastChecked', {
+                          time: versionStatus?.pi.lastSuccessAt
+                            ? new Date(versionStatus.pi.lastSuccessAt).toLocaleString()
+                            : t('settings.version.notChecked'),
+                        })}
+                  </div>
+                  {env?.compatibility?.status === 'compatible-untested' && (
+                    <div className="warning">{t('status.compatibleUntested')}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="pill-group">
+              <button className="pill" data-testid="settings-recheck" onClick={() => void detect(true)}>
+                {t('onboarding.recheck')}
+              </button>
+              <button
+                className="pill"
+                data-testid="settings-pi-check"
+                disabled={versionChecking}
+                onClick={() => void checkVersions()}
+              >
+                {versionChecking
+                  ? t('settings.version.checking')
+                  : checkFeedback === 'upToDate'
+                    ? t('settings.version.alreadyLatest')
+                    : t('settings.version.checkNow')}
+              </button>
+              {versionStatus?.pi.updateAvailable && (
+                <button
+                  className="pill active"
+                  data-testid="settings-pi-upgrade"
+                  onClick={() => void usePiSystemStore.getState().install()}
+                >
+                  {t('settings.version.upgradePi')}
+                </button>
+              )}
+              <button
+                className="pill"
+                onClick={() => void hostApi.shell.openExternal('https://github.com/badlogic/pi-mono')}
+              >
+                GitHub
+              </button>
+            </div>
           </div>
         </div>
       </section>

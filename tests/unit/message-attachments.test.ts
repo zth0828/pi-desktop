@@ -41,9 +41,49 @@ describe('ordered message attachments', () => {
     ]));
     expect(parsed.attachments[0].name).toBe('a & b.png');
   });
+
+  it('parses manifest when not anchored at start of text', () => {
+    const raw = 'prefix text\n<attachments>\n<attachment index="1" kind="image" name="pic.png" image-index="1"></attachment>\n</attachments>\n<file name="data.json">\n{"a":1}\n</file>\nUser prompt';
+    const parsed = parseUserMessage(raw);
+    expect(parsed.text).toBe('prefix text\nUser prompt');
+    expect(parsed.attachments).toEqual([
+      { index: 1, kind: 'image', name: 'pic.png', imageIndex: 1 },
+    ]);
+    expect(parsed.files).toEqual([{ name: 'data.json', text: '{"a":1}' }]);
+  });
+
+  it('parses skill block and keeps it separate from user message text', () => {
+    const raw = '<skill name="pdf-tools" location="/path/to/SKILL.md">\nReferences are relative to /path/to.\n\n# PDF Tools Guide\nDo the extract.\n</skill>\n\nextract table from invoice.pdf';
+    const parsed = parseUserMessage(raw);
+    expect(parsed.text).toBe('extract table from invoice.pdf');
+    expect(parsed.skills).toEqual([
+      {
+        name: 'pdf-tools',
+        location: '/path/to/SKILL.md',
+        content: 'References are relative to /path/to.\n\n# PDF Tools Guide\nDo the extract.',
+      },
+    ]);
+  });
+
+  it('handles skill block with attachment manifest and files together', () => {
+    const raw = '<skill name="brave-search" location="/skills/brave-search/SKILL.md">\nSearch docs\n</skill>\n\n<attachments>\n<attachment index="1" kind="image" name="pic.png" image-index="1"></attachment>\n</attachments>\n<file name="test.txt">\nhello\n</file>\nSearch for this';
+    const parsed = parseUserMessage(raw);
+    expect(parsed.text).toBe('Search for this');
+    expect(parsed.skills).toEqual([
+      {
+        name: 'brave-search',
+        location: '/skills/brave-search/SKILL.md',
+        content: 'Search docs',
+      },
+    ]);
+    expect(parsed.attachments).toEqual([
+      { index: 1, kind: 'image', name: 'pic.png', imageIndex: 1 },
+    ]);
+    expect(parsed.files).toEqual([{ name: 'test.txt', text: 'hello' }]);
+  });
 });
 
-describe('stripAttachmentEnvelope — 标题等纯文本场景剥离附件信封', () => {
+describe('stripAttachmentEnvelope — 标题等纯文本场景剥离附件信封与技能块', () => {
   it('strips envelope and keeps user text', () => {
     const prompt = formatOrderedAttachmentPrompt('看看这张图像什么', [
       { kind: 'image', name: 'image.png' },
@@ -64,6 +104,11 @@ describe('stripAttachmentEnvelope — 标题等纯文本场景剥离附件信封
     ]);
     expect(stripAttachmentEnvelope(prompt)).toBe('解释一下');
     expect(stripAttachmentEnvelope('前缀 <attachments>\n<attachment index="1" kind="image" name="a.png"></attachment>\n</attachments> 后缀')).toBe('前缀  后缀');
+  });
+
+  it('strips skill block from text for clean session titles', () => {
+    const text = '<skill name="pdf-tools" location="/path/to/SKILL.md">\n# PDF Tools\n</skill>\n\n帮我提取表格';
+    expect(stripAttachmentEnvelope(text)).toBe('帮我提取表格');
   });
 
   it('leaves plain text untouched', () => {

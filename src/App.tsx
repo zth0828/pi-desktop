@@ -20,13 +20,17 @@ import {
 import logoUrl from '../resources/icon.png';
 import { bindPiSystemEvents, usePiSystemStore } from './stores/pi-system';
 import { getActiveChatStore } from './stores/chat-registry';
+import { onHostEvent } from './lib/host-events';
 import { hostApi } from './lib/host-api';
 import { onNavigateToPage } from './lib/app-navigation';
 import { initTheme } from './lib/theme';
 import { SessionList } from './components/SessionList';
+import { GlobalErrorBanner } from './components/GlobalErrorBanner';
 import { SessionSearchDialog } from './components/SessionSearchDialog';
 import { ExtensionUiNotifications } from './components/ExtensionUiDialog';
 import { TrustDialog } from './components/TrustDialog';
+import { VersionUpdateToast } from './components/VersionUpdateToast';
+import { VersionInstallDialog } from './components/VersionInstallDialog';
 import Onboarding from './pages/Onboarding';
 import ChatPage from './pages/Chat';
 import ModelsPage from './pages/Models';
@@ -133,6 +137,15 @@ export default function App() {
     return () => document.removeEventListener('keydown', openSearch);
   }, []);
 
+  // macOS 原生系统菜单栏业务项：与自绘菜单（Windows/Linux）走同一组 action。
+  useEffect(() => {
+    return onHostEvent('menu', 'action', ({ action }) => {
+      if (action === 'new-chat') newChat();
+      else if (action === 'collapse-sidebar') toggleSidebar();
+      else if (action === 'search-chats') setSessionSearchOpen(true);
+    });
+  }, []);
+
   const newChat = () => {
     navigate('chat');
     // 走活跃面板 store 的 newSession：置位 expectingReplacement，sessionReplaced 事件据此改绑
@@ -159,8 +172,12 @@ export default function App() {
       { key: 'menu.closeWindow', action: () => void hostApi.windows.close() },
     ],
     edit: [
-      { key: 'menu.copy', disabled: true },
-      { key: 'menu.paste', disabled: true },
+      { key: 'menu.undo', action: () => void hostApi.app.editCommand('undo') },
+      { key: 'menu.redo', action: () => void hostApi.app.editCommand('redo') },
+      { key: 'menu.cut', action: () => void hostApi.app.editCommand('cut') },
+      { key: 'menu.copy', action: () => void hostApi.app.editCommand('copy') },
+      { key: 'menu.paste', action: () => void hostApi.app.editCommand('paste') },
+      { key: 'menu.selectAll', action: () => void hostApi.app.editCommand('selectAll') },
     ],
     view: [
       { key: 'menu.collapseSidebar', action: toggleSidebar },
@@ -202,9 +219,10 @@ export default function App() {
     </>
   );
 
-  // Windows/Linux frameless 顶部：Row 1 标题栏（logo + 菜单 + 折叠/搜索 + 窗口控件，
-  // 整行拖拽区，交互子元素显式 no-drag）。未就绪（onboarding）时同样渲染，
-  // 保证窗口可拖动、可最小化/关闭。侧边栏顶部只有全宽新会话按钮。
+  // Windows/Linux frameless 顶部：Row 1 标题栏（logo + 菜单 + 窗口控件，整行拖拽区，
+  // 交互子元素显式 no-drag）。macOS 走原生规范：系统菜单栏 + 原生红绿灯，
+  // 内部不渲染自绘标题栏（自绘浮层会遮挡界面按钮）。未就绪（onboarding）时
+  // 同样渲染，保证窗口可拖动、可最小化/关闭。侧边栏顶部为全平台共用 sidebar-head。
   const chrome = (
     <div className="window-chrome" data-testid="window-chrome">
       <div className="titlebar" data-testid="titlebar">
@@ -219,6 +237,10 @@ export default function App() {
                   role="menuitem"
                   aria-haspopup="menu"
                   aria-expanded={openMenu === group}
+                  onMouseDown={(e) => {
+                    // 阻止点击菜单栏夺走输入区域焦点
+                    e.preventDefault();
+                  }}
                   onClick={() => setOpenMenu((current) => (current === group ? null : group))}
                 >
                   {t(`menu.${group}`)}
@@ -232,6 +254,9 @@ export default function App() {
                         role="menuitem"
                         data-testid={`menu-item-${group}-${index}`}
                         disabled={item.disabled}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                        }}
                         onClick={() => {
                           setOpenMenu(null);
                           item.action?.();
@@ -251,31 +276,31 @@ export default function App() {
           <button
             className="window-control"
             data-testid="window-minimize"
-            title={t('menu.minimize')}
-            aria-label={t('menu.minimize')}
-            onClick={() => void hostApi.windows.minimize()}
-          >
-            <Minus size={14} />
-          </button>
-          <button
-            className="window-control"
-            data-testid="window-maximize"
-            title={maximized ? t('menu.restore') : t('menu.maximize')}
-            aria-label={maximized ? t('menu.restore') : t('menu.maximize')}
-            onClick={toggleMaximize}
-          >
-            {maximized ? <Copy size={12} /> : <Square size={12} />}
-          </button>
-          <button
-            className="window-control window-control-close"
-            data-testid="window-close"
-            title={t('menu.close')}
-            aria-label={t('menu.close')}
-            onClick={() => void hostApi.windows.close()}
-          >
-            <X size={14} />
-          </button>
-        </div>
+              title={t('menu.minimize')}
+              aria-label={t('menu.minimize')}
+              onClick={() => void hostApi.windows.minimize()}
+            >
+              <Minus size={14} />
+            </button>
+            <button
+              className="window-control"
+              data-testid="window-maximize"
+              title={maximized ? t('menu.restore') : t('menu.maximize')}
+              aria-label={maximized ? t('menu.restore') : t('menu.maximize')}
+              onClick={toggleMaximize}
+            >
+              {maximized ? <Copy size={12} /> : <Square size={12} />}
+            </button>
+            <button
+              className="window-control window-control-close"
+              data-testid="window-close"
+              title={t('menu.close')}
+              aria-label={t('menu.close')}
+              onClick={() => void hostApi.windows.close()}
+            >
+              <X size={14} />
+            </button>
+          </div>
       </div>
     </div>
   );
@@ -292,34 +317,28 @@ export default function App() {
 
   return (
     <div className={`${isMac ? 'app-layout is-macos' : 'app-layout'}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-      {chrome}
+      {!isMac && chrome}
       {dragStrip}
-      {/* 折叠/搜索悬浮层：macOS 常驻（红绿灯右侧）；Windows 仅侧栏收起时出现在内容区左上角
-          （提供展开入口）。两平台同一 testid 同一结构。 */}
+      {/* 折叠/搜索悬浮层：macOS 常驻于红绿灯右侧（顶部带内）；Windows/Linux 仅侧栏收起时
+         出现在内容区左上角（提供展开入口）。同一组件、同一 testid，仅位置不同。 */}
       {(isMac || sidebarCollapsed) && (
         <div
-          className={`app-window-controls${isMac ? '' : ' is-native-frame'}`}
+          className={`app-window-controls${isMac ? ' is-traffic' : ' is-native-frame'}`}
           data-testid="app-window-controls"
         >
           {sidebarActions}
         </div>
       )}
       <nav className="sidebar">
-        {isMac ? (
-          /* macOS：新会话按钮单独一行（折叠/搜索在红绿灯右侧悬浮层常驻） */
-          <button className="new-chat" data-testid="new-chat" onClick={newChat}>
-            <MessageSquarePlus size={16} />
-            <span>{t('sidebar.newChat')}</span>
-          </button>
-        ) : !sidebarCollapsed && (
-          /* Windows：侧边栏顶部一行 = 新会话按钮（与侧边栏同宽）+ 折叠/搜索（同行靠右）。
-             折叠时整行随侧栏隐藏（DOM 移除），展开入口由 is-native-frame 悬浮层提供 */
+        {/* 侧边栏顶部一行：新会话按钮（与侧边栏同宽）。Windows/Linux 折叠/搜索与它同行靠右；
+           macOS 折叠/搜索在红绿灯右侧，这里只剩全宽新会话按钮。折叠时整行随侧栏隐藏。 */}
+        {!sidebarCollapsed && (
           <div className="sidebar-head">
             <button className="new-chat" data-testid="new-chat" onClick={newChat}>
               <MessageSquarePlus size={16} />
               <span>{t('sidebar.newChat')}</span>
             </button>
-            {sidebarActions}
+            {!isMac && sidebarActions}
           </div>
         )}
         <SessionList onOpenChat={() => navigate('chat')} />
@@ -339,9 +358,11 @@ export default function App() {
         </div>
       </nav>
       <main className="content">
+        {/* 主内容区顶部的全局错误条：侧栏等跨区域操作的失败提示，任何页面可见 */}
+        <GlobalErrorBanner />
         {visitedPages.has('chat') && <div className={`page-view${page === 'chat' ? ' active' : ''}`}><ChatPage searchTarget={chatSearchTarget} onSearchTargetHandled={clearChatSearchTarget} /></div>}
         {visitedPages.has('models') && <div className={`page-view${page === 'models' ? ' active' : ''}`}><ModelsPage /></div>}
-        {visitedPages.has('sessions') && <div className={`page-view${page === 'sessions' ? ' active' : ''}`}><SessionsPage onOpenChat={() => navigate('chat')} /></div>}
+        {visitedPages.has('sessions') && <div className={`page-view${page === 'sessions' ? ' active' : ''}`}><SessionsPage active={page === 'sessions'} onOpenChat={() => navigate('chat')} /></div>}
         {visitedPages.has('skills') && <div className={`page-view${page === 'skills' ? ' active' : ''}`}><SkillsPage /></div>}
         {visitedPages.has('extensions') && <div className={`page-view${page === 'extensions' ? ' active' : ''}`}><ExtensionsPage /></div>}
         {visitedPages.has('mcp') && <div className={`page-view${page === 'mcp' ? ' active' : ''}`}><McpPage /></div>}
@@ -349,6 +370,8 @@ export default function App() {
       </main>
       <ExtensionUiNotifications />
       <TrustDialog />
+      <VersionUpdateToast onNavigate={navigate} />
+      <VersionInstallDialog />
       <SessionSearchDialog
         open={sessionSearchOpen}
         onClose={() => setSessionSearchOpen(false)}

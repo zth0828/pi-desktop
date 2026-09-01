@@ -5,6 +5,7 @@ import type {
   PiSkillRow,
   PiSkillScanExternalResult,
 } from '@shared/host-api/contract';
+import { parseSkillDocument } from '@shared/skill-parser';
 import { hostApi } from '../lib/host-api';
 import { Markdown } from '../components/Markdown';
 import { useActiveChatStore } from './Chat/chat-store-context';
@@ -22,14 +23,17 @@ export default function SkillsPage() {
   const [query, setQuery] = useState('');
   const [runtimeActive, setRuntimeActive] = useState(false);
   const [error, setError] = useState<string>();
-  const [viewing, setViewing] = useState<{ name: string; content: string }>();
+  const [viewing, setViewing] = useState<{ skill: PiSkillRow; content: string }>();
   const [viewLoading, setViewLoading] = useState<string>();
   const [importData, setImportData] = useState<PiSkillScanExternalResult>();
   const [importOpen, setImportOpen] = useState(false);
   const [selections, setSelections] = useState<Record<string, ImportSelection>>({});
   const [manualDirs, setManualDirs] = useState<string[]>([]);
   const [importBusy, setImportBusy] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
   const [importSummary, setImportSummary] = useState<string>();
+  const [filterMode, setFilterMode] = useState<'all' | 'auto' | 'manual'>('all');
+  const [updatingSkill, setUpdatingSkill] = useState<string | null>(null);
   const chatStarted = useActiveChatStore((s) => s.started);
 
   const refresh = useCallback(() => {
@@ -46,11 +50,63 @@ export default function SkillsPage() {
   // runtime 启动（Chat 页恢复 workspace 后）再拉一次
   useEffect(refresh, [refresh, chatStarted]);
 
+  const toggleInvocationMode = async (skill: PiSkillRow) => {
+    if (skill.isReadOnly || updatingSkill) return;
+    const nextDisable = !skill.disableModelInvocation;
+    setUpdatingSkill(skill.name);
+    try {
+      const res = await hostApi.piSkills.setInvocationMode(skill.filePath, nextDisable);
+      if (!res.ok) {
+        setError(res.error || 'Failed to update skill mode');
+      } else {
+        setSkills((prev) =>
+          prev.map((s) => (s.filePath === skill.filePath ? { ...s, disableModelInvocation: nextDisable } : s)),
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUpdatingSkill(null);
+    }
+  };
+
+  const handleViewerToggle = async (skill: PiSkillRow) => {
+    await toggleInvocationMode(skill);
+    try {
+      const { content } = await hostApi.piSkills.read(skill.filePath);
+      const nextDisable = !skill.disableModelInvocation;
+      setViewing((prev) =>
+        prev
+          ? {
+              skill: { ...prev.skill, disableModelInvocation: nextDisable },
+              content,
+            }
+          : undefined,
+      );
+    } catch {}
+  };
+
+  const handleBatchSetManual = async () => {
+    const autoSkills = skills.filter((s) => !s.disableModelInvocation && !s.isReadOnly);
+    if (autoSkills.length === 0 || batchBusy) return;
+    setBatchBusy(true);
+    try {
+      for (const s of autoSkills) {
+        await hostApi.piSkills.setInvocationMode(s.filePath, true);
+      }
+      setSkills((prev) => prev.map((s) => (s.isReadOnly ? s : { ...s, disableModelInvocation: true })));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
   const openViewer = async (skill: PiSkillRow) => {
     setViewLoading(skill.name);
     try {
       const { content } = await hostApi.piSkills.read(skill.filePath);
-      setViewing({ name: skill.name, content });
+      setViewing({ skill, content });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -127,6 +183,17 @@ export default function SkillsPage() {
   };
 
   const selectedCount = Object.keys(selections).length;
+  const autoCount = skills.filter((s) => !s.disableModelInvocation).length;
+  const manualCount = skills.filter((s) => s.disableModelInvocation).length;
+
+  const filteredSkills = skills.filter((s) => {
+    if (query && !s.name.toLowerCase().includes(query.toLowerCase()) && !s.description?.toLowerCase().includes(query.toLowerCase())) {
+      return false;
+    }
+    if (filterMode === 'auto' && s.disableModelInvocation) return false;
+    if (filterMode === 'manual' && !s.disableModelInvocation) return false;
+    return true;
+  });
 
   return (
     <div className="skills-page">
@@ -144,6 +211,61 @@ export default function SkillsPage() {
           {t('skills.import')}
         </button>
       </div>
+
+      {autoCount >= 5 && (
+        <div className="skills-recommendation-banner" data-testid="skills-recommendation-banner">
+          <div className="skills-recommendation-content">
+            <span className="skills-recommendation-icon">💡</span>
+            <span className="skills-recommendation-text">
+              {t('skills.batchOptimize.title', { autoCount })}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="pill primary skills-batch-optimize-btn"
+            data-testid="skills-batch-optimize-btn"
+            disabled={batchBusy}
+            onClick={() => void handleBatchSetManual()}
+          >
+            {batchBusy ? t('skills.batchOptimize.optimizing') : t('skills.batchOptimize.action')}
+          </button>
+        </div>
+      )}
+
+      {skills.length > 0 && (
+        <div className="skills-summary-bar" data-testid="skills-summary-bar">
+          <span className="skills-count-summary hint">
+            {t('skills.countSummary', { total: skills.length, auto: autoCount, manual: manualCount })}
+          </span>
+          <div className="skills-filter-tabs" data-testid="skills-filter-tabs">
+            <button
+              type="button"
+              className={`pill filter-tab${filterMode === 'all' ? ' active' : ''}`}
+              data-testid="skills-filter-all"
+              onClick={() => setFilterMode('all')}
+            >
+              {t('skills.filter.all', { count: skills.length })}
+            </button>
+            <button
+              type="button"
+              className={`pill filter-tab${filterMode === 'auto' ? ' active' : ''}`}
+              data-testid="skills-filter-auto"
+              onClick={() => setFilterMode('auto')}
+            >
+              {t('skills.filter.auto', { count: autoCount })}
+            </button>
+            <button
+              type="button"
+              className={`pill filter-tab${filterMode === 'manual' ? ' active' : ''}`}
+              data-testid="skills-filter-manual"
+              onClick={() => setFilterMode('manual')}
+            >
+              {t('skills.filter.manual', { count: manualCount })}
+            </button>
+          </div>
+        </div>
+      )}
+
       {importSummary && (
         <p className="hint" data-testid="skills-import-summary">{importSummary}</p>
       )}
@@ -159,20 +281,40 @@ export default function SkillsPage() {
         <p className="hint" data-testid="skills-no-runtime">{t('skills.noRuntime')}</p>
       ) : skills.length === 0 && !error ? (
         <p className="hint" data-testid="skills-empty">{t('skills.empty')}</p>
+      ) : filteredSkills.length === 0 && !error ? (
+        <p className="hint" data-testid="skills-filtered-empty">{t('list.noResults')}</p>
       ) : (
         <div className="skill-list">
-          {skills
-            .filter((s) => !query || s.name.toLowerCase().includes(query.toLowerCase()))
-            .map((s) => (
+          {filteredSkills.map((s) => (
             <div className="skill-row" data-testid={`skill-row-${s.name}`} key={`${s.source}:${s.filePath}`}>
               <div className="skill-row-main">
                 <span className="skill-name">{s.name}</span>
                 <span className={`skill-source-badge source-${s.source}`} data-testid="skill-source">
                   {t(`skills.source.${s.source}`)}
                 </span>
-                {s.disableModelInvocation && (
-                  <span className="skill-source-badge">{t('skills.manualOnly')}</span>
-                )}
+                <button
+                  type="button"
+                  className={`skill-mode-toggle ${s.disableModelInvocation ? 'mode-manual' : 'mode-auto'}`}
+                  data-testid={`skill-mode-toggle-${s.name}`}
+                  disabled={s.isReadOnly || updatingSkill === s.name}
+                  title={
+                    s.isReadOnly
+                      ? t('skills.mode.readOnly')
+                      : s.disableModelInvocation
+                        ? t('skills.mode.manualDesc')
+                        : t('skills.mode.autoDesc')
+                  }
+                  onClick={() => void toggleInvocationMode(s)}
+                >
+                  <span className="skill-mode-dot" />
+                  <span className="skill-mode-text">
+                    {updatingSkill === s.name
+                      ? t('skills.mode.switching')
+                      : s.disableModelInvocation
+                        ? t('skills.mode.manual')
+                        : t('skills.mode.auto')}
+                  </span>
+                </button>
                 <button
                   className="pill skill-view-button"
                   data-testid={`skill-view-${s.name}`}
@@ -192,19 +334,79 @@ export default function SkillsPage() {
         </div>
       )}
 
-      {viewing && (
-        <div className="skill-view-overlay" data-testid="skill-view-overlay" onClick={() => setViewing(undefined)}>
-          <div className="skill-view-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="skill-view-header">
-              <strong>{viewing.name}</strong>
-              <button className="pill" data-testid="skill-view-close" onClick={() => setViewing(undefined)}>
-                {t('skills.close')}
-              </button>
+      {viewing && (() => {
+        const parsed = parseSkillDocument(viewing.content);
+        const isManual = viewing.skill.disableModelInvocation ?? parsed.disableModelInvocation;
+        return (
+          <div className="skill-view-overlay" data-testid="skill-view-overlay" onClick={() => setViewing(undefined)}>
+            <div className="skill-view-dialog" onClick={(e) => e.stopPropagation()}>
+              <div className="skill-view-header">
+                <div className="skill-view-title-group">
+                  <strong className="skill-view-title">{viewing.skill.name}</strong>
+                  <span className={`skill-source-badge source-${viewing.skill.source}`}>
+                    {t(`skills.source.${viewing.skill.source}`)}
+                  </span>
+                  {parsed.version && <span className="skill-version-tag">v{parsed.version}</span>}
+                </div>
+                <button className="pill" data-testid="skill-view-close" onClick={() => setViewing(undefined)}>
+                  {t('skills.close')}
+                </button>
+              </div>
+
+              <div className={`skill-view-mode-card ${isManual ? 'mode-manual' : 'mode-auto'}`}>
+                <div className="skill-view-mode-header">
+                  <div className="skill-view-mode-status">
+                    <span className={`skill-mode-dot ${isManual ? 'dot-manual' : 'dot-auto'}`} />
+                    <span className="skill-view-mode-title">
+                      {t('skills.viewModal.modeLabel')}：{isManual ? t('skills.viewModal.manual') : t('skills.viewModal.auto')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="pill skill-view-mode-btn"
+                    disabled={viewing.skill.isReadOnly || updatingSkill === viewing.skill.name}
+                    onClick={() => void handleViewerToggle(viewing.skill)}
+                  >
+                    <span className="skill-mode-text">
+                      {updatingSkill === viewing.skill.name
+                        ? t('skills.mode.switching')
+                        : isManual
+                          ? t('skills.viewModal.switchToAuto')
+                          : t('skills.viewModal.switchToManual')}
+                    </span>
+                  </button>
+                </div>
+                <p className="skill-view-mode-desc">
+                  {isManual
+                    ? t('skills.viewModal.manualExplanation', { name: viewing.skill.name })
+                    : t('skills.viewModal.autoExplanation')}
+                </p>
+                <div className="skill-view-path-box hint">
+                  {viewing.skill.filePath}
+                </div>
+              </div>
+
+              {(parsed.description || viewing.skill.description) && (
+                <div className="skill-view-desc-card">
+                  <div className="skill-view-section-label">{t('skills.viewModal.descriptionLabel')}</div>
+                  <p className="skill-view-desc-text">{parsed.description || viewing.skill.description}</p>
+                </div>
+              )}
+
+              <div className="skill-view-body-section">
+                <div className="skill-view-section-label">{t('skills.viewModal.instructionsLabel')}</div>
+                <div className="skill-view-markdown-wrap">
+                  {parsed.body ? (
+                    <Markdown text={parsed.body} />
+                  ) : (
+                    <p className="hint">{t('skills.viewModal.emptyInstructions')}</p>
+                  )}
+                </div>
+              </div>
             </div>
-            <Markdown text={viewing.content} />
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {importOpen && (
         <div className="skill-view-overlay" data-testid="skills-import-dialog" onClick={() => setImportOpen(false)}>

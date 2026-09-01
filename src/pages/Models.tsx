@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Radar, RefreshCw } from 'lucide-react';
-import { matchModelProfile } from '@shared/model-profiles';
+import { Radar, RefreshCw, X } from 'lucide-react';
 import type { PiDefaultModel, PiModelRow, PiProviderProbeResult, PiProviderRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { getActiveChatStore } from '../stores/chat-registry';
 
 const CUSTOM_API_TYPES = [
-  'openai-responses',
   'openai-completions',
+  'openai-responses',
   'anthropic-messages',
   'google-generative-ai',
 ] as const;
@@ -54,8 +53,30 @@ function modelDisplayName(model: PiModelRow, provider: PiProviderRow): string {
   return name;
 }
 
-function formatRate(rate: number): string {
+function formatRate(rate: number | undefined): string {
+  // 未上报价格 → 占位；真 0（如免费/本地模型）仍显示 $0
+  if (rate === undefined || rate === null) return '—';
   return rate === 0 ? '$0' : `$${rate.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
+}
+
+/** 供应商 id 由名称生成 slug（保留 Unicode 字母数字，中文名称可用）。 */
+function slugifyProviderName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^\p{L}\p{N}-]+/gu, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'custom-provider';
+}
+
+function uniqueProviderId(name: string, existingIds: string[]): string {
+  const base = slugifyProviderName(name);
+  if (!existingIds.includes(base)) return base;
+  let n = 2;
+  while (existingIds.includes(`${base}-${n}`)) n += 1;
+  return `${base}-${n}`;
 }
 
 function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChanged }: ProviderRowProps) {
@@ -64,6 +85,44 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editBaseUrl, setEditBaseUrl] = useState('');
+  const [editApi, setEditApi] = useState('openai-responses');
+
+  useEffect(() => {
+    if (!editing) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEditing(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editing]);
+
+  const startEdit = () => {
+    setEditName(provider.name);
+    setEditBaseUrl(provider.baseUrl ?? '');
+    setEditApi(provider.api ?? models[0]?.api ?? 'openai-responses');
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    setBusy(true);
+    setMessage(undefined);
+    const result = await hostApi.providers.updateCustom({
+      providerId: provider.id,
+      name: editName.trim(),
+      baseUrl: editBaseUrl.trim(),
+      api: editApi,
+    });
+    setBusy(false);
+    if (result.success) {
+      setEditing(false);
+      onChanged();
+    } else {
+      setMessage(result.error);
+    }
+  };
   const setApiKey = async () => {
     setBusy(true);
     setMessage(undefined);
@@ -89,7 +148,8 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
     setBusy(true);
     const result = await hostApi.providers.startOAuth(provider.id);
     setBusy(false);
-    if (!result.success) setMessage(result.error);
+    if (result.success) onChanged();
+    else setMessage(result.error);
   };
 
   const remove = async () => {
@@ -139,7 +199,7 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
     if (!activeStore || !runtime?.model || runtime.model.provider !== provider.id || runtime.model.id !== modelId) return;
     const levels = runtime.availableThinkingLevels.length > 0
       ? runtime.availableThinkingLevels
-      : reasoning ? ['off', 'minimal', 'low', 'medium', 'high'] : [];
+      : reasoning ? ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] : [];
     activeStore.getState().applyModelUpdate({
 
       success: true,
@@ -162,6 +222,34 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
     onChanged();
     syncRuntimeReasoning(modelId, reasoning);
     // 若活动会话正在使用该模型，同步会话状态，思考深度菜单立即恢复可用
+  };
+
+  // 图像开关与推理开关同构：活动会话正在使用该模型时同步 input 声明，
+  // 图片附件能力即时生效。
+  const syncRuntimeInput = (modelId: string, image: boolean) => {
+    const activeStore = getActiveChatStore();
+    const runtime = activeStore?.getState();
+    if (!activeStore || !runtime?.model || runtime.model.provider !== provider.id || runtime.model.id !== modelId) return;
+    activeStore.getState().applyModelUpdate({
+      success: true,
+      model: { ...runtime.model, input: image ? ['text', 'image'] : ['text'] },
+      thinkingLevel: runtime.thinkingLevel,
+      availableThinkingLevels: runtime.availableThinkingLevels,
+      contextUsage: runtime.contextUsage ?? undefined,
+    });
+  };
+
+  const setImage = async (modelId: string, image: boolean) => {
+    setBusy(true);
+    setMessage(undefined);
+    const result = await hostApi.providers.setModelInput(provider.id, modelId, image);
+    setBusy(false);
+    if (!result.success) {
+      setMessage(result.error);
+      return;
+    }
+    onChanged();
+    syncRuntimeInput(modelId, image);
   };
 
   const isDefault = (modelId: string) =>
@@ -231,6 +319,108 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
           )}
           {provider.source === 'config' && (
             <button
+              className="outline"
+              data-testid={`edit-provider-${provider.id}`}
+              disabled={busy}
+              onClick={startEdit}
+            >
+              {t('models.editProvider')}
+            </button>
+          )}
+          {provider.source === 'config' && editing && (
+            <div
+              className="provider-modal-overlay"
+              data-testid={`provider-edit-overlay-${provider.id}`}
+              onClick={(e) => {
+                // 点遮罩关闭；表单内部点击不冒泡关闭
+                if (e.target === e.currentTarget) setEditing(false);
+              }}
+            >
+              <div className="provider-modal-dialog" data-testid={`provider-edit-form-${provider.id}`}>
+                <div className="provider-modal-header">
+                  <div className="provider-modal-title-group">
+                    <h3 className="provider-modal-title">{t('models.editProviderTitle')}</h3>
+                    <p className="provider-modal-desc">{t('models.editProviderDesc')}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="icon-button provider-modal-close"
+                    onClick={() => setEditing(false)}
+                    aria-label={t('models.closeDialog')}
+                    title={t('models.closeDialog')}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="provider-modal-body">
+                  <div className="provider-field">
+                    <label htmlFor={`edit-name-${provider.id}`}>{t('models.fieldName')}</label>
+                    <input
+                      id={`edit-name-${provider.id}`}
+                      data-testid={`edit-name-${provider.id}`}
+                      placeholder={t('models.customName')}
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                    />
+                    <div className="provider-field-hint">{t('models.fieldNameHint')}</div>
+                  </div>
+                  <div className="provider-field">
+                    <label htmlFor={`edit-base-url-${provider.id}`}>{t('models.fieldBaseUrl')}</label>
+                    <input
+                      id={`edit-base-url-${provider.id}`}
+                      data-testid={`edit-base-url-${provider.id}`}
+                      placeholder={t('models.customBaseUrl')}
+                      value={editBaseUrl}
+                      onChange={(e) => setEditBaseUrl(e.target.value)}
+                    />
+                    <div className="provider-field-hint">{t('models.fieldBaseUrlHint')}</div>
+                    {requestUrlForApi(editBaseUrl, editApi) && (
+                      <div className="provider-request-url" data-testid={`edit-request-url-${provider.id}`}>
+                        {t('models.actualRequest', { url: requestUrlForApi(editBaseUrl, editApi) })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="provider-field">
+                    <label htmlFor={`edit-api-${provider.id}`}>{t('models.fieldApi')}</label>
+                    <select
+                      id={`edit-api-${provider.id}`}
+                      aria-label={t('models.customApi')}
+                      data-testid={`edit-api-${provider.id}`}
+                      value={editApi}
+                      onChange={(e) => setEditApi(e.target.value)}
+                    >
+                      {CUSTOM_API_TYPES.map((apiType) => (
+                        <option key={apiType} value={apiType}>{apiType}</option>
+                      ))}
+                    </select>
+                    {/* 当前选中适配器的用途说明：随选项与语言即时更新 */}
+                    <div
+                      className="provider-field-hint"
+                      data-testid={`edit-api-hint-${provider.id}`}
+                    >
+                      {t(`models.apiHint.${editApi}`)}
+                    </div>
+                  </div>
+                  {message && <p className="error-text">{message}</p>}
+                </div>
+                <div className="provider-modal-actions">
+                  <button type="button" disabled={busy} onClick={() => setEditing(false)}>
+                    {t('models.cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={busy || !editName.trim() || !editBaseUrl.trim()}
+                    onClick={() => void saveEdit()}
+                  >
+                    {t('models.saveEdit')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {provider.source === 'config' && (
+            <button
               className="danger-outline"
               data-testid={`delete-provider-${provider.id}`}
               disabled={busy}
@@ -245,66 +435,129 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
               {models.length === 0 ? (
                 <div className="hint">{t('models.noAvailableModels')}</div>
               ) : (
-                models.map((m) => (
+                models.map((m) => {
+                  const contextText = t('models.metaContext', {
+                    context: m.contextWindow?.toLocaleString() ?? '—',
+                  });
+                  const outputText = t('models.metaOutput', {
+                    output: m.maxTokens?.toLocaleString() ?? '—',
+                  });
+                  const pricingText = t('models.pricing', {
+                    input: formatRate(m.cost?.input),
+                    output: formatRate(m.cost?.output),
+                    cacheRead: formatRate(m.cost?.cacheRead),
+                    cacheWrite: formatRate(m.cost?.cacheWrite),
+                  });
+                  const metaTitle = [
+                    m.input?.includes('image') ? t('models.visionMeta') : '',
+                    m.api ?? '',
+                    contextText,
+                    outputText,
+                    pricingText,
+                  ].filter(Boolean).join(' · ');
+                  return (
                   <div
                     className="provider-model-row"
                     key={m.id}
                     data-testid={`provider-model-${provider.id}-${m.id}`}
                   >
                     <div className="provider-model-main">
-                      <div>
-                        <span className="provider-model-name">{modelDisplayName(m, provider)}</span>
-                        {m.name && m.name !== m.id && <span className="hint">{m.id}</span>}
+                      {/* 行1：名称 + ID（超长 ellipsis，title 悬浮全文）+ 视觉徽标 */}
+                      <div className="provider-model-title">
+                        <span
+                          className="provider-model-name"
+                          title={modelDisplayName(m, provider)}
+                        >
+                          {modelDisplayName(m, provider)}
+                        </span>
+                        {m.name && m.name !== m.id && (
+                          <span className="provider-model-id hint" title={m.id}>{m.id}</span>
+                        )}
+                        {m.input?.includes('image') && (
+                          <span
+                            className="provider-model-vision"
+                            data-testid={`provider-model-vision-${provider.id}-${m.id}`}
+                          >
+                            {t('models.visionMeta')}
+                          </span>
+                        )}
                       </div>
-                      <span className="provider-model-meta" data-testid={`provider-model-meta-${provider.id}-${m.id}`}>
-                        {t('models.modelMeta', {
-                          api: m.api,
-                          context: m.contextWindow?.toLocaleString() ?? '—',
-                          output: m.maxTokens?.toLocaleString() ?? '—',
-                        })}
-                        {' · '}
-                        {t('models.pricing', {
-                          input: formatRate(m.cost.input),
-                          output: formatRate(m.cost.output),
-                          cacheRead: formatRate(m.cost.cacheRead),
-                          cacheWrite: formatRate(m.cost.cacheWrite),
-                        })}
+                      {/* 行2：协议 · 上下文 · 最大输出；行3：价格。meta 容器 testid 供 E2E 断言 */}
+                      <span
+                        className="provider-model-meta"
+                        title={metaTitle}
+                        data-testid={`provider-model-meta-${provider.id}-${m.id}`}
+                      >
+                        <span className="provider-model-specs">
+                          <span className="provider-model-meta-chunk">{m.api}</span>
+                          <span className="provider-model-meta-chunk">{contextText}</span>
+                          <span
+                            className="provider-model-meta-chunk"
+                            data-testid={`provider-model-meta-output-${provider.id}-${m.id}`}
+                          >
+                            {outputText}
+                          </span>
+                        </span>
+                        <span
+                          className="provider-model-pricing"
+                          data-testid={`provider-model-pricing-${provider.id}-${m.id}`}
+                        >
+                          {pricingText}
+                        </span>
                       </span>
                     </div>
-                    {provider.source === 'config' && (
-                      <label
-                        className="provider-model-reasoning"
-                        data-testid={`provider-model-reasoning-${provider.id}-${m.id}`}
-                        title={t('models.reasoningHint')}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(m.reasoning)}
+                    {/* 右侧固定列：标签胶囊组在上、当前徽标/按钮在下，不与左侧元数据互挤 */}
+                    <div className="provider-model-side">
+                      {provider.source === 'config' && (
+                        <div className="provider-model-badges">
+                          <label
+                            className="provider-model-pill"
+                            data-testid={`provider-model-reasoning-${provider.id}-${m.id}`}
+                            title={t('models.reasoningHint')}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(m.reasoning)}
+                              disabled={busy}
+                              onChange={(e) => void setReasoning(m.id, e.target.checked)}
+                            />
+                            <span>{t('models.reasoningSupport')}</span>
+                          </label>
+                          <label
+                            className="provider-model-pill"
+                            data-testid={`provider-model-image-${provider.id}-${m.id}`}
+                            title={t('models.imageSupportHint')}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(m.input?.includes('image'))}
+                              disabled={busy}
+                              onChange={(e) => void setImage(m.id, e.target.checked)}
+                            />
+                            <span>{t('models.imageSupport')}</span>
+                          </label>
+                        </div>
+                      )}
+                      {isDefault(m.id) ? (
+                        <span
+                          className="provider-model-pill provider-model-current"
+                          data-testid={`current-model-${provider.id}-${m.id}`}
+                        >
+                          {t('models.current')}
+                        </span>
+                      ) : (
+                        <button
                           disabled={busy}
-                          onChange={(e) => void setReasoning(m.id, e.target.checked)}
-                        />
-                        <span>{t('models.reasoningSupport')}</span>
-                      </label>
-                    )}
-                    <span className="spacer" />
-                    {isDefault(m.id) ? (
-                      <span
-                        className="provider-model-current"
-                        data-testid={`current-model-${provider.id}-${m.id}`}
-                      >
-                        {t('models.current')}
-                      </span>
-                    ) : (
-                      <button
-                        disabled={busy}
-                        data-testid={`set-current-${provider.id}-${m.id}`}
-                        onClick={() => void setCurrent(m.id)}
-                      >
-                        {t('models.setCurrent')}
-                      </button>
-                    )}
+                          data-testid={`set-current-${provider.id}-${m.id}`}
+                          onClick={() => void setCurrent(m.id)}
+                        >
+                          {t('models.setCurrent')}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}
@@ -315,17 +568,43 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
   );
 }
 
-function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
+function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => void; existingProviderIds: string[] }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [id, setId] = useState('');
+  const [name, setName] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
-  const [api, setApi] = useState<string>('openai-responses');
+  const [api, setApi] = useState<string>('openai-completions');
   const [apiKey, setApiKey] = useState('');
   const [modelIds, setModelIds] = useState('');
   const [message, setMessage] = useState<string>();
   const [probing, setProbing] = useState(false);
   const [probeResult, setProbeResult] = useState<PiProviderProbeResult>();
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open]);
+
+  // 每次打开都从空白开始：上次（已保存/已取消）的录入不应残留在新表单里
+  const resetForm = () => {
+    setName('');
+    setBaseUrl('');
+    setApi('openai-completions');
+    setApiKey('');
+    setModelIds('');
+    setMessage(undefined);
+    setProbeResult(undefined);
+    setProbing(false);
+  };
+
+  const openForm = () => {
+    resetForm();
+    setOpen(true);
+  };
 
   const resetProbe = () => {
     setProbeResult(undefined);
@@ -378,34 +657,38 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
   };
 
   const submit = async () => {
-    const detectedContexts = new Map(
-      (probeResult?.modelDetails ?? [])
-        .filter((model) => model.contextWindow && model.contextWindow > 0)
-        .map((model) => [model.id, model.contextWindow as number]),
+    const detectedDetails = new Map(
+      (probeResult?.modelDetails ?? []).map((model) => [model.id, model]),
     );
     const models = modelIds
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
       .map((mid) => {
-        // 上下文与最大输出自动管理：探测值优先，探测不到用前缀规格表。
-        const profile = matchModelProfile(mid);
+        // 元数据自动管理：probe 返回的 modelDetails 已由后端用网关目录 +
+        // pi 内置官方目录回填，前端直接透传。
+        const detail = detectedDetails.get(mid);
         return {
           id: mid,
-          contextWindow: detectedContexts.get(mid) ?? profile.contextWindow,
-          ...(profile.maxTokens ? { maxTokens: profile.maxTokens } : {}),
+          ...(detail?.contextWindow && detail.contextWindow > 0 ? { contextWindow: detail.contextWindow } : {}),
+          ...(detail?.maxTokens ? { maxTokens: detail.maxTokens } : {}),
+          ...(detail?.input ? { input: detail.input } : {}),
+          ...(detail?.thinkingLevelMap ? { thinkingLevelMap: detail.thinkingLevelMap } : {}),
         };
       });
     const result = await hostApi.providers.addCustom({
-      id: id.trim(),
+      // 供应商 id 由名称自动生成（slug + 去重），用户只负责命名
+      id: uniqueProviderId(name, existingProviderIds),
+      name: name.trim(),
       baseUrl: baseUrl.trim(),
       api,
       apiKey: apiKey.trim() || undefined,
+      serverType: probeResult?.serverType,
       models,
     });
     if (result.success) {
+      resetForm();
       setOpen(false);
-      setMessage(undefined);
       onAdded();
     } else {
       setMessage(result.error);
@@ -414,155 +697,241 @@ function CustomProviderForm({ onAdded }: { onAdded: () => void }) {
 
   if (!open) {
     return (
-      <button data-testid="add-custom-provider" onClick={() => setOpen(true)}>
+      <button data-testid="add-custom-provider" onClick={openForm}>
         {t('models.addCustom')}
       </button>
     );
   }
   return (
-    <div className="custom-provider-form" data-testid="custom-provider-form">
-      <input placeholder={t('models.customId')} value={id} onChange={(e) => setId(e.target.value)} />
-      <input
-        placeholder={t('models.customBaseUrl')}
-        value={baseUrl}
-        onChange={(e) => {
-          setBaseUrl(e.target.value);
-          resetProbe();
-        }}
-      />
-      <input
-        placeholder={t('models.keyPlaceholder')}
-        type="password"
-        value={apiKey}
-        onChange={(e) => {
-          setApiKey(e.target.value);
-          resetProbe();
-        }}
-      />
-      <div className="probe-actions">
-        <button type="button" className="primary probe-button" data-testid="probe-custom-provider" disabled={probing || !baseUrl.trim()} onClick={() => void probe()}>
-          <Radar size={15} />
-          {probing ? t('models.probing') : t('models.probe')}
-        </button>
-        <button
-          type="button"
-          className="probe-button"
-          data-testid="verify-protocols"
-          title={t('models.verifyProtocolHint')}
-          disabled={probing || !probeResult || !baseUrl.trim()}
-          onClick={() => void verifyProtocols()}
-        >
-          <Radar size={15} />
-          {probing ? t('models.probing') : t('models.verifyProtocol')}
-        </button>
-      </div>
-      <p className="hint" data-testid="probe-list-hint">{t('models.probeListHint')}</p>
-      {probeResult && (
-        <div className="probe-results" data-testid="probe-results">
-          {probeResult.protocols.length > 0
-            && probeResult.protocols.every((protocol) => protocol.verified && !protocol.available) && (
-            <p className="probe-rejected-hint" data-testid="probe-rejected-hint">
-              {t('models.probeRejectedHint')}
-            </p>
-          )}
-          {probeResult.protocols.map((protocol) => (
-            <div className="probe-result-row" key={protocol.api}>
-              <span className="probe-protocol-name">{protocol.api}</span>
-              {protocol.verified ? (
-                <span className={protocol.available ? 'probe-ok' : 'probe-fail'}>
-                  {protocol.available ? t('models.probeAvailable') : t('models.probeUnavailable')}
-                </span>
-              ) : protocol.available ? (
-                <span className="probe-ok">{t('models.probeAdvertised')}</span>
-              ) : (
-                <span className="hint">{t('models.probeUnverified')}</span>
-              )}
-              {protocol.verified && protocol.available && (
-                <span className={protocol.cacheStats ? 'probe-ok' : 'hint'}>
-                  {protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')}
-                </span>
-              )}
-              {protocol.verified && protocol.error && (
-                <span className="probe-error" data-testid={`probe-error-${protocol.api}`}>{protocol.error}</span>
-              )}
+    <div
+      className="provider-modal-overlay"
+      data-testid="custom-provider-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setOpen(false);
+      }}
+    >
+      <div className="provider-modal-dialog" data-testid="custom-provider-form">
+        <div className="provider-modal-header">
+          <div className="provider-modal-title-group">
+            <h3 className="provider-modal-title">{t('models.addCustomTitle')}</h3>
+            <p className="provider-modal-desc">{t('models.addCustomDesc')}</p>
+          </div>
+          <button
+            type="button"
+            className="icon-button provider-modal-close"
+            onClick={() => setOpen(false)}
+            aria-label={t('models.closeDialog')}
+            title={t('models.closeDialog')}
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="provider-modal-body">
+          <div className="provider-field">
+            <label htmlFor="custom-provider-name">{t('models.fieldName')}</label>
+            <input
+              id="custom-provider-name"
+              data-testid="custom-provider-name"
+              placeholder={t('models.customName')}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <div className="provider-field-hint">{t('models.fieldNameHint')}</div>
+          </div>
+          <div className="provider-field">
+            <label htmlFor="custom-provider-base-url">{t('models.fieldBaseUrl')}</label>
+            <input
+              id="custom-provider-base-url"
+              placeholder={t('models.customBaseUrl')}
+              value={baseUrl}
+              onChange={(e) => {
+                setBaseUrl(e.target.value);
+                resetProbe();
+              }}
+            />
+            <div className="provider-field-hint">{t('models.fieldBaseUrlHint')}</div>
+          </div>
+          <div className="provider-field">
+            <label htmlFor="custom-provider-key">{t('models.fieldApiKey')}</label>
+            <input
+              id="custom-provider-key"
+              placeholder={t('models.keyPlaceholder')}
+              type="password"
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                resetProbe();
+              }}
+            />
+            <div className="provider-field-hint">{t('models.fieldApiKeyHint')}</div>
+          </div>
+          <div className="provider-form-section">
+            <div className="provider-section-header">
+              <div className="provider-section-title">{t('models.probeSectionTitle')}</div>
+              <div className="provider-section-desc">{t('models.probeSectionDesc')}</div>
             </div>
-          ))}
-          <div className="probe-api-choice">
-            <label htmlFor="custom-api-select">
-              {probeResult.protocols.some((protocol) => protocol.verified && protocol.available)
-                ? t('models.detectedApi')
-                : t('models.unverifiedApi')}
-            </label>
-            <select
-              id="custom-api-select"
-              aria-label={t('models.customApi')}
-              data-testid="custom-api-select"
-              value={api}
-              onChange={(event) => selectApi(event.target.value)}
-            >
-              {CUSTOM_API_TYPES.map((apiType) => (
-                <option key={apiType} value={apiType}>{apiType}</option>
-              ))}
-            </select>
-            {requestUrlForApi(baseUrl, api) && (
-              <span className="probe-request-url" data-testid="custom-request-url">
-                {t('models.actualRequest', { url: requestUrlForApi(baseUrl, api) })}
-              </span>
+            <div className="probe-actions">
+              <button
+                type="button"
+                className="primary probe-button"
+                data-testid="probe-custom-provider"
+                disabled={probing || !baseUrl.trim()}
+                onClick={() => void probe()}
+              >
+                <Radar size={15} />
+                {probing ? t('models.probing') : t('models.probe')}
+              </button>
+              <button
+                type="button"
+                className="outline probe-button"
+                data-testid="verify-protocols"
+                title={t('models.verifyProtocolHint')}
+                disabled={probing || !probeResult || !baseUrl.trim()}
+                onClick={() => void verifyProtocols()}
+              >
+                <Radar size={15} />
+                {probing ? t('models.probing') : t('models.verifyProtocol')}
+              </button>
+            </div>
+            <p className="hint" data-testid="probe-list-hint">{t('models.probeListHint')}</p>
+            {probeResult && (
+              <div className="probe-results" data-testid="probe-results">
+                {probeResult.models.length === 0 && probeResult.catalogError && (
+                  <p className="error-text" data-testid="probe-catalog-error">
+                    {t('models.probeCatalogFailed', { error: probeResult.catalogError })}
+                  </p>
+                )}
+                {probeResult.protocols.length > 0
+                  && probeResult.protocols.every((protocol) => protocol.verified && !protocol.available) && (
+                  <p className="probe-rejected-hint" data-testid="probe-rejected-hint">
+                    {t('models.probeRejectedHint')}
+                  </p>
+                )}
+                {probeResult.protocols.map((protocol) => (
+                  <div className="probe-result-row" key={protocol.api}>
+                    <span className="probe-protocol-name">{protocol.api}</span>
+                    <span className="probe-status-slot">
+                      {protocol.verified ? (
+                        <span className={protocol.available ? 'probe-ok' : 'probe-fail'}>
+                          {protocol.available ? t('models.probeAvailable') : t('models.probeUnavailable')}
+                        </span>
+                      ) : protocol.available ? (
+                        <span className="probe-ok">{t('models.probeAdvertised')}</span>
+                      ) : (
+                        <span className="hint">{t('models.probeUnverified')}</span>
+                      )}
+                    </span>
+                    <span className="probe-cache-slot">
+                      {protocol.verified && protocol.available ? (
+                        <span className={protocol.cacheStats ? 'probe-ok' : 'hint'}>
+                          {protocol.cacheStats ? t('models.probeCache') : t('models.probeNoCache')}
+                        </span>
+                      ) : null}
+                    </span>
+                    {protocol.verified && protocol.error && (
+                      <span className="probe-error" data-testid={`probe-error-${protocol.api}`}>{protocol.error}</span>
+                    )}
+                  </div>
+                ))}
+                <div className="probe-api-choice">
+                  <label htmlFor="custom-api-select">
+                    {probeResult.protocols.some((protocol) => protocol.verified && protocol.available)
+                      ? t('models.detectedApi')
+                      : t('models.unverifiedApi')}
+                  </label>
+                  <select
+                    id="custom-api-select"
+                    aria-label={t('models.customApi')}
+                    data-testid="custom-api-select"
+                    value={api}
+                    onChange={(event) => selectApi(event.target.value)}
+                  >
+                    {CUSTOM_API_TYPES.map((apiType) => (
+                      <option key={apiType} value={apiType}>{apiType}</option>
+                    ))}
+                  </select>
+                  {/* 当前选中适配器的用途说明：随选项与语言即时更新 */}
+                  <div className="provider-field-hint" data-testid="custom-api-hint">
+                    {t(`models.apiHint.${api}`)}
+                  </div>
+                  {requestUrlForApi(baseUrl, api) && (
+                    <span className="probe-request-url" data-testid="custom-request-url">
+                      {t('models.actualRequest', { url: requestUrlForApi(baseUrl, api) })}
+                    </span>
+                  )}
+                </div>
+                {probeResult.models.length > 0 && (
+                  <details className="probe-models-fold" data-testid="probe-models" open>
+                    <summary className="probe-models-title">
+                      {t('models.probeModels', { count: probeResult.models.length })}
+                    </summary>
+                    <div className="probe-models">
+                      {probeResult.models.map((modelId) => {
+                        const detail = probeResult.modelDetails?.find((model) => model.id === modelId);
+                        const selected = modelIds.split(',').map((id) => id.trim()).includes(modelId);
+                        return (
+                          <label className="probe-model-row" data-testid={`probe-model-${modelId}`} key={modelId}>
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={(event) => {
+                                const ids = modelIds.split(',').map((id) => id.trim()).filter(Boolean);
+                                const next = event.target.checked
+                                  ? [...new Set([...ids, modelId])]
+                                  : ids.filter((id) => id !== modelId);
+                                setModelIds(next.join(', '));
+                              }}
+                            />
+                            <span className="probe-model-id" title={modelId}>{modelId}</span>
+                            <span className="probe-model-vision-slot">
+                              {detail?.input?.includes('image') && (
+                                <span className="provider-model-vision" data-testid={`probe-model-vision-${modelId}`}>
+                                  {t('models.imageSupport')}
+                                </span>
+                              )}
+                            </span>
+                            <span className="probe-model-spec" data-testid={`probe-model-spec-${modelId}`}>
+                              {t('models.probeSpec', {
+                                contextWindow: detail?.contextWindow?.toLocaleString() ?? '—',
+                                maxOutput: detail?.maxTokens?.toLocaleString() ?? '—',
+                              })}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </details>
+                )}
+              </div>
             )}
           </div>
-          {probeResult.models.length > 0 && (
-            <details className="probe-models-fold" data-testid="probe-models" open>
-              <summary className="probe-models-title">
-                {t('models.probeModels', { count: probeResult.models.length })}
-              </summary>
-              <div className="probe-models">
-                {probeResult.models.map((modelId) => {
-                  const detail = probeResult.modelDetails?.find((model) => model.id === modelId);
-                  const profile = matchModelProfile(modelId);
-                  const selected = modelIds.split(',').map((id) => id.trim()).includes(modelId);
-                  return (
-                    <label className="probe-model-row" data-testid={`probe-model-${modelId}`} key={modelId}>
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        onChange={(event) => {
-                          const ids = modelIds.split(',').map((id) => id.trim()).filter(Boolean);
-                          const next = event.target.checked
-                            ? [...new Set([...ids, modelId])]
-                            : ids.filter((id) => id !== modelId);
-                          setModelIds(next.join(', '));
-                        }}
-                      />
-                      <span className="probe-model-id">{modelId}</span>
-                      <span className="probe-model-spec" data-testid={`probe-model-spec-${modelId}`}>
-                        {t('models.probeSpec', {
-                          contextWindow: (detail?.contextWindow ?? profile.contextWindow).toLocaleString(),
-                          maxOutput: profile.maxTokens?.toLocaleString() ?? '—',
-                        })}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </details>
+          {probeResult && probeResult.models.length === 0 && (
+            <div className="provider-field">
+              <label htmlFor="custom-models">{t('models.fieldModels')}</label>
+              <input
+                id="custom-models"
+                data-testid="custom-models"
+                placeholder={t('models.customModels')}
+                value={modelIds}
+                onChange={(e) => setModelIds(e.target.value)}
+              />
+              <div className="provider-field-hint">{t('models.fieldModelsHint')}</div>
+            </div>
           )}
+          {message && <p className="error-text">{message}</p>}
         </div>
-      )}
-      {probeResult && probeResult.models.length === 0 && (
-        <input
-          data-testid="custom-models"
-          placeholder={t('models.customModels')}
-          value={modelIds}
-          onChange={(e) => setModelIds(e.target.value)}
-        />
-      )}
-      <div className="actions">
-        <button className="primary" disabled={!probeResult || !id.trim() || !baseUrl.trim() || !modelIds.trim()} onClick={() => void submit()}>
-          {t('models.saveCustom')}
-        </button>
-        <button onClick={() => setOpen(false)}>{t('models.cancel')}</button>
+        <div className="provider-modal-actions">
+          <button type="button" onClick={() => setOpen(false)}>{t('models.cancel')}</button>
+          <button
+            type="button"
+            className="primary"
+            disabled={!probeResult || !name.trim() || !baseUrl.trim() || !modelIds.trim()}
+            onClick={() => void submit()}
+          >
+            {t('models.saveCustom')}
+          </button>
+        </div>
       </div>
-      {message && <p className="error-text">{message}</p>}
     </div>
   );
 }
@@ -683,7 +1052,7 @@ export default function ModelsPage() {
           />
         ))}
       </div>
-      <CustomProviderForm onAdded={refresh} />
+      <CustomProviderForm onAdded={refresh} existingProviderIds={providers.map((p) => p.id)} />
     </div>
   );
 }

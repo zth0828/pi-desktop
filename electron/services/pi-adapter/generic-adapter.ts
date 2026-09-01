@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { getActiveSubprocessProxyEnv } from '../proxy-api';
 import type { PiCompatibilityReport } from '@shared/host-api/contract';
 import type {
   PiAdapterNotReadyError,
@@ -96,9 +97,34 @@ function atomicJsonMutation(
     }
     mutate(doc);
     mkdirSync(dirname(file), { recursive: true });
-    const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
-    writeFileSync(temp, `${JSON.stringify(doc, null, 2)}\n`, { mode: 0o600 });
-    renameSync(temp, file);
+    const temp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+    const content = `${JSON.stringify(doc, null, 2)}\n`;
+    writeFileSync(temp, content, { mode: 0o600 });
+
+    const MAX_RETRIES = 5;
+    let delay = 20;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        renameSync(temp, file);
+        return;
+      } catch (err: unknown) {
+        const code = (err as { code?: string })?.code;
+        if ((code === 'EBUSY' || code === 'EPERM' || code === 'EACCES') && attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, delay));
+          delay *= 2;
+        } else if (attempt === MAX_RETRIES) {
+          try {
+            writeFileSync(file, content, { mode: 0o600 });
+            try { rmSync(temp, { force: true }); } catch {}
+            return;
+          } catch {
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
+    }
   });
   queues.set(file, next);
   return next.finally(() => {
@@ -200,6 +226,10 @@ export function createGenericPiAdapter(input: AdapterInput): PiRuntimeAdapter {
     port.waitForIdle = () => raw.waitForIdle();
     port.setSessionName = (name) => raw.setSessionName(name);
     port.setThinkingLevel = (level) => raw.setThinkingLevel(level);
+    port.setContextWindow = (contextWindow) => {
+      if (raw.model) raw.model.contextWindow = contextWindow;
+      if (raw.agent?.model) raw.agent.model.contextWindow = contextWindow;
+    };
     port.setModel = async (model) => {
       const entry = models.get(model.identity);
       if (!entry) throw new Error('stale-model');
@@ -316,6 +346,7 @@ export function createGenericPiAdapter(input: AdapterInput): PiRuntimeAdapter {
       return provider && id ? { provider, id } : null;
     },
     getDefaultThinking: (handle) => getSettings(handle).getDefaultThinkingLevel() ?? null,
+    getDefaultTools: (handle) => getSettings(handle).getDefaultTools() ?? null,
     getBranchSummarySkipPrompt: (handle) => getSettings(handle).getBranchSummarySkipPrompt(),
     isProjectTrusted: (handle) => getSettings(handle).isProjectTrusted(),
     setDefaultModel: (handle, model) => getSettings(handle).setDefaultModelAndProvider(model.provider, model.id),
@@ -570,8 +601,29 @@ export function createGenericPiAdapter(input: AdapterInput): PiRuntimeAdapter {
             },
           } : undefined,
         });
+        const proxyEnv = await getActiveSubprocessProxyEnv().catch(() => ({}));
+        const hasProxy = Object.keys(proxyEnv).length > 0;
+        const customTools: any[] = [];
+        if (hasProxy && typeof sdk.createBashTool === 'function') {
+          const customBash = sdk.createBashTool(cwd, {
+            spawnHook: (ctx: { command: string; cwd: string; env?: Record<string, string | undefined> }) => ({
+              command: ctx.command,
+              cwd: ctx.cwd,
+              env: {
+                ...ctx.env,
+                ...proxyEnv,
+              },
+            }),
+          });
+          customTools.push(customBash);
+        }
         return {
-          ...(await sdk.createAgentSessionFromServices({ services, sessionManager, sessionStartEvent })),
+          ...(await sdk.createAgentSessionFromServices({
+            services,
+            sessionManager,
+            sessionStartEvent,
+            ...(customTools.length > 0 ? { customTools } : {}),
+          })),
           services,
           diagnostics: services.diagnostics,
         };

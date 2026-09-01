@@ -26,8 +26,12 @@ export type LaunchOptions = {
   seedSettings?: Record<string, unknown>;
   /** 官方 Package Catalog 的测试替身地址。 */
   packageCatalogUrl?: string;
+  /** GitHub release API 测试替身地址 */
+  githubApiUrl?: string;
   /** npm package 安装测试使用的 registry 地址。 */
   npmRegistryUrl?: string;
+  /** 仅 E2E：缩短主进程会话启动超时（毫秒），驱动 start-timeout 场景。 */
+  startTimeoutMs?: number;
   /** 仅 E2E：模拟 dev 脚本指定的初始功能页。 */
   initialPage?: string;
   /** 仅 E2E：模拟 dev 脚本显式选择非 npm pi 包。 */
@@ -62,6 +66,12 @@ function killProcessTree(pid: number): void {
   } catch {
     // ignore
   }
+}
+
+function shallowStripEnv(env: NodeJS.ProcessEnv, keys: string[]): NodeJS.ProcessEnv {
+  const next: NodeJS.ProcessEnv = { ...env };
+  for (const key of keys) delete next[key];
+  return next;
 }
 
 async function closeElectronApp(app: ElectronApplication, timeoutMs = 5_000): Promise<void> {
@@ -147,9 +157,20 @@ export const test = base.extend<ElectronFixtures>({
           : `${piEnv!.piBinDir}:${nodeBinDir}:/usr/bin:/bin`);
         const app = await electron.launch({
           executablePath: electronBinaryPath,
-          args: ['--lang=en-US', electronEntry],
+          // darwin 直跑 node_modules 裸 Electron 时 seatbelt 沙箱初始化会 EPERM，
+          // GPU 进程反复崩溃（白屏）；与 packaged-macos.spec.ts 一律加 --no-sandbox。
+          args: [
+            '--lang=en-US',
+            ...(process.platform === 'darwin' ? ['--no-sandbox'] : []),
+            electronEntry,
+          ],
           env: {
-            ...process.env,
+            // IDE 内嵌终端注入的 ELECTRON_FORCE_IS_PACKAGED 会让裸 Electron 的
+            // app.isPackaged 变 true，main 走打包分支（resourcesPath 图标等解析失败）
+            // 后 uncaughtException → app.quit()，全部用例启动即退；E2E 固定跑
+            // dist-electron 裸入口，必须剥离该注入（解构丢弃，避免 env 里出现
+            // undefined 值违反 Record<string, string> 类型）。
+            ...shallowStripEnv(process.env, ['ELECTRON_FORCE_IS_PACKAGED']),
             HOME: homeDir,
             // Windows 的 os.homedir()/Electron 读 USERPROFILE 而非 HOME，不隔离会穿透到真实用户目录
             ...(process.platform === 'win32' ? { USERPROFILE: homeDir } : {}),
@@ -167,8 +188,18 @@ export const test = base.extend<ElectronFixtures>({
               ? { PI_DESKTOP_NPM_ROOT: options.npmRoot ?? piEnv!.npmRoot }
               : {}),
             ...(options.agentDir ? { PI_CODING_AGENT_DIR: options.agentDir } : {}),
+            // 默认指向本地拒绝连接的地址：不打真实 GitHub API，否则更新提示
+            // toast 会弹出并盖住 composer（版本更新场景由 version-update.spec 显式传 mock）。
+            ...(options.githubApiUrl
+              ? { PI_DESKTOP_GITHUB_API_URL: options.githubApiUrl }
+              : { PI_DESKTOP_GITHUB_API_URL: 'http://127.0.0.1:9/releases/latest' }),
+            // 同理：pi 版本检查默认也不打真实 npm registry，避免 pi 升级提示 toast 弹出。
+            PI_DESKTOP_PI_REGISTRY_URL: 'http://127.0.0.1:9/pi',
             ...(options.packageCatalogUrl ? { PI_PACKAGE_CATALOG_URL: options.packageCatalogUrl } : {}),
             ...(options.npmRegistryUrl ? { npm_config_registry: options.npmRegistryUrl } : {}),
+            ...(options.startTimeoutMs !== undefined
+              ? { PI_DESKTOP_E2E: '1', PI_DESKTOP_START_TIMEOUT_MS: String(options.startTimeoutMs) }
+              : {}),
             ...(options.initialPage
               ? { PI_DESKTOP_E2E: '1', PI_DESKTOP_DEV_INITIAL_PAGE: options.initialPage }
               : {}),

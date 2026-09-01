@@ -58,7 +58,8 @@ test.beforeEach(async () => {
 });
 
 test.afterEach(async () => {
-  await rm(agentDir, { recursive: true, force: true });
+  // Windows 上进程退出后文件句柄释放有延迟，rm 加重试避免 ENOTEMPTY/EBUSY 抖动
+  await rm(agentDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
 });
 
 test.afterAll(async () => {
@@ -90,6 +91,18 @@ async function sendAndWaitReply(page: import('@playwright/test').Page, text: str
 
 const sessionRows = (page: import('@playwright/test').Page) =>
   page.locator('[data-testid^="session-row-"]');
+
+test('未发送任何内容时进入 Sessions 页 → 显示空状态，无「未命名会话」', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('nav-sessions').click();
+  await expect(page.getByTestId('sessions-empty')).toBeVisible({ timeout: 15_000 });
+  await expect(sessionRows(page)).toHaveCount(0);
+});
 
 test('发消息 → Sessions 页出现该会话（firstMessage 匹配，标记为当前）', async ({
   launchElectronApp,
@@ -255,7 +268,7 @@ test('Sessions 页删除非当前会话 → 文件真实移除且侧栏即时同
   await expect(stat(sessionFile!)).rejects.toThrow();
 });
 
-test('导出 HTML → 统一系统目录并在重新进入页面后保留打开入口', async ({
+test('导出 HTML → 按项目分类目录并在会话列表中标记已导出（有意义的文件名与最近导出联动）', async ({
   launchElectronApp,
 }) => {
   const app = await launchElectronApp(launchOptions());
@@ -268,23 +281,54 @@ test('导出 HTML → 统一系统目录并在重新进入页面后保留打开�
   await row.getByTestId('session-export').click();
 
   const exportInfo = page.getByTestId('sessions-export-info');
-  await expect(exportInfo).toContainText('Last export', { timeout: 15_000 });
+  await expect(exportInfo).toContainText('Recent exports', { timeout: 15_000 });
+  await expect(exportInfo).toContainText('export location OSPREY');
+  await expect(page.getByTestId('sessions-recent-list')).toBeVisible();
+  await expect(page.getByTestId('session-recent-item')).toHaveCount(1);
   await expect(page.getByTestId('sessions-open-export')).toBeVisible();
   await expect(page.getByTestId('sessions-show-export')).toBeVisible();
+
+  // 会话行显示已导出徽标、打开导出按钮与在文件夹中显示按钮
+  await expect(row.getByTestId('session-exported')).toBeVisible();
+  await expect(row.getByTestId('session-open-exported')).toBeVisible();
+  await expect(row.getByTestId('session-show-exported')).toBeVisible();
+
   await page.screenshot({ path: 'output/playwright/session-export-actions.png', fullPage: false });
 
   await page.getByTestId('nav-settings').click();
   const directory = (await page.getByTestId('settings-export-directory').textContent())?.trim();
   expect(directory).toBeTruthy();
   expect(directory!.split(path.sep).slice(-2)).toEqual(['Pi Desktop', 'Exports']);
-  const exportedFiles = (await readdir(directory!)).filter((name) => name.endsWith('.html'));
+  const workspaceName = (await realpath(workspace)).split(/[\\/]/).filter(Boolean).pop()!;
+  const projectExportDir = path.join(directory!, workspaceName);
+  const exportedFiles = (await readdir(projectExportDir)).filter((name) => name.endsWith('.html'));
   expect(exportedFiles).toHaveLength(1);
-  const exportedHtml = await readFile(path.join(directory!, exportedFiles[0]), 'utf8');
+  expect(exportedFiles[0]).toMatch(/^export location OSPREY_/);
+  const exportedHtml = await readFile(path.join(projectExportDir, exportedFiles[0]), 'utf8');
   expect(exportedHtml).toContain('<script id="session-data" type="application/json">');
 
   await page.getByTestId('nav-sessions').click();
   await expect(page.getByTestId('sessions-export-info')).toContainText(exportedFiles[0]);
   await expect(page.getByTestId('sessions-open-export')).toBeVisible();
+  await expect(row.getByTestId('session-exported')).toBeVisible();
+
+  // 若用户手动删除导出文件，点击查看导出给出友好提示并清理状态
+  await rm(path.join(projectExportDir, exportedFiles[0]));
+  await row.getByTestId('session-open-exported').click();
+  await expect(page.getByTestId('sessions-error')).toContainText('Exported file does not exist or has been removed');
+  // 重新导出成功
+  await row.getByTestId('session-export').click();
+  await expect(exportInfo).toContainText('Recent exports', { timeout: 15_000 });
+  const reExported = (await readdir(projectExportDir)).filter((name) => name.endsWith('.html'));
+  expect(reExported).toHaveLength(1);
+
+  // 再次删除文件后切换到其他页面再切回，会话页面自动检测文件不存在并清理导出状态
+  await rm(path.join(projectExportDir, reExported[0]));
+  await page.getByTestId('nav-models').click();
+  await page.getByTestId('nav-sessions').click();
+  // 切换回来后自动检测，无需用户点击，最近导出列表已自动清空且会话行已导出徽标消失
+  await expect(page.getByTestId('sessions-recent-list')).toHaveCount(0);
+  await expect(row.getByTestId('session-exported')).toHaveCount(0);
 });
 
 test('切换会话 → 消息列表恢复目标会话内容', async ({ launchElectronApp }) => {
@@ -426,6 +470,26 @@ test('删除当前打开的会话 → 面板切到新会话并可继续发送', 
   await expect(page.getByTestId('message-user').last()).toContainText('after delete KITE');
 });
 
+test('Sessions 页删除当前打开的唯一会话 → 回到空状态，不出现「未命名会话」', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'delete sole active session SAPPHIRE');
+  await page.getByTestId('nav-sessions').click();
+
+  const row = sessionRows(page).filter({ hasText: 'delete sole active session SAPPHIRE' });
+  await expect(row).toHaveCount(1, { timeout: 15_000 });
+  await row.getByTestId('session-delete').click();
+  await row.getByTestId('session-delete-confirm').click();
+
+  // Sessions 页清空，直接展示 empty 提示，绝不出现未命名会话
+  await expect(page.getByTestId('sessions-empty')).toBeVisible({ timeout: 15_000 });
+  await expect(sessionRows(page)).toHaveCount(0);
+});
+
 test('侧栏会话菜单 → 归档后移入已归档，可恢复；删除后消失', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
@@ -498,4 +562,274 @@ test('侧栏会话菜单 → 复制 ID、重命名、在新聊天中继续', asy
   await renamedRow.locator('.sidebar-session-menu-trigger').click();
   await page.getByRole('button', { name: 'Continue in new chat' }).click();
   await expect(page.locator('.sidebar-session-row')).toHaveCount(2, { timeout: 15_000 });
+});
+
+test('流式中删除会话 → 菜单项禁用且后端防御拦截，流结束后可删除', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'delete while streaming HERON');
+  const row = page.locator('.sidebar-session-row').filter({ hasText: 'delete while streaming HERON' });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+
+  // SLOW_END：慢速流；趁流式进行中验证删除保护
+  await page.getByTestId('chat-input').fill('SLOW_END delete while streaming');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 10_000 });
+
+  // 1. UI 保护：流式进行中，菜单内 Delete 按钮为 disabled
+  await row.hover();
+  await row.locator('.sidebar-session-menu-trigger').click();
+  await expect(page.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await page.keyboard.press('Escape');
+
+  // 2. 后端保护：即使绕过 UI 直接调 remove IPC，main 也会拒绝
+  const sessionPath = await row.locator('.sidebar-session').getAttribute('title');
+  expect(sessionPath).toBeTruthy();
+  const deleteResult = await page.evaluate(async (targetPath) => {
+    const pidesktop = (globalThis as unknown as { pidesktop: { hostInvoke: (args: unknown) => Promise<unknown> } }).pidesktop;
+    return await pidesktop.hostInvoke({
+      id: 'test-delete-running',
+      module: 'piSessions',
+      action: 'remove',
+      payload: { path: targetPath },
+    });
+  }, sessionPath) as { ok: boolean; data: { success: boolean; error?: string } };
+  expect(deleteResult.data).toEqual({ success: false, error: 'session is running' });
+
+  // 3. 等慢速流自然结束（stop 按钮消失），再删 → 成功
+  await expect(page.getByTestId('chat-stop')).toHaveCount(0, { timeout: 30_000 });
+  await row.hover();
+  await row.locator('.sidebar-session-menu-trigger').click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+  await expect(row).toHaveCount(0, { timeout: 15_000 });
+});
+
+test('侧栏会话列表：长列表展开与收起（含当前会话保底与归档分组）', async ({ launchElectronApp }) => {
+  // 预置活跃工作区的 25 个会话
+  const longWorkspace = await realpath(await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-long-')));
+  const longName = path.basename(longWorkspace);
+  const encodedLong = `--${longWorkspace.replace(/^\//, '').replace(/[\/\\:]/g, '-')}--`;
+  const seedDirLong = path.join(agentDir, 'sessions', encodedLong);
+  await mkdir(seedDirLong, { recursive: true });
+  for (let i = 0; i < 25; i += 1) {
+    const seedId = `019fe296-0000-7000-8000-${String(i).padStart(12, '0')}`;
+    const seedTs = new Date(Date.parse('2026-08-01T00:00:00.000Z') + i * 60_000).toISOString();
+    const lines = [
+      JSON.stringify({ type: 'session', version: 3, id: seedId, timestamp: seedTs, cwd: longWorkspace }),
+      JSON.stringify({
+        type: 'message',
+        id: `msg-${i}`,
+        parentId: null,
+        timestamp: seedTs,
+        message: { role: 'user', content: [{ type: 'text', text: `active session ${i}` }], timestamp: Date.parse(seedTs) },
+      }),
+    ];
+    await writeFile(path.join(seedDirLong, `${seedTs.replace(/[:.]/g, '-')}_${seedId}.jsonl`), lines.join('\n') + '\n');
+  }
+
+  // 预置归档工作区的 25 个会话
+  const archivedWorkspace = await realpath(await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-archived-')));
+  const archivedName = path.basename(archivedWorkspace);
+  const encodedArchived = `--${archivedWorkspace.replace(/^\//, '').replace(/[\/\\:]/g, '-')}--`;
+  const seedDirArchived = path.join(agentDir, 'sessions', encodedArchived);
+  await mkdir(seedDirArchived, { recursive: true });
+  for (let i = 0; i < 25; i += 1) {
+    const seedId = `019fe296-0000-7000-8000-${String(100 + i).padStart(12, '0')}`;
+    const seedTs = new Date(Date.parse('2026-08-02T00:00:00.000Z') + i * 60_000).toISOString();
+    const lines = [
+      JSON.stringify({ type: 'session', version: 3, id: seedId, timestamp: seedTs, cwd: archivedWorkspace }),
+      JSON.stringify({
+        type: 'message',
+        id: `msg-archived-${i}`,
+        parentId: null,
+        timestamp: seedTs,
+        message: { role: 'user', content: [{ type: 'text', text: `archived session ${i}` }], timestamp: Date.parse(seedTs) },
+      }),
+      JSON.stringify({
+        type: 'custom',
+        customType: 'pi-desktop.archive',
+        data: { archived: true },
+      }),
+    ];
+    await writeFile(path.join(seedDirArchived, `${seedTs.replace(/[:.]/g, '-')}_${seedId}.jsonl`), lines.join('\n') + '\n');
+  }
+
+  try {
+    const app = await launchElectronApp({
+      withPi: true,
+      agentDir,
+      seedSettings: { workspaceCwd: longWorkspace },
+    });
+    const page = await app.firstWindow();
+    await waitSessionReady(page);
+
+    const activeGroup = page.getByTestId(`session-group-${longName}`);
+    await expect(activeGroup).toBeVisible({ timeout: 15_000 });
+
+    // 默认展示 10 条
+    const activeRows = activeGroup.locator('.sidebar-session-row');
+    await expect(activeRows).toHaveCount(10);
+
+    // 显示更多按钮可见（剩余 15 条），收起按钮不可见
+    const showMoreBtn = page.getByTestId(`session-group-show-more-${longName}`);
+    const showLessBtn = page.getByTestId(`session-group-show-less-${longName}`);
+    await expect(showMoreBtn).toBeVisible();
+    await expect(showMoreBtn).toContainText('15');
+    await expect(showLessBtn).toHaveCount(0);
+
+    // 点击一次「显示更多」→ 直接全部展开（25 条全部可见），显示更多消失，收起可见
+    await showMoreBtn.click();
+    await expect(activeRows).toHaveCount(25);
+    await expect(showMoreBtn).toHaveCount(0);
+    await expect(showLessBtn).toBeVisible();
+
+    // 点击「收起」→ 回到 10 条，显示更多恢复，收起消失
+    await showLessBtn.click();
+    await expect(activeRows).toHaveCount(10);
+    await expect(showMoreBtn).toBeVisible();
+    await expect(showMoreBtn).toContainText('15');
+    await expect(showLessBtn).toHaveCount(0);
+
+    // 测试当前会话在第 25 条时的保底逻辑：
+    // 先全部展开至 25 条，点击第 25 个会话使其成为当前活跃会话（isCurrent）
+    await showMoreBtn.click();
+    await expect(activeRows).toHaveCount(25);
+    const lastSessionRow = activeRows.nth(24);
+    await lastSessionRow.locator('.sidebar-session').click();
+    await expect(lastSessionRow.locator('.sidebar-session.current')).toBeVisible();
+
+    // 点击「收起」：因为当前会话在第 25 条，保底显示 25 条而非 10 条
+    await showLessBtn.click();
+    await expect(activeRows).toHaveCount(25);
+    await expect(showLessBtn).toHaveCount(0);
+
+    // 归档分组展开与收起测试
+    const archivedHeader = page.getByTestId(`archived-session-group-header-${archivedName}`);
+    await expect(archivedHeader).toBeVisible();
+    await archivedHeader.click();
+
+    const archivedGroup = page.getByTestId(`archived-session-group-${archivedName}`);
+    const archivedRows = archivedGroup.locator('.sidebar-session-row');
+    await expect(archivedRows).toHaveCount(10);
+
+    const archivedShowMoreBtn = page.getByTestId(`archived-session-group-show-more-${archivedName}`);
+    const archivedShowLessBtn = page.getByTestId(`archived-session-group-show-less-${archivedName}`);
+    await expect(archivedShowMoreBtn).toBeVisible();
+    await expect(archivedShowLessBtn).toHaveCount(0);
+
+    await archivedShowMoreBtn.click();
+    await expect(archivedRows).toHaveCount(25);
+    await expect(archivedShowLessBtn).toBeVisible();
+
+    await archivedShowLessBtn.click();
+    await expect(archivedRows).toHaveCount(10);
+    await expect(archivedShowLessBtn).toHaveCount(0);
+  } finally {
+    await rm(longWorkspace, { recursive: true, force: true });
+    await rm(archivedWorkspace, { recursive: true, force: true });
+  }
+});
+
+test('新建会话后发消息正常响应（不报 session not started）', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 第一会话发送并落盘
+  await sendAndWaitReply(page, 'PING 1');
+  await expect(page.getByTestId('message-assistant')).toHaveCount(1);
+
+  // 点击新建会话
+  await page.getByTestId('new-chat').click();
+  // 消息列表清空（新会话）
+  await expect(page.getByTestId('message-assistant')).toHaveCount(0);
+  await expect(page.getByTestId('runtime-error-notice')).toHaveCount(0);
+
+  // 在新会话发送消息，验证正常返回且不报 session not started
+  await page.getByTestId('chat-input').fill('PING 2');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').first()).toContainText('PONG', {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId('runtime-error-notice')).toHaveCount(0);
+});
+
+test('流式输出中点击新建会话：新会话立即处于空闲态且不报替换超时', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 发送消息使 agent 开始生成
+  await page.getByTestId('chat-input').fill('PING STREAMING');
+  await page.getByTestId('chat-send').click();
+
+  // 在生成开始后立即点击新建会话
+  await page.getByTestId('new-chat').click();
+
+  // 新会话消息列表清空，不应卡在「工作中...」，不应显示红色停止按钮
+  await expect(page.getByTestId('message-assistant')).toHaveCount(0);
+  await expect(page.getByTestId('status-working')).toHaveCount(0);
+  await expect(page.getByTestId('chat-stop')).toHaveCount(0);
+  await expect(page.getByTestId('runtime-error-notice')).toHaveCount(0);
+
+  // 新会话能够正常发送下一条消息
+  await page.getByTestId('chat-input').fill('PING AFTER NEW');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').first()).toContainText('PONG', {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId('runtime-error-notice')).toHaveCount(0);
+});
+
+test('会话置顶与取消置顶：置顶会话跳出项目文件夹提升至顶部独立置顶区，取消后回归原项目', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 创建会话 1
+  await sendAndWaitReply(page, 'PING FIRST SESSION');
+  const firstRow = page.locator('.sidebar-session-row').filter({ hasText: 'PING FIRST SESSION' });
+  await expect(firstRow).toBeVisible();
+
+  // 新建会话 2
+  await page.getByTestId('new-chat').click();
+  await sendAndWaitReply(page, 'PING SECOND SESSION');
+
+  // 此时没有置顶会话，不显示置顶专区
+  await expect(page.getByTestId('pinned-session-group')).toHaveCount(0);
+
+  // 侧栏应该有 2 个会话行，都在项目文件夹内
+  const sessionRows = page.locator('.sidebar-session-row');
+  await expect(sessionRows).toHaveCount(2);
+
+  // 默认第二会话（最新）排在第 1 行，第一会话排在第 2 行
+  await expect(sessionRows.first()).toContainText('PING SECOND SESSION');
+  await expect(sessionRows.nth(1)).toContainText('PING FIRST SESSION');
+
+  // 点击第 2 行（第一会话）的置顶按钮
+  const firstSessionPinBtn = sessionRows.nth(1).locator('[data-testid^="sidebar-session-pin-"]');
+  await firstSessionPinBtn.click();
+
+  // 置顶后：顶部出现置顶专区
+  const pinnedGroup = page.getByTestId('pinned-session-group');
+  await expect(pinnedGroup).toBeVisible();
+  // 置顶专区内包含第一会话
+  await expect(pinnedGroup.locator('.sidebar-session-row')).toContainText('PING FIRST SESSION');
+
+  // 取消置顶
+  await pinnedGroup.locator('.sidebar-session-pin-trigger.pinned').click();
+
+  // 取消置顶后，置顶专区消失，第一会话回归项目文件夹
+  await expect(page.getByTestId('pinned-session-group')).toHaveCount(0);
+  await expect(page.locator('.sidebar-session-row')).toHaveCount(2);
+  await expect(page.locator('.sidebar-session-row').first()).toContainText('PING SECOND SESSION');
 });

@@ -175,7 +175,7 @@ test('Models 页：录入 API key 后状态变已配置', async ({ launchElectro
   await expect(page.getByTestId('provider-model-customnoauth-mock-discovered')).toBeVisible({
     timeout: 15_000,
   });
-  await expect(row).toContainText('Found 2 models, including 1 new');
+  await expect(row).toContainText('Found 7 models, including 6 new');
   await expect.poll(async () => {
     const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
       providers: { customnoauth: { models: Array<{ id: string }> } };
@@ -215,40 +215,43 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
   await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('add-custom-provider').click();
   const form = page.getByTestId('custom-provider-form');
-  await form.getByPlaceholder('Provider id (e.g. my-llm)').fill('added-provider');
+  await form.getByPlaceholder('Provider name (e.g. My LLM)').fill('Added Provider');
   await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}/v1`);
   await form.getByPlaceholder('API key').fill('added-secret');
   await expect(form.getByTestId('custom-api-select')).toHaveCount(0);
   await expect(form.getByTestId('custom-models')).toHaveCount(0);
   await expect(form.getByRole('button', { name: 'Save provider' })).toBeDisabled();
   await form.getByTestId('probe-custom-provider').click();
-  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-responses', { timeout: 30_000 });
+  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-completions', { timeout: 30_000 });
   await expect(form.getByTestId('probe-models')).toBeVisible();
   await expect(form.getByRole('button', { name: 'Save provider' })).toBeEnabled();
   await form.getByRole('button', { name: 'Save provider' }).click();
 
   const added = page.getByTestId('provider-added-provider');
   await expect(added).toBeVisible({ timeout: 15_000 });
+  await expect(added.locator('.provider-name')).toHaveText('Added Provider');
   await expect(page.getByTestId('provider-status-added-provider')).toHaveClass(/configured/);
   await expect.poll(async () => {
     const models = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
-      providers: { 'added-provider': { apiKey?: string; models?: Array<{ contextWindow?: number; reasoning?: boolean }> } };
+      providers: { 'added-provider': { name?: string; apiKey?: string; models?: Array<{ contextWindow?: number; reasoning?: boolean }> } };
     };
     const auth = JSON.parse(await readFile(path.join(agentDir, 'auth.json'), 'utf8')) as {
       'added-provider'?: { key?: string };
     };
     return {
+      name: models.providers['added-provider'].name,
       inlineKey: models.providers['added-provider'].apiKey,
       storedKey: auth['added-provider']?.key,
       contextWindow: models.providers['added-provider'].models?.[0]?.contextWindow,
       // 第三方模型缺省按支持推理处理，思考深度菜单可用
       reasoning: models.providers['added-provider'].models?.[0]?.reasoning,
     };
-  }).toEqual({ inlineKey: undefined, storedKey: 'added-secret', contextWindow: 262144, reasoning: true });
+    // mock-2 目录未上报且不在 pi 内置目录：规格未知不瞎写（运行时用 pi 默认兜底）
+  }).toEqual({ name: 'Added Provider', inlineKey: undefined, storedKey: 'added-secret', contextWindow: undefined, reasoning: true });
 
   await added.locator('.provider-row-header').click();
   await expect(page.getByTestId('provider-request-url-added-provider')).toContainText(
-    `http://127.0.0.1:${mockPort}/v1/responses`,
+    `http://127.0.0.1:${mockPort}/v1/chat/completions`,
   );
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByTestId('delete-provider-added-provider').click();
@@ -263,6 +266,68 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
       hasCredential: Object.hasOwn(auth, 'added-provider'),
     };
   }).toEqual({ hasProvider: false, hasCredential: false });
+});
+
+test('Models 页：重新打开新增供应商表单时字段为空', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('add-custom-provider').click();
+  const form = page.getByTestId('custom-provider-form');
+  await form.getByPlaceholder('Provider name (e.g. My LLM)').fill('Temp Provider');
+  await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}/v1`);
+  await form.getByRole('button', { name: 'Cancel' }).click();
+
+  // 再次打开：上次填写的内容不应残留
+  await page.getByTestId('add-custom-provider').click();
+  await expect(form.getByPlaceholder('Provider name (e.g. My LLM)')).toHaveValue('');
+  await expect(form.getByPlaceholder('baseURL')).toHaveValue('');
+  await expect(form.getByTestId('probe-results')).toHaveCount(0);
+});
+
+test('Models 页：已配置模型的自定义供应商仍可编辑名称与请求协议', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  const row = page.getByTestId('provider-mock');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.provider-row-header').click();
+  await expect(page.getByTestId('provider-model-mock-mock-1')).toBeVisible();
+
+  await page.getByTestId('edit-provider-mock').click();
+  await expect(page.getByTestId('provider-edit-form-mock')).toBeVisible();
+  await expect(page.getByTestId('edit-name-mock')).toHaveValue('mock');
+  // 适配器描述随选中项即时更新
+  await expect(page.getByTestId('edit-api-hint-mock')).toContainText('Chat Completions');
+  await page.getByTestId('edit-name-mock').fill('Renamed Mock');
+  await page.getByTestId('edit-api-mock').selectOption('openai-responses');
+  await expect(page.getByTestId('edit-api-hint-mock')).toContainText('Responses');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+
+  // 列表行立即显示新名称，models.json 仅更新基本信息，模型与凭证保持不变
+  await expect(row.locator('.provider-name')).toHaveText('Renamed Mock', { timeout: 15_000 });
+  await expect.poll(async () => {
+    const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+      providers: { mock: { name?: string; api?: string; baseUrl?: string; apiKey?: string; models?: Array<{ id: string }> } };
+    };
+    const p = doc.providers.mock;
+    return {
+      name: p.name,
+      api: p.api,
+      baseUrl: p.baseUrl,
+      apiKey: p.apiKey,
+      modelIds: p.models?.map((m) => m.id),
+    };
+  }).toEqual({
+    name: 'Renamed Mock',
+    api: 'openai-responses',
+    baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+    apiKey: 'mock-key',
+    modelIds: ['mock-1', 'mock-wide'],
+  });
 });
 
 test('Models 页：协议探测拒绝 200 HTML，发现 /v1 并选择真实 OpenAI 接口', async ({ launchElectronApp }) => {
@@ -280,28 +345,29 @@ test('Models 页：协议探测拒绝 200 HTML，发现 /v1 并选择真实 Open
   await expect(results).toBeVisible({ timeout: 30_000 });
   await expect(form.locator('.probe-result-row')).toHaveCount(4);
   await expect(form.locator('.probe-result-row').first()).toContainText('Unverified');
-  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-responses');
+  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-completions');
   await expect(form.getByTestId('custom-api-select').locator('option')).toHaveText([
-    'openai-responses',
     'openai-completions',
+    'openai-responses',
     'anthropic-messages',
     'google-generative-ai',
   ]);
-  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/responses`);
+  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/chat/completions`);
   // 验证协议：发送最小化测试请求，发现 /v1 并确认 openai 两类协议可用
   await form.getByTestId('verify-protocols').click();
   await expect(results.locator('.probe-result-row').filter({ hasText: 'openai-completions' })).toContainText('Available');
   await expect(results.locator('.probe-result-row').filter({ hasText: 'openai-responses' })).toContainText('Available');
   await expect(results.locator('.probe-result-row').filter({ hasText: 'anthropic-messages' })).toContainText('Unavailable');
-  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-responses');
+  await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-completions');
   await expect(form.getByPlaceholder('baseURL')).toHaveValue(`http://127.0.0.1:${mockPort}/v1`);
-  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/responses`);
-  page.once('dialog', (dialog) => dialog.accept());
-  await form.getByTestId('custom-api-select').selectOption('openai-completions');
   await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/chat/completions`);
-  // 上下文与最大输出自动管理：探测到的用探测值，探测不到的用前缀规格表兜底。
+  page.once('dialog', (dialog) => dialog.accept());
+  await form.getByTestId('custom-api-select').selectOption('openai-responses');
+  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/responses`);
+  // 上下文与最大输出自动管理：目录上报的用目录值；目录未上报且不在
+  // pi 内置目录的（mock-2）如实显示未知（—），不再瞎写缺省规格。
   await expect(form.getByTestId('probe-model-spec-mock-discovered')).toContainText('256,000');
-  await expect(form.getByTestId('probe-model-spec-mock-2')).toContainText('262,144');
+  await expect(form.getByTestId('probe-model-spec-mock-2')).toContainText('—');
   await expect(form.getByTestId('probe-models')).toBeVisible();
   await expect(form.getByTestId('probe-model-mock-2')).toContainText('mock-2');
   await expect(form.getByTestId('probe-model-mock-discovered')).toContainText('mock-discovered');
@@ -339,13 +405,20 @@ test('Models 页：探测全失败时说明不代表供应商不可用并展示�
 });
 
 test('Models 页：刷新会发现已配置自定义供应商的新模型', async ({ launchElectronApp }) => {
+  // 模拟 agentrouter 真实场景：models.json 无 cost（价格未知），验证不写误导性 0
+  const modelsDoc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+    providers: { mock: { models: Array<Record<string, unknown>> } };
+  };
+  for (const model of modelsDoc.providers.mock.models) delete model.cost;
+  await writeFile(path.join(agentDir, 'models.json'), JSON.stringify(modelsDoc));
+
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
 
   await page.getByTestId('nav-models').click();
   await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('refresh-models').click();
-  await expect(page.getByTestId('models-refresh-message')).toContainText('Found 2 custom models', {
+  await expect(page.getByTestId('models-refresh-message')).toContainText('Found 7 custom models', {
     timeout: 30_000,
   });
   await expect(page.getByTestId('models-refresh-message')).toContainText(
@@ -369,6 +442,64 @@ test('Models 页：刷新会发现已配置自定义供应商的新模型', asyn
   await row.locator('.provider-row-header').click();
   await expect(page.getByTestId('provider-request-url-mock')).toContainText('/v1/responses');
   await expect(page.getByTestId('provider-model-mock-mock-discovered')).toBeVisible();
+  // 目录上报 input: ['text','image'] → 发现链路写入 models.json 并在界面标识
+  await expect(page.getByTestId('provider-model-vision-mock-mock-discovered')).toBeVisible();
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; input?: string[] }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'mock-discovered')?.input;
+    }, { timeout: 15_000 })
+    .toEqual(['text', 'image']);
+  // OpenRouter 风格 top_provider.max_completion_tokens → maxTokens 通用映射：
+  // models.json 持久化完整数值，UI meta 片段完整显示（不截断数字）
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; maxTokens?: number; contextWindow?: number }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'openrouter-style');
+    }, { timeout: 15_000 })
+    .toEqual(expect.objectContaining({ id: 'openrouter-style', contextWindow: 262144, maxTokens: 65536 }));
+  await expect(
+    page.getByTestId('provider-model-meta-output-mock-openrouter-style'),
+  ).toContainText('65,536');
+  // 目录未上报价格：models.json 不写 cost，UI 显示占位而非误导性 $0
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; cost?: unknown }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'openrouter-style')?.cost;
+    }, { timeout: 15_000 })
+    .toBeUndefined();
+  await expect(
+    page.getByTestId('provider-model-pricing-mock-openrouter-style'),
+  ).toContainText('—');
+  // agentrouter 场景（claude-opus-4.8）：目录上报官方上下文/最大输出（完整不截断），
+  // 目录未上报的能力/价格由 pi 内置目录补全：视觉徽标 + 官方价格
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; contextWindow?: number; maxTokens?: number; input?: string[]; cost?: { input?: number } }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'claude-opus-4.8');
+    }, { timeout: 15_000 })
+    .toEqual(expect.objectContaining({
+      id: 'claude-opus-4.8',
+      contextWindow: 1000000,
+      maxTokens: 128000,
+      input: ['text', 'image'],
+      cost: expect.objectContaining({ input: 5 }),
+    }));
+  await expect(
+    page.getByTestId('provider-model-meta-output-mock-claude-opus-4.8'),
+  ).toContainText('128,000');
+  await expect(page.getByTestId('provider-model-vision-mock-claude-opus-4.8')).toBeVisible();
+  await expect(
+    page.getByTestId('provider-model-pricing-mock-claude-opus-4.8'),
+  ).toContainText('$5');
 });
 
 test('Models 页：已配置供应商展开显示可用模型，可设为当前模型并持久化', async ({
@@ -459,12 +590,187 @@ test('Models 页：推理开关恢复自定义模型的思考深度', async ({ l
   const thinkingRow = page.getByTestId('model-menu-thinking');
   await expect(thinkingRow).toBeVisible({ timeout: 15_000 });
   await thinkingRow.click();
-  await expect(page.getByTestId('thinking-option')).toHaveCount(5);
+  await expect(page.getByTestId('thinking-option')).toHaveCount(7);
   await page.locator('[data-testid="thinking-option"][data-value="high"]').click();
 
   await selector.click();
   await expect(page.getByTestId('model-menu-thinking')).toContainText('High', { timeout: 15_000 });
   await expect(page.getByTestId('model-trigger-thinking')).toContainText('High');
+});
+
+test('Models 页：图像开关声明自定义模型的多模态输入', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  const row = page.getByTestId('provider-mock');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.provider-row-header').click();
+
+  // mock-1 初始 input: ['text'] → 开关关闭，无图像标识
+  const toggle = page.getByTestId('provider-model-image-mock-mock-1').locator('input');
+  await expect(toggle).not.toBeChecked();
+  await expect(page.getByTestId('provider-model-vision-mock-mock-1')).toHaveCount(0);
+
+  // 受控 checkbox：状态经 IPC 往返后异步刷新
+  await toggle.click();
+  await expect(toggle).toBeChecked({ timeout: 15_000 });
+  await expect(page.getByTestId('provider-model-vision-mock-mock-1')).toBeVisible();
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; input?: string[] }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'mock-1')?.input;
+    }, { timeout: 15_000 })
+    .toEqual(['text', 'image']);
+
+  // 关闭后写回 ['text']，标识消失
+  await toggle.click();
+  await expect(toggle).not.toBeChecked({ timeout: 15_000 });
+  await expect(page.getByTestId('provider-model-vision-mock-mock-1')).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; input?: string[] }> } };
+      };
+      return doc.providers.mock.models.find((m) => m.id === 'mock-1')?.input;
+    }, { timeout: 15_000 })
+    .toEqual(['text']);
+});
+
+test('Models 页：刷新把旧版写入的多模态声明升级为内置目录识别结果', async ({ launchElectronApp }) => {
+  // 覆盖 beforeEach 的 models.json：模拟历史版本写入的旧模型——
+  // gemini-2.5-pro 命中 pi 内置目录（视觉），plain-legacy-model 未命中
+  const modelsDoc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+    providers: { mock: { models: unknown[] } };
+  };
+  const legacyModel = (id: string) => ({
+    id,
+    name: id,
+    reasoning: false,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 262144,
+    maxTokens: 4096,
+  });
+  modelsDoc.providers.mock.models = [legacyModel('plain-legacy-model'), legacyModel('gemini-2.5-pro')];
+  await writeFile(path.join(agentDir, 'models.json'), JSON.stringify(modelsDoc));
+  // mock-1 已被替换：默认模型指向仍存在的旧模型，避免启动时解析失败
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'gemini-2.5-pro' }),
+  );
+
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  const row = page.getByTestId('provider-mock');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.provider-row-header').click();
+  // 刷新前：两个旧模型都无视觉标识
+  await expect(page.getByTestId('provider-model-vision-mock-gemini-2.5-pro')).toHaveCount(0);
+
+  await page.getByTestId('refresh-models').click();
+  await expect(page.getByTestId('models-refresh-message')).toContainText('Found', {
+    timeout: 30_000,
+  });
+
+  // 命中规格表的旧模型升级为多模态；未命中的保持纯文本
+  await expect(page.getByTestId('provider-model-vision-mock-gemini-2.5-pro')).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByTestId('provider-model-vision-mock-plain-legacy-model')).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<{ id: string; input?: string[] }> } };
+      };
+      return {
+        gemini: doc.providers.mock.models.find((m) => m.id === 'gemini-2.5-pro')?.input,
+        plain: doc.providers.mock.models.find((m) => m.id === 'plain-legacy-model')?.input,
+      };
+    }, { timeout: 15_000 })
+    .toEqual({ gemini: ['text', 'image'], plain: ['text'] });
+});
+
+test('Models 页：刷新把历史错值纠正为官方规格（目录值与内置目录兜底）', async ({ launchElectronApp }) => {
+  // 模拟 agentrouter 存量数据（旧手写规格表写入的错值 + 全 0 价格占位）：
+  // - claude-opus-4.8/opus-5/deepseek-v4-flash：mock 目录已列出（带官方值）
+  // - gpt-5.6-sol：目录未列出（agentrouter 真实目录不含它），只能靠 pi 内置目录纠正
+  const modelsDoc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+    providers: { mock: { models: unknown[] } };
+  };
+  const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const historical = (
+    id: string,
+    contextWindow: number,
+    maxTokens: number,
+    extra: Record<string, unknown> = {},
+  ) => ({ id, name: id, reasoning: true, input: ['text'], cost: { ...zeroCost }, contextWindow, maxTokens, ...extra });
+  modelsDoc.providers.mock.models = [
+    historical('gpt-5.6-sol', 400000, 128000, { inputPinned: true }),
+    historical('claude-opus-4.8', 200000, 64000),
+    historical('claude-opus-5', 200000, 64000),
+    historical('deepseek-v4-flash', 1000000, 16384),
+  ];
+  await writeFile(path.join(agentDir, 'models.json'), JSON.stringify(modelsDoc));
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'gpt-5.6-sol' }),
+  );
+
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  const row = page.getByTestId('provider-mock');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.provider-row-header').click();
+
+  await page.getByTestId('refresh-models').click();
+  await expect(page.getByTestId('models-refresh-message')).toContainText('Found', {
+    timeout: 30_000,
+  });
+
+  // 目录列出的模型：ctx/max 按目录上报纠正，input 按内置目录升级多模态，全 0 价格换官方价
+  // 目录未列出的 gpt-5.6-sol：全链路靠内置目录纠正（openai 官方条目 272,000，
+  // 优先于 openrouter 聚合转报的 1,050,000）；inputPinned 尊重用户声明不覆盖
+  await expect
+    .poll(async () => {
+      const doc = JSON.parse(await readFile(path.join(agentDir, 'models.json'), 'utf8')) as {
+        providers: { mock: { models: Array<Record<string, unknown>> } };
+      };
+      const pick = (id: string) => doc.providers.mock.models.find((m) => m.id === id);
+      return {
+        solCtx: pick('gpt-5.6-sol')?.contextWindow,
+        solInput: pick('gpt-5.6-sol')?.input,
+        solCost: pick('gpt-5.6-sol')?.cost,
+        opusCtx: pick('claude-opus-4.8')?.contextWindow,
+        opusMax: pick('claude-opus-4.8')?.maxTokens,
+        opusInput: pick('claude-opus-4.8')?.input,
+        opusCost: pick('claude-opus-4.8')?.cost,
+        flashMax: pick('deepseek-v4-flash')?.maxTokens,
+        opus5Ctx: pick('claude-opus-5')?.contextWindow,
+      };
+    }, { timeout: 15_000 })
+    .toEqual({
+      solCtx: 272000,
+      solInput: ['text'],
+      solCost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25 },
+      opusCtx: 1000000,
+      opusMax: 128000,
+      opusInput: ['text', 'image'],
+      opusCost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+      flashMax: 384000,
+      opus5Ctx: 1000000,
+    });
+
+  // UI 侧同步可见：claude-opus-4.8 升级出视觉标识
+  await expect(page.getByTestId('provider-model-vision-mock-claude-opus-4.8')).toBeVisible({
+    timeout: 15_000,
+  });
 });
 
 /** Codex 风格模型菜单：触发器 → 「模型」行 → 子菜单里按 data-value 点选 */
@@ -474,7 +780,107 @@ async function selectChatModel(page: import('@playwright/test').Page, value: str
   await page.locator(`[data-testid="model-option"][data-value="${value}"]`).click();
 }
 
-test('聊天页模型菜单按供应商分组', async ({ launchElectronApp }) => {
+test('聊天页模型菜单按供应商分组与折叠展开', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  await selector.click();
+
+  const modelMenu = page.getByTestId('model-menu');
+  await expect(modelMenu).toBeVisible();
+  // 初始无子菜单展开，无 with-submenu 修饰类
+  await expect(modelMenu).not.toHaveClass(/with-submenu/);
+
+  await page.getByTestId('model-menu-models').click();
+  await expect(modelMenu).toHaveClass(/with-submenu/);
+  const submenu = page.getByTestId('model-submenu');
+  await expect(submenu).toBeVisible();
+  // 各组模型数均 ≤5：不渲染搜索框
+  await expect(submenu.getByTestId('model-search')).toHaveCount(0);
+
+  // 当前默认模型为 mock/mock-1 -> mock 组默认展开，包含 2 个模型选项
+  const mockToggle = page.locator('[data-testid="model-group-toggle"][data-value="mock"]');
+  await expect(mockToggle).toBeVisible();
+  await expect(mockToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(mockToggle.locator('.model-group-count')).toHaveText('2');
+  const mockGroup = page.locator('.model-group', { has: page.locator('[data-testid="model-group-toggle"][data-value="mock"]') });
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(2);
+
+  // 非当前模型组（extension-models）默认折叠，数量徽标显示 1
+  const extensionToggle = page.locator('[data-testid="model-group-toggle"][data-value="extension-models"]');
+  await expect(extensionToggle).toBeVisible();
+  await expect(extensionToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(extensionToggle.locator('.model-group-count')).toHaveText('1');
+  const extensionGroup = page.locator('.model-group', { has: page.locator('[data-testid="model-group-toggle"][data-value="extension-models"]') });
+  await expect(extensionGroup.getByTestId('model-option')).toHaveCount(0);
+
+  // 点击展开 extension-models
+  await extensionToggle.click();
+  await expect(extensionToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(extensionGroup.getByTestId('model-option')).toHaveText(['Extension Model 1']);
+
+  // 再次点击折叠
+  await extensionToggle.click();
+  await expect(extensionToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(extensionGroup.getByTestId('model-option')).toHaveCount(0);
+
+  // 再次展开并选中模型，验证选中后菜单关闭并在重新打开时默认展开该组
+  await extensionToggle.click();
+  await extensionGroup.getByTestId('model-option').click();
+  await expect(modelMenu).not.toBeVisible();
+  await expect(selector).toHaveAttribute('data-value', 'extension-models/extension-1');
+
+  // 重新打开模型子菜单：此时当前模型所在组为 extension-models，默认展开；mock 变为折叠
+  await selector.click();
+  await page.getByTestId('model-menu-models').click();
+  await expect(extensionToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(extensionGroup.getByTestId('model-option')).toHaveCount(1);
+  await expect(mockToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(0);
+});
+
+test('单供应商场景：组头不渲染，列表直接平铺', async ({ launchElectronApp }) => {
+  // 覆盖 settings 与 models.json，仅保留单一 mock 供应商
+  await writeFile(
+    path.join(agentDir, 'models.json'),
+    JSON.stringify({
+      providers: {
+        mock: {
+          baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+          api: 'openai-completions',
+          apiKey: 'mock-key',
+          models: [
+            {
+              id: 'mock-single-1',
+              name: 'Mock Single 1',
+              reasoning: false,
+              input: ['text'],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 128000,
+              maxTokens: 4096,
+            },
+            {
+              id: 'mock-single-2',
+              name: 'Mock Single 2',
+              reasoning: false,
+              input: ['text'],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 128000,
+              maxTokens: 4096,
+            },
+          ],
+        },
+      },
+    }),
+  );
+  await rm(path.join(agentDir, 'extensions'), { recursive: true, force: true });
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'mock-single-1' }),
+  );
+
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
 
@@ -482,17 +888,16 @@ test('聊天页模型菜单按供应商分组', async ({ launchElectronApp }) =>
   await expect(selector).toBeVisible({ timeout: 30_000 });
   await selector.click();
   await page.getByTestId('model-menu-models').click();
+
   const submenu = page.getByTestId('model-submenu');
   await expect(submenu).toBeVisible();
-  const mockGroup = submenu.locator('> div', {
-    has: page.locator('.model-group-label', { hasText: 'mock' }),
-  });
-  await expect(mockGroup).toHaveCount(1);
-  await expect(mockGroup.getByTestId('model-option')).toHaveCount(2);
-  const extensionGroup = submenu.locator('> div', {
-    has: page.locator('.model-group-label', { hasText: 'extension-models' }),
-  });
-  await expect(extensionGroup.getByTestId('model-option')).toHaveText(['Extension Model 1']);
+  // 单供应商下不渲染折叠头
+  await expect(submenu.getByTestId('model-group-toggle')).toHaveCount(0);
+  // 2 个模型（≤5）：不渲染搜索框
+  await expect(submenu.getByTestId('model-search')).toHaveCount(0);
+  // 模型列表直接可见
+  await expect(submenu.getByTestId('model-option')).toHaveCount(2);
+  await expect(submenu.getByTestId('model-option')).toHaveText(['Mock Single 1', 'Mock Single 2']);
 });
 
 test('Models 页标识扩展供应商并展示 pi 模型协议与费率', async ({ launchElectronApp }) => {
@@ -512,6 +917,122 @@ test('Models 页标识扩展供应商并展示 pi 模型协议与费率', async 
   await page.screenshot({ path: 'output/playwright/models-extension-provider.png', fullPage: false });
 });
 
+test('聊天页模型菜单：供应商模型超过 5 个时组内显示搜索并可过滤选择', async ({ launchElectronApp }) => {
+  // mock 供应商 6 个模型（>5 → 组内搜索框）；扩展供应商 1 个（≤5 → 无搜索框）
+  const manyModels = ['alpha-1', 'alpha-2', 'alpha-3', 'beta-1', 'beta-2', 'beta-3'].map((id) => ({
+    id,
+    name: `Search ${id}`,
+    reasoning: false,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128000,
+    maxTokens: 4096,
+  }));
+  await writeFile(
+    path.join(agentDir, 'models.json'),
+    JSON.stringify({
+      providers: {
+        mock: {
+          baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+          api: 'openai-completions',
+          apiKey: 'mock-key',
+          models: manyModels,
+        },
+      },
+    }),
+  );
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'alpha-1' }),
+  );
+
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  await selector.click();
+  await page.getByTestId('model-menu-models').click();
+  const submenu = page.getByTestId('model-submenu');
+  await expect(submenu).toBeVisible();
+
+  // 当前模型所在 mock 组默认展开：6 个选项 + 组内搜索框
+  const mockGroup = page.locator('.model-group', { has: page.locator('[data-testid="model-group-toggle"][data-value="mock"]') });
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(6);
+  const search = mockGroup.getByTestId('model-search');
+  await expect(search).toBeVisible();
+
+  // 扩展供应商组（1 个模型）展开后无搜索框
+  const extensionToggle = page.locator('[data-testid="model-group-toggle"][data-value="extension-models"]');
+  await extensionToggle.click();
+  const extensionGroup = page.locator('.model-group', { has: page.locator('[data-testid="model-group-toggle"][data-value="extension-models"]') });
+  await expect(extensionGroup.getByTestId('model-option')).toHaveCount(1);
+  await expect(extensionGroup.getByTestId('model-search')).toHaveCount(0);
+
+  // 组内过滤：只影响本组，数量徽标仍显示总数
+  await search.fill('beta');
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(3);
+  await expect(mockGroup.locator('.model-group-count')).toHaveText('6');
+
+  // 无匹配：组内提示
+  await search.fill('zzz-no-match');
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(0);
+  await expect(mockGroup.getByTestId('model-search-empty')).toBeVisible();
+
+  // 回车选中首个命中项，菜单关闭
+  await search.fill('beta-2');
+  await expect(mockGroup.getByTestId('model-option')).toHaveCount(1);
+  await search.press('Enter');
+  await expect(page.getByTestId('model-menu')).not.toBeVisible();
+  await expect(selector).toHaveAttribute('data-value', 'mock/beta-2');
+});
+
+test('聊天页模型菜单：单供应商超过 5 个模型时平铺列表也显示搜索', async ({ launchElectronApp }) => {
+  const manyModels = ['flat-1', 'flat-2', 'flat-3', 'flat-4', 'flat-5', 'flat-6'].map((id) => ({
+    id,
+    name: `Flat ${id}`,
+    reasoning: false,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128000,
+    maxTokens: 4096,
+  }));
+  await writeFile(
+    path.join(agentDir, 'models.json'),
+    JSON.stringify({
+      providers: {
+        mock: {
+          baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+          api: 'openai-completions',
+          apiKey: 'mock-key',
+          models: manyModels,
+        },
+      },
+    }),
+  );
+  await rm(path.join(agentDir, 'extensions'), { recursive: true, force: true });
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'flat-1' }),
+  );
+
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+  await selector.click();
+  await page.getByTestId('model-menu-models').click();
+  const submenu = page.getByTestId('model-submenu');
+  await expect(submenu).toBeVisible();
+
+  await expect(submenu.getByTestId('model-search')).toBeVisible();
+  await expect(submenu.getByTestId('model-option')).toHaveCount(6);
+  await submenu.getByTestId('model-search').fill('flat-5');
+  await expect(submenu.getByTestId('model-option')).toHaveCount(1);
+  await expect(submenu.getByTestId('model-option')).toHaveText(['Flat flat-5']);
+});
+
 test('LM Studio：自动发现模型并同步视觉能力与真实上下文', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
@@ -520,8 +1041,12 @@ test('LM Studio：自动发现模型并同步视觉能力与真实上下文', as
   await expect(selector).toBeVisible({ timeout: 30_000 });
   await selector.click();
   await page.getByTestId('model-menu-models').click();
-  const group = page.locator('.model-submenu > div', {
-    has: page.locator('.model-group-label', { hasText: 'LM Studio' }),
+  const submenu = page.getByTestId('model-submenu');
+  const lmStudioToggle = page.locator('[data-testid="model-group-toggle"][data-value="LM Studio"]');
+  await expect(lmStudioToggle).toBeVisible();
+  await lmStudioToggle.click();
+  const group = page.locator('.model-group', {
+    has: page.locator('[data-testid="model-group-toggle"][data-value="LM Studio"]'),
   });
   await expect(group).toHaveCount(1);
   await expect(group.getByTestId('model-option')).toHaveText(['Qwen3.5 9B']);
@@ -555,8 +1080,8 @@ test('Models 页：探测前隐藏协议与模型输入，探测失败后才允�
   await form.getByTestId('probe-custom-provider').click();
   await expect(form.getByTestId('custom-models')).toBeVisible({ timeout: 30_000 });
   await expect(form.getByTestId('custom-api-select').locator('option')).toHaveText([
-    'openai-responses',
     'openai-completions',
+    'openai-responses',
     'anthropic-messages',
     'google-generative-ai',
   ]);
@@ -653,3 +1178,88 @@ test('模型切换只更新当前模型参数，会话累计 usage 保持不变'
   await expect(page.getByTestId('usage-context-window')).toContainText('200,000');
   await expect(inputTotal.locator('strong')).toHaveText(before ?? '');
 });
+
+test('思考深度档位：逐模型可用档支持 xhigh/max 且在模型切换时正确刷新与 clamp', async ({
+  launchElectronApp,
+}) => {
+  await writeFile(
+    path.join(agentDir, 'models.json'),
+    JSON.stringify({
+      providers: {
+        mock: {
+          baseUrl: `http://127.0.0.1:${mockPort}/v1`,
+          api: 'openai-completions',
+          apiKey: 'mock-key',
+          models: [
+            {
+              id: 'mock-custom-thinking',
+              name: 'Mock Custom Thinking',
+              reasoning: true,
+              thinkingLevelMap: { off: null, xhigh: 'xhigh', max: 'max' },
+              input: ['text'],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 128000,
+              maxTokens: 4096,
+            },
+            {
+              id: 'mock-default-thinking',
+              name: 'Mock Default Thinking',
+              reasoning: true,
+              input: ['text'],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 128000,
+              maxTokens: 4096,
+            },
+          ],
+        },
+      },
+    }),
+  );
+  await rm(path.join(agentDir, 'extensions'), { recursive: true, force: true });
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'mock-custom-thinking' }),
+  );
+
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+
+  // 1. mock-custom-thinking 声明 off: null, xhigh: 'xhigh', max: 'max'
+  // 思考菜单应出现 6 档（无 "关闭" / off），含 "Very high" / "Maximum"
+  await selector.click();
+  const thinkingRow = page.getByTestId('model-menu-thinking');
+  await expect(thinkingRow).toBeVisible({ timeout: 15_000 });
+  await thinkingRow.click();
+  const options = page.getByTestId('thinking-option');
+  await expect(options).toHaveCount(6);
+  await expect(page.locator('[data-testid="thinking-option"][data-value="off"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="thinking-option"][data-value="xhigh"]')).toBeVisible();
+  await expect(page.locator('[data-testid="thinking-option"][data-value="max"]')).toBeVisible();
+
+  // 2. 选择 max 档位，trigger 与 menu 同步显示 Maximum
+  await page.locator('[data-testid="thinking-option"][data-value="max"]').click();
+  await selector.click();
+  await expect(page.getByTestId('model-menu-thinking')).toContainText('Maximum', { timeout: 15_000 });
+  await expect(page.getByTestId('model-trigger-thinking')).toContainText('Maximum');
+
+  // 3. 切换为 mock-default-thinking（不带 map 的 reasoning 模型）
+  // 菜单应刷新为 5 档（off–high），且 pi 将超出范围的 max 自动 clamp 到 high
+  await page.getByTestId('model-menu-models').click();
+  await page.locator('[data-testid="model-option"][data-value="mock/mock-default-thinking"]').click();
+
+  // 验证 trigger 文案被 clamp 为 High
+  await expect(page.getByTestId('model-trigger-thinking')).toContainText('High', { timeout: 15_000 });
+
+  // 打开思考菜单，确认显示 5 档（包含 off，不含 xhigh/max）
+  await selector.click();
+  await expect(page.getByTestId('model-menu-thinking')).toContainText('High');
+  await page.getByTestId('model-menu-thinking').click();
+  await expect(page.getByTestId('thinking-option')).toHaveCount(5);
+  await expect(page.locator('[data-testid="thinking-option"][data-value="off"]')).toBeVisible();
+  await expect(page.locator('[data-testid="thinking-option"][data-value="xhigh"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="thinking-option"][data-value="max"]')).toHaveCount(0);
+});
+

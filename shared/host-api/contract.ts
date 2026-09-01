@@ -25,6 +25,20 @@ export type ShellOpenPathWithPayload = {
 };
 export type ShellOpenPathPayload = { path: string };
 export type AppClipboardWritePayload = { text: string };
+export type AppClipboardImagePayload = {
+  /** Base64-encoded image data (without data: URL prefix) */
+  data: string;
+  mimeType?: string;
+};
+export type AppWriteBinaryFilePayload = {
+  path: string;
+  /** Base64-encoded binary file content */
+  data: string;
+};
+export type AppEditCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll';
+export type AppEditCommandPayload = {
+  command: AppEditCommand;
+};
 
 // —— piSystem：pi/Node/npm 环境检测与安装引导 ——
 
@@ -143,9 +157,18 @@ export type VersionCheckSnapshot = {
   pi: VersionCheckStatus;
   app: VersionCheckStatus & {
     releaseUrl?: string;
+    releaseNotes?: string;
     assetName?: string;
     downloadedPath?: string;
   };
+};
+
+/** 待展示的版本更新通知（kind 区分 app 自身与 pi）。 */
+export type VersionCheckPendingNotice = {
+  current: string;
+  latest: string;
+  releaseUrl?: string;
+  kind: 'app' | 'pi';
 };
 
 export type AppUpdateDownloadResult = HostSuccess & {
@@ -157,6 +180,7 @@ export type AppUpdateProgressEvent = {
   phase: 'started' | 'progress' | 'completed' | 'failed';
   downloadedBytes?: number;
   totalBytes?: number;
+  speedBytesPerSec?: number;
   path?: string;
   error?: string;
 };
@@ -204,6 +228,8 @@ export type PiRuntimeModelInfo = {
   id: string;
   name?: string;
   reasoning?: boolean;
+  /** 输入模态：含 'image' 表示支持图像输入（多模态）。 */
+  input?: string[];
   contextWindow?: number;
   /** Maximum generated tokens for one response. This is not the context window. */
   maxTokens?: number;
@@ -276,11 +302,18 @@ export type PiRuntimeStateResult = {
   pendingUiRequests?: PiUiRequestPayload[];
   /** 删除会话驱动的替换：被删会话的原 sessionId，供正在查看它的面板认领新会话。 */
   replacesSessionId?: string;
+  /**
+   * 渲染层发起的替换动作 id（newSession/fork 请求携带、main 原样回显）：
+   * 同窗口多面板并发替换时，各面板只应用自己发起的那次事件，防止面板劫持。
+   */
+  replacementActionId?: string;
 };
 
 // —— piRuntime 消息级 fork / 分支导航（/tree）——
 
-export type PiRuntimeForkPayload = { entryId: string };
+export type PiRuntimeForkPayload = { entryId: string; actionId?: string };
+/** newSession 请求载荷：actionId 供 sessionReplaced 事件回显发起上下文。 */
+export type PiRuntimeNewSessionPayload = { actionId?: string };
 export type PiRuntimeForkResult = HostSuccess & {
   /** position='before' 语义：被选中 user 消息的文本（回填输入框供编辑重发） */
   selectedText?: string;
@@ -326,6 +359,7 @@ export type PiRuntimeSessionInfo = {
   name?: string;
   sessionId: string;
   sessionFile?: string;
+  isSaved?: boolean;
   model?: PiRuntimeModelInfo;
   totalMessages: number;
   userMessages: number;
@@ -438,6 +472,16 @@ export type WorkspaceListResult = { path: string; entries: WorkspaceEntry[] };
 
 /** 当前工作区 git 分支（pi TUI footer 同口径；非仓库返回 branch: null）。 */
 export type GitBranchResult = { branch: string | null };
+export type GitBranchListResult = {
+  branches: string[];
+  current: string | null;
+  isDirty: boolean;
+};
+export type GitCheckoutResult = {
+  success: boolean;
+  error?: 'dirty' | 'running' | string;
+  branch?: string;
+};
 export type WorkspaceReadPayload = { path: string };
 export type WorkspaceReadResult = {
   path: string;
@@ -456,6 +500,9 @@ export type WorkspaceReadResult = {
 
 /** 默认由 Pi Desktop 管理的本地代理地址。 */
 export const DEFAULT_DESKTOP_PROXY_URL = 'http://127.0.0.1:7897';
+
+/** 默认公共 GitHub 下载加速镜像前缀。 */
+export const DEFAULT_DOWNLOAD_MIRROR = 'https://ghproxy.net/';
 
 /** 网络代理模式：auto=启用 Pi Desktop 中配置的代理地址（默认），off=直连。 */
 export type ProxyMode = 'auto' | 'off';
@@ -500,8 +547,14 @@ export type SettingsSnapshot = {
   appVersionCheckLatest?: string;
   appVersionCheckError?: string;
   appVersionCheckReleaseUrl?: string;
+  appVersionCheckReleaseNotes?: string;
   appVersionCheckAssetName?: string;
   appVersionCheckDownloadedPath?: string;
+  appVersionCheckNoticedLatest?: string;
+  appVersionCheckNoticedAt?: number;
+  piVersionCheckNoticedLatest?: string;
+  piVersionCheckNoticedAt?: number;
+  downloadMirror?: string;
 };
 
 export type SettingsGetPayload = { key: keyof SettingsSnapshot };
@@ -531,6 +584,13 @@ export type DialogOpenPayload = {
 };
 export type DialogOpenResult = { canceled: boolean; filePaths: string[] };
 
+export type DialogSavePayload = {
+  title?: string;
+  defaultPath?: string;
+  filters?: Array<{ name: string; extensions: string[] }>;
+};
+export type DialogSaveResult = { canceled: boolean; filePath?: string };
+
 // —— windows：多窗口管理 ——
 
 export type WindowsOpenDetachedPayload = { sessionPath: string; cwd?: string };
@@ -551,6 +611,10 @@ export type WindowListEntry = {
   isMain: boolean;
   focused: boolean;
 };
+/** 工作台 docked 展开时请求窗口向右加宽的像素数。 */
+export type WindowsExpandRightPayload = { extraWidth: number };
+/** 实际加宽像素（受屏幕右缘可用空间约束，可能小于请求值；无空间/最大化时为 0）。 */
+export type WindowsExpandRightResult = { applied: number };
 
 // —— notify：macOS 系统通知（渲染层只上报事件，焦点判定与弹通知都在 main）——
 
@@ -560,6 +624,8 @@ export type NotifyDispatchPayload = {
   /** 已在渲染层本地化的标题/正文 */
   title: string;
   body?: string;
+  /** 产生通知的会话文件路径：main 按它定位焦点判定与点击目标；in-memory 会话暂无文件，缺省回退窗口级判定 */
+  sessionPath?: string;
 };
 
 // —— providers：模型/供应商管理 ——
@@ -569,6 +635,8 @@ export type PiProviderRow = {
   name: string;
   /** 供应商 API 请求地址（内置来自 pi catalog，自定义来自 models.json baseUrl）。 */
   baseUrl?: string;
+  /** 请求协议（自定义供应商来自 models.json api；内置供应商缺省）。 */
+  api?: string;
   source: 'builtin' | 'config' | 'extension';
   authMethods: string[];
   configured: boolean;
@@ -591,7 +659,7 @@ export type PiModelRow = {
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
-  cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 };
 export type PiProviderRefreshResult = HostSuccess & {
   aborted?: boolean;
@@ -600,18 +668,35 @@ export type PiProviderRefreshResult = HostSuccess & {
   addedModels?: number;
   migratedProviders?: number;
 };
+/** 探测到的自定义服务器类型：决定 models.json 写库时的思考控制兼容配置。 */
+export type PiProviderServerType = 'lm-studio' | 'vllm' | 'generic';
+
 export type PiProviderAddCustomPayload = {
   id: string;
+  /** 展示名：写入 models.json providers.<id>.name，pi 会将其作为供应商名返回。 */
+  name: string;
   baseUrl: string;
   api: string;
   apiKey?: string;
+  /** 探测结果（probe.serverType）；未探测时由 main 按 baseUrl/ID 回退判定。 */
+  serverType?: PiProviderServerType;
   models: Array<{
     id: string;
     name?: string;
     reasoning?: boolean;
+    /** 输入模态（多模态识别）：探测目录上报时传入；缺省由后端按规格表判定。 */
+    input?: Array<'text' | 'image'>;
     contextWindow?: number;
     maxTokens?: number;
+    thinkingLevelMap?: Record<string, string | null>;
   }>;
+};
+/** 编辑自定义供应商基本信息（名称/baseUrl/请求协议）；模型与凭证保持不变。 */
+export type PiProviderUpdateCustomPayload = {
+  providerId: string;
+  name?: string;
+  baseUrl?: string;
+  api?: string;
 };
 export type PiProviderProbePayload = {
   baseUrl: string;
@@ -625,6 +710,12 @@ export type PiProviderSetModelReasoningPayload = {
   providerId: string;
   modelId: string;
   reasoning: boolean;
+};
+/** 切换 models.json 自定义模型的图像输入声明（多模态识别，决定图片附件是否可用）。 */
+export type PiProviderSetModelInputPayload = {
+  providerId: string;
+  modelId: string;
+  image: boolean;
 };
 export type PiProviderProbeProtocol = {
   api: string;
@@ -640,16 +731,29 @@ export type PiProviderProbeProtocol = {
 };
 export type PiProviderProbeResult = {
   models: string[];
-  modelDetails?: Array<{ id: string; contextWindow?: number }>;
+  modelDetails?: Array<{
+    id: string;
+    contextWindow?: number;
+    maxTokens?: number;
+    /** 目录上报的输入模态：含 image 表示支持图像输入（多模态）。 */
+    input?: Array<'text' | 'image'>;
+    thinkingLevelMap?: Record<string, string | null>;
+  }>;
   protocols: PiProviderProbeProtocol[];
   recommendedApi?: string;
   /** Successful API base URL, including a discovered /v1 prefix when required. */
   recommendedBaseUrl?: string;
+  /** 服务器类型（LM Studio native 端点 / vLLM /version 端点探测）。 */
+  serverType?: PiProviderServerType;
+  /** 模型目录请求失败原因（连接拒绝/超时/HTTP 错误等）；models 为空时用于界面提示。 */
+  catalogError?: string;
 };
 export type PiCompactionSettings = {
   reserveTokens: number;
   keepRecentTokens: number;
   enabled: boolean;
+  /** settings.json 中是否已显式写入 compaction（未写入时取 pi 默认值，UI 可按模型窗口套用推荐值）。 */
+  configured?: boolean;
 };
 export type PiOAuthProgressEvent = {
   providerId: string;
@@ -665,6 +769,16 @@ export type PiRetrySettingsResult = { enabled: boolean; maxRetries: number; base
 export type PiRetrySettingsPayload = Partial<PiRetrySettingsResult>;
 /** 新会话默认思考深度（pi settings.defaultThinkingLevel；null = 未设置）。 */
 export type PiDefaultThinkingResult = { level: string | null };
+
+/** 新会话默认启用工具（pi settings.defaultTools；未配置时 pi 回退 read/bash/edit/write）。 */
+export type PiDefaultToolsResult = { tools: string[] };
+
+/** pi 内置工具全集（设置页工具开关枚举；顺序即展示顺序）。 */
+export const PI_BUILTIN_TOOLS = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls'] as const;
+/** 不可取消的核心工具（关闭后模型无法读写/执行，设置页开关锁定为开启）。 */
+export const PI_CORE_TOOLS = ['read', 'bash', 'edit', 'write'] as const;
+/** pi 未配置 defaultTools 时的默认工具列表（与 pi SDK 的 defaultActiveToolNames 一致）。 */
+export const PI_DEFAULT_TOOLS = PI_CORE_TOOLS;
 
 // —— piRuntime 命令补全 ——
 
@@ -688,6 +802,7 @@ export type PiSessionRow = {
   /** 该会话仍有保活的 pi runtime 正在执行。 */
   isRunning: boolean;
   archived: boolean;
+  pinned: boolean;
 };
 export type PiSessionListResult = { sessions: PiSessionRow[] };
 export type PiSessionSearchMatch = 'name' | 'firstMessage' | 'message';
@@ -699,18 +814,38 @@ export type PiSessionSearchRow = PiSessionRow & {
 };
 export type PiSessionSearchPayload = { query: string; limit?: number };
 export type PiSessionSearchResult = { sessions: PiSessionSearchRow[] };
-export type PiSessionPathPayload = { path: string; cwd?: string };
+export type PiSessionPathPayload = { path: string; cwd?: string; title?: string; id?: string };
+export type PiSessionPinPayload = PiSessionPathPayload & { pinned: boolean };
 export type PiSessionArchivePayload = PiSessionPathPayload & { archived: boolean };
+
 export type PiSessionProjectArchivePayload = { cwd: string; archived: boolean };
 export type PiSessionRenamePayload = { path: string; name: string };
 export type PiSessionForkResult = HostSuccess & { path?: string };
-export type PiSessionExportResult = HostSuccess & { path?: string };
-export type PiSessionExportInfo = { directory: string; lastPath?: string };
+export type PiSessionExportRecord = {
+  path: string;
+  sessionPath: string;
+  sessionId?: string;
+  projectName: string;
+  cwd: string;
+  title: string;
+  exportedAt: string;
+};
+export type PiSessionExportResult = HostSuccess & { path?: string; record?: PiSessionExportRecord };
+export type PiSessionExportInfo = {
+  directory: string;
+  lastPath?: string;
+  lastRecord?: PiSessionExportRecord;
+  recentRecords?: PiSessionExportRecord[];
+  records?: Record<string, PiSessionExportRecord>;
+};
 
 // —— piFiles：@ 文件引用（补全候选；展开在 piRuntime.prompt 前处理，格式照 pi file-processor）——
 
 export type PiFileListPayload = { cwd: string };
 export type PiFileListResult = { files: string[] };
+/** 目录逐层浏览（手动文件面板）：列某目录的直接子项，目录/文件分开排序。 */
+export type PiFileListDirPayload = { cwd: string; dir?: string };
+export type PiFileListDirResult = { dir: string; dirs: string[]; files: string[] };
 
 // —— piSkills：技能列表 ——
 
@@ -725,6 +860,8 @@ export type PiSkillRow = {
   /** pi 的 sourceInfo（source/scope/origin），UI 可直接展示 */
   sourceDetail?: string;
   disableModelInvocation: boolean;
+  /** 是否只读（如 package 内部或无写权限文件，不可切换模式） */
+  isReadOnly?: boolean;
 };
 export type PiSkillListResult = {
   skills: PiSkillRow[];
@@ -772,6 +909,16 @@ export type PiSkillImportResult = {
     action: string;
     error?: string;
   }>;
+};
+
+/** 修改 skill 调用模式（写 SKILL.md 的 disable-model-invocation frontmatter） */
+export type PiSkillSetModePayload = {
+  filePath: string;
+  disableModelInvocation: boolean;
+};
+export type PiSkillSetModeResult = {
+  ok: boolean;
+  error?: string;
 };
 
 // —— piPackages：扩展包管理（SDK PackageManager 的封装）——
@@ -924,6 +1071,9 @@ export type HostApiContract = {
     name: () => string;
     platform: () => string;
     writeClipboard: (payload: AppClipboardWritePayload) => HostSuccess;
+    writeClipboardImage: (payload: AppClipboardImagePayload) => HostSuccess;
+    writeBinaryFile: (payload: AppWriteBinaryFilePayload) => HostSuccess;
+    editCommand: (payload: AppEditCommandPayload) => HostSuccess;
   };
   shell: {
     openExternal: (payload: ShellOpenExternalPayload) => void;
@@ -947,11 +1097,16 @@ export type HostApiContract = {
   versionCheck: {
     check: (payload?: { force?: boolean }) => VersionCheckSnapshot;
     getStatus: () => VersionCheckSnapshot;
+    /** 渲染层挂载时拉取待展示通知：推送可能先于订阅丢失，拉取兜底并标记已读。 */
+    getPendingNotice: () => VersionCheckPendingNotice | null;
+    /** 用户关闭/点击通知后标记该版本已读，重启不再弹。 */
+    dismissNotice: (payload: { kind: 'app' | 'pi'; latest: string }) => HostSuccess;
   };
   appUpdate: {
     download: () => AppUpdateDownloadResult;
     openDownloaded: () => HostSuccess;
     showDownloaded: () => HostSuccess;
+    installDownloaded: (payload?: { force?: boolean }) => HostSuccess;
   };
   piRuntime: {
     /** 启动（或复用）指定 cwd 的会话运行时；更换 cwd 会重建。 */
@@ -962,11 +1117,13 @@ export type HostApiContract = {
     /** 生成中调用按 payload.behavior 排队：默认 followUp（排队），'steer' = 当前轮插入。 */
     prompt: (payload: PiRuntimePromptPayload) => HostSuccess;
     abort: () => PiRuntimeAbortResult;
+    /** 只停止正在运行的 bash 命令，不影响消息回合/压缩等（pi TUI Esc 的分支语义）。 */
+    abortBash: () => HostSuccess;
     /** 移除一条排队消息（pi 仅 clearQueue 全清：main 侧快照→全清→按原顺序重排其余项）。 */
     queueRemove: (payload: PiRuntimeQueueItemPayload) => PiRuntimeQueueMutationResult;
     /** 在 pi 原生 steering/followUp 队列之间移动消息。 */
     queueMove: (payload: PiRuntimeQueueMovePayload) => PiRuntimeQueueMutationResult;
-    newSession: () => HostSuccess;
+    newSession: (payload?: PiRuntimeNewSessionPayload) => HostSuccess;
     /** /compact [instructions]：手动压缩上下文，可带 pi 的自定义压缩指令。 */
     compact: (payload?: PiRuntimeCompactPayload) => HostSuccess;
     /** 消息级 fork：从某条历史 user 消息分叉出新会话并切过去（runtime.fork，TUI /fork 语义）。 */
@@ -976,6 +1133,7 @@ export type HostApiContract = {
     /** 同会话文件内跳分支（session.navigateTree，TUI /tree 语义）。 */
     navigateTree: (payload: PiRuntimeNavigatePayload) => PiRuntimeNavigateResult;
     setThinkingLevel: (payload: { level: string }) => PiRuntimeModelUpdateResult;
+    setContextWindow: (payload: { contextWindow: number }) => PiRuntimeModelUpdateResult;
     setModel: (payload: { provider: string; id: string }) => PiRuntimeModelUpdateResult;
     /** /name <text>：重命名当前会话（session.setSessionName；返回 pi 规范化后的名字）。 */
     setSessionName: (payload: { name: string; notify?: boolean }) => HostSuccess & { name?: string };
@@ -1003,11 +1161,18 @@ export type HostApiContract = {
     deleteCustom: (payload: { providerId: string }) => HostSuccess;
     startOAuth: (payload: { providerId: string }) => HostSuccess;
     addCustom: (payload: PiProviderAddCustomPayload) => HostSuccess;
+    /** 编辑自定义供应商基本信息（名称/baseUrl/请求协议）；模型与凭证保持不变。 */
+    updateCustom: (payload: PiProviderUpdateCustomPayload) => HostSuccess;
     /**
      * 切换 models.json 自定义模型的 reasoning 声明。目录探测不上报推理能力时，
      * 用户用此开关手动声明；活动会话正在使用该模型时同步重新应用模型定义。
      */
     setModelReasoning: (payload: PiProviderSetModelReasoningPayload) => HostSuccess;
+    /**
+     * 切换 models.json 自定义模型的图像输入声明（多模态）。规格表识别不到或
+     * 网关剥离视觉时用户用此开关手动声明；活动会话正在使用该模型时同步重新应用。
+     */
+    setModelInput: (payload: PiProviderSetModelInputPayload) => HostSuccess;
     /**
      * 探测自定义供应商：默认只拉模型目录（GET /models，元数据，不发生成请求）；
      * verifyProtocols=true 时才对每个候选协议发送一次最小化测试请求（约 1 token）。
@@ -1028,6 +1193,9 @@ export type HostApiContract = {
     /** 新会话默认思考深度（pi settings.defaultThinkingLevel）。 */
     getDefaultThinking: () => PiDefaultThinkingResult;
     setDefaultThinking: (payload: { level: string }) => HostSuccess;
+    /** 新会话默认启用工具（pi settings.defaultTools；未配置返回 pi 内置默认列表）。 */
+    getDefaultTools: () => PiDefaultToolsResult;
+    setDefaultTools: (payload: { tools: string[] }) => HostSuccess;
   };
   piSessions: {
     /** 当前 workspace cwd 的会话列表（modified 倒序）。runtime 未启动时回退 settings.workspaceCwd。 */
@@ -1043,6 +1211,7 @@ export type HostApiContract = {
     fork: (payload: PiSessionPathPayload) => PiSessionForkResult;
     archive: (payload: PiSessionArchivePayload) => HostSuccess;
     archiveProject: (payload: PiSessionProjectArchivePayload) => HostSuccess;
+    pin: (payload: PiSessionPinPayload) => HostSuccess;
     /** pi 无删除 SDK API：删当前会话前先 newSession，随后移入系统废纸篓。 */
     remove: (payload: PiSessionPathPayload) => HostSuccess;
     /** 只导当前会话（exportToHtml 在 AgentSession 上），非当前先 switch。 */
@@ -1064,6 +1233,7 @@ export type HostApiContract = {
   piFiles: {
     /** @ 补全候选：cwd 下递归列文件（相对路径，排除 .git/node_modules，上限 200 条）。 */
     list: (payload: PiFileListPayload) => PiFileListResult;
+    listDir: (payload: PiFileListDirPayload) => PiFileListDirResult;
   };
   workspace: {
     listChildren: (payload: WorkspaceListPayload) => WorkspaceListResult;
@@ -1072,6 +1242,10 @@ export type HostApiContract = {
   git: {
     /** 当前工作区的 git 分支（非仓库 / git 不可用返回 null；detached HEAD 返回 'detached'）。 */
     getBranch: (payload: { cwd: string }) => GitBranchResult;
+    /** 列出当前仓库的本地分支及工作区是否干净。 */
+    listBranches: (payload: { cwd: string }) => GitBranchListResult;
+    /** 切换分支（带 dirty 预检与运行状态检查）。 */
+    checkout: (payload: { cwd: string; branch: string }) => GitCheckoutResult;
   };
   piSkills: {
     /** 活动 runtime 的 skills（resourceLoader.getSkills()）；runtime 未启动返回空列表。 */
@@ -1082,6 +1256,8 @@ export type HostApiContract = {
     scanExternal: (payload?: PiSkillScanExternalPayload) => PiSkillScanExternalResult;
     /** 导入 = 复制目录到 agentDir/skills（不建软链）；同名按 strategy 处理。 */
     import: (payload: PiSkillImportPayload) => PiSkillImportResult;
+    /** 设置 skill 调用模式（更新 SKILL.md frontmatter 并重载 runtime）。 */
+    setInvocationMode: (payload: PiSkillSetModePayload) => PiSkillSetModeResult;
   };
   piPackages: {
     /** settings.json 里配置的扩展包（user + project scope 合并）。 */
@@ -1121,6 +1297,7 @@ export type HostApiContract = {
   };
   dialog: {
     open: (payload: DialogOpenPayload) => DialogOpenResult;
+    save: (payload: DialogSavePayload) => DialogSaveResult;
   };
   windows: {
     /** 在独立窗口打开指定会话；同会话已有窗口则聚焦复用。 */
@@ -1135,6 +1312,10 @@ export type HostApiContract = {
     setSessions: (payload: WindowsSetSessionsPayload) => void;
     /** 窗口↔会话绑定清单（调试/测试用）。 */
     list: () => WindowListEntry[];
+    /** 工作台 docked 展开：窗口向右加宽，让面板占新增宽度而不是挤压聊天列。 */
+    expandRight: (payload: WindowsExpandRightPayload) => WindowsExpandRightResult;
+    /** 收回 expandRight 的加宽；展开期间用户手动改过窗口宽度则不动作。 */
+    restoreExpandRight: () => void;
     /** frameless 自绘标题栏：最小化当前窗口。 */
     minimize: () => void;
     /** frameless 自绘标题栏：最大化/还原当前窗口。 */

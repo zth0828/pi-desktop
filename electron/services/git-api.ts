@@ -1,20 +1,17 @@
-// gitBranch：当前工作区 git 分支读取（与 pi TUI footer 同口径）。
+// gitBranch：当前工作区 git 分支读取与切换。
 // pi 的 FooterDataProvider 按 cwd 向上找 .git（支持 worktree：.git 为文件时读 gitdir），
 // 读 HEAD（ref: refs/heads/<branch> → branch；detached HEAD → "detached"），
-// git 不可用/非仓库返回 null。壳在 main 侧用同一逻辑实现，供输入栏展示当前分支。
+// git 不可用/非仓库返回 null。壳在 main 侧提供分支展示、列表与切换能力。
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-
-export type GitBranchResult = {
-  /** 当前分支名；detached HEAD 为 'detached'；非 git 仓库 / git 不可用为 null。 */
-  branch: string | null;
-};
+import type { GitBranchListResult, GitBranchResult, GitCheckoutResult } from '@shared/host-api/contract';
+import { isCwdRunning } from './pi-runtime-api';
 
 type GitPaths = { repoDir: string; headPath: string };
 
 /** 从 cwd 向上找 .git（目录或 worktree 的 gitdir 文件）。 */
-function findGitPaths(cwd: string): GitPaths | null {
+export function findGitPaths(cwd: string): GitPaths | null {
   let dir = cwd;
   for (;;) {
     const gitPath = join(dir, '.git');
@@ -42,6 +39,27 @@ function findGitPaths(cwd: string): GitPaths | null {
     if (parent === dir) return null;
     dir = parent;
   }
+}
+
+function execGit(repoDir: string, args: string[], timeout = 5000): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    execFile(
+      'git',
+      ['--no-optional-locks', ...args],
+      {
+        cwd: repoDir,
+        encoding: 'utf8',
+        timeout,
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          rejectPromise(Object.assign(error, { stdout: stdout?.trim() ?? '', stderr: stderr?.trim() ?? '' }));
+        } else {
+          resolvePromise({ stdout: stdout?.trim() ?? '', stderr: stderr?.trim() ?? '' });
+        }
+      },
+    );
+  });
 }
 
 /** 异步读取当前分支（与 pi FooterDataProvider 的异步路径一致，避免阻塞 main）。 */
@@ -82,6 +100,66 @@ export function getGitBranch(cwd: string): Promise<GitBranchResult> {
   });
 }
 
+/** 列出本地分支以及工作区是否有未提交改动。 */
+export async function listGitBranches(cwd: string): Promise<GitBranchListResult> {
+  const gitPaths = findGitPaths(cwd);
+  if (!gitPaths) {
+    return { branches: [], current: null, isDirty: false };
+  }
+  try {
+    const [branchOutput, statusOutput, currentResult] = await Promise.all([
+      execGit(gitPaths.repoDir, ['branch', '--list', '--format=%(refname:short)']),
+      execGit(gitPaths.repoDir, ['status', '--porcelain']),
+      getGitBranch(cwd),
+    ]);
+    const branches = branchOutput.stdout
+      .split('\n')
+      .map((b) => b.trim())
+      .filter(Boolean);
+    const isDirty = statusOutput.stdout.length > 0;
+    return {
+      branches,
+      current: currentResult.branch,
+      isDirty,
+    };
+  } catch {
+    return { branches: [], current: null, isDirty: false };
+  }
+}
+
+/** 切换本地分支（带运行中状态检查与 dirty 预检）。 */
+export async function checkoutGitBranch(
+  cwd: string,
+  branch: string,
+): Promise<GitCheckoutResult> {
+  if (isCwdRunning(cwd)) {
+    return { success: false, error: 'running' };
+  }
+  const gitPaths = findGitPaths(cwd);
+  if (!gitPaths) {
+    return { success: false, error: 'not a git repository' };
+  }
+  try {
+    const status = await execGit(gitPaths.repoDir, ['status', '--porcelain']);
+    if (status.stdout.length > 0) {
+      return { success: false, error: 'dirty' };
+    }
+    try {
+      await execGit(gitPaths.repoDir, ['switch', branch]);
+    } catch {
+      await execGit(gitPaths.repoDir, ['checkout', branch]);
+    }
+    return { success: true, branch };
+  } catch (err: unknown) {
+    const gitErr = err as { stderr?: string; message?: string };
+    const errorMsg = gitErr.stderr || gitErr.message || 'checkout failed';
+    return { success: false, error: errorMsg };
+  }
+}
+
 export const gitApi = {
   getBranch: (payload: { cwd: string }): Promise<GitBranchResult> => getGitBranch(payload.cwd),
+  listBranches: (payload: { cwd: string }): Promise<GitBranchListResult> => listGitBranches(payload.cwd),
+  checkout: (payload: { cwd: string; branch: string }): Promise<GitCheckoutResult> =>
+    checkoutGitBranch(payload.cwd, payload.branch),
 };

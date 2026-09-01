@@ -16,6 +16,8 @@ export type PiDiagnosticRecord = {
   /** Legacy field retained for existing call sites; sanitized and never contains secrets. */
   piVersion?: string;
   compatibilityStatus?: string;
+  /** Non-error context for info/warning records (e.g. session removal method). */
+  detail?: string;
   eventType?: string;
   promptPhase?: string;
   durationMs?: number;

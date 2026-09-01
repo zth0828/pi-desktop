@@ -2,6 +2,9 @@
 // 新能力 = contract.ts 加类型 + services/ 加实现 + 这里加一行。
 import { invokeHost, scopedInvokeHost } from './host-api-client';
 import type {
+  AppEditCommand,
+  DialogOpenPayload,
+  DialogSavePayload,
   HostApiAction,
   HostApiModule,
   HostApiPayloadArgs,
@@ -28,6 +31,11 @@ function createHostApi(sessionPath?: string) {
     name: () => invoke('app', 'name'),
     platform: () => invoke('app', 'platform'),
     writeClipboard: (text: string) => invoke('app', 'writeClipboard', { text }),
+    writeClipboardImage: (payload: { data: string; mimeType?: string }) =>
+      invoke('app', 'writeClipboardImage', payload),
+    writeBinaryFile: (payload: { path: string; data: string }) =>
+      invoke('app', 'writeBinaryFile', payload),
+    editCommand: (command: AppEditCommand) => invoke('app', 'editCommand', { command }),
   },
   shell: {
     openExternal: (url: string) => invoke('shell', 'openExternal', { url }),
@@ -45,11 +53,14 @@ function createHostApi(sessionPath?: string) {
   versionCheck: {
     check: (force?: boolean) => invoke('versionCheck', 'check', force ? { force } : undefined),
     getStatus: () => invoke('versionCheck', 'getStatus'),
+    getPendingNotice: () => invoke('versionCheck', 'getPendingNotice'),
+    dismissNotice: (payload: { kind: 'app' | 'pi'; latest: string }) => invoke('versionCheck', 'dismissNotice', payload),
   },
   appUpdate: {
     download: () => invoke('appUpdate', 'download'),
     openDownloaded: () => invoke('appUpdate', 'openDownloaded'),
     showDownloaded: () => invoke('appUpdate', 'showDownloaded'),
+    installDownloaded: (force?: boolean) => invoke('appUpdate', 'installDownloaded', force ? { force } : undefined),
   },
   piRuntime: {
     start: (cwd: string) => invoke('piRuntime', 'start', { cwd }),
@@ -59,18 +70,20 @@ function createHostApi(sessionPath?: string) {
     prompt: (text: string, images?: unknown[], behavior?: 'steer' | 'followUp') =>
       invoke('piRuntime', 'prompt', { text, images, behavior }),
     abort: () => invoke('piRuntime', 'abort'),
+    abortBash: () => invoke('piRuntime', 'abortBash'),
     queueRemove: (kind: 'steering' | 'followUp', index: number) =>
       invoke('piRuntime', 'queueRemove', { kind, index }),
     queueMove: (kind: 'steering' | 'followUp', index: number, target: 'steering' | 'followUp') =>
       invoke('piRuntime', 'queueMove', { kind, index, target }),
-    newSession: () => invoke('piRuntime', 'newSession'),
+    newSession: (payload?: { actionId?: string }) => invoke('piRuntime', 'newSession', payload),
     compact: (customInstructions?: string) =>
       invoke('piRuntime', 'compact', customInstructions ? { customInstructions } : undefined),
-    fork: (entryId: string) => invoke('piRuntime', 'fork', { entryId }),
+    fork: (entryId: string, actionId?: string) => invoke('piRuntime', 'fork', { entryId, actionId }),
     getTree: () => invoke('piRuntime', 'getTree'),
     navigateTree: (targetId: string, options?: { summarize?: boolean; customInstructions?: string }) =>
       invoke('piRuntime', 'navigateTree', { targetId, ...options }),
     setThinkingLevel: (level: string) => invoke('piRuntime', 'setThinkingLevel', { level }),
+    setContextWindow: (contextWindow: number) => invoke('piRuntime', 'setContextWindow', { contextWindow }),
     setModel: (provider: string, id: string) => invoke('piRuntime', 'setModel', { provider, id }),
     setSessionName: (name: string, notify = true) => invoke('piRuntime', 'setSessionName', { name, notify }),
     getSessionInfo: () => invoke('piRuntime', 'getSessionInfo'),
@@ -96,13 +109,27 @@ function createHostApi(sessionPath?: string) {
     startOAuth: (providerId: string) => invoke('providers', 'startOAuth', { providerId }),
     addCustom: (payload: {
       id: string;
+      name: string;
       baseUrl: string;
       api: string;
       apiKey?: string;
-      models: Array<{ id: string; name?: string }>;
+      serverType?: 'lm-studio' | 'vllm' | 'generic';
+      models: Array<{
+        id: string;
+        name?: string;
+        reasoning?: boolean;
+        input?: Array<'text' | 'image'>;
+        contextWindow?: number;
+        maxTokens?: number;
+        thinkingLevelMap?: Record<string, string | null>;
+      }>;
     }) => invoke('providers', 'addCustom', payload),
+    updateCustom: (payload: { providerId: string; name?: string; baseUrl?: string; api?: string }) =>
+      invoke('providers', 'updateCustom', payload),
     setModelReasoning: (providerId: string, modelId: string, reasoning: boolean) =>
       invoke('providers', 'setModelReasoning', { providerId, modelId, reasoning }),
+    setModelInput: (providerId: string, modelId: string, image: boolean) =>
+      invoke('providers', 'setModelInput', { providerId, modelId, image }),
     probe: (payload: { baseUrl: string; apiKey?: string; model?: string; verifyProtocols?: boolean }) =>
       invoke('providers', 'probe', payload),
     getCompaction: () => invoke('providers', 'getCompaction'),
@@ -113,6 +140,8 @@ function createHostApi(sessionPath?: string) {
       invoke('providers', 'setRetry', payload),
     getDefaultThinking: () => invoke('providers', 'getDefaultThinking'),
     setDefaultThinking: (level: string) => invoke('providers', 'setDefaultThinking', { level }),
+    getDefaultTools: () => invoke('providers', 'getDefaultTools'),
+    setDefaultTools: (tools: string[]) => invoke('providers', 'setDefaultTools', { tools }),
     getDefaultModel: () => invoke('providers', 'getDefaultModel'),
     setDefaultModel: (provider: string, id: string) =>
       invoke('providers', 'setDefaultModel', { provider, id }),
@@ -128,8 +157,11 @@ function createHostApi(sessionPath?: string) {
       invoke('piSessions', 'archive', { path, archived }),
     archiveProject: (cwd: string, archived: boolean) =>
       invoke('piSessions', 'archiveProject', { cwd, archived }),
+    pin: (path: string, pinned: boolean) =>
+      invoke('piSessions', 'pin', { path, pinned }),
     remove: (path: string) => invoke('piSessions', 'remove', { path }),
-    exportHtml: (path: string) => invoke('piSessions', 'exportHtml', { path }),
+    exportHtml: (path: string, options?: { cwd?: string; title?: string; id?: string }) =>
+      invoke('piSessions', 'exportHtml', { path, ...options }),
     getExportInfo: () => invoke('piSessions', 'getExportInfo'),
   },
   piSkills: {
@@ -138,9 +170,12 @@ function createHostApi(sessionPath?: string) {
     scanExternal: (extraDirs?: string[]) => invoke('piSkills', 'scanExternal', { extraDirs }),
     import: (skills: Array<{ name: string; dir: string; strategy: 'skip' | 'overwrite' | 'rename' }>) =>
       invoke('piSkills', 'import', { skills }),
+    setInvocationMode: (filePath: string, disableModelInvocation: boolean) =>
+      invoke('piSkills', 'setInvocationMode', { filePath, disableModelInvocation }),
   },
   piFiles: {
     list: (cwd: string) => invoke('piFiles', 'list', { cwd }),
+    listDir: (cwd: string, dir?: string) => invoke('piFiles', 'listDir', { cwd, dir }),
   },
   piPackages: {
     list: () => invoke('piPackages', 'list'),
@@ -199,8 +234,12 @@ function createHostApi(sessionPath?: string) {
     apply: () => invoke('proxy', 'apply'),
   },
   notify: {
-    dispatch: (payload: { kind: 'runCompleted' | 'uiRequest'; title: string; body?: string }) =>
-      invoke('notify', 'dispatch', payload),
+    dispatch: (payload: {
+      kind: 'runCompleted' | 'uiRequest';
+      title: string;
+      body?: string;
+      sessionPath?: string;
+    }) => invoke('notify', 'dispatch', payload),
   },
   review: {
     getSummary: () => invoke('review', 'getSummary'),
@@ -215,10 +254,15 @@ function createHostApi(sessionPath?: string) {
   },
   git: {
     getBranch: (cwd: string) => invoke('git', 'getBranch', { cwd }),
+    listBranches: (cwd: string) => invoke('git', 'listBranches', { cwd }),
+    checkout: (cwd: string, branch: string) => invoke('git', 'checkout', { cwd, branch }),
   },
   dialog: {
+    open: (payload: DialogOpenPayload) => invoke('dialog', 'open', payload),
     openDirectory: (title?: string, defaultPath?: string) =>
       invoke('dialog', 'open', { title, defaultPath, properties: ['openDirectory', 'createDirectory'] }),
+    save: (payload: DialogSavePayload) => invoke('dialog', 'save', payload),
+    saveFile: (payload?: DialogSavePayload) => invoke('dialog', 'save', payload ?? {}),
   },
   windows: {
     openDetached: (payload: { sessionPath: string; cwd?: string }) =>
@@ -230,6 +274,8 @@ function createHostApi(sessionPath?: string) {
     setSessions: (payload: { sessionPaths: string[]; activeSessionPath?: string }) =>
       invoke('windows', 'setSessions', payload),
     list: () => invoke('windows', 'list'),
+    expandRight: (payload: { extraWidth: number }) => invoke('windows', 'expandRight', payload),
+    restoreExpandRight: () => invoke('windows', 'restoreExpandRight'),
     minimize: () => invoke('windows', 'minimize'),
     maximizeToggle: () => invoke('windows', 'maximizeToggle'),
     isMaximized: () => invoke('windows', 'isMaximized'),

@@ -8,6 +8,7 @@ class FakeBrowserWindow {
   destroyed = false;
   minimized = false;
   focused = false;
+  visible = true;
   bounds: { x: number; y: number; width: number; height: number };
   constructor(options: { x?: number; y?: number; width?: number; height?: number } = {}) {
     this.bounds = {
@@ -32,6 +33,12 @@ class FakeBrowserWindow {
   }
   isMinimized(): boolean {
     return this.minimized;
+  }
+  isVisible(): boolean {
+    return this.visible;
+  }
+  show(): void {
+    this.visible = true;
   }
   getBounds(): { x: number; y: number; width: number; height: number } {
     return { ...this.bounds };
@@ -58,7 +65,7 @@ vi.mock('electron', () => ({
     getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }),
     getDisplayNearestPoint: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 875 } }),
   },
-  app: { isPackaged: false },
+  app: { isPackaged: false, focus: () => {} },
 }));
 
 type WindowManager = typeof import('@electron/main/window-manager');
@@ -199,6 +206,43 @@ describe('window-manager registry', () => {
       isMain: false,
       focused: false,
     });
+  });
+
+  it('unbindWindowSessionForWindow 只解绑目标窗口的会话并置为 null', () => {
+    const win1 = fakeWindow();
+    const win2 = fakeWindow();
+    wm.registerWindow(win1 as never);
+    wm.registerWindow(win2 as never);
+    wm.bindWindowSession(win1.webContents.id, '/tmp/shared-session.jsonl');
+    wm.bindWindowSession(win2.webContents.id, '/tmp/shared-session.jsonl');
+
+    wm.unbindWindowSessionForWindow(win1.webContents.id, '/tmp/shared-session.jsonl');
+    expect(wm.resolveWindowSession(win1.webContents.id)).toBeNull();
+    expect(wm.resolveWindowSession(win2.webContents.id)).toBe('/tmp/shared-session.jsonl');
+  });
+
+  it('unbindWindowSession 解绑所有窗口中的指定会话', () => {
+    const win1 = fakeWindow();
+    const win2 = fakeWindow();
+    wm.registerWindow(win1 as never);
+    wm.registerWindow(win2 as never);
+    wm.bindWindowSession(win1.webContents.id, '/tmp/deleted-session.jsonl');
+    wm.bindWindowSession(win2.webContents.id, '/tmp/deleted-session.jsonl');
+
+    wm.unbindWindowSession('/tmp/deleted-session.jsonl');
+    expect(wm.resolveWindowSession(win1.webContents.id)).toBeNull();
+    expect(wm.resolveWindowSession(win2.webContents.id)).toBeNull();
+    expect(wm.findWindowBySession('/tmp/deleted-session.jsonl')).toBeNull();
+  });
+
+  it('bindWindowSession 支持传入 null 清空绑定', () => {
+    const win = fakeWindow();
+    wm.registerWindow(win as never);
+    wm.bindWindowSession(win.webContents.id, '/tmp/session-to-clear.jsonl');
+    expect(wm.resolveWindowSession(win.webContents.id)).toBe('/tmp/session-to-clear.jsonl');
+
+    wm.bindWindowSession(win.webContents.id, null);
+    expect(wm.resolveWindowSession(win.webContents.id)).toBeNull();
   });
 });
 

@@ -3,12 +3,19 @@
 // 叶子 = ChatStoreProvider + ChatPane + 会话拖入落区（5 区：四边分栏 / 中心替换）。
 // ?session= attach / workspaceCwd 恢复只作用于窗口首个面板（primary = DEFAULT_CHAT_STORE_ID），
 // 在本文件顶层读取一次后下传，避免每个新面板挂载都跑一遍恢复逻辑。
-import { useEffect, useMemo, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, type DragEvent } from 'react';
 import { useStore } from 'zustand';
 import { useTranslation } from 'react-i18next';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
-import { markSessionDroppedInWindow, setPaneDropHoverActive } from '../lib/session-drag';
+import {
+  flashPaneClaimed,
+  getSessionDragPayload,
+  getPaneClaimSnapshot,
+  markSessionDroppedInWindow,
+  setPaneDropHoverActive,
+  subscribePaneClaim,
+} from '../lib/session-drag';
 import { getChatStore } from '../stores/chat-registry';
 import { DEFAULT_CHAT_STORE_ID } from '../stores/default-chat-store';
 import { sessionPathsInTree, type BranchNode, type LeafNode, type SplitNode } from '../stores/panes';
@@ -24,7 +31,9 @@ export type PaneLayoutProps = {
 };
 
 /** 落区判定：面板边缘约 25% 区域为四边分栏区，其余为中心替换区 */
-type DropZone = 'left' | 'right' | 'top' | 'bottom' | 'center';
+type EdgeZone = 'left' | 'right' | 'top' | 'bottom' | 'center';
+/** 悬停展示态：五区 + already-open（拖的会话已在本窗口某面板打开，整面板提示） */
+type DropZone = EdgeZone | 'already-open';
 
 const DROP_HINT_KEYS: Record<DropZone, string> = {
   left: 'panes.dropSplitLeft',
@@ -32,9 +41,10 @@ const DROP_HINT_KEYS: Record<DropZone, string> = {
   top: 'panes.dropSplitTop',
   bottom: 'panes.dropSplitBottom',
   center: 'panes.dropReplace',
+  'already-open': 'panes.dropAlreadyOpen',
 };
 
-function zoneFromPoint(event: DragEvent<HTMLDivElement>): DropZone {
+function zoneFromPoint(event: DragEvent<HTMLDivElement>): EdgeZone {
   const rect = event.currentTarget.getBoundingClientRect();
   const x = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5;
   const y = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5;
@@ -59,6 +69,9 @@ function PaneLeaf({ node, shared }: { node: LeafNode; shared: SharedProps }) {
   const { t } = useTranslation();
   const [dropZone, setDropZone] = useState<DropZone | null>(null);
   const isActive = useStore(panesStore, (s) => s.activePaneId === node.paneId);
+  // 已打开会话被拖入松手：本面板若是持有者则播放认领闪烁（key 含递增序号，重挂载重放动画）
+  const claim = useSyncExternalStore(subscribePaneClaim, getPaneClaimSnapshot);
+  const claimed = claim.startsWith(`${node.paneId}#`);
   const store = getChatStore(node.paneId);
   // 落区激活状态同步给 SessionList 的全局拖拽提示（hover 落区时提示弱化让位）
   useEffect(() => {
@@ -73,6 +86,13 @@ function PaneLeaf({ node, shared }: { node: LeafNode; shared: SharedProps }) {
     if (!event.dataTransfer.types.includes(SESSION_MIME)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
+    // dragover 读不到 dataTransfer 数据，用 dragstart 写入的模块单例判断
+    // 拖的会话是否已在本窗口某面板打开；已打开时整面板提示，不再按位置分四区
+    const dragged = getSessionDragPayload();
+    if (dragged && panesStore.getState().findPaneBySession(dragged.sessionPath)) {
+      setDropZone('already-open');
+      return;
+    }
     setDropZone(zoneFromPoint(event));
   };
   const onDragLeave = (event: DragEvent<HTMLDivElement>) => {
@@ -87,6 +107,14 @@ function PaneLeaf({ node, shared }: { node: LeafNode; shared: SharedProps }) {
     try {
       const payload = JSON.parse(raw) as { sessionPath: string; cwd?: string };
       if (!payload.sessionPath) return;
+      // 会话已在本窗口某面板打开：激活持有面板并闪烁反馈，不重复分栏/替换
+      const existingPane = panesStore.getState().findPaneBySession(payload.sessionPath);
+      if (existingPane) {
+        panesStore.getState().activatePane(existingPane);
+        flashPaneClaimed(existingPane);
+        markSessionDroppedInWindow();
+        return;
+      }
       const zone = zoneFromPoint(event);
       const applyDrop = () => {
         const panes = panesStore.getState();
@@ -125,6 +153,9 @@ function PaneLeaf({ node, shared }: { node: LeafNode; shared: SharedProps }) {
           onSearchTargetHandled={shared.onSearchTargetHandled}
         />
       </ChatStoreProvider>
+      {claimed && (
+        <div className="pane-claimed-flash" data-testid="pane-claimed-flash" key={claim} />
+      )}
       {dropZone && (
         <div className="pane-drop-overlay" data-testid="pane-drop-overlay">
           <div className={`pane-drop-highlight zone-${dropZone}`} data-testid="pane-drop-highlight" />

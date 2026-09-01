@@ -1,133 +1,46 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, AtSign, Brain, Check, ChevronDown, ChevronLeft, CircleGauge, FileText, Folder, GitBranch, Paperclip, Plus, Square, Sparkles } from 'lucide-react';
+import { AlertTriangle, Check, Copy, FolderOpen, Info, Sparkles, Terminal, X } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
 import type {
-  PiCommandRow,
   PiModelRow,
   PiRuntimeSessionInfo,
   PiRuntimeUsageResult,
 } from '@shared/host-api/contract';
-import { isProbablyBinary, MAX_FILE_TEXT_BYTES } from '@shared/file-references';
 import { formatOrderedAttachmentPrompt, stripAttachmentEnvelope } from '@shared/message-attachments';
 import { hostApi } from '../../lib/host-api';
-import { filterFiles } from '../../lib/file-search';
-import { navigateToPage } from '../../lib/app-navigation';
-import { cacheHitRate, formatCost, formatHitRate } from '../../lib/usage-stats';
+import { cacheHitRate, formatCost } from '../../lib/usage-stats';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
-import type { ChatMessage, ComposerAttachment } from '../../stores/chat';
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
 import { QueueList } from './QueueList';
+import {
+  detectAtToken,
+  detectSlashToken,
+  formatPercent,
+  modelDisplayName,
+  resolveStreamBehavior,
+  SHELL_BUILTIN_NAMES,
+  type ChatInputProps,
+  type FollowupBehavior,
+  type ModelMenuSection,
+  type SendWith,
+  type StagedAttachment,
+  type StagedImage,
+} from './chat-input/types';
+import { useFileMentions } from './chat-input/useFileMentions';
+import { useSlashCommands } from './chat-input/useSlashCommands';
+import { useComposerAttachments } from './chat-input/useComposerAttachments';
+import { ChatInputAttachments } from './chat-input/ChatInputAttachments';
+import { ChatInputMentionsPopup } from './chat-input/ChatInputMentionsPopup';
+import { ChatInputSlashPopup } from './chat-input/ChatInputSlashPopup';
+import { ChatInputControls } from './chat-input/ChatInputControls';
 
-type StagedImage = Extract<ComposerAttachment, { kind: 'image' }>;
-type StagedFile = Extract<ComposerAttachment, { kind: 'file' }>;
-type StagedAttachment = ComposerAttachment;
-
-/** 光标处的 @ token（@ 前需行首/空白，对齐 pi-tui 编辑器触发规则） */
-type AtToken = { start: number; end: number; query: string };
-
-function detectAtToken(text: string, caret: number): AtToken | null {
-  const before = text.slice(0, caret);
-  const m = before.match(/(?:^|[\s])@([^\s@]*)$/);
-  if (!m) return null;
-  const query = m[1];
-  return { start: before.length - query.length - 1, end: caret, query };
-}
-
-type ChatInputProps = {
-  cwd: string;
-  onChooseWorkspace: () => Promise<void>;
-};
-
-type FollowupBehavior = 'queue' | 'steer';
-type SendWith = 'enter' | 'cmdEnter';
-
-function modelDisplayName(model: PiModelRow): string {
-  let name = model.name ?? model.id;
-  for (const suffix of [model.provider, model.providerLabel]) {
-    if (!suffix) continue;
-    if (name.toLowerCase().endsWith(` (${suffix.toLowerCase()})`)) {
-      name = name.slice(0, -(suffix.length + 3));
-    }
-  }
-  return name;
-}
-
-/** 流式中提交的排队方式：设置决定默认行为，Alt 反转（queue ↔ steer） */
-function resolveStreamBehavior(followupBehavior: FollowupBehavior, alt: boolean): 'steer' | 'followUp' {
-  const base: 'steer' | 'followUp' = followupBehavior === 'steer' ? 'steer' : 'followUp';
-  if (!alt) return base;
-  return base === 'steer' ? 'followUp' : 'steer';
-}
-
-function fileToStagedImage(file: File): Promise<StagedImage> {
-  return new Promise((resolveFile, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result);
-      resolveFile({
-        kind: 'image',
-        name: file.name,
-        data: dataUrl.split(',')[1] ?? '',
-        mediaType: file.type || 'image/png',
-        previewUrl: dataUrl,
-      });
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-/**
- * 壳内建斜杠命令（与 main 侧 SHELL_BUILTIN_COMMANDS 对齐；pi TUI onSubmit 分发的壳映射）。
- * 不在此集合里的 /xxx 原样发给 pi（prompt 模板 / skill / 扩展命令由 pi 展开执行）。
- */
-const SHELL_BUILTIN_NAMES = new Set([
-  'new',
-  'compact',
-  'tree',
-  'model',
-  'name',
-  'copy',
-  'export',
-  'session',
-  'settings',
-  'login',
-  'logout',
-  'reload',
-  'resume',
-]);
-
-/** 带参数的命令：补全面板选中后填入输入框补参数，不直接执行 */
-const ARG_BUILTIN_COMMANDS = new Set(['model', 'name', 'export', 'compact']);
-
-/** pi session.getLastAssistantText 语义：最后一条 assistant 消息的文本块拼接。 */
-function lastAssistantText(messages: ChatMessage[]): string | null {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const m = messages[i];
-    if (m.role !== 'assistant') continue;
-    const text = m.content
-      .filter((b) => b.type === 'text')
-      .map((b) => b.text ?? '')
-      .join('\n')
-      .trim();
-    if (text) return text;
-  }
-  return null;
-}
-
-export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
+export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: ChatInputProps) {
   const { t } = useTranslation();
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [commands, setCommands] = useState<PiCommandRow[]>([]);
-  const [selected, setSelected] = useState(0);
-  const [atToken, setAtToken] = useState<AtToken | null>(null);
-  const [atSuppressed, setAtSuppressed] = useState(false);
-  const [fileList, setFileList] = useState<string[]>([]);
-  const [fileSelected, setFileSelected] = useState(0);
   const chatStore = usePaneChatStoreApi();
   const paneApi = usePaneHostApi();
+
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
   const isRunning = usePaneChatStore((s) => s.running);
   const compacting = usePaneChatStore((s) => s.compaction !== null);
@@ -136,6 +49,10 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const runtimeContextUsage = usePaneChatStore((s) => s.contextUsage);
   const retrying = usePaneChatStore((s) => s.retry !== null);
   const bashing = usePaneChatStore((s) => s.bashDraft !== null);
+  const commandMode = usePaneChatStore((s) => s.commandMode);
+  const commandExcludeFromContext = usePaneChatStore((s) => s.commandExcludeFromContext);
+  const setCommandMode = usePaneChatStore((s) => s.setCommandMode);
+  const setCommandExcludeFromContext = usePaneChatStore((s) => s.setCommandExcludeFromContext);
   const started = usePaneChatStore((s) => s.started);
   const prompt = usePaneChatStore((s) => s.prompt);
   const runBash = usePaneChatStore((s) => s.runBash);
@@ -153,28 +70,50 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const model = usePaneChatStore((s) => s.model);
   const thinkingLevel = usePaneChatStore((s) => s.thinkingLevel);
   const availableThinkingLevels = usePaneChatStore((s) => s.availableThinkingLevels);
-  // messages 只在 /copy 与首发自动命名时读取（调用时取快照，见下），不订阅——
-  // 否则流式每个 chunk 都会重渲染输入框组件树（流式热路径）
+
   const [models, setModels] = useState<PiModelRow[]>([]);
   const [modelKey, setModelKey] = useState('');
   const [usage, setUsage] = useState<PiRuntimeUsageResult | null>(null);
   const [usageOpen, setUsageOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<PiRuntimeSessionInfo | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    type: 'slash' | 'mention';
+    target: string;
+    promptText: string;
+    outgoing: StagedImage[];
+    behavior?: 'steer' | 'followUp';
+  } | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [followupBehavior, setFollowupBehavior] = useState<FollowupBehavior>('queue');
+
+  const copyText = (key: string, text: string) => {
+    void navigator.clipboard.writeText(text);
+    setCopiedField(key);
+    setTimeout(() => setCopiedField((curr) => (curr === key ? null : curr)), 1500);
+  };
   const [sendWith, setSendWith] = useState<SendWith>('enter');
   const [gitBranch, setGitBranch] = useState<string | null>(null);
+  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+  const [branchList, setBranchList] = useState<string[]>([]);
+  const [isBranchDirty, setIsBranchDirty] = useState(false);
+  const [loadingBranches, setLoadingBranches] = useState(false);
+  const [switchingBranch, setSwitchingBranch] = useState(false);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const [modelMenuSection, setModelMenuSection] = useState<'models' | 'thinking' | null>(null);
+  const [modelMenuSection, setModelMenuSection] = useState<ModelMenuSection>(null);
+  const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
+  const [modelQueries, setModelQueries] = useState<Record<string, string>>({});
   const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
   const [composerScrollable, setComposerScrollable] = useState(false);
   const [composerScrollbarActive, setComposerScrollbarActive] = useState(false);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const commandPanelRef = useRef<HTMLDivElement>(null);
-  const filePanelRef = useRef<HTMLDivElement>(null);
   const composerMenuRef = useRef<HTMLDivElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
+  const branchMenuRef = useRef<HTMLDivElement>(null);
   const usageControlRef = useRef<HTMLDivElement>(null);
   const noticeTimerRef = useRef<number | null>(null);
   const composerScrollTimerRef = useRef<number | null>(null);
@@ -184,6 +123,12 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   };
   const setAttachments = (next: StagedAttachment[] | ((current: StagedAttachment[]) => StagedAttachment[])) => {
     setComposerAttachments(typeof next === 'function' ? next(chatStore.getState().composerAttachments) : next);
+  };
+
+  const showNotice = (text: string) => {
+    setNotice(text);
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 5000);
   };
 
   const resizeComposer = () => {
@@ -206,49 +151,23 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     return () => window.removeEventListener('resize', resize);
   }, []);
 
-  useEffect(() => {
-    if (!composerMenuOpen && !usageOpen && !modelMenuOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (composerMenuOpen && !composerMenuRef.current?.contains(target)) setComposerMenuOpen(false);
-      if (usageOpen && !usageControlRef.current?.contains(target)) setUsageOpen(false);
-      if (modelMenuOpen && !modelMenuRef.current?.contains(target)) setModelMenuOpen(false);
-    };
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setComposerMenuOpen(false);
-      setUsageOpen(false);
-      setModelMenuOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [composerMenuOpen, usageOpen, modelMenuOpen]);
-
-  /** 命令执行的轻量确认（/name /copy /export /reload 等），5s 自动消失 */
-  const showNotice = (text: string) => {
-    setNotice(text);
-    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
-    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 5000);
-  };
-
-  useEffect(
-    () => () => {
-      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
-      if (composerScrollTimerRef.current) window.clearTimeout(composerScrollTimerRef.current);
-    },
-    [],
-  );
-
   const revealComposerScrollbar = () => {
     if (!composerScrollable) return;
     setComposerScrollbarActive(true);
     if (composerScrollTimerRef.current) window.clearTimeout(composerScrollTimerRef.current);
     composerScrollTimerRef.current = window.setTimeout(() => setComposerScrollbarActive(false), 700);
   };
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+      if (composerScrollTimerRef.current) window.clearTimeout(composerScrollTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    setUsage(null);
+  }, [sessionId, generation, paneApi]);
 
   useEffect(() => {
     let disposed = false;
@@ -264,7 +183,6 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
           })
           .catch(() => { if (!disposed) setUsage(null); });
       };
-      // 压缩或快照重建期间，旧 token/context 数值已经失效，先清空旧快照。
       if (compacting || transcriptSyncing) setUsage(null);
       else refreshUsage();
       const timer = window.setInterval(refreshUsage, isStreaming || compacting || transcriptSyncing ? 400 : 1000);
@@ -288,8 +206,12 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     if (model) setModelKey(`${model.provider}/${model.id}`);
   }, [model]);
 
-  // 当前工作区 git 分支：cwd 切换后立即刷新，并低频轮询跟随 checkout 换分支
-  // （与 pi TUI footer 同口径；非仓库返回 null 时不显示 chip）。
+  useEffect(() => {
+    if (openModelMenuNonce <= 0) return;
+    setModelMenuSection('models');
+    setModelMenuOpen(true);
+  }, [openModelMenuNonce]);
+
   useEffect(() => {
     let disposed = false;
     const refresh = () => {
@@ -305,10 +227,12 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     };
   }, [cwd]);
 
-  // fork / 跳分支后被选消息的文本回填输入框（TUI /fork、/tree 的 editorText 语义）
   useEffect(() => {
     if (!inputDraft) return;
     setValue(inputDraft.text);
+    if (inputDraft.attachments !== undefined) {
+      setAttachments(inputDraft.attachments);
+    }
     clearInputDraft();
     textareaRef.current?.focus();
   }, [inputDraft, clearInputDraft]);
@@ -320,11 +244,12 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
   const cacheStatsAvailable = usageTotals.cacheRead + usageTotals.cacheWrite > 0;
   const selectedModel = models.find((candidate) => `${candidate.provider}/${candidate.id}` === modelKey);
   const reasoning = Boolean(model?.reasoning ?? selectedModel?.reasoning);
-  const effectiveThinkingLevels = availableThinkingLevels.length > 1
+  const hasCustomLevels = availableThinkingLevels.length > 1
+    || (availableThinkingLevels.length === 1 && availableThinkingLevels[0] !== 'off');
+  const effectiveThinkingLevels = hasCustomLevels
     ? availableThinkingLevels
-    : reasoning ? ['off', 'minimal', 'low', 'medium', 'high'] : availableThinkingLevels;
-  const planAvailable = commands.some((command) => /(^|[-_])plan([-_]|$)/i.test(command.name));
-  // 模型下拉按供应商分组（optgroup），供应商顺序保持 listModels 的首现顺序
+    : reasoning ? ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] : availableThinkingLevels;
+
   const modelGroups = new Map<string, PiModelRow[]>();
   for (const m of models) {
     const label = m.providerLabel ?? m.provider;
@@ -332,9 +257,44 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     if (group) group.push(m);
     else modelGroups.set(label, [m]);
   }
+
+  useEffect(() => {
+    if (modelMenuOpen) {
+      const currentGroup = selectedModel
+        ? (selectedModel.providerLabel ?? selectedModel.provider)
+        : (model ? model.provider : null);
+      const initialCollapsed = new Set<string>();
+      for (const provider of modelGroups.keys()) {
+        if (provider !== currentGroup) {
+          initialCollapsed.add(provider);
+        }
+      }
+      setCollapsedProviders(initialCollapsed);
+    } else {
+      setModelMenuSection(null);
+      setModelQueries({});
+    }
+  }, [modelMenuOpen]);
+
+  const groupVisibleModels = (provider: string, providerModels: PiModelRow[]) => {
+    const needle = (modelQueries[provider] ?? '').trim().toLowerCase();
+    if (!needle) return providerModels;
+    return providerModels.filter(
+      (m) => modelDisplayName(m).toLowerCase().includes(needle) || m.id.toLowerCase().includes(needle),
+    );
+  };
+
+  const toggleProviderCollapse = (provider: string) => {
+    setCollapsedProviders((prev) => {
+      const next = new Set(prev);
+      if (next.has(provider)) next.delete(provider);
+      else next.add(provider);
+      return next;
+    });
+  };
+
   const contextWindow = model?.contextWindow ?? selectedModel?.contextWindow
     ?? (contextUsage?.contextWindow && contextUsage.contextWindow > 0 ? contextUsage.contextWindow : DEFAULT_CONTEXT_WINDOW);
-  // pi 在压缩后可能明确返回 tokens=null：这表示暂时未知，不应伪装成 0%。
   const contextTokens = contextUsage?.tokens ?? null;
   const contextPercent = contextUsage?.percent != null
     ? Math.max(0, Math.min(100, contextUsage.percent))
@@ -343,11 +303,12 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       : null;
   const contextLabel = compacting || transcriptSyncing
     ? t('chat.contextSyncing')
-    : contextPercent == null ? t('chat.tokenUnknown') : `${Math.round(contextPercent)}%`;
-  const formatTokens = (value: number | null | undefined) =>
-    value == null ? t('chat.tokenUnknown') : value.toLocaleString();
+    : contextPercent == null
+      ? t('chat.tokenUnknown')
+      : formatPercent(contextPercent);
+  const formatTokens = (val: number | null | undefined) =>
+    val == null ? t('chat.tokenUnknown') : val.toLocaleString();
 
-  /** 模型下拉选中后的统一切换流程（onChange 与 /model <provider/id> 共用） */
   const applyModelSelection = (next: string) => {
     const previous = modelKey;
     setModelKey(next);
@@ -358,167 +319,121 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
         return;
       }
       chatStore.getState().applyModelUpdate(result);
+      const state = chatStore.getState();
+      if (state.startErrorCode === 'MODEL_UNAVAILABLE' && state.lastFailedSwitch) {
+        void state.switchSession(state.lastFailedSwitch.path, state.lastFailedSwitch.cwd);
+      }
       const nextUsage = await paneApi.piRuntime.getUsage();
       setUsage(nextUsage);
     });
   };
 
-  /** 补全面板里的命令描述：内建命令走 i18n；/compact 内联当前上下文用量（Codex 式 "…(87% full)"） */
-  const commandDescription = (cmd: PiCommandRow): string => {
-    if (cmd.source !== 'built-in') return cmd.description ?? '';
-    if (cmd.name === 'compact') {
-      return contextPercent == null
-        ? t('chat.commands.compactUnknown')
-        : t('chat.commands.compact', { percent: Math.round(contextPercent) });
-    }
-    return t(`chat.commands.${cmd.name}`);
-  };
+  const {
+    atToken,
+    setAtToken,
+    setAtSuppressed,
+    fileList,
+    isTreeMode,
+    fileSelected,
+    setFileSelected,
+    treeSelected,
+    setTreeSelected,
+    fileMatches,
+    filePanelOpen,
+    filePanelManual,
+    setFilePanelManual,
+    dirTree,
+    setDirTree,
+    dirContents,
+    expandedDirs,
+    filePanelRef,
+    pickFile,
+    toggleDir,
+    handleFileKeyDown,
+  } = useFileMentions({
+    cwd,
+    value,
+    setValue,
+    setAttachments,
+    textareaRef,
+  });
 
-  /** 壳内建命令分发（pi TUI onSubmit 的壳映射；动作类命令执行后给轻量确认） */
-  const runBuiltinCommand = async (name: string, arg: string) => {
-    switch (name) {
-      case 'new':
-        return void newSession();
-      case 'tree':
-        return void setTreeOpen(true);
-      case 'compact':
-        // pi /compact <instructions>：handleCompactCommand 的自定义压缩指令
-        return void paneApi.piRuntime.compact(arg || undefined);
-      case 'model': {
-        if (!arg) {
-          // pi /model 无参 = 打开模型选择器 → 壳展开聊天页模型菜单
-          setModelMenuSection('models');
-          setModelMenuOpen(true);
-          return;
-        }
-        const needle = arg.toLowerCase();
-        const target =
-          models.find((m) => `${m.provider}/${m.id}`.toLowerCase() === needle) ??
-          models.find(
-            (m) =>
-              `${m.provider}/${m.id}`.toLowerCase().includes(needle) ||
-              (m.name ?? '').toLowerCase().includes(needle),
-          );
-        if (!target) {
-          showNotice(t('chat.notice.modelNotFound', { model: arg }));
-          return;
-        }
-        applyModelSelection(`${target.provider}/${target.id}`);
-        showNotice(t('chat.notice.modelSet', { model: target.name ?? target.id }));
-        return;
-      }
-      case 'name': {
-        if (!arg) {
-          // pi /name 无参 = 显示当前会话名（未命名则提示用法）
-          const info = await paneApi.piRuntime.getSessionInfo().catch(() => null);
-          showNotice(
-            info?.name
-              ? t('chat.notice.currentName', { name: info.name })
-              : t('chat.notice.nameUsage'),
-          );
-          return;
-        }
-        const result = await paneApi.piRuntime.setSessionName(arg);
-        if (result.success) showNotice(t('chat.notice.renamed', { name: result.name ?? arg }));
-        else showNotice(t('chat.notice.renameFailed', { message: result.error ?? 'unknown' }));
-        return;
-      }
-      case 'copy': {
-        // pi /copy：session.getLastAssistantText → 剪贴板
-        const text = lastAssistantText(chatStore.getState().messages);
-        if (!text) {
-          showNotice(t('chat.notice.nothingToCopy'));
-          return;
-        }
-        await hostApi.app.writeClipboard(text);
-        showNotice(t('chat.notice.copied'));
-        return;
-      }
-      case 'export': {
-        const result = await paneApi.piRuntime.exportHtml(arg || undefined);
-        if (result.success) showNotice(t('chat.notice.exported', { path: result.path ?? '' }));
-        else showNotice(t('chat.notice.exportFailed', { message: result.error ?? 'unknown' }));
-        return;
-      }
-      case 'session': {
-        const info = await paneApi.piRuntime.getSessionInfo().catch(() => null);
-        if (info) setSessionInfo(info);
-        return;
-      }
-      case 'settings':
-        return navigateToPage('settings');
-      case 'login':
-      case 'logout':
-        // pi /login /logout = 供应商认证管理 → 壳的 Models 页
-        return navigateToPage('models');
-      case 'resume':
-        // pi /resume = 会话选择器 → 壳的 Sessions 页
-        return navigateToPage('sessions');
-      case 'reload': {
-        const result = await paneApi.piRuntime.reload();
-        if (result.success) {
-          showNotice(t('chat.notice.reloaded'));
-          // 扩展/skills/prompts 可能变化，重建命令补全列表（TUI setupAutocompleteProvider）
-          void paneApi.piRuntime.getCommands().then((r) => setCommands(r.commands));
-        } else {
-          showNotice(t('chat.notice.reloadFailed', { message: result.error ?? 'unknown' }));
-        }
-        return;
-      }
-      default:
-        return;
-    }
-  };
+  const {
+    slashToken,
+    setSlashToken,
+    setSlashSuppressed,
+    commands,
+    setCommands,
+    selected,
+    setSelected,
+    matches,
+    panelOpen,
+    commandPanelRef,
+    commandDescription,
+    runBuiltinCommand,
+    pick,
+    handleCommandKeyDown,
+  } = useSlashCommands({
+    value,
+    setValue,
+    paneApi,
+    chatStore,
+    newSession,
+    setTreeOpen,
+    setModelMenuSection,
+    setModelMenuOpen,
+    applyModelSelection,
+    models,
+    showNotice,
+    setSessionInfo,
+    contextPercent,
+    textareaRef,
+    setSelectedSkill,
+  });
 
-  // / 补全面板：裸 '/' 只显示内置命令 + prompt 模板（skills 多，不打脸）；
-  // 输入字符后再全量过滤，前缀匹配优先，built-in > prompt > skill 排序
-  const query = value.startsWith('/') && !value.includes(' ') ? value.slice(1) : null;
-  const sourceRank = (source: string) =>
-    source === 'built-in' ? 0 : source.startsWith('prompt') ? 1 : 2;
-  const matches = query === null
-    ? []
-    : (() => {
-        const filtered = commands
-          .filter((c) => {
-            if (query === '') return sourceRank(c.source) < 2;
-            return c.name.toLowerCase().includes(query.toLowerCase());
-          })
-          .sort((a, b) => {
-            const qa = query.toLowerCase();
-            const pa = a.name.toLowerCase().startsWith(qa) ? 0 : 1;
-            const pb = b.name.toLowerCase().startsWith(qa) ? 0 : 1;
-            return pa - pb || sourceRank(a.source) - sourceRank(b.source) || a.name.localeCompare(b.name);
-          });
-        // 裸 '/' 全量展示内建 + prompt 模板（面板可滚动，对齐 TUI）；过滤时截断 8 条
-        return query === '' ? filtered : filtered.slice(0, 8);
-      })();
-  const panelOpen = matches.length > 0;
+  const {
+    previewImage,
+    setPreviewImage,
+    stageFiles,
+    onPaste,
+    removeAttachment,
+  } = useComposerAttachments({
+    attachments,
+    setAttachments,
+  });
 
   useEffect(() => {
-    setSelected(0);
-  }, [query]);
-
-  useEffect(() => {
-    if (!panelOpen) return;
-    commandPanelRef.current
-      ?.querySelector<HTMLElement>('.command-item.selected')
-      ?.scrollIntoView({ block: 'nearest' });
-  }, [panelOpen, query, selected]);
-
-  // @ 文件补全：panel 打开时拉一次候选列表（cwd 下相对路径），本地模糊过滤
-  const atActive = atToken !== null && !atSuppressed;
-  useEffect(() => {
-    if (!atActive) return;
-    void hostApi.piFiles.list(cwd).then((r) => setFileList(r.files)).catch(() => {});
-  }, [atActive, cwd]);
-  const fileMatches = atActive ? filterFiles(fileList, atToken.query) : [];
-  const filePanelOpen = fileMatches.length > 0;
+    if (!composerMenuOpen && !usageOpen && !modelMenuOpen && !branchMenuOpen && !filePanelOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (composerMenuOpen && !composerMenuRef.current?.contains(target)) setComposerMenuOpen(false);
+      if (usageOpen && !usageControlRef.current?.contains(target)) setUsageOpen(false);
+      if (modelMenuOpen && !modelMenuRef.current?.contains(target)) setModelMenuOpen(false);
+      if (branchMenuOpen && !branchMenuRef.current?.contains(target)) setBranchMenuOpen(false);
+      if (filePanelOpen && !filePanelRef.current?.contains(target)) {
+        setFilePanelManual(false);
+        setAtSuppressed(true);
+      }
+    };
+    const onKeyDownDoc = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setComposerMenuOpen(false);
+      setUsageOpen(false);
+      setModelMenuOpen(false);
+      setBranchMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDownDoc);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDownDoc);
+    };
+  }, [composerMenuOpen, usageOpen, modelMenuOpen, branchMenuOpen, filePanelOpen, setAtSuppressed, setFilePanelManual]);
 
   useEffect(() => {
     const stopOnEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || (!isStreaming && !isRunning)) return;
       if (panelOpen || filePanelOpen || composerMenuOpen || usageOpen || modelMenuOpen) return;
-      // 焦点在其他浮层（侧栏会话菜单、对话框等）时按 Escape 只关该浮层，不触发 stop
       const target = event.target as HTMLElement | null;
       if (target && target !== document.body && !target.closest('.chat-input-card')) return;
       event.preventDefault();
@@ -528,163 +443,336 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     return () => document.removeEventListener('keydown', stopOnEscape);
   }, [abort, composerMenuOpen, filePanelOpen, isRunning, isStreaming, modelMenuOpen, panelOpen, usageOpen]);
 
-  useEffect(() => {
-    setFileSelected(0);
-  }, [atToken?.query]);
+  const hasMessages = usePaneChatStore((s) => s.messages.length > 0 || s.historyMessages.length > 0);
+  const canSwitchBranch = started && !isStreaming && !isRunning && !hasMessages;
 
-  useEffect(() => {
-    if (!filePanelOpen) return;
-    filePanelRef.current
-      ?.querySelector<HTMLElement>('.command-item.selected')
-      ?.scrollIntoView({ block: 'nearest' });
-  }, [atToken?.query, filePanelOpen, fileSelected]);
-
-  const send = (behavior?: 'steer' | 'followUp') => {
-    const text = value.trim();
-    if (!text && attachments.length === 0) return;
-    const outgoingAttachments = attachments;
-    const outgoing = outgoingAttachments.filter((attachment): attachment is StagedImage => attachment.kind === 'image');
-    const promptText = formatOrderedAttachmentPrompt(text, outgoingAttachments);
-    setValue('');
-    setAttachments([]);
-    // `!` bash 命令模式（pi TUI：`!cmd` 执行并入上下文，`!!cmd` 执行但不入上下文）
-    if (text.startsWith('!') && outgoingAttachments.length === 0) {
-      const isExcluded = text.startsWith('!!');
-      const command = (isExcluded ? text.slice(2) : text.slice(1)).trim();
-      if (command) void runBash(command, isExcluded);
+  const toggleBranchMenu = () => {
+    if (!canSwitchBranch) return;
+    if (branchMenuOpen) {
+      setBranchMenuOpen(false);
       return;
     }
-    // 壳内置命令直接执行，不发给 pi（其余 /xxx 由 pi 展开：prompt 模板/skill/扩展命令）
-    if (text.startsWith('/') && outgoingAttachments.length === 0) {
-      const spaceIndex = text.indexOf(' ');
-      const name = (spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex)).toLowerCase();
-      if (SHELL_BUILTIN_NAMES.has(name)) {
-        void runBuiltinCommand(name, spaceIndex === -1 ? '' : text.slice(spaceIndex + 1).trim());
-        return;
-      }
+    const chatState = chatStore.getState();
+    if ((chatState.messages?.length ?? 0) > 0 || (chatState.historyMessages?.length ?? 0) > 0) {
+      return;
     }
+    setBranchMenuOpen(true);
+    setLoadingBranches(true);
+    hostApi.git.listBranches(cwd)
+      .then((result) => {
+        setBranchList(result.branches);
+        setIsBranchDirty(result.isDirty);
+        if (result.current) setGitBranch(result.current);
+      })
+      .catch(() => {
+        setBranchList([]);
+        setIsBranchDirty(false);
+      })
+      .finally(() => {
+        setLoadingBranches(false);
+      });
+  };
+
+  const handleSwitchBranch = async (targetBranch: string) => {
+    if (targetBranch === gitBranch || switchingBranch) return;
+    setSwitchingBranch(true);
+    try {
+      const result = await hostApi.git.checkout(cwd, targetBranch);
+      if (result.success) {
+        setGitBranch(targetBranch);
+        setBranchMenuOpen(false);
+        showNotice(t('chat.branchSwitch.success', { branch: targetBranch }));
+      } else {
+        if (result.error === 'dirty') {
+          showNotice(t('chat.branchSwitch.dirty'));
+        } else if (result.error === 'running') {
+          showNotice(t('chat.branchSwitch.running'));
+        } else {
+          showNotice(t('chat.branchSwitch.failed', { error: result.error ?? 'unknown' }));
+        }
+      }
+    } catch (err) {
+      showNotice(t('chat.branchSwitch.failed', { error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setSwitchingBranch(false);
+    }
+  };
+
+  const executePrompt = (
+    promptText: string,
+    outgoing: StagedImage[],
+    behavior?: 'steer' | 'followUp',
+  ) => {
     const autoTitle = chatStore.getState().messages.length === 0
-      ? sessionTitleFromQuestion(text, t('chat.imageSessionTitle'))
+      ? sessionTitleFromQuestion(value.trim(), t('chat.imageSessionTitle'))
       : null;
     void prompt(
       promptText,
-      // pi ImageContent 是扁平结构 {type:'image', data, mimeType}
       outgoing.map((img) => ({ type: 'image', data: img.data, mimeType: img.mediaType })),
       behavior,
     ).then(async () => {
-      // 等 prompt 返回后再持久化，避免 sessionReplaced 与扩展 UI 请求竞态。
       if (!autoTitle) return;
       const info = await paneApi.piRuntime.getSessionInfo().catch(() => null);
-      // pi 可能已按首条消息（含附件信封）自动命名，脏名也用干净标题覆盖
       const dirtyName = info?.name ? stripAttachmentEnvelope(info.name) !== info.name : false;
       if (!info?.name || dirtyName) await paneApi.piRuntime.setSessionName(autoTitle, false).catch(() => {});
     });
   };
 
-  const stageFiles = async (files: Iterable<File>) => {
-    for (const file of files) {
-      if (file.type.startsWith('image/')) {
-        try {
-          const staged = await fileToStagedImage(file);
-          setAttachments((prev) => [...prev, staged]);
-        } catch {
-          // 忽略读不了的文件
-        }
-        continue;
-      }
-      // 文本文件：读内容暂存，发送时按 <file name> 块拼进 prompt（超大/二进制跳过）
-      if (file.size > MAX_FILE_TEXT_BYTES) continue;
-      try {
-        const text = await file.text();
-        if (isProbablyBinary(text)) continue;
-        setAttachments((prev) => [...prev, { kind: 'file', name: file.name, text }]);
-      } catch {
-        // 忽略读不了的文件
-      }
-    }
-  };
+  const send = (behavior?: 'steer' | 'followUp') => {
+    const text = value.trim();
+    if (!text && attachments.length === 0) return;
+    if (text === '/' || text === '／' || text === '@') return;
+    if (commandMode && bashing) return;
+    const outgoingAttachments = attachments;
+    const outgoing = outgoingAttachments.filter((attachment): attachment is StagedImage => attachment.kind === 'image');
 
-  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = Array.from(e.clipboardData.files);
-    if (files.length > 0) {
-      e.preventDefault();
-      void stageFiles(files);
-    }
-  };
-
-  const pick = (cmd: PiCommandRow) => {
-    if (cmd.source === 'built-in') {
-      // 带参命令填入输入框补参数（对齐 pi autocomplete 只补全不执行）；无参命令直接执行
-      if (ARG_BUILTIN_COMMANDS.has(cmd.name)) {
-        setValue(`/${cmd.name} `);
-        textareaRef.current?.focus();
-        return;
-      }
+    if (commandMode) {
       setValue('');
-      void runBuiltinCommand(cmd.name, '');
+      setAttachments(() => []);
+      setCommandMode(false);
+      if (text && !bashing) void runBash(text, commandExcludeFromContext);
       return;
     }
-    setValue(`/${cmd.name} `);
-    textareaRef.current?.focus();
+    if ((text.startsWith('!') || text.startsWith('！')) && outgoingAttachments.length === 0) {
+      setValue('');
+      setAttachments(() => []);
+      const isExcluded = text.startsWith('!!') || text.startsWith('！！');
+      const command = (isExcluded ? text.slice(2) : text.slice(1)).trim();
+      if (command) void runBash(command, isExcluded);
+      return;
+    }
+    const isAt = (text.startsWith('@') || text.startsWith('＠')) && outgoingAttachments.length === 0;
+    if (isAt) {
+      const normalizedAt = text.startsWith('＠') ? '@' + text.slice(1) : text;
+      const rawMention = normalizedAt.slice(1).split(/\s/)[0]?.replace(/^["']|["']$/g, '') ?? '';
+      if (!rawMention) return;
+
+      const exactFile = fileList.find(
+        (f) => f === rawMention || f.toLowerCase() === rawMention.toLowerCase() || f.endsWith('/' + rawMention),
+      );
+      if (!exactFile) {
+        const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+        const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
+        setConfirmDialog({
+          type: 'mention',
+          target: rawMention,
+          promptText,
+          outgoing,
+          behavior,
+        });
+        return;
+      }
+    }
+    const isSlash = (text.startsWith('/') || text.startsWith('／')) && outgoingAttachments.length === 0;
+    if (isSlash) {
+      const normalizedText = text.startsWith('／') ? '/' + text.slice(1) : text;
+      const spaceIndex = normalizedText.search(/\s/);
+      const rawName = (spaceIndex === -1 ? normalizedText.slice(1) : normalizedText.slice(1, spaceIndex)).toLowerCase();
+      const arg = spaceIndex === -1 ? '' : normalizedText.slice(spaceIndex + 1).trim();
+
+      if (!rawName) return;
+
+      if (rawName === 'plan' || rawName === 'plan-mode') {
+        setValue('');
+        setAttachments(() => []);
+        setPlanMode((prev) => !prev);
+        return;
+      }
+
+      if (rawName.startsWith('skill:') || rawName === 'skill') {
+        const skillName = rawName.startsWith('skill:') ? rawName.slice(6) : (arg.split(/\s/)[0] ?? '');
+        const promptAfterSkill = rawName.startsWith('skill:') ? arg : arg.slice(skillName.length).trim();
+        if (!promptAfterSkill) {
+          if (skillName) {
+            setValue('');
+            setAttachments(() => []);
+            setSelectedSkill(skillName);
+          }
+          return;
+        }
+      }
+
+      if (SHELL_BUILTIN_NAMES.has(rawName)) {
+        setValue('');
+        setAttachments(() => []);
+        void runBuiltinCommand(rawName, arg);
+        return;
+      }
+
+      const isKnownCommand =
+        rawName.startsWith('skill:') ||
+        rawName === 'skill' ||
+        commands.some((c) => c.name.toLowerCase() === rawName);
+
+      if (isKnownCommand) {
+        const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+        const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
+        setValue('');
+        setAttachments(() => []);
+        executePrompt(promptText, outgoing, behavior);
+        return;
+      }
+
+      // 未知命令：弹出确认对话框，询问用户是否作为提示词直接发送给 AI
+      const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+      const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
+      setConfirmDialog({
+        type: 'slash',
+        target: rawName,
+        promptText,
+        outgoing,
+        behavior,
+      });
+      return;
+    }
+
+    const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+    const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
+    setValue('');
+    setAttachments(() => []);
+    executePrompt(promptText, outgoing, behavior);
   };
 
-  /** 选中文件：把光标处的 @query 替换为 @相对路径（含空格走 @"..." 引用，对齐 pi-tui） */
-  const pickFile = (relPath: string) => {
-    if (!atToken) return;
-    const inserted = relPath.includes(' ') ? `@"${relPath}"` : `@${relPath}`;
-    setValue(value.slice(0, atToken.start) + inserted + ' ' + value.slice(atToken.end));
-    setAtToken(null);
-    setAtSuppressed(true); // 插入后不再立刻弹面板，下次输入重置
-    textareaRef.current?.focus();
+  type StagedItemType =
+    | { type: 'attachment'; id: string }
+    | { type: 'skill'; name: string }
+    | { type: 'command' }
+    | { type: 'plan' };
+
+  const [stagedStack, setStagedStack] = useState<StagedItemType[]>([]);
+  const prevAttachmentsRef = useRef(attachments);
+  const prevSkillRef = useRef(selectedSkill);
+  const prevCommandRef = useRef(commandMode);
+  const prevPlanRef = useRef(planMode);
+
+  useEffect(() => {
+    if (attachments.length > prevAttachmentsRef.current.length) {
+      const addedCount = attachments.length - prevAttachmentsRef.current.length;
+      const newItems: StagedItemType[] = Array.from({ length: addedCount }, () => ({
+        type: 'attachment' as const,
+        id: Math.random().toString(36).slice(2),
+      }));
+      setStagedStack((prev) => [...prev, ...newItems]);
+    } else if (attachments.length < prevAttachmentsRef.current.length) {
+      setStagedStack((prev) => {
+        let toRemove = prevAttachmentsRef.current.length - attachments.length;
+        const next: StagedItemType[] = [];
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].type === 'attachment' && toRemove > 0) {
+            toRemove--;
+          } else {
+            next.unshift(prev[i]);
+          }
+        }
+        return next;
+      });
+    }
+    prevAttachmentsRef.current = attachments;
+
+    if (selectedSkill !== prevSkillRef.current) {
+      if (selectedSkill) {
+        setStagedStack((prev) => [
+          ...prev.filter((it) => it.type !== 'skill'),
+          { type: 'skill' as const, name: selectedSkill },
+        ]);
+      } else {
+        setStagedStack((prev) => prev.filter((it) => it.type !== 'skill'));
+      }
+      prevSkillRef.current = selectedSkill;
+    }
+
+    if (commandMode !== prevCommandRef.current) {
+      if (commandMode) {
+        setStagedStack((prev) => [
+          ...prev.filter((it) => it.type !== 'command'),
+          { type: 'command' as const },
+        ]);
+      } else {
+        setStagedStack((prev) => prev.filter((it) => it.type !== 'command'));
+      }
+      prevCommandRef.current = commandMode;
+    }
+
+    if (planMode !== prevPlanRef.current) {
+      if (planMode) {
+        setStagedStack((prev) => [
+          ...prev.filter((it) => it.type !== 'plan'),
+          { type: 'plan' as const },
+        ]);
+      } else {
+        setStagedStack((prev) => prev.filter((it) => it.type !== 'plan'));
+      }
+      prevPlanRef.current = planMode;
+    }
+  }, [attachments, selectedSkill, commandMode, planMode]);
+
+  const cancelLastStagedItem = (): boolean => {
+    for (let i = stagedStack.length - 1; i >= 0; i--) {
+      const item = stagedStack[i];
+      if (item.type === 'skill' && selectedSkill) {
+        setSelectedSkill(null);
+        setStagedStack((prev) => prev.filter((_, idx) => idx !== i));
+        return true;
+      }
+      if (item.type === 'attachment' && attachments.length > 0) {
+        setAttachments((prev) => prev.slice(0, -1));
+        setStagedStack((prev) => prev.filter((_, idx) => idx !== i));
+        return true;
+      }
+      if (item.type === 'command' && commandMode) {
+        setCommandMode(false);
+        setStagedStack((prev) => prev.filter((_, idx) => idx !== i));
+        return true;
+      }
+      if (item.type === 'plan' && planMode) {
+        setPlanMode(false);
+        setStagedStack((prev) => prev.filter((_, idx) => idx !== i));
+        return true;
+      }
+    }
+
+    if (selectedSkill) {
+      setSelectedSkill(null);
+      return true;
+    }
+    if (attachments.length > 0) {
+      setAttachments((prev) => prev.slice(0, -1));
+      return true;
+    }
+    if (commandMode) {
+      setCommandMode(false);
+      return true;
+    }
+    if (planMode) {
+      setPlanMode(false);
+      return true;
+    }
+
+    if (value !== '') {
+      setValue('');
+      return true;
+    }
+
+    return false;
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (panelOpen) {
-      if (e.key === 'ArrowDown') {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    if (handleCommandKeyDown(e)) return;
+    if (handleFileKeyDown(e)) return;
+    if (e.key === 'Escape') {
+      if (cancelLastStagedItem()) {
         e.preventDefault();
-        setSelected((i) => Math.min(i + 1, matches.length - 1));
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelected((i) => Math.max(i - 1, 0));
-        return;
-      }
-      if (e.key === 'Tab' || (e.key === 'Enter' && query !== '')) {
-        e.preventDefault();
-        pick(matches[selected] ?? matches[0]);
-        return;
-      }
-      if (e.key === 'Escape') {
-        setValue('');
         return;
       }
     }
-    if (filePanelOpen) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setFileSelected((i) => Math.min(i + 1, fileMatches.length - 1));
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setFileSelected((i) => Math.max(i - 1, 0));
-        return;
-      }
-      if (e.key === 'Tab' || e.key === 'Enter') {
-        e.preventDefault();
-        pickFile(fileMatches[fileSelected] ?? fileMatches[0]);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setAtSuppressed(true);
-        return;
-      }
+    if (e.key !== 'Enter') return;
+    const trimmed = value.trim();
+    if (trimmed === '/' || trimmed === '／' || trimmed === '@') {
+      e.preventDefault();
+      return;
     }
-    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
     if (sendWith === 'cmdEnter') {
-      // Cmd/Ctrl+Enter 发送；裸 Enter / Shift+Enter 换行
       if (!e.metaKey && !e.ctrlKey) return;
       e.preventDefault();
       send(resolveStreamBehavior(followupBehavior, e.altKey));
@@ -692,10 +780,78 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
     }
     if (!e.shiftKey) {
       e.preventDefault();
-      // 流式中：Enter 按设置的跟进方式分发（默认排队 followUp）；Alt+Enter 始终反向
       send(resolveStreamBehavior(followupBehavior, e.altKey));
     }
   };
+
+
+  useEffect(() => {
+    const onEsc = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (confirmDialog) {
+        e.preventDefault();
+        e.stopPropagation();
+        setConfirmDialog(null);
+        textareaRef.current?.focus();
+        return;
+      }
+      if (sessionInfo) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSessionInfo(null);
+        return;
+      }
+      if (previewImage) {
+        e.preventDefault();
+        e.stopPropagation();
+        setPreviewImage(null);
+        return;
+      }
+      if (modelMenuOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setModelMenuOpen(false);
+        return;
+      }
+      if (branchMenuOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setBranchMenuOpen(false);
+        return;
+      }
+      if (composerMenuOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setComposerMenuOpen(false);
+        return;
+      }
+      if (panelOpen || filePanelOpen) {
+        return;
+      }
+
+      if (cancelLastStagedItem()) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [
+    confirmDialog,
+    sessionInfo,
+    previewImage,
+    modelMenuOpen,
+    branchMenuOpen,
+    composerMenuOpen,
+    panelOpen,
+    filePanelOpen,
+    value,
+    stagedStack,
+    selectedSkill,
+    attachments,
+    commandMode,
+    planMode,
+  ]);
 
   return (
     <div className="chat-input">
@@ -708,148 +864,330 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
       {sessionInfo && (
         <div
           className="tree-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('chat.sessionInfo.title')}
           data-testid="session-info-dialog"
-          onClick={() => setSessionInfo(null)}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSessionInfo(null);
+          }}
         >
-          <div className="tree-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="tree-title">{t('chat.sessionInfo.title')}</div>
+          <div className="session-info-modal" data-testid="session-info-modal">
+            <div className="session-info-header">
+              <div className="session-info-title-wrap">
+                <Info size={16} style={{ color: 'var(--accent)' }} />
+                <span>{t('chat.sessionInfo.title')}</span>
+                {sessionInfo.name && (
+                  <span className="session-info-name-chip" title={sessionInfo.name}>
+                    {sessionInfo.name}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                data-testid="session-info-close"
+                onClick={() => setSessionInfo(null)}
+                aria-label={t('common.close')}
+              >
+                <X size={15} />
+              </button>
+            </div>
             <div className="session-info-body">
-              {sessionInfo.name && (
+              <div className="session-info-section">
+                {sessionInfo.name && (
+                  <div className="usage-row">
+                    <span>{t('chat.sessionInfo.name')}</span>
+                    <strong>{sessionInfo.name}</strong>
+                  </div>
+                )}
                 <div className="usage-row">
-                  <span>{t('chat.sessionInfo.name')}</span>
-                  <strong>{sessionInfo.name}</strong>
+                  <span>{t('chat.sessionInfo.id')}</span>
+                  <div className="session-info-val-wrap">
+                    <code className="session-info-id" title={sessionInfo.sessionId}>
+                      {sessionInfo.sessionId}
+                    </code>
+                    <button
+                      type="button"
+                      className={`session-info-action-btn${copiedField === 'id' ? ' copied' : ''}`}
+                      title={copiedField === 'id' ? t('chat.sessionInfo.copied') : t('chat.sessionInfo.copyId')}
+                      onClick={() => copyText('id', sessionInfo.sessionId)}
+                    >
+                      {copiedField === 'id' ? <Check size={13} /> : <Copy size={13} />}
+                    </button>
+                  </div>
                 </div>
-              )}
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.id')}</span>
-                <strong>{sessionInfo.sessionId}</strong>
-              </div>
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.file')}</span>
-                <strong>{sessionInfo.sessionFile ?? t('chat.sessionInfo.inMemory')}</strong>
-              </div>
-              {sessionInfo.model && (
                 <div className="usage-row">
-                  <span>{t('chat.sessionInfo.model')}</span>
+                  <span>{t('chat.sessionInfo.file')}</span>
+                  <div className="session-info-val-wrap">
+                    {sessionInfo.isSaved === false && (
+                      <span
+                        className="session-info-badge session-info-unsaved-badge"
+                        title={t('chat.sessionInfo.notSavedYetHint')}
+                      >
+                        {t('chat.sessionInfo.notSavedYet')}
+                      </span>
+                    )}
+                    <code
+                      className="session-info-id session-info-file-path"
+                      title={
+                        sessionInfo.isSaved === false
+                          ? `${sessionInfo.sessionFile ?? cwd} (${t('chat.sessionInfo.notSavedYetHint')})`
+                          : (sessionInfo.sessionFile ?? cwd)
+                      }
+                    >
+                      {sessionInfo.sessionFile ?? cwd}
+                    </code>
+                    <button
+                      type="button"
+                      className={`session-info-action-btn${copiedField === 'file' ? ' copied' : ''}`}
+                      title={copiedField === 'file' ? t('chat.sessionInfo.copied') : t('chat.sessionInfo.copyPath')}
+                      onClick={() => copyText('file', sessionInfo.sessionFile ?? cwd)}
+                    >
+                      {copiedField === 'file' ? <Check size={13} /> : <Copy size={13} />}
+                    </button>
+                    <button
+                      type="button"
+                      className="session-info-action-btn"
+                      title={
+                        sessionInfo.isSaved === false
+                          ? t('chat.sessionInfo.notSavedYetHint')
+                          : t('chat.sessionInfo.showInFolder')
+                      }
+                      onClick={() => {
+                        void hostApi.shell.showInFolder(sessionInfo.sessionFile ?? cwd);
+                      }}
+                    >
+                      <FolderOpen size={13} />
+                    </button>
+                  </div>
+                </div>
+                {sessionInfo.model && (
+                  <div className="usage-row">
+                    <span>{t('chat.sessionInfo.model')}</span>
+                    <span className="session-info-badge">
+                      {sessionInfo.model.name ??
+                        `${sessionInfo.model.provider}/${sessionInfo.model.id}`}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="session-info-section">
+                <div className="usage-row">
+                  <span>{t('chat.sessionInfo.messages')}</span>
                   <strong>
-                    {sessionInfo.model.name ??
-                      `${sessionInfo.model.provider}/${sessionInfo.model.id}`}
+                    {t('chat.sessionInfo.messagesValue', {
+                      total: sessionInfo.totalMessages,
+                      user: sessionInfo.userMessages,
+                      assistant: sessionInfo.assistantMessages,
+                    })}
                   </strong>
                 </div>
-              )}
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.messages')}</span>
-                <strong>
-                  {t('chat.sessionInfo.messagesValue', {
-                    total: sessionInfo.totalMessages,
-                    user: sessionInfo.userMessages,
-                    assistant: sessionInfo.assistantMessages,
-                  })}
-                </strong>
-              </div>
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.tools')}</span>
-                <strong>
-                  {t('chat.sessionInfo.toolsValue', {
-                    calls: sessionInfo.toolCalls,
-                    results: sessionInfo.toolResults,
-                  })}
-                </strong>
-              </div>
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.input')}</span>
-                <strong>{formatTokens(sessionInfo.tokens.input)}</strong>
-              </div>
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.output')}</span>
-                <strong>{formatTokens(sessionInfo.tokens.output)}</strong>
-              </div>
-              <div className="usage-row">
-                <span>{t('chat.sessionInfo.total')}</span>
-                <strong>{formatTokens(sessionInfo.tokens.total)}</strong>
-              </div>
-              {sessionInfo.cost > 0 && (
                 <div className="usage-row">
-                  <span>{t('chat.sessionInfo.cost')}</span>
-                  <strong>{formatCost(sessionInfo.cost)}</strong>
+                  <span>{t('chat.sessionInfo.tools')}</span>
+                  <strong>
+                    {t('chat.sessionInfo.toolsValue', {
+                      calls: sessionInfo.toolCalls,
+                      results: sessionInfo.toolResults,
+                    })}
+                  </strong>
                 </div>
-              )}
+              </div>
+
+              <div className="session-info-section">
+                <div className="usage-row">
+                  <span>{t('chat.sessionInfo.input')}</span>
+                  <strong>{formatTokens(sessionInfo.tokens.input)}</strong>
+                </div>
+                <div className="usage-row">
+                  <span>{t('chat.sessionInfo.output')}</span>
+                  <strong>{formatTokens(sessionInfo.tokens.output)}</strong>
+                </div>
+                <div className="usage-row">
+                  <span>{t('chat.sessionInfo.total')}</span>
+                  <strong style={{ color: 'var(--accent)' }}>{formatTokens(sessionInfo.tokens.total)}</strong>
+                </div>
+                {sessionInfo.cost > 0 && (
+                  <div className="usage-row">
+                    <span>{t('chat.sessionInfo.cost')}</span>
+                    <strong>{formatCost(sessionInfo.cost)}</strong>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
-      {panelOpen && (
-        <div ref={commandPanelRef} className="command-panel" data-testid="command-panel">
-          {matches.map((cmd, i) => (
-            <button
-              key={cmd.name}
-              className={i === selected ? 'command-item selected' : 'command-item'}
-              data-testid={`command-${cmd.name}`}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                pick(cmd);
-              }}
-            >
-              <span className="command-name">/{cmd.name}</span>
-              <span className="command-desc">{commandDescription(cmd)}</span>
-              <span className="command-source">{cmd.source}</span>
-            </button>
-          ))}
+      {confirmDialog && (
+        <div
+          className="tree-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={
+            confirmDialog.type === 'slash'
+              ? t('chat.confirmSlashSend.title')
+              : t('chat.confirmMentionSend.title')
+          }
+          data-testid={confirmDialog.type === 'slash' ? 'confirm-slash-dialog' : 'confirm-mention-dialog'}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setConfirmDialog(null);
+              textareaRef.current?.focus();
+            }
+          }}
+        >
+          <div className="session-info-modal" style={{ maxWidth: 440 }}>
+            <div className="session-info-header">
+              <div className="session-info-title-wrap">
+                <AlertTriangle size={16} style={{ color: 'var(--accent)' }} />
+                <span>
+                  {confirmDialog.type === 'slash'
+                    ? t('chat.confirmSlashSend.title')
+                    : t('chat.confirmMentionSend.title')}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                data-testid="confirm-dialog-close"
+                onClick={() => {
+                  setConfirmDialog(null);
+                  textareaRef.current?.focus();
+                }}
+                aria-label={t('common.close')}
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div style={{ padding: '16px 18px', fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>
+              {confirmDialog.type === 'slash'
+                ? t('chat.confirmSlashSend.description', { command: `/${confirmDialog.target}` })
+                : t('chat.confirmMentionSend.description', { mention: `@${confirmDialog.target}` })}
+            </div>
+            <div className="confirm-slash-actions">
+              <button
+                type="button"
+                className="confirm-slash-btn-cancel"
+                data-testid="confirm-dialog-cancel"
+                autoFocus
+                onClick={() => {
+                  setConfirmDialog(null);
+                  textareaRef.current?.focus();
+                }}
+              >
+                {confirmDialog.type === 'slash'
+                  ? t('chat.confirmSlashSend.cancel')
+                  : t('chat.confirmMentionSend.cancel')}
+              </button>
+              <button
+                type="button"
+                className="confirm-slash-btn-send"
+                data-testid="confirm-dialog-submit"
+                onClick={() => {
+                  const modalData = confirmDialog;
+                  setValue('');
+                  setAttachments(() => []);
+                  setConfirmDialog(null);
+                  executePrompt(modalData.promptText, modalData.outgoing, modalData.behavior);
+                }}
+              >
+                {confirmDialog.type === 'slash'
+                  ? t('chat.confirmSlashSend.send')
+                  : t('chat.confirmMentionSend.send')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
-      {filePanelOpen && (
-        <div ref={filePanelRef} className="command-panel" data-testid="file-panel">
-          {fileMatches.map((file, i) => (
-            <button
-              key={file}
-              className={i === fileSelected ? 'command-item selected' : 'command-item'}
-              data-testid="file-option"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                pickFile(file);
-              }}
-            >
-              <span className="command-name">@{file}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <ChatInputSlashPopup
+        panelOpen={panelOpen}
+        commandPanelRef={commandPanelRef}
+        matches={matches}
+        selected={selected}
+        onPick={pick}
+        commandDescription={commandDescription}
+        onClose={() => {
+          setValue('');
+          textareaRef.current?.focus();
+        }}
+      />
+      <ChatInputMentionsPopup
+        filePanelOpen={filePanelOpen}
+        filePanelManual={filePanelManual}
+        isTreeMode={isTreeMode}
+        filePanelRef={filePanelRef}
+        fileMatches={fileMatches}
+        fileSelected={fileSelected}
+        treeSelected={treeSelected}
+        dirTree={dirTree}
+        dirContents={dirContents}
+        expandedDirs={expandedDirs}
+        onPickFile={pickFile}
+        onToggleDir={toggleDir}
+        onSelectTreeIndex={setTreeSelected}
+        onClose={() => {
+          setAtSuppressed(true);
+          setFilePanelManual(false);
+          if (atToken) {
+            setValue((current) => current.slice(0, atToken.start) + current.slice(atToken.end));
+            setAtToken(null);
+          }
+          textareaRef.current?.focus();
+        }}
+      />
       <div className="chat-input-card">
-        {attachments.length > 0 && (
-          <div className="staged-attachments" data-testid="staged-attachments">
-            {attachments.map((attachment, index) => attachment.kind === 'image' ? (
-              <span key={`${attachment.name}-${index}`} className="staged-image" data-testid="staged-image" data-attachment-index={index + 1}>
-                <button
-                  className="staged-image-preview"
-                  data-testid="staged-image-preview"
-                  aria-label={t('chat.imageAttachment', { index: index + 1, name: attachment.name })}
-                  onClick={() => setPreviewImage(attachment.previewUrl)}
-                >
-                  <img src={attachment.previewUrl} alt={attachment.name} />
-                  <span className="attachment-order">{index + 1}</span>
-                </button>
-                <button
-                  className="staged-remove"
-                  aria-label={t('chat.removeAttachment')}
-                  onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                >
-                  <span aria-hidden="true">×</span>
-                </button>
-              </span>
-            ) : (
-              <span key={`${attachment.name}-${index}`} className="staged-file" data-testid="staged-file" data-attachment-index={index + 1}>
-                <span className="attachment-order">{index + 1}</span>
-                <FileText size={14} />
-                <span className="staged-file-name">{attachment.name}</span>
-                <button
-                  className="staged-remove"
-                  aria-label={t('chat.removeAttachment')}
-                  onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                >
-                  <span aria-hidden="true">×</span>
-                </button>
-              </span>
-            ))}
+        <ChatInputAttachments
+          attachments={attachments}
+          onRemove={removeAttachment}
+          onPreviewImage={setPreviewImage}
+        />
+        {commandMode && (
+          <div className="command-mode-bar" data-testid="command-mode-bar">
+            <span className="command-mode-label">
+              <Terminal size={13} />
+              {t('chat.command.mode')}
+            </span>
+            <button
+              type="button"
+              className={`command-context-toggle${commandExcludeFromContext ? '' : ' in-context'}`}
+              data-testid="command-context-toggle"
+              title={
+                commandExcludeFromContext
+                  ? t('chat.command.includeContext')
+                  : t('chat.command.excludeContext')
+              }
+              onClick={() => setCommandExcludeFromContext(!commandExcludeFromContext)}
+            >
+              {commandExcludeFromContext ? t('chat.bash.excluded') : t('chat.command.inContext')}
+            </button>
+            <button
+              type="button"
+              className="command-mode-exit"
+              data-testid="command-mode-exit"
+              aria-label={t('chat.command.exit')}
+              title={t('chat.command.exit')}
+              onClick={() => setCommandMode(false)}
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+        {selectedSkill && (
+          <div className="skill-mode-bar" data-testid="skill-mode-bar">
+            <span className="skill-mode-label">
+              <Sparkles size={13} />/skill:{selectedSkill}
+            </span>
+            <button
+              type="button"
+              className="skill-mode-remove"
+              data-testid="skill-mode-remove"
+              aria-label={t('chat.skillRemove')}
+              title={t('chat.skillRemove')}
+              onClick={() => setSelectedSkill(null)}
+            >
+              <X size={13} />
+            </button>
           </div>
         )}
         <textarea
@@ -857,18 +1195,28 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
           data-testid="chat-input"
           className={`${composerScrollable ? 'is-scrollable' : ''}${composerScrollbarActive ? ' scrollbar-active' : ''}`}
           value={value}
-          placeholder={sendWith === 'cmdEnter' ? t('chat.placeholderCmdEnter') : t('chat.placeholder')}
+          placeholder={
+            commandMode
+              ? t('chat.command.placeholder')
+              : sendWith === 'cmdEnter'
+                ? t('chat.placeholderCmdEnter')
+                : t('chat.placeholder')
+          }
           onChange={(e) => {
             setValue(e.target.value);
             setSelected(0);
             setFileSelected(0);
             setAtSuppressed(false);
-            setAtToken(detectAtToken(e.target.value, e.target.selectionStart ?? e.target.value.length));
+            setSlashSuppressed(false);
+            const caret = e.target.selectionStart ?? e.target.value.length;
+            setAtToken(detectAtToken(e.target.value, caret));
+            setSlashToken(detectSlashToken(e.target.value, caret));
           }}
           onSelect={(e) => {
-            // 光标移动（点击/方向键）后重判 @ token
             const target = e.currentTarget;
-            setAtToken(detectAtToken(target.value, target.selectionStart ?? target.value.length));
+            const caret = target.selectionStart ?? target.value.length;
+            setAtToken(detectAtToken(target.value, caret));
+            setSlashToken(detectSlashToken(target.value, caret));
           }}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
@@ -876,230 +1224,97 @@ export function ChatInput({ cwd, onChooseWorkspace }: ChatInputProps) {
           onWheel={revealComposerScrollbar}
           rows={1}
         />
-        <div className="chat-input-toolbar">
-          <div className="composer-menu-wrap" ref={composerMenuRef}>
-            <input id="chat-attach-input" type="file" accept="image/*,text/*,.md,.markdown,.json,.yaml,.yml,.toml,.xml,.csv,.log" multiple hidden data-testid="attach-input" onChange={(e) => { void stageFiles(Array.from(e.target.files ?? [])); e.target.value = ''; setComposerMenuOpen(false); }} />
-            <button className="attach-button" data-testid="composer-menu" title={t('chat.composerMenu')} aria-expanded={composerMenuOpen} onClick={() => setComposerMenuOpen((open) => !open)}><Plus size={17} /></button>
-            {composerMenuOpen && (
-              <div className="composer-menu" role="menu">
-                <label className="composer-menu-item" data-testid="attach-image" htmlFor="chat-attach-input" title={t('chat.attachFile')}>
-                  <Paperclip size={15} /><span>{t('chat.attachFile')}</span>
-                </label>
-                <button className="composer-menu-item" data-testid="composer-file-reference" onClick={() => { setValue((current) => `${current}${current && !current.endsWith(' ') ? ' ' : ''}@`); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><AtSign size={15} /><span>{t('chat.fileReference')}</span></button>
-                <div className="composer-menu-section"><Sparkles size={14} /><span>{t('chat.skills')}</span></div>
-                <div className="composer-skills-list">
-                  {skills.length === 0 ? <div className="composer-menu-hint">{t('chat.noSkills')}</div> : skills.map((skill) => <button className="composer-menu-item" data-testid={`composer-skill-${skill.name}`} key={skill.name} onClick={() => { setValue(`/skill:${skill.name} `); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Sparkles size={14} /><span>{skill.name}</span></button>)}
-                </div>
-                <button className="composer-menu-item" data-testid="composer-plan-mode" disabled={!planAvailable} title={!planAvailable ? t('chat.planModeUnavailable') : undefined} onClick={() => { setValue('/plan '); setComposerMenuOpen(false); textareaRef.current?.focus(); }}><Brain size={15} /><span>{t('chat.planMode')}</span></button>
-              </div>
-            )}
-          </div>
-          <button
-            className="context-chip workspace-chip"
-            data-testid="chat-workspace"
-            title={cwd}
-            onClick={() => void onChooseWorkspace()}
-          >
-            <Folder size={15} />
-            <span>{cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd}</span>
-            <ChevronDown size={13} />
-          </button>
-          {gitBranch && (
-            <span
-              className="context-chip git-branch-chip"
-              data-testid="git-branch"
-              title={gitBranch === 'detached' ? t('chat.gitDetachedTitle') : t('chat.gitBranchTitle', { branch: gitBranch })}
-            >
-              <GitBranch size={14} />
-              <span>{gitBranch === 'detached' ? t('chat.gitDetached') : gitBranch}</span>
-            </span>
-          )}
-          <span className="spacer" />
-          {(models.length > 0 || model) && (
-            <div className="model-menu-wrap" ref={modelMenuRef}>
-              <button
-                className="model-menu-trigger"
-                data-testid="model-select"
-                data-value={modelKey}
-                aria-label={t('chat.model')}
-                aria-expanded={modelMenuOpen}
-                onClick={() => setModelMenuOpen((open) => !open)}
-              >
-                <span className="model-menu-trigger-name">
-                  {selectedModel ? modelDisplayName(selectedModel) : (model?.name ?? model?.id ?? t('chat.model'))}
-                </span>
-                {reasoning && thinkingLevel && (
-                  <span className="model-menu-trigger-thinking" data-testid="model-trigger-thinking">
-                    · {t(`chat.thinkingLevels.${thinkingLevel}`, { defaultValue: thinkingLevel })}
-                  </span>
-                )}
-                <ChevronDown size={13} />
-              </button>
-              {modelMenuOpen && (
-                <div className="model-menu" data-testid="model-menu" role="menu">
-                  {modelMenuSection === 'models' && (
-                    <div className="model-submenu" data-testid="model-submenu">
-                      {models.length === 0 && <div className="composer-menu-hint">{t('chat.modelMenu.empty')}</div>}
-                      {[...modelGroups.entries()].map(([provider, providerModels]) => (
-                        <div key={provider}>
-                          <div className="model-group-label">{provider}</div>
-                          {providerModels.map((m) => {
-                            const value = `${m.provider}/${m.id}`;
-                            return (
-                              <button
-                                key={value}
-                                className="model-option"
-                                data-testid="model-option"
-                                data-value={value}
-                                onClick={() => { setModelMenuOpen(false); applyModelSelection(value); }}
-                              >
-                                <span>{modelDisplayName(m)}</span>
-                                {value === modelKey && <Check size={14} />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {modelMenuSection === 'thinking' && (
-                    <div className="model-submenu" data-testid="model-submenu">
-                      {effectiveThinkingLevels.map((level) => (
-                        <button
-                          key={level}
-                          className="model-option"
-                          data-testid="thinking-option"
-                          data-value={level}
-                          onClick={() => {
-                            setModelMenuOpen(false);
-                            void paneApi.piRuntime.setThinkingLevel(level).then((result) => {
-                              chatStore.getState().applyModelUpdate(result);
-                            });
-                          }}
-                        >
-                          <span>{t(`chat.thinkingLevels.${level}`, { defaultValue: level })}</span>
-                          {level === thinkingLevel && <Check size={14} />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <div className="model-menu-main">
-                    <button
-                      className={`model-menu-row${modelMenuSection === 'models' ? ' active' : ''}`}
-                      data-testid="model-menu-models"
-                      onClick={() => setModelMenuSection((s) => (s === 'models' ? null : 'models'))}
-                    >
-                      <span>{t('chat.modelMenu.model')}</span>
-                      <span className="model-menu-value">
-                        {selectedModel ? modelDisplayName(selectedModel) : (model?.name ?? model?.id ?? '')}
-                      </span>
-                      <ChevronLeft size={13} />
-                    </button>
-                    {reasoning && effectiveThinkingLevels.length > 0 && (
-                      <button
-                        className={`model-menu-row${modelMenuSection === 'thinking' ? ' active' : ''}`}
-                        data-testid="model-menu-thinking"
-                        disabled={isStreaming}
-                        onClick={() => setModelMenuSection((s) => (s === 'thinking' ? null : 'thinking'))}
-                      >
-                        <span>{t('chat.thinkingLevel')}</span>
-                        <span className="model-menu-value">{t(`chat.thinkingLevels.${thinkingLevel}`, { defaultValue: thinkingLevel })}</span>
-                        <ChevronLeft size={13} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          <div className="usage-control" ref={usageControlRef}>
-            <button
-              className="usage-button"
-              data-testid="token-usage"
-              aria-label={t('chat.tokenUsage')}
-              aria-expanded={usageOpen}
-              onClick={() => setUsageOpen((open) => !open)}
-            >
-              <CircleGauge size={17} />
-              <span>{contextLabel}</span>
-            </button>
-            {usageOpen && (
-              <div className="usage-popover" role="dialog" data-testid="token-usage-popover">
-                <div className="usage-popover-title">{t('chat.tokenUsage')}</div>
-                <div className="usage-section-label">{t('chat.currentModelUsage')}</div>
-                <div className="usage-row" data-testid="usage-context-used"><span>{t('chat.contextUsed')}</span><strong>{formatTokens(contextTokens)}</strong></div>
-                <div className="usage-row" data-testid="usage-context-window"><span>{t('chat.contextWindow')}</span><strong>{formatTokens(contextWindow)}</strong></div>
-                {contextUsage?.estimated && <div className="usage-note" data-testid="usage-context-estimated">{t('chat.contextEstimated')}</div>}
-                {(model?.maxTokens ?? selectedModel?.maxTokens) != null && <div className="usage-row" data-testid="usage-max-output"><span>{t('chat.maxOutputTokens')}</span><strong>{formatTokens(model?.maxTokens ?? selectedModel?.maxTokens)}</strong></div>}
-                <div className="usage-section-label">{t('chat.sessionTotals')}</div>
-                <div className="usage-row" data-testid="usage-session-input"><span>{t('chat.inputTokens')}</span><strong>{formatTokens(usageTotals.input)}</strong></div>
-                <div className="usage-row"><span>{t('chat.outputTokens')}</span><strong>{formatTokens(usageTotals.output)}</strong></div>
-                {(usageTotals.cacheRead > 0 || usageTotals.cacheWrite > 0) && (
-                  <>
-                    <div className="usage-row"><span>{t('chat.cacheRead')}</span><strong>{formatTokens(usageTotals.cacheRead)}</strong></div>
-                    <div className="usage-row"><span>{t('chat.cacheWrite')}</span><strong>{formatTokens(usageTotals.cacheWrite)}</strong></div>
-                  </>
-                )}
-                {cacheStatsAvailable && totalHitRate != null && (
-                  <div className="usage-row" data-testid="usage-session-cache-hit-rate"><span>{t('chat.cacheHitRate')}</span><strong>{formatHitRate(totalHitRate)}</strong></div>
-                )}
-                {cacheStatsAvailable && lastTurnHitRate != null && (
-                  <div className="usage-row"><span>{t('chat.cacheHitRateLast')}</span><strong>{formatHitRate(lastTurnHitRate)}</strong></div>
-                )}
-                {usageTotals.cost > 0 && (
-                  <div className="usage-row"><span>{t('chat.totalCost')}</span><strong>{formatCost(usageTotals.cost)}</strong></div>
-                )}
-                <div className="usage-note">{t('chat.cacheStatsNote')}</div>
-              </div>
-            )}
-          </div>
-          {isStreaming ? (
-            <>
-              <button
-                data-testid="chat-queue-send"
-                className="send-button"
-                onClick={() => send('steer')}
-                disabled={!value.trim() && attachments.length === 0}
-                title={t('chat.queueSendTipSteer')}
-              >
-                <ArrowUp size={15} />
-              </button>
-              <button
-                data-testid="chat-stop"
-                className="send-button stop"
-                onClick={() => void abort()}
-                title={t('chat.stopTip')}
-              >
-                <Square size={13} />
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                data-testid="chat-send"
-                className="send-button"
-                onClick={() => send()}
-                disabled={!value.trim() && attachments.length === 0}
-                title={sendWith === 'cmdEnter' ? t('chat.sendTipCmdEnter') : t('chat.sendTip')}
-              >
-                <ArrowUp size={15} />
-              </button>
-              {/* 压缩中/重试等待中/bash 执行中 isStreaming=false，但回合仍可中断（pi Escape 语义） */}
-              {(compacting || retrying || bashing || isRunning) && (
-                <button
-                  data-testid="chat-stop"
-                  className="send-button stop"
-                  onClick={() => void abort()}
-                  title={t('chat.stopTip')}
-                >
-                  <Square size={13} />
-                </button>
-              )}
-            </>
-          )}
-        </div>
+        <ChatInputControls
+          cwd={cwd}
+          onChooseWorkspace={onChooseWorkspace}
+          composerMenuRef={composerMenuRef}
+          composerMenuOpen={composerMenuOpen}
+          setComposerMenuOpen={setComposerMenuOpen}
+          onStageFiles={(files) => void stageFiles(files)}
+          onOpenFileReference={() => {
+            setFilePanelManual(true);
+            void hostApi.piFiles.listDir(cwd).then((r) => setDirTree(r)).catch(() => setDirTree(null));
+            textareaRef.current?.focus();
+          }}
+          skills={skills}
+          selectedSkill={selectedSkill}
+          setSelectedSkill={setSelectedSkill}
+          setCommandMode={setCommandMode}
+          setAttachments={setAttachments}
+          planMode={planMode}
+          setPlanMode={setPlanMode}
+          gitBranch={gitBranch}
+          canSwitchBranch={canSwitchBranch}
+          branchMenuRef={branchMenuRef}
+          branchMenuOpen={branchMenuOpen}
+          toggleBranchMenu={toggleBranchMenu}
+          loadingBranches={loadingBranches}
+          branchList={branchList}
+          switchingBranch={switchingBranch}
+          isBranchDirty={isBranchDirty}
+          onSwitchBranch={handleSwitchBranch}
+          models={models}
+          model={model}
+          selectedModel={selectedModel}
+          modelKey={modelKey}
+          modelMenuRef={modelMenuRef}
+          modelMenuOpen={modelMenuOpen}
+          setModelMenuOpen={setModelMenuOpen}
+          modelMenuSection={modelMenuSection}
+          setModelMenuSection={setModelMenuSection}
+          modelGroups={modelGroups}
+          collapsedProviders={collapsedProviders}
+          toggleProviderCollapse={toggleProviderCollapse}
+          modelQueries={modelQueries}
+          setModelQueries={setModelQueries}
+          groupVisibleModels={groupVisibleModels}
+          applyModelSelection={applyModelSelection}
+          onSelectThinkingLevel={(level) => {
+            void paneApi.piRuntime.setThinkingLevel(level).then((result) => {
+              chatStore.getState().applyModelUpdate(result);
+            });
+          }}
+          onSelectContextWindow={(cw) => {
+            void paneApi.piRuntime.setContextWindow(cw).then((result) => {
+              chatStore.getState().applyModelUpdate(result);
+            });
+          }}
+          reasoning={reasoning}
+          thinkingLevel={thinkingLevel}
+          effectiveThinkingLevels={effectiveThinkingLevels}
+          isStreaming={isStreaming}
+          isRunning={isRunning}
+          compacting={compacting}
+          retrying={retrying}
+          bashing={bashing}
+          commandMode={commandMode}
+          sendWith={sendWith}
+          value={value}
+          attachmentsLength={attachments.length}
+          usageControlRef={usageControlRef}
+          usageOpen={usageOpen}
+          setUsageOpen={setUsageOpen}
+          contextLabel={contextLabel}
+          contextTokens={contextTokens}
+          contextWindow={contextWindow}
+          contextUsage={contextUsage}
+          usageTotals={usageTotals}
+          cacheStatsAvailable={cacheStatsAvailable}
+          totalHitRate={totalHitRate}
+          lastTurnHitRate={lastTurnHitRate}
+          formatTokens={formatTokens}
+          onSend={send}
+          onAbort={() => void abort()}
+          onFocusTextarea={() => textareaRef.current?.focus()}
+        />
       </div>
-      {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
+      {previewImage && (
+        <ImageLightbox
+          src={previewImage.url}
+          name={previewImage.name}
+          onClose={() => setPreviewImage(null)}
+        />
+      )}
     </div>
   );
 }

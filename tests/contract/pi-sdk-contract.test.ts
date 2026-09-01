@@ -2,8 +2,11 @@
 // 真 pi（隔离 npm prefix）+ mock provider（不烧真实 API quota）。
 // 覆盖：runtime 工厂模式、bindExtensions（无头）、prompt/事件序列、
 // abort 中断、SessionManager 持久化与 list、newSession 替换。
+process.env.NO_PROXY = '127.0.0.1,localhost,::1';
+process.env.no_proxy = '127.0.0.1,localhost,::1';
+
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -20,6 +23,11 @@ let agentDir: string;
 let workspace: string;
 
 beforeAll(async () => {
+  for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy']) {
+    delete process.env[key];
+  }
+  process.env.NO_PROXY = '127.0.0.1,localhost,::1';
+  process.env.no_proxy = '127.0.0.1,localhost,::1';
   const { piPackageRoot } = piTestEnv();
   const entry = path.join(piPackageRoot, 'dist/index.js');
   sdk = (await import(pathToFileURL(entry).href)) as PiSdk;
@@ -33,10 +41,10 @@ beforeAll(async () => {
     setTimeout(() => reject(new Error('mock server timeout')), 10_000);
   });
 
-  agentDir = mkdtempSync(path.join(tmpdir(), 'pi-contract-agent-'));
-  workspace = mkdtempSync(path.join(tmpdir(), 'pi-contract-workspace-'));
-  // SessionManager.create(cwd) 的默认 sessionDir 走 getAgentDir()（读环境变量），
-  // 不设会把测试会话写进真实 ~/.pi/agent
+  const baseDir = path.join(process.cwd(), '.cache', 'contract-test');
+  mkdirSync(baseDir, { recursive: true });
+  agentDir = mkdtempSync(path.join(baseDir, 'agent-'));
+  workspace = mkdtempSync(path.join(baseDir, 'workspace-'));
   process.env.PI_CODING_AGENT_DIR = agentDir;
   writeFileSync(
     path.join(agentDir, 'models.json'),
@@ -61,6 +69,10 @@ beforeAll(async () => {
       },
     }),
   );
+  writeFileSync(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultProvider: 'mock', defaultModel: 'mock-1' }),
+  );
 });
 
 afterAll(() => {
@@ -71,15 +83,17 @@ function resolveFixture(name: string): string {
   return path.join(__dirname, '../fixtures', name);
 }
 
-// 与 electron/services/pi-runtime-api.ts 完全相同的 runtime 创建路径
 async function createRuntimeUnderTest() {
   const createFactory = async ({ cwd, sessionManager, sessionStartEvent }: never) => {
-    const services = await sdk.createAgentSessionServices({ cwd, agentDir });
+    const settingsManager = sdk.SettingsManager.create(cwd, agentDir, { projectTrusted: true });
+    const services = await sdk.createAgentSessionServices({ cwd, agentDir, settingsManager });
+    const model = services.modelRuntime.getModel('mock', 'mock-1');
     return {
       ...(await sdk.createAgentSessionFromServices({
         services,
         sessionManager,
         sessionStartEvent,
+        model,
       })),
       services,
       diagnostics: services.diagnostics,

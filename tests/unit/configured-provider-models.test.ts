@@ -1,5 +1,5 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -27,22 +27,51 @@ describe('configured provider model discovery', () => {
     }]);
   });
 
+  it('parses thinkingLevelMap from model directory or capabilities', () => {
+    expect(parseProviderModelDirectory({
+      data: [
+        {
+          id: 'model-with-map',
+          thinkingLevelMap: { off: null, xhigh: 'xhigh', max: 'max' },
+        },
+        {
+          id: 'model-with-snake-case',
+          capabilities: { thinking_level_map: { off: 'none', low: 'low' } },
+        },
+      ],
+    }, 'openai-completions')).toEqual([
+      {
+        id: 'model-with-map',
+        thinkingLevelMap: { off: null, xhigh: 'xhigh', max: 'max' },
+      },
+      {
+        id: 'model-with-snake-case',
+        thinkingLevelMap: { off: 'none', low: 'low' },
+      },
+    ]);
+  });
+
   it('preserves manual definitions and uses their provider defaults for new ids', () => {
     const existing = [{
       id: 'manual',
       name: 'Manual',
       reasoning: true,
+      thinkingLevelMap: { off: null, max: 'max' },
       input: ['text'],
       contextWindow: 400000,
       maxTokens: 32768,
       cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
     }];
-    expect(mergeDiscoveredProviderModels(existing, [{ id: 'new-model' }, { id: 'manual' }]))
+    expect(mergeDiscoveredProviderModels(existing, [
+      { id: 'new-model', thinkingLevelMap: { off: 'none' } },
+      { id: 'manual', thinkingLevelMap: { off: 'overwritten-attempt' } },
+    ]))
       .toEqual([
         {
           id: 'new-model',
           name: 'new-model',
           reasoning: true,
+          thinkingLevelMap: { off: 'none' },
           input: ['text'],
           contextWindow: 400000,
           maxTokens: 32768,
@@ -57,6 +86,210 @@ describe('configured provider model discovery', () => {
       [{ id: 'existing-without-context', reasoning: false }],
       [{ id: 'existing-without-context', contextWindow: 128000 }],
     )).toEqual([{ id: 'existing-without-context', reasoning: false, contextWindow: 128000 }]);
+  });
+
+  it('omits cost for discovered models when the template has no price', () => {
+    // 价格未知时不写 cost（pi 定义允许缺省）：前端显示占位，与真 0 区分
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'manual', reasoning: true }],
+      [{ id: 'manual' }, { id: 'new-model' }],
+    );
+    expect(merged.find((m) => m.id === 'new-model')).not.toHaveProperty('cost');
+    expect(merged.find((m) => m.id === 'manual')).not.toHaveProperty('cost');
+  });
+
+  it('backfills image input for known vision models when the directory is silent', () => {
+    // 目录未上报 input：按 pi 内置目录（官方能力声明）识别已知视觉模型
+    const catalog = new Map([
+      ['gemini-2-5-pro', { id: 'gemini-2.5-pro', input: ['text', 'image'], contextWindow: 1048576, maxTokens: 65536 }],
+    ]);
+    const merged = mergeDiscoveredProviderModels([], [{ id: 'gemini-2.5-pro' }, { id: 'qwen3-32b' }], catalog);
+    expect(merged.find((m) => m.id === 'gemini-2.5-pro'))
+      .toEqual(expect.objectContaining({ id: 'gemini-2.5-pro', input: ['text', 'image'], contextWindow: 1048576, maxTokens: 65536 }));
+    expect(merged.find((m) => m.id === 'qwen3-32b'))
+      .toEqual(expect.objectContaining({ id: 'qwen3-32b', input: ['text'] }));
+  });
+
+  it('respects directory-reported input over the profile table', () => {
+    // 目录显式 text：官方目录无数据时，服务端声明优先
+    const merged = mergeDiscoveredProviderModels([], [{ id: 'gemini-2.5-pro', input: ['text'] }]);
+    expect(merged[0]).toEqual(expect.objectContaining({ id: 'gemini-2.5-pro', input: ['text'] }));
+  });
+
+  it('prefers builtin catalog input over directory-reported text-only', () => {
+    // 网关目录错误声明 text-only，但 pi 内置官方目录声明多模态：以官方为准
+    const catalog = new Map([
+      ['gpt-5-6-sol', { id: 'gpt-5.6-sol', input: ['text', 'image'] }],
+    ]);
+    const merged = mergeDiscoveredProviderModels([], [{ id: 'gpt-5.6-sol', input: ['text'] }], catalog);
+    expect(merged[0]).toEqual(expect.objectContaining({ id: 'gpt-5.6-sol', input: ['text', 'image'] }));
+  });
+
+  it('keeps manually declared input for existing models', () => {
+    // 用户逐模型写过的 input（inputPinned）不被发现流程覆盖（与 reasoning 同策略）
+    const existing = [{
+      id: 'gemini-2.5-pro',
+      reasoning: true,
+      input: ['text'],
+      inputPinned: true,
+      contextWindow: 1048576,
+    }];
+    const merged = mergeDiscoveredProviderModels(existing, [{ id: 'gemini-2.5-pro', input: ['text', 'image'] }]);
+    expect(merged[0]).toEqual(expect.objectContaining({ id: 'gemini-2.5-pro', input: ['text'] }));
+  });
+
+  it('upgrades legacy text-only input to vision when directory or builtin catalog recognises it', () => {
+    // 历史版本一律写死 input: ['text'] 且无 pin 标记：视为陈旧缺省值，刷新时纠正
+    const catalog = new Map([
+      ['gemini-2-5-pro', { id: 'gemini-2.5-pro', input: ['text', 'image'], contextWindow: 1048576 }],
+    ]);
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'gemini-2.5-pro', reasoning: true, input: ['text'], contextWindow: 1048576 }],
+      [{ id: 'gemini-2.5-pro' }],
+      catalog,
+    );
+    expect(merged[0]).toEqual(expect.objectContaining({ input: ['text', 'image'] }));
+  });
+
+  it('upgrades legacy text-only input when directory wrongly reports text-only', () => {
+    // 网关目录也报 text-only 时，仍应以 pi 官方目录的多模态声明为准
+    const catalog = new Map([
+      ['gpt-5-6-sol', { id: 'gpt-5.6-sol', input: ['text', 'image'] }],
+    ]);
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'gpt-5.6-sol', reasoning: true, input: ['text'] }],
+      [{ id: 'gpt-5.6-sol', input: ['text'] }],
+      catalog,
+    );
+    expect(merged[0]).toEqual(expect.objectContaining({ input: ['text', 'image'] }));
+  });
+
+  it('refreshes stale legacy fallback context window and missing maxTokens', () => {
+    // 兜底 contextWindow（262144/128000）是历史缺省写入，用目录真实值替换
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'gateway-model', reasoning: true, input: ['text'], contextWindow: 262144 }],
+      [{ id: 'gateway-model', contextWindow: 1000000, maxTokens: 65536 }],
+    );
+    expect(merged[0]).toEqual(expect.objectContaining({ contextWindow: 1000000, maxTokens: 65536 }));
+  });
+
+  it('corrects historical wrong context window and max tokens from the builtin catalog', () => {
+    // 旧手写规格表写入的错值（claude-opus-4.8 ctx 200000/max 64000）在目录
+    // 沉默时由 pi 内置官方目录直接纠正；全 0 价格占位换官方价；纯文本升级多模态
+    const catalog = new Map([
+      ['claude-opus-4-8', {
+        id: 'claude-opus-4-8',
+        contextWindow: 1000000,
+        maxTokens: 128000,
+        input: ['text', 'image'],
+        cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+      }],
+    ]);
+    const merged = mergeDiscoveredProviderModels(
+      [{
+        id: 'claude-opus-4.8',
+        name: 'claude-opus-4.8',
+        reasoning: true,
+        input: ['text'],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200000,
+        maxTokens: 64000,
+      }],
+      [{ id: 'claude-opus-4.8' }],
+      catalog,
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual(expect.objectContaining({
+      id: 'claude-opus-4.8',
+      contextWindow: 1000000,
+      maxTokens: 128000,
+      input: ['text', 'image'],
+      cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
+    }));
+  });
+
+  it('aligns directory ids with stored ids across version separator styles', () => {
+    // 网关目录用横杠风格（claude-opus-4-8）、存量用点号风格（claude-opus-4.8）：
+    // 视为同一模型刷新元数据，保留存量 id，不产生重复条目
+    const catalog = new Map([
+      ['claude-opus-4-8', { id: 'claude-opus-4-8', contextWindow: 1000000, maxTokens: 128000 }],
+    ]);
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'claude-opus-4.8', reasoning: true, contextWindow: 200000, maxTokens: 64000 }],
+      [{ id: 'claude-opus-4-8' }],
+      catalog,
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual(expect.objectContaining({
+      id: 'claude-opus-4.8',
+      contextWindow: 1000000,
+      maxTokens: 128000,
+    }));
+  });
+
+  it('keeps pinned input while correcting other stale fields', () => {
+    // inputPinned 的模型 input 不动，但 ctx/maxTokens/价格仍按官方目录纠正
+    const catalog = new Map([
+      ['gpt-5-6-sol', {
+        id: 'gpt-5.6-sol',
+        contextWindow: 272000,
+        maxTokens: 128000,
+        input: ['text', 'image'],
+        cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25 },
+      }],
+    ]);
+    const merged = mergeDiscoveredProviderModels(
+      [{
+        id: 'gpt-5.6-sol',
+        reasoning: true,
+        input: ['text'],
+        inputPinned: true,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 400000,
+        maxTokens: 128000,
+      }],
+      [],
+      catalog,
+    );
+    expect(merged[0]).toEqual(expect.objectContaining({
+      input: ['text'],
+      inputPinned: true,
+      contextWindow: 272000,
+      cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25 },
+    }));
+  });
+
+  it('parses max output tokens across directory field variants', () => {
+    // OpenAI 风格 max_output_tokens / max_completion_tokens、OpenRouter 风格
+    // top_provider.max_completion_tokens（agentrouter 等兼容网关同构）
+    const detected = parseProviderModelDirectory({ data: [
+      { id: 'openai-style', max_output_tokens: 32768 },
+      { id: 'completion-style', max_completion_tokens: 8192 },
+      { id: 'openrouter-style', context_length: 262144, top_provider: { max_completion_tokens: 65536 } },
+      { id: 'no-metadata' },
+    ] }, 'openai-completions');
+    const byId = Object.fromEntries(detected.map((m) => [m.id, m]));
+    expect(byId['openai-style']).toEqual(expect.objectContaining({ maxTokens: 32768 }));
+    expect(byId['completion-style']).toEqual(expect.objectContaining({ maxTokens: 8192 }));
+    expect(byId['openrouter-style']).toEqual(expect.objectContaining({
+      contextWindow: 262144,
+      maxTokens: 65536,
+    }));
+    expect(byId['no-metadata']).not.toHaveProperty('maxTokens');
+  });
+
+  it('applies builtin catalog refresh to existing models missing from the directory', () => {
+    // 手动 modelIds 添加、目录未列出的旧模型同样享受内置目录识别（多模态/规格）
+    const catalog = new Map([
+      ['qwen3-vl-plus', { id: 'qwen3-vl-plus', input: ['text', 'image'], contextWindow: 131072 }],
+    ]);
+    const merged = mergeDiscoveredProviderModels(
+      [{ id: 'qwen3-vl-plus', reasoning: true, input: ['text'], contextWindow: 128000 }],
+      [{ id: 'other-model' }],
+      catalog,
+    );
+    expect(merged.find((m) => m.id === 'qwen3-vl-plus'))
+      .toEqual(expect.objectContaining({ input: ['text', 'image'], contextWindow: 131072 }));
   });
 
 
@@ -77,7 +310,7 @@ describe('configured provider model discovery', () => {
   });
 
   it('falls back to /v1/models for openai servers whose baseUrl lacks /v1 (vLLM style)', async () => {
-    const agentDir = await mkdtemp(path.join(tmpdir(), 'pi-provider-discovery-v1-'));
+    const agentDir = await mkdtemp(path.join(os.tmpdir(), 'pi-provider-discovery-v1-'));
     tempDirs.push(agentDir);
     const modelsPath = path.join(agentDir, 'models.json');
     await writeFile(modelsPath, JSON.stringify({
@@ -113,24 +346,105 @@ describe('configured provider model discovery', () => {
     expect(result).toMatchObject({ discovered: 1, added: 1, changed: true });
   });
 
-  it('throws the last candidate error when every directory candidate fails', async () => {
-    const agentDir = await mkdtemp(path.join(tmpdir(), 'pi-provider-discovery-err-'));
+  it('degrades to builtin catalog correction when every directory candidate fails', async () => {
+    // 目录不可达不再阻断刷新：存量错值仍被官方目录纠正并落盘，失败原因经
+    // warning 上报（key 无效/网关不开放 /models 等）
+    const agentDir = await mkdtemp(path.join(os.tmpdir(), 'pi-provider-discovery-err-'));
     tempDirs.push(agentDir);
     const modelsPath = path.join(agentDir, 'models.json');
     await writeFile(modelsPath, JSON.stringify({
-      providers: { down: { baseUrl: 'http://127.0.0.1:8000', api: 'openai-completions', models: [] } },
+      providers: {
+        down: {
+          baseUrl: 'http://127.0.0.1:8000',
+          api: 'openai-completions',
+          models: [{
+            id: 'claude-opus-4.8',
+            reasoning: true,
+            input: ['text'],
+            contextWindow: 200000,
+            maxTokens: 64000,
+          }],
+        },
+      },
     }));
-    await expect(syncConfiguredProviderModels({
+    const result = await syncConfiguredProviderModels({
       agentDir,
       providerId: 'down',
       api: 'openai-completions',
       auth: { apiKey: 'dummy' },
       fetchImpl: async () => new Response('{}', { status: 403 }),
-    })).rejects.toThrow(/HTTP 403/);
+      catalog: new Map([
+        ['claude-opus-4-8', { id: 'claude-opus-4-8', contextWindow: 1000000, maxTokens: 128000 }],
+      ]),
+    });
+    expect(result?.warning).toMatch(/HTTP 403/);
+    expect(result).toMatchObject({ discovered: 0, added: 0, changed: true });
+    const saved = JSON.parse(await readFile(modelsPath, 'utf8')) as {
+      providers: { down: { models: Array<{ id: string; contextWindow: number; maxTokens: number }> } };
+    };
+    expect(saved.providers.down.models[0]).toMatchObject({
+      id: 'claude-opus-4.8',
+      contextWindow: 1000000,
+      maxTokens: 128000,
+    });
+  });
+
+  it('treats a 200 HTML body as a failed candidate instead of throwing', async () => {
+    // 代理/网关错误页返回 200 + HTML（"Unexpected token '<'"）时按候选失败
+    // 处理：继续试下一个候选路径，全部失败降级官方目录纠正，不抛解析错误
+    const agentDir = await mkdtemp(path.join(os.tmpdir(), 'pi-provider-discovery-html-'));
+    tempDirs.push(agentDir);
+    const modelsPath = path.join(agentDir, 'models.json');
+    await writeFile(modelsPath, JSON.stringify({
+      providers: {
+        relay: {
+          baseUrl: 'http://relay.example',
+          api: 'openai-completions',
+          models: [{
+            id: 'claude-opus-4.8',
+            reasoning: true,
+            input: ['text'],
+            contextWindow: 200000,
+            maxTokens: 64000,
+          }],
+        },
+      },
+    }));
+    const requestedUrls: string[] = [];
+    const result = await syncConfiguredProviderModels({
+      agentDir,
+      providerId: 'relay',
+      api: 'openai-completions',
+      auth: { apiKey: 'dummy' },
+      fetchImpl: async (input) => {
+        requestedUrls.push(String(input));
+        return new Response('<!doctype html><html><body>gateway error</body></html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        });
+      },
+      catalog: new Map([
+        ['claude-opus-4-8', { id: 'claude-opus-4-8', contextWindow: 1000000, maxTokens: 128000 }],
+      ]),
+    });
+    // 两个候选路径（根 + /v1）都试过，不中断
+    expect(requestedUrls).toEqual([
+      'http://relay.example/models',
+      'http://relay.example/v1/models',
+    ]);
+    expect(result?.warning).toMatch(/non-JSON/);
+    expect(result).toMatchObject({ discovered: 0, added: 0, changed: true });
+    const saved = JSON.parse(await readFile(modelsPath, 'utf8')) as {
+      providers: { relay: { models: Array<{ id: string; contextWindow: number }> } };
+    };
+    expect(saved.providers.relay.models[0]).toMatchObject({
+      id: 'claude-opus-4.8',
+      contextWindow: 1000000,
+    });
   });
 
   it('requests /models with resolved auth and writes discovered ids to models.json', async () => {
-    const agentDir = await mkdtemp(path.join(tmpdir(), 'pi-provider-discovery-'));
+    const agentDir = await mkdtemp(path.join(os.tmpdir(), 'pi-provider-discovery-'));
     tempDirs.push(agentDir);
     const modelsPath = path.join(agentDir, 'models.json');
     await writeFile(modelsPath, JSON.stringify({
@@ -144,6 +458,7 @@ describe('configured provider model discovery', () => {
     }));
     let requestedUrl = '';
     let authorization = '';
+    let userAgent = '';
     const result = await syncConfiguredProviderModels({
       agentDir,
       providerId: 'relay',
@@ -152,6 +467,7 @@ describe('configured provider model discovery', () => {
       fetchImpl: async (input, init) => {
         requestedUrl = String(input);
         authorization = new Headers(init?.headers).get('authorization') ?? '';
+        userAgent = new Headers(init?.headers).get('user-agent') ?? '';
         return new Response(JSON.stringify({ data: [{ id: 'manual' }, { id: 'remote' }] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -160,6 +476,9 @@ describe('configured provider model discovery', () => {
     });
     expect(requestedUrl).toBe('https://relay.example/v1/models');
     expect(authorization).toBe('Bearer secret');
+    // 目录请求带 pi 同款 UA：agentrouter 等网关按客户端白名单拦截未知 UA
+    expect(userAgent).toMatch(/^pi \(.+; .+\)$/);
+    expect(userAgent).toBe(`pi (${process.platform} ${os.release()}; ${process.arch})`);
     expect(result).toMatchObject({ discovered: 2, added: 1, changed: true });
     const saved = JSON.parse(await readFile(modelsPath, 'utf8')) as {
       providers: { relay: { models: Array<{ id: string }> } };

@@ -38,11 +38,11 @@ describe('pi-detector 路径逻辑', () => {
     expect(needsWindowsCommandShell('/usr/local/bin/npm', 'darwin')).toBe(false);
   });
 
-  it.skipIf(process.platform !== 'win32')('Windows 可实际执行 PATH 中的 npm.cmd', () => {
-    expect(detectNpm()).toMatchObject({ found: true });
+  it.skipIf(process.platform !== 'win32')('Windows 可实际执行 PATH 中的 npm.cmd', async () => {
+    await expect(detectNpm()).resolves.toMatchObject({ found: true });
   });
 
-  it('Windows npm 的 pi.cmd 映射到全局包内真实 CLI', () => {
+  it('Windows npm 的 pi.cmd 映射到全局包内真实 CLI', async () => {
     const prefix = path.join(root, 'windows-prefix');
     const globalRoot = path.join(prefix, 'node_modules');
     const windowsPkgDir = path.join(globalRoot, '@earendil-works/pi-coding-agent');
@@ -63,7 +63,7 @@ describe('pi-detector 路径逻辑', () => {
     process.env.PI_DESKTOP_USER_PATH = prefix;
     _resetUserPathCache();
     try {
-      expect(detectPi({ found: true, globalRoot: realpathSync(globalRoot) }, 'win32')).toMatchObject({
+      expect(await detectPi({ found: true, globalRoot: realpathSync(globalRoot) }, 'win32')).toMatchObject({
         found: true,
         binPath: path.join(prefix, 'pi.cmd'),
         realBinPath: realpathSync(cliPath),
@@ -79,7 +79,7 @@ describe('pi-detector 路径逻辑', () => {
     }
   });
 
-  it('Windows 不执行 npm prefix 外的同名 cmd，直接使用已验证的全局包', () => {
+  it('Windows 不执行 npm prefix 外的同名 cmd，直接使用已验证的全局包', async () => {
     const prefix = path.join(root, 'windows-prefix');
     const globalRoot = path.join(prefix, 'node_modules');
     const unrelatedBin = path.join(root, 'unrelated-bin');
@@ -90,7 +90,7 @@ describe('pi-detector 路径逻辑', () => {
     process.env.PI_DESKTOP_USER_PATH = unrelatedBin;
     _resetUserPathCache();
     try {
-      expect(detectPi({ found: true, globalRoot: realpathSync(globalRoot) }, 'win32')).toMatchObject({
+      expect(await detectPi({ found: true, globalRoot: realpathSync(globalRoot) }, 'win32')).toMatchObject({
         found: true,
         binPath: undefined,
         realBinPath: realpathSync(path.join(globalRoot, '@earendil-works/pi-coding-agent/dist/cli.js')),
@@ -138,5 +138,71 @@ describe('pi-detector 路径逻辑', () => {
 
   it('显式 package root 拒绝非 pi package', () => {
     expect(detectPiPackageRoot(root, { found: true })).toBeNull();
+  });
+});
+
+describe('PI_DESKTOP_NPM_ROOT 测试钩子仅开发模式生效', () => {
+  // 用假 npm shim 隔离真实环境：--version 正常返回，root -g 输出 realRoot。
+  // 生产模式必须忽略钩子值真实执行 root -g；开发模式钩子值直接替代 root -g。
+  it.skipIf(process.platform === 'win32')('生产忽略钩子真实执行，开发模式用钩子值替代', async () => {
+    const prefix = path.join(root, 'npm-root-gate');
+    const fakeBin = path.join(prefix, 'bin');
+    const overrideRoot = path.join(prefix, 'override-root');
+    const realRoot = path.join(prefix, 'real-root');
+    mkdirSync(fakeBin, { recursive: true });
+    mkdirSync(overrideRoot, { recursive: true });
+    mkdirSync(realRoot, { recursive: true });
+    writeFileSync(
+      path.join(fakeBin, 'npm'),
+      `#!/bin/sh\ncase "$1" in\n  --version) echo 10.0.0 ;;\n  root) printf '%s' '${realRoot}' ;;\nesac\n`,
+      { mode: 0o755 },
+    );
+
+    const saved = {
+      NODE_ENV: process.env.NODE_ENV,
+      VITE_DEV_SERVER_URL: process.env.VITE_DEV_SERVER_URL,
+      PI_DESKTOP_E2E: process.env.PI_DESKTOP_E2E,
+      PI_DESKTOP_NPM_ROOT: process.env.PI_DESKTOP_NPM_ROOT,
+      PI_DESKTOP_USER_PATH: process.env.PI_DESKTOP_USER_PATH,
+    };
+    const savedDefaultApp = process.defaultApp;
+    // defaultApp 在 @types/node 上是只读属性，经可写形状断言清空/还原
+    const setDefaultApp = (value: boolean | undefined) => {
+      (process as { defaultApp?: boolean }).defaultApp = value;
+    };
+    const restore = (key: keyof typeof saved) => {
+      const value = saved[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    };
+
+    try {
+      // 生产模式：清空全部开发指示量，钩子必须被忽略
+      process.env.NODE_ENV = 'production';
+      delete process.env.VITE_DEV_SERVER_URL;
+      delete process.env.PI_DESKTOP_E2E;
+      setDefaultApp(undefined);
+      process.env.PI_DESKTOP_NPM_ROOT = overrideRoot;
+      process.env.PI_DESKTOP_USER_PATH = fakeBin;
+      _resetUserPathCache();
+
+      const prod = await detectNpm();
+      expect(prod).toMatchObject({ found: true, version: '10.0.0' });
+      expect(prod.globalRoot).toBe(realpathSync(realRoot));
+
+      // 开发模式：VITE_DEV_SERVER_URL 存在时钩子生效，跳过真实 root -g
+      process.env.VITE_DEV_SERVER_URL = 'http://localhost:5173';
+      const dev = await detectNpm();
+      expect(dev).toMatchObject({ found: true, version: '10.0.0' });
+      expect(dev.globalRoot).toBe(realpathSync(overrideRoot));
+    } finally {
+      restore('NODE_ENV');
+      restore('VITE_DEV_SERVER_URL');
+      restore('PI_DESKTOP_E2E');
+      restore('PI_DESKTOP_NPM_ROOT');
+      restore('PI_DESKTOP_USER_PATH');
+      setDefaultApp(savedDefaultApp);
+      _resetUserPathCache();
+    }
   });
 });

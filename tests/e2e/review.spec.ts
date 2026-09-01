@@ -162,19 +162,35 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
   const panel = page.getByTestId('review-panel');
   await expect(panel).toBeVisible();
 
-  // 评审态下标题栏开关同样能收起面板
-  await page.getByTestId('workspace-toggle').click();
+  // 评审态下标题栏开关同样能收起面板；窄窗口回退 overlay 时面板悬浮层会盖住标题栏按钮，
+  // 此时走面板自身的关闭按钮（两者都是「评审态可收起」的合法路径）
+  if ((await panel.getAttribute('data-mode')) === 'overlay') {
+    await panel.getByTestId('workspace-close').click();
+  } else {
+    await page.getByTestId('workspace-toggle').click();
+  }
   await expect(panel).toBeHidden();
   await openReview(page);
   await expect(panel).toBeVisible();
 
-  // 文件清单：e2e-edit-target.txt，+1/-1
-  const fileRow = panel.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' });
-  await expect(fileRow).toBeVisible({ timeout: 30_000 });
-  await expect(fileRow.locator('.review-stat-add')).toHaveText('+1');
-  await expect(fileRow.locator('.review-stat-del')).toHaveText('-1');
+  // 本会话改动与工作区改动两分组均出现
+  const sessionGroup = panel.getByTestId('review-group-session');
+  const workspaceGroup = panel.getByTestId('review-group-workspace');
+  await expect(sessionGroup).toBeVisible({ timeout: 30_000 });
+  await expect(workspaceGroup).toBeVisible();
 
-  // 第一个文件默认选中，diff 活视图渲染（删除红 / 新增绿）
+  const sessionFile = sessionGroup.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' });
+  await expect(sessionFile).toBeVisible();
+  await expect(sessionFile.getByTestId('review-file-scope')).toHaveText(/会话|Session/);
+  await expect(sessionFile.getByTestId('revert-file')).toHaveCount(0);
+
+  const workspaceFile = workspaceGroup.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' });
+  await expect(workspaceFile).toBeVisible();
+  await expect(workspaceFile.locator('.review-stat-add')).toHaveText('+1');
+  await expect(workspaceFile.locator('.review-stat-del')).toHaveText('-1');
+
+  // 点击工作区文件，diff 活视图渲染（删除红 / 新增绿）
+  await workspaceFile.locator('.review-file-main').click();
   const diff = panel.getByTestId('review-diff');
   await expect(diff).toBeVisible();
   await expect(diff.locator('.diff-del')).toContainText('alpha');
@@ -183,12 +199,13 @@ test('git 仓库：改动文件列表 + diff 渲染 + 文件级回滚后磁盘�
   await panel.getByTestId('review-toggle-mode').click();
   await expect(panel.getByTestId('diff-unified')).toBeVisible();
 
-  // 文件级回滚：确认对话框 → git apply -R → 磁盘复原、清单清空
-  await fileRow.getByTestId('revert-file').click();
+  // 文件级回滚：确认对话框 → git apply -R → 磁盘复原、工作区清单清空（会话历史记录保留）
+  await workspaceFile.getByTestId('revert-file').click();
   await expect(page.getByTestId('review-confirm')).toBeVisible();
   await page.getByTestId('review-confirm-ok').click();
 
-  await expect(panel.getByTestId('review-file')).toHaveCount(0, { timeout: 30_000 });
+  await expect(workspaceGroup.getByTestId('review-file')).toHaveCount(0, { timeout: 30_000 });
+  await expect(sessionGroup.getByTestId('review-file')).toHaveCount(1);
   const content = await readFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'utf-8');
   expect(content).toBe('alpha\ngamma\n');
 });
@@ -218,7 +235,7 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   const app = await launchElectronApp(launchOptions(repoWorkspace));
   const page = await app.firstWindow();
   await waitSessionReady(page);
-  await page.setViewportSize({ width: 1440, height: 800 });
+  await page.setViewportSize({ width: 1600, height: 800 });
 
   await page.getByTestId('workspace-toggle').click();
   const panel = page.getByTestId('review-panel');
@@ -228,6 +245,8 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await expect(treeToggle).toBeVisible();
   await expect(treeToggle).toHaveAttribute('aria-expanded', 'true');
   await expect(treeToggle.locator('span')).toHaveText(/\d+/);
+  // 默认 docked：聊天列与面板并排
+  await expect(panel).toHaveAttribute('data-mode', 'docked');
   await page.screenshot({ path: 'output/playwright/workspace-tree-overlay.png', fullPage: false });
 
   // Long tool output must scroll inside the chat column and never push the panel beyond the viewport.
@@ -254,25 +273,10 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await expect.poll(async () => (await panel.boundingBox())!.width).toBeLessThan(initialWidth - 40);
   await expect.poll(async () => (await page.locator('.chat-column').boundingBox())!.width).toBeGreaterThan(initialChatWidth + 40);
 
-  // 过窄窗口自动切成覆盖层工作台，不要求用户手动拖宽（≥960px 时停靠并排）。
-  await page.setViewportSize({ width: 900, height: 800 });
-  await expect(handle).toBeHidden();
-  await expect.poll(async () => {
-    const panelWidth = (await panel.boundingBox())!.width;
-    const pageWidth = (await page.locator('.chat-page').boundingBox())!.width;
-    return Math.abs(panelWidth - pageWidth);
-  }).toBeLessThan(2);
-
-  // 拖出覆盖层断点后又回到停靠模式
-  await page.setViewportSize({ width: 1440, height: 800 });
-  await expect(handle).toBeVisible();
-  // 覆盖层期间宽度被钳到最小，拖宽后再继续树/预览断言
-  const dockedBox = await handle.boundingBox();
-  await page.mouse.move(dockedBox!.x + 4, dockedBox!.y + 100);
-  await page.mouse.down();
-  await page.mouse.move(dockedBox!.x - 300, dockedBox!.y + 100);
-  await page.mouse.up();
-  await expect.poll(async () => (await panel.boundingBox())!.width).toBeGreaterThan(500);
+  // Switch to overlay mode and verify overlay behavior
+  const modeToggle = panel.getByTestId('workspace-mode-toggle');
+  await modeToggle.click();
+  await expect(panel).toHaveAttribute('data-mode', 'overlay');
 
   await panel.getByTestId('workspace-directory').filter({ hasText: 'src' }).click();
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.ts' }).click();
@@ -311,6 +315,10 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await panel.getByTestId('workspace-files-tab').click();
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.png' }).click();
   await expect(panel.getByTestId('workspace-image-preview').locator('img')).toBeVisible();
+  await panel.getByTestId('workspace-image-preview').locator('img').click();
+  await expect(page.getByTestId('image-lightbox')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('image-lightbox')).toHaveCount(0);
   await expect(panel.getByTestId('workspace-file-tab')).toHaveCount(2);
   await expect(panel.getByTestId('workspace-close-all')).toBeVisible();
   await panel.getByTestId('workspace-close-all').click();
@@ -357,11 +365,12 @@ test('右侧工作台：Markdown、PDF、Word、Excel 和 CSV 使用专用预览
   const canvas = pdf.locator('canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await expect(pdf).toContainText('Page 1 of 2', { timeout: 20_000 });
-  await expect.poll(async () => canvas.evaluate((element) => element.width * element.height)).toBeGreaterThan(100_000);
+  await expect.poll(async () => canvas.evaluate((element) => (element as HTMLCanvasElement).width * (element as HTMLCanvasElement).height)).toBeGreaterThan(100_000);
   const nonWhitePixels = await canvas.evaluate((element) => {
-    const context = element.getContext('2d');
+    const canvasElement = element as HTMLCanvasElement;
+    const context = canvasElement.getContext('2d');
     if (!context) return 0;
-    const pixels = context.getImageData(0, 0, element.width, element.height).data;
+    const pixels = context.getImageData(0, 0, canvasElement.width, canvasElement.height).data;
     let count = 0;
     for (let index = 0; index < pixels.length; index += 400) {
       if (pixels[index + 3] > 0 && (pixels[index] < 245 || pixels[index + 1] < 245 || pixels[index + 2] < 245)) count += 1;
@@ -452,6 +461,41 @@ test('历史会话恢复后仍可预览工作区外的工具文件', async ({ la
   await restoredApp.close();
 });
 
+test('重新进入历史会话：评审面板仍能展示该会话的文件改动与 diff', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await runTool(page, 'USE_TOOL_EDIT history-diff');
+  await app.close();
+
+  const restoredApp = await launchElectronApp(launchOptions(repoWorkspace));
+  const restoredPage = await restoredApp.firstWindow();
+  await waitSessionReady(restoredPage);
+
+  await restoredPage.locator('.sidebar-session').filter({ hasText: 'USE_TOOL_EDIT history-diff' }).first().click();
+  await expect(restoredPage.getByTestId('turn-fold-toggle')).toBeVisible({ timeout: 30_000 });
+
+  await openReview(restoredPage);
+  const panel = restoredPage.getByTestId('review-panel');
+  await expect(panel).toBeVisible();
+
+  const sessionGroup = panel.getByTestId('review-group-session');
+  await expect(sessionGroup).toBeVisible();
+  const fileRow = sessionGroup.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' });
+  await expect(fileRow).toBeVisible();
+  await expect(fileRow.getByTestId('review-file-scope')).toHaveText(/会话|Session/);
+  await expect(fileRow.getByTestId('revert-file')).toHaveCount(0);
+
+  await fileRow.locator('.review-file-main').click();
+  const toolDiff = panel.getByTestId('review-tool-diff');
+  await expect(toolDiff).toBeVisible();
+  await expect(toolDiff.locator('.diff-del')).toContainText('alpha');
+  await expect(toolDiff.locator('.diff-add')).toContainText('beta');
+
+  await restoredApp.close();
+});
+
 test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文件删除', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions(repoWorkspace));
   const page = await app.firstWindow();
@@ -462,7 +506,8 @@ test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文�
 
   await openReview(page);
   const panel = page.getByTestId('review-panel');
-  const fileRow = panel.getByTestId('review-file').filter({ hasText: 'e2e-new-file.txt' });
+  const workspaceGroup = panel.getByTestId('review-group-workspace');
+  const fileRow = workspaceGroup.getByTestId('review-file').filter({ hasText: 'e2e-new-file.txt' });
   await expect(fileRow).toBeVisible({ timeout: 30_000 });
   await expect(fileRow.locator('.review-stat-add')).toHaveText('+1');
 
@@ -474,7 +519,7 @@ test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文�
   // 回滚 = 删除新文件
   await fileRow.getByTestId('revert-file').click();
   await page.getByTestId('review-confirm-ok').click();
-  await expect(panel.getByTestId('review-file')).toHaveCount(0, { timeout: 30_000 });
+  await expect(workspaceGroup.getByTestId('review-file').filter({ hasText: 'e2e-new-file.txt' })).toHaveCount(0, { timeout: 30_000 });
   expect(existsSync(path.join(repoWorkspace, 'e2e-new-file.txt'))).toBe(false);
 });
 
@@ -490,12 +535,13 @@ test('非 Git 目录：新增/修改/删除进入评审并可回滚', async ({ l
   await openReview(page);
   const panel = page.getByTestId('review-panel');
   await expect(panel.getByTestId('review-fallback')).toHaveCount(0);
-  await expect(panel.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' })).toBeVisible({ timeout: 30_000 });
-  await expect(panel.getByTestId('review-file').filter({ hasText: 'plain-new.txt' })).toBeVisible();
-  await expect(panel.getByTestId('review-file').filter({ hasText: 'delete-me.txt' })).toBeVisible();
+  const workspaceGroup = panel.getByTestId('review-group-workspace');
+  await expect(workspaceGroup.getByTestId('review-file').filter({ hasText: 'e2e-edit-target.txt' })).toBeVisible({ timeout: 30_000 });
+  await expect(workspaceGroup.getByTestId('review-file').filter({ hasText: 'plain-new.txt' })).toBeVisible();
+  await expect(workspaceGroup.getByTestId('review-file').filter({ hasText: 'delete-me.txt' })).toBeVisible();
 
   for (const name of ['e2e-edit-target.txt', 'plain-new.txt', 'delete-me.txt']) {
-    const row = panel.getByTestId('review-file').filter({ hasText: name });
+    const row = workspaceGroup.getByTestId('review-file').filter({ hasText: name });
     await row.getByTestId('revert-file').click();
     await page.getByTestId('review-confirm-ok').click();
     await expect(row).toHaveCount(0, { timeout: 15_000 });
@@ -503,4 +549,182 @@ test('非 Git 目录：新增/修改/删除进入评审并可回滚', async ({ l
   await expect(readFile(path.join(plainWorkspace, 'e2e-edit-target.txt'), 'utf8')).resolves.toBe('alpha\ngamma\n');
   expect(existsSync(path.join(plainWorkspace, 'plain-new.txt'))).toBe(false);
   await expect(readFile(path.join(plainWorkspace, 'delete-me.txt'), 'utf8')).resolves.toBe('remove me\n');
+});
+
+test('工作台展开模式：默认 docked 窗口向右扩大 + 窄窗口回退 overlay + 模式切换与持久化', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  const getWindowWidth = () =>
+    app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds().width);
+  // 窗口移到所在显示器左缘，保证右侧有充足扩展空间（宽度断言才有确定性）
+  await app.evaluate(({ BrowserWindow, screen }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    const area = screen.getDisplayMatching(win.getBounds()).workArea;
+    win.setBounds({ x: area.x, y: area.y + 40, width: 1440, height: 800 });
+  });
+
+  // 1. 默认 docked：窗口向右加宽 ≈ 面板宽，聊天列保持展开前像素宽
+  const initialChatBox = await page.locator('.chat-column').boundingBox();
+  expect(initialChatBox).not.toBeNull();
+  const initialWindowWidth = await getWindowWidth();
+  // 展开前量出屏幕右缘剩余空间：扩窗会被后端 clamp 到该值（CI 小分辨率屏幕上必然发生），
+  // 断言用 clamp 后的期望而非无条件等于面板宽。
+  const headroom = await app.evaluate(({ BrowserWindow, screen }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    const bounds = win.getBounds();
+    const area = screen.getDisplayMatching(bounds).workArea;
+    return Math.max(0, area.x + area.width - (bounds.x + bounds.width));
+  });
+
+  await page.getByTestId('workspace-toggle').click();
+  const panel = page.getByTestId('review-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel).toHaveAttribute('data-mode', 'docked');
+  await expect(panel).toHaveAttribute('data-mode-preference', 'docked');
+
+  await expect.poll(getWindowWidth).toBeGreaterThan(initialWindowWidth + Math.min(100, Math.max(0, headroom - 4)));
+  // 加宽量 == min(面板像素宽, 右缘剩余空间)（窗口加宽动画与面板滑入动画结束后断言）
+  await expect.poll(async () => {
+    const box = await panel.boundingBox();
+    const currentWindowWidth = await getWindowWidth();
+    const applied = currentWindowWidth - initialWindowWidth;
+    return box ? Math.abs(applied - Math.min(box.width, headroom)) : Number.POSITIVE_INFINITY;
+  }).toBeLessThan(4);
+  // 聊天列自适应占满左侧区域，保证舒适宽度
+  const dockedChatBox = await page.locator('.chat-column').boundingBox();
+  expect(dockedChatBox).not.toBeNull();
+  expect(dockedChatBox!.width).toBeGreaterThanOrEqual(560 - 2);
+
+  // 2. docked 下 Esc 只收目录树，不收面板
+  const treeToggle = panel.getByTestId('workspace-tree-toggle');
+  await expect(treeToggle).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Escape');
+  await expect(treeToggle).toHaveAttribute('aria-expanded', 'false');
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeVisible();
+
+  // 3. 超窄窗口：显式 docked 也回退 overlay，避免面板被压成细条
+  await page.setViewportSize({ width: 700, height: 800 });
+  await expect(panel).toHaveAttribute('data-mode', 'overlay');
+  await expect(panel).toHaveAttribute('data-mode-preference', 'docked');
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await expect(panel).toHaveAttribute('data-mode', 'docked');
+
+  // 4. 模式切换按钮：docked -> overlay -> auto -> docked
+  const modeToggle = panel.getByTestId('workspace-mode-toggle');
+  await expect(modeToggle).toBeVisible();
+
+  // 切换到 overlay：窗口缩回原宽，聊天列恢复，遮罩出现，点遮罩收面板
+  await modeToggle.click();
+  await expect(panel).toHaveAttribute('data-mode', 'overlay');
+  await expect(panel).toHaveAttribute('data-mode-preference', 'overlay');
+  await expect.poll(getWindowWidth).toBe(initialWindowWidth);
+  const overlayChatBox = await page.locator('.chat-column').boundingBox();
+  expect(overlayChatBox).not.toBeNull();
+  expect(Math.abs(overlayChatBox!.width - initialChatBox!.width)).toBeLessThan(2);
+  expect(Math.abs(overlayChatBox!.x - initialChatBox!.x)).toBeLessThan(2);
+  const backdrop = page.getByTestId('workspace-backdrop');
+  await expect(backdrop).toBeVisible();
+  await backdrop.click({ position: { x: 50, y: 50 } });
+  await expect(panel).toBeHidden();
+
+  // 5. auto 模式：标准窗口下默认 docked 展开，超窄窗口回退 overlay
+  await page.getByTestId('workspace-toggle').click();
+  await expect(panel).toBeVisible();
+  await modeToggle.click();
+  await expect(panel).toHaveAttribute('data-mode-preference', 'auto');
+  await expect(panel).toHaveAttribute('data-mode', 'docked');
+  await page.setViewportSize({ width: 700, height: 800 });
+  await expect(panel).toHaveAttribute('data-mode', 'overlay');
+  await page.setViewportSize({ width: 1800, height: 800 });
+  await expect(panel).toHaveAttribute('data-mode', 'docked');
+  const wideChatBox = await page.locator('.chat-column').boundingBox();
+  expect(wideChatBox).not.toBeNull();
+  expect(wideChatBox!.width).toBeGreaterThanOrEqual(560);
+
+  // 6. 双击调整手柄也可切换模式，偏好持久化到 localStorage（字符串表达式求值，避免在 node 侧 tsconfig 引用 DOM 类型）
+  const handle = panel.getByTestId('workspace-resize-handle');
+  await handle.dblclick();
+  await expect(panel).toHaveAttribute('data-mode-preference', 'docked');
+  await expect(panel).toHaveAttribute('data-mode', 'docked');
+  await expect
+    .poll(() => page.evaluate("window.localStorage.getItem('pi-desktop.workspace-panel-mode')"))
+    .toBe('docked');
+});
+
+test('文件区内部排版：目录树与预览并排无遮挡 + 空态可见 + 代码横向滚动 + 图片容器约束', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+  await page.setViewportSize({ width: 1600, height: 800 });
+
+  // 打开工作台
+  await page.getByTestId('workspace-toggle').click();
+  const panel = page.getByTestId('review-panel');
+  await expect(panel).toBeVisible();
+
+  // 1. 宽面板下：目录树与预览区并排，预览区左缘 >= 目录树右缘（无重叠遮挡）
+  const tree = panel.getByTestId('workspace-tree');
+  const preview = panel.getByTestId('workspace-preview');
+  await expect(tree).toBeVisible();
+  await expect(preview).toBeVisible();
+
+  const empty = panel.locator('.workspace-empty');
+  await expect(empty).toBeVisible();
+  await expect(empty).toContainText(/Select a file|选择文件/);
+
+  await expect.poll(async () => {
+    const treeBox = await tree.boundingBox();
+    const previewBox = await preview.boundingBox();
+    if (!treeBox || !previewBox) return false;
+    return previewBox.x >= treeBox.x + treeBox.width - 2;
+  }).toBe(true);
+
+  // 2. 空态文字完整位于预览区内，未被目录树覆盖
+  await expect.poll(async () => {
+    const treeBox = await tree.boundingBox();
+    const emptyBox = await empty.boundingBox();
+    if (!treeBox || !emptyBox) return false;
+    return emptyBox.x >= treeBox.x + treeBox.width - 2;
+  }).toBe(true);
+
+  // 3. 打开含超长行的代码文件
+  await panel.getByTestId('workspace-directory').filter({ hasText: 'src' }).click();
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.ts' }).click();
+  const textPreview = panel.getByTestId('workspace-text-preview');
+  await expect(textPreview).toBeVisible();
+
+  // 关闭自动换行后：代码容器出现横向可滚动能力且内容不裁切
+  const wrapBtn = panel.getByTestId('workspace-toggle-wrap');
+  await expect(wrapBtn).toHaveAttribute('aria-pressed', 'true');
+  await wrapBtn.click();
+  await expect(wrapBtn).toHaveAttribute('aria-pressed', 'false');
+  const isScrollableX = await panel.locator('.workspace-file-content').evaluate((el) => el.scrollWidth > el.clientWidth);
+  expect(isScrollableX).toBe(true);
+
+  // 开启自动换行后：行内换行生效
+  await wrapBtn.click();
+  await expect(wrapBtn).toHaveAttribute('aria-pressed', 'true');
+
+  // 4. 打开图片文件：图片高度受容器约束，不超过面板内容区
+  await panel.getByTestId('workspace-tree-toggle').click();
+  await panel.getByTestId('workspace-file').filter({ hasText: 'preview.png' }).click();
+  const imgPreview = panel.getByTestId('workspace-image-preview');
+  await expect(imgPreview).toBeVisible();
+  const img = imgPreview.locator('img');
+  await expect(img).toBeVisible();
+  const imgBox = await img.boundingBox();
+  const contentBox = await panel.locator('.workspace-file-content').boundingBox();
+  expect(imgBox).not.toBeNull();
+  expect(contentBox).not.toBeNull();
+  expect(imgBox!.height).toBeLessThanOrEqual(contentBox!.height + 2);
+
+  // 5. 树展开/收起切换
+  const treeToggle = panel.getByTestId('workspace-tree-toggle');
+  await treeToggle.click();
+  await expect(tree).toBeVisible();
+  await treeToggle.click();
+  await expect(tree).toBeHidden();
 });

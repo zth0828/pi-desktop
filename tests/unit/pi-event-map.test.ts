@@ -7,7 +7,7 @@ const events = recorded as unknown as AgentSessionEvent[];
 
 describe('pi-event-map（录制 fixture 回放，pi 0.83.x / 0.84.x）', () => {
   it('关键事件一个不漏地映射', () => {
-    const mapped = events.map(mapPiSessionEvent);
+    const mapped = events.map((e) => mapPiSessionEvent(e));
     const types = mapped.filter(Boolean).map((e) => e!.type);
 
     expect(types).toContain('run.started');
@@ -21,19 +21,19 @@ describe('pi-event-map（录制 fixture 回放，pi 0.83.x / 0.84.x）', () => {
 
   it('tool.execution 事件携带 toolCallId/toolName/args/result/isError', () => {
     const started = events
-      .map(mapPiSessionEvent)
+      .map((e) => mapPiSessionEvent(e))
       .find((e) => e?.type === 'tool.execution.started');
     expect(started).toMatchObject({ toolCallId: 'call_mock_1', toolName: 'ls', args: { path: '.' } });
 
     const completed = events
-      .map(mapPiSessionEvent)
+      .map((e) => mapPiSessionEvent(e))
       .find((e) => e?.type === 'tool.execution.completed');
     expect(completed).toMatchObject({ toolCallId: 'call_mock_1', toolName: 'ls', isError: false });
   });
 
   it('assistant.partial 携带完整 partial 消息（替换式渲染）', () => {
     const partials = events
-      .map(mapPiSessionEvent)
+      .map((e) => mapPiSessionEvent(e))
       .filter((e) => e?.type === 'assistant.partial');
     expect(partials.length).toBeGreaterThan(0);
     for (const p of partials) {
@@ -128,6 +128,54 @@ describe('pi-event-map（录制 fixture 回放，pi 0.83.x / 0.84.x）', () => {
       willRetry: false,
       message: 'Compaction failed: boom',
     });
+  });
+
+  it('未知事件类型上报 onDrop（unknown-type）并返回 null', () => {
+    const drops: Array<[string, string]> = [];
+    const onDrop = (reason: string, rawType: string) => drops.push([reason, rawType]);
+    expect(mapPiSessionEvent({ type: 'brand_new_event', payload: {} }, onDrop)).toBeNull();
+    expect(drops).toEqual([['unknown-type', 'brand_new_event']]);
+  });
+
+  it('turn_start/turn_end/agent_settled 属已知不映射，不触发 onDrop', () => {
+    const drops: Array<[string, string]> = [];
+    const onDrop = (reason: string, rawType: string) => drops.push([reason, rawType]);
+    for (const type of ['turn_start', 'turn_end', 'agent_settled']) {
+      expect(mapPiSessionEvent({ type }, onDrop)).toBeNull();
+    }
+    expect(drops).toEqual([]);
+  });
+
+  it('message_update 缺 partial 上报 malformed-payload 并丢弃', () => {
+    const drops: Array<[string, string]> = [];
+    const onDrop = (reason: string, rawType: string) => drops.push([reason, rawType]);
+    expect(mapPiSessionEvent({ type: 'message_update' }, onDrop)).toBeNull();
+    expect(drops).toEqual([['malformed-payload', 'message_update']]);
+  });
+
+  it('compaction_end reason 漂移上报 malformed-payload 并纠正为 manual', () => {
+    const drops: Array<[string, string]> = [];
+    const onDrop = (reason: string, rawType: string) => drops.push([reason, rawType]);
+    const mapped = mapPiSessionEvent({ type: 'compaction_end', reason: 'brand-new' }, onDrop);
+    expect(mapped).toMatchObject({ type: 'compaction.ended', reason: 'manual' });
+    expect(drops).toEqual([['malformed-payload', 'compaction_end']]);
+  });
+
+  it('compaction_end 合法 reason 不触发 onDrop', () => {
+    const drops: Array<[string, string]> = [];
+    const onDrop = (reason: string, rawType: string) => drops.push([reason, rawType]);
+    const mapped = mapPiSessionEvent({ type: 'compaction_end', reason: 'threshold' }, onDrop);
+    expect(mapped).toMatchObject({ type: 'compaction.ended', reason: 'threshold' });
+    expect(drops).toEqual([]);
+  });
+
+  it('连事件形状都不具备的输入（null/无 type/非对象）不上报', () => {
+    const drops: Array<[string, string]> = [];
+    const onDrop = (reason: string, rawType: string) => drops.push([reason, rawType]);
+    expect(mapPiSessionEvent(null, onDrop)).toBeNull();
+    expect(mapPiSessionEvent('str', onDrop)).toBeNull();
+    expect(mapPiSessionEvent({ type: 42 }, onDrop)).toBeNull();
+    expect(drops).toEqual([]);
   });
 
   it('compaction_end 映射压缩前后与摘要请求 usage', () => {

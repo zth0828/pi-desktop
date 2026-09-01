@@ -186,3 +186,36 @@ test('/tree 跳分支选「摘要」：被弃分支写入 branch_summary 节点'
   await openTree(page);
   await expect(page.locator('.tree-node[data-kind="other"]').first()).toBeVisible();
 });
+
+test('消息级编辑重发：点击编辑按钮，回填输入框，修改后重新发送', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'initial question');
+  await sendAndWaitReply(page, 'editable question');
+  await expect(page.getByTestId('message-user')).toHaveCount(2);
+
+  // hover 第二条 user 消息，点「编辑并重发」
+  const secondUser = page.getByTestId('message-user').filter({ hasText: 'editable question' });
+  const editBtn = secondUser.getByTestId('edit-message');
+  await expect(editBtn).toBeAttached({ timeout: 30_000 });
+  await secondUser.hover();
+  await editBtn.click();
+
+  // sessionReplaced 刷新：只剩第一轮；输入框回填原文本
+  await expect(page.getByTestId('message-user')).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.getByTestId('message-user').first()).toContainText('initial question');
+  await expect(page.getByTestId('chat-input')).toHaveValue('editable question');
+
+  // 修改文本后重新发送
+  await page.getByTestId('chat-input').fill('edited question');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId('message-user')).toHaveCount(2);
+  await expect(page.getByTestId('message-user').last()).toContainText('edited question');
+});

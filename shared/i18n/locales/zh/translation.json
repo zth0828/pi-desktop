@@ -16,8 +16,14 @@
     "closeWindow": "关闭窗口",
     "collapseSidebar": "折叠侧边栏",
     "searchChats": "会话搜索",
+    "undo": "撤销",
+    "redo": "重做",
+    "cut": "剪切",
     "copy": "复制",
     "paste": "粘贴",
+    "pastePlain": "粘贴为纯文本",
+    "delete": "删除",
+    "selectAll": "全选",
     "comingSoon": "敬请期待",
     "maximize": "最大化",
     "restore": "还原",
@@ -82,8 +88,8 @@
     "settings": "设置"
   },
   "chat": {
-    "placeholder": "给 pi 发消息…（Enter 发送，Shift+Enter 换行）",
-    "placeholderCmdEnter": "给 pi 发消息…（Cmd/Ctrl+Enter 发送，Enter 换行）",
+    "placeholder": "给 pi 发消息…（输入 @ 引用文件，/ 调用命令，支持拖入图片与文件；Enter 发送）",
+    "placeholderCmdEnter": "给 pi 发消息…（输入 @ 引用文件，/ 调用命令，支持拖入图片与文件；⌘Enter 发送）",
     "send": "发送",
     "stop": "停止",
     "sendTip": "发送（Enter）",
@@ -93,6 +99,17 @@
     "gitBranchTitle": "Git 分支：{{branch}}",
     "gitDetachedTitle": "HEAD 分离（detached）",
     "gitDetached": "detached",
+    "branchSwitch": {
+      "title": "切换分支",
+      "locked": "会话开始后不可切换分支",
+      "dirty": "工作区有未提交的改动，无法切换分支",
+      "dirtyHint": "工作区有未提交的改动，请先提交或暂存后再切换",
+      "running": "当前会话正在运行中，无法切换分支",
+      "failed": "切换分支失败：{{error}}",
+      "success": "已切换到分支 {{branch}}",
+      "empty": "未找到本地分支",
+      "loading": "正在加载分支..."
+    },
     "queueSend": "稍后继续",
     "steerSend": "引导当前轮",
     "stopTip": "停止当前生成",
@@ -114,9 +131,9 @@
       "followUp": "稍后继续 ×{{count}}：{{preview}}",
       "steeringLabel": "引导回复",
       "followUpLabel": "直接发送",
-      "sendNow": "改为本轮引导",
-      "sendNowTip": "从稍后队列移到当前轮，在当前工具调用结束后发送",
-      "send": "直接发送",
+      "sendNow": "立即发送",
+      "sendNowTip": "立即发送：流式中插入当前轮，空闲时直接开新轮",
+      "send": "改为稍后发送",
       "steer": "引导回复",
       "sendTip": "改为当前任务完成后直接发送",
       "steerTip": "改为当前工具调用结束后引导回复",
@@ -138,7 +155,9 @@
     "workspace": {
       "required": "先为 pi 会话选择一个工作目录。",
       "choose": "选择目录",
-      "change": "更换"
+      "change": "更换",
+      "riskyHome": "用户主目录不能作为工作区（agent 会扫描/触碰你的全部个人文件）。请选择一个项目目录。",
+      "riskyRoot": "磁盘根目录不能作为工作区。请选择一个项目目录。"
     },
     "tool": {
       "running": "执行中",
@@ -174,6 +193,16 @@
           "done": "已搜索 {{summary}}{{durationPart}}",
           "stopped": "已停止搜索"
         },
+        "find": {
+          "running": "正在查找 {{summary}}…",
+          "done": "已查找 {{summary}}{{durationPart}}",
+          "stopped": "已停止查找"
+        },
+        "ls": {
+          "running": "正在列出 {{summary}}…",
+          "done": "已列出 {{summary}}{{durationPart}}",
+          "stopped": "已停止列出"
+        },
         "default": {
           "running": "正在运行 {{tool}}…",
           "done": "已运行 {{tool}}{{durationPart}}",
@@ -185,7 +214,8 @@
       "truncatedLines": "输出被截断：仅显示 {{outputLines}} / {{totalLines}} 行",
       "truncatedBytes": "输出超出大小上限，仅显示 {{outputLines}} 行",
       "matchLimit": "匹配数达到上限（{{limit}}）",
-      "linesTruncated": "部分过长的行被截断"
+      "linesTruncated": "部分过长的行被截断",
+      "readingSkill": "读取技能指南：{{name}}"
     },
     "turnChanges": {
       "title": "已编辑 {{count}} 个文件",
@@ -196,6 +226,7 @@
       "review": "审核",
       "viewChanges": "查看更改",
       "showMore": "再显示 {{count}} 个文件",
+      "showLess": "收起",
       "openFile": "打开文件"
     },
     "workLog": {
@@ -209,6 +240,7 @@
     "turnFold": {
       "expand": "展开本轮过程",
       "collapse": "收起本轮过程",
+      "interrupted": "已中断",
       "stage": "阶段 {{index}} · {{count}} 条过程消息",
       "duration": "耗时 {{duration}}",
       "durationSeconds": "{{seconds}} 秒",
@@ -230,6 +262,7 @@
     "expandTools": "展开全部工具",
     "collapseTools": "折叠全部工具",
     "forkFromHere": "从此分叉",
+    "editMessage": "编辑并重发",
     "branches": "分支",
     "tree": {
       "title": "会话分支",
@@ -268,7 +301,36 @@
     "cacheHitRateLast": "本轮命中率",
     "totalCost": "累计成本",
     "tokenUnknown": "—",
-    "greeting": "我能为你做些什么？",
+    "greeting": "今天想构建什么",
+    "greetingRotating": [
+      "今天想构建什么",
+      "帮我重构代码结构",
+      "开发一个全新功能",
+      "排查并修复测试问题",
+      "分析项目核心架构"
+    ],
+    "greetingCards": {
+      "architecture": {
+        "title": "探索项目架构",
+        "desc": "概括项目的核心结构与关键模块",
+        "prompt": "请简要概括一下当前项目的核心架构、目录结构和关键模块的功能。"
+      },
+      "inspect": {
+        "title": "代码审查与体检",
+        "desc": "检查最近修改或潜在的代码问题",
+        "prompt": "请检查当前项目的代码变更或潜在问题，并给出优化建议。"
+      },
+      "feature": {
+        "title": "开发新功能",
+        "desc": "描述需求，让 pi 规划并编写实现",
+        "prompt": "我想在当前项目中添加一个新功能："
+      },
+      "test": {
+        "title": "运行测试与排错",
+        "desc": "运行项目的测试用例并分析结果",
+        "prompt": "请运行本项目的测试用例，并帮我排查分析失败的问题。"
+      }
+    },
     "scrollToBottom": "回到底部",
     "untitled": "未命名会话",
     "imageSessionTitle": "图片会话",
@@ -281,6 +343,15 @@
     "copyMarkdown": "复制 Markdown",
     "imagePreview": "图片预览",
     "closeImagePreview": "关闭图片预览",
+    "imageCopy": "复制图片",
+    "imageCopySuccess": "已复制图片到剪贴板",
+    "imageCopyFailed": "复制图片失败",
+    "imageSave": "保存图片",
+    "imageSaveSuccess": "图片已保存",
+    "imageSaveFailed": "保存图片失败",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "zoomReset": "适应窗口",
     "copied": "已复制",
     "thinkingLevel": "思考深度",
     "thinkingLevels": {
@@ -299,6 +370,11 @@
     "planMode": "计划模式",
     "planModeUnavailable": "安装 plan-mode 扩展后可用",
     "cacheStatsNote": "部分本地模型不会上报缓存统计。",
+    "mentionsHint": {
+      "tree": "↑↓ 移动 · ←→ 层级 · 空格/Tab 选择 · Esc 取消",
+      "filter": "↑↓ 移动 · 空格/Tab 选择 · Esc 取消",
+      "command": "↑↓ 移动 · 空格/Tab 选择 · Esc 取消"
+    },
     "commands": {
       "new": "开始新会话",
       "compact": "压缩当前会话的上下文（已用 {{percent}}%）",
@@ -327,34 +403,90 @@
       "reloaded": "已重新加载扩展、技能、提示词与上下文文件",
       "reloadFailed": "重新加载失败：{{message}}",
       "modelSet": "模型已切换：{{model}}",
-      "modelNotFound": "找不到模型：{{model}}"
+      "modelNotFound": "找不到模型：{{model}}",
+      "commandNotFound": "未知命令：{{command}}"
+    },
+    "confirmSlashSend": {
+      "title": "确认发送指令？",
+      "description": "检测到以斜杠开头的未知指令「{{command}}」，该指令不是本地内置功能。是否作为提示词直接发送给 AI？",
+      "send": "直接发送",
+      "cancel": "取消"
+    },
+    "confirmMentionSend": {
+      "title": "确认发送文件引用？",
+      "description": "检测到文件引用「{{mention}}」，但在当前工作区中未找到匹配的文件。是否作为普通文本直接发送给 AI？",
+      "send": "直接发送",
+      "cancel": "取消"
     },
     "sessionInfo": {
-      "title": "会话信息",
-      "name": "名称",
-      "id": "ID",
-      "file": "文件",
+      "title": "会话详情",
+      "name": "会话名称",
+      "id": "会话 ID",
+      "file": "存储文件",
       "inMemory": "内存会话",
-      "model": "模型",
-      "messages": "消息",
+      "notSavedYet": "尚未落盘",
+      "notSavedYetHint": "发送首条消息后保存到本地磁盘",
+      "model": "生效模型",
+      "messages": "消息数",
       "messagesValue": "{{total}}（用户 {{user}} / 助手 {{assistant}}）",
-      "tools": "工具",
-      "toolsValue": "{{calls}} 次调用，{{results}} 条结果",
-      "input": "输入",
-      "output": "输出",
-      "total": "总计",
-      "cost": "费用"
+      "tools": "工具调用",
+      "toolsValue": "{{calls}} 次调用（{{results}} 条结果）",
+      "tokens": "Token 统计",
+      "input": "输入 Tokens",
+      "output": "输出 Tokens",
+      "total": "总计消耗",
+      "cost": "预估费用",
+      "copied": "已复制",
+      "copyId": "复制 ID",
+      "copyPath": "复制文件路径",
+      "showInFolder": "在文件管理器中显示"
     },
     "startTimeout": "会话启动超时，请检查后重试",
     "startRetry": "重试",
+    "switchFailedNote": "打开该会话失败，当前仍显示原会话，可继续对话。",
+    "runtimeErrorTitle": "操作失败",
+    "runtimeErrorDismiss": "关闭",
+    "error": {
+      "modelUnavailable": "该会话使用的模型不可用（{{provider}}/{{model}}），请选择其他模型",
+      "chooseModel": "选择模型",
+      "retrySwitch": "重试打开会话"
+    },
     "modelMenu": {
       "model": "模型",
-      "empty": "暂无可用模型"
+      "empty": "暂无可用模型",
+      "search": "搜索模型…",
+      "noResults": "无匹配模型",
+      "expandProvider": "展开 {{provider}}",
+      "collapseProvider": "折叠 {{provider}}",
+      "currentLimit": "当前设置",
+      "quickPresets": "快捷梯度",
+      "resetMax": "恢复最大默认",
+      "usedTokens": "当前已用",
+      "compactionWarning": "低于当前已用量，将在下一轮对话时自动触发会话压缩 (Compaction)",
+      "maxSupported": "模型原生支持上限 {{max}}"
     },
     "bash": {
       "excluded": "不入上下文",
       "cancelled": "已取消",
       "exitCode": "退出码 {{code}}"
+    },
+    "command": {
+      "run": "运行命令",
+      "mode": "命令模式",
+      "placeholder": "输入 bash 命令，Enter 执行",
+      "inContext": "入上下文",
+      "includeContext": "当前不入上下文，点击改为入上下文",
+      "excludeContext": "当前入上下文，点击改为不入上下文",
+      "exit": "退出命令模式",
+      "runningHint": "上一条命令仍在执行",
+      "stopBash": "停止命令",
+      "planModeOn": "计划模式已开启（发送时自动加 /plan）",
+      "skillRemove": "移除技能"
+    },
+    "skillBlock": {
+      "title": "已加载技能：{{name}}",
+      "viewDetails": "查看指令",
+      "collapse": "收起指令"
     },
     "errors": {
       "invalidKey": "这是 API Key 问题：密钥可能无效、已过期或被禁用，请在供应商设置里更换。",
@@ -362,6 +494,30 @@
       "upstream": "这是服务商（上游）问题：请求已到达服务器，但服务商自己的上游渠道异常。请稍后重试，或联系服务商并提供下方请求 ID。",
       "rateLimit": "上游限流：请求过于频繁，请稍等片刻再试。",
       "quota": "账号配额或用量已达上限：需要联系服务商充值或续期。",
+      "network": "网络连接问题：无法连接到服务商服务器。请检查网络或代理设置后重试。",
+      "timeout": "请求超时：服务商未在时限内响应。请稍后重试。",
+      "stream": "响应流中断：生成过程中连接被断开。请重试。",
+      "unsupportedRelay": "服务商不支持 Responses 协议（/v1/responses）。请在模型设置中将该供应商的适配器类型切换为 openai-completions（/v1/chat/completions）。",
+      "replacementTimeout": "会话替换超时未确认，请重试或切换会话。",
+      "hostInvokeTimeout": "与主进程通信超时（{{action}}），请重试。",
+      "sessionNotStarted": "会话未启动或已失效，请重试或新建会话。",
+      "sessionIsRunning": "会话正在运行中，请等待完成或中断后再试。",
+      "sessionIsStreaming": "会话正在生成输出中，请稍后再试。",
+      "sessionIsCompacting": "会话正在压缩历史中，请稍后再试。",
+      "sessionHasNoFile": "未找到会话文件。",
+      "projectHasRunningSession": "该项目下有正在运行的会话，请等待完成后再操作。",
+      "emptyName": "名称不能为空。",
+      "emptySource": "来源不能为空。",
+      "queueIndexOutOfRange": "排队项目已不存在或序号超出范围。",
+      "cancelled": "操作已取消。",
+      "cannotCreate": "创建会话失败，请重试。",
+      "packageSourceNotFound": "未找到该扩展包源。",
+      "piNotFound": "未找到 pi 可执行文件，请检查安装。",
+      "piNotInstalled": "未检测到已安装的 pi 环境。",
+      "installTimeout": "安装超时，请检查网络后重试。",
+      "running": "正在运行中，请稍后重试。",
+      "notGitRepo": "当前目录不是 Git 仓库。",
+      "gitDirty": "工作区有未提交的改动，请暂存或提交后再试。",
       "requestId": "请求 ID：{{id}}"
     }
   },
@@ -377,7 +533,19 @@
       "config": "models.json",
       "extension": "扩展"
     },
-    "modelMeta": "{{api}} · 上下文 {{context}} · 最大输出 {{output}}",
+    "metaContext": "上下文 {{context}}",
+    "metaOutput": "最大输出 {{output}}",
+    "fieldName": "供应商名称",
+    "fieldNameHint": "界面展示用的名称，保存后不可更改 ID",
+    "fieldBaseUrl": "API 地址（Base URL）",
+    "fieldBaseUrlHint": "服务商的 OpenAI 兼容接口地址，通常以 /v1 结尾",
+    "fieldApi": "适配器类型",
+    "apiHint": {
+      "openai-responses": "适配 OpenAI Responses 接口协议，支持推理思考类模型",
+      "openai-completions": "适配传统 Chat Completions 接口协议，绝大多数第三方 API / OpenRouter 使用",
+      "anthropic-messages": "适配 Anthropic Messages 接口协议，用于 Anthropic 官方 API",
+      "google-generative-ai": "适配 Google Generative AI 接口协议，用于 Gemini 官方 API"
+    },
     "pricing": "每百万 Token：输入 {{input}}，输出 {{output}}，缓存读 {{cacheRead}}，缓存写 {{cacheWrite}}",
     "keyPlaceholder": "API key",
     "saveKey": "保存 key",
@@ -386,10 +554,22 @@
     "removeKey": "删除凭证",
     "deleteProvider": "删除供应商",
     "deleteProviderConfirm": "删除供应商“{{name}}”及其全部模型和凭证？此操作无法撤销。",
+    "editProvider": "编辑信息",
+    "editProviderTitle": "编辑供应商信息",
+    "editProviderDesc": "修改该供应商的展示名称、API 基础地址或请求适配协议。",
+    "saveEdit": "保存修改",
     "oauth": "浏览器授权登录",
     "oauthStarted": "授权已发起——请在浏览器中完成。",
     "addCustom": "添加自定义供应商",
-    "customId": "供应商 id（如 my-llm）",
+    "addCustomTitle": "添加自定义供应商",
+    "addCustomDesc": "接入兼容 OpenAI、Anthropic 或 Google 协议的第三方 API 或本地大模型服务。",
+    "fieldApiKey": "API Key（访问凭证）",
+    "fieldApiKeyHint": "访问凭证；本地免鉴权服务（如 LM Studio / Ollama / vLLM）可留空。",
+    "fieldModels": "模型列表（Model IDs）",
+    "fieldModelsHint": "未探测到模型时可手动指定支持的模型 ID，多个以英文逗号分隔。",
+    "probeSectionTitle": "接口探测与协议验证",
+    "probeSectionDesc": "自动检测服务端支持的模型列表与推荐协议，或发送测试请求验证可用性。",
+    "customName": "供应商名称（如 我的大模型）",
     "customBaseUrl": "baseURL",
     "customApi": "请求协议",
     "detectedApi": "探测到的请求协议",
@@ -421,6 +601,7 @@
     "contextUsingDefault": "供应商未返回上下文，将使用 256K 默认值。",
     "usePiContextDefault": "使用默认上下文（256K）",
     "cancel": "取消",
+    "closeDialog": "关闭",
     "configured": "已配置",
     "notConfigured": "未配置",
     "availableModels": "可用模型",
@@ -429,7 +610,11 @@
     "current": "当前",
     "reasoningSupport": "支持推理",
     "reasoningHint": "第三方模型默认按支持推理处理，保证思考深度菜单可用；仅当供应商拒绝思考参数时才关闭。",
-    "probeSpec": "上下文 {{contextWindow}} · 最大输出 {{maxOutput}}"
+    "imageSupport": "支持图像",
+    "imageSupportHint": "按主流模型规格自动识别图像输入能力；网关不支持图片或识别有误时可手动调整。",
+    "visionMeta": "图像输入",
+    "probeSpec": "上下文 {{contextWindow}} · 最大输出 {{maxOutput}}",
+    "probeCatalogFailed": "无法获取模型列表：{{error}}。请确认服务器已启动、地址与端口正确（本地 LM Studio 需先打开应用）。"
   },
   "sessions": {
     "title": "会话",
@@ -444,10 +629,14 @@
     "openInPane": "已在面板中打开",
     "continueNewChat": "在新聊天中继续",
     "showMore": "显示更多（剩余 {{count}} 条）",
+    "showLess": "收起",
     "save": "保存",
     "cancel": "取消",
     "fork": "分叉",
     "export": "导出 HTML",
+    "pin": "置顶会话",
+    "unpin": "取消置顶",
+    "pinned": "已置顶",
     "archive": "归档聊天",
     "unarchive": "恢复归档",
     "archived": "已归档",
@@ -456,14 +645,26 @@
     "delete": "删除",
     "confirmDelete": "确认删除",
     "exported": "已导出到 {{path}}",
+    "exportedBadge": "已导出",
+    "openExported": "查看导出",
+    "showExportedInFolder": "在文件夹中显示",
+    "reExport": "重新导出",
+    "openExportedTooltip": "在浏览器中打开已导出的 HTML 文件",
+    "showExportedInFolderTooltip": "在文件夹中定位已导出的 HTML 文件",
+    "exportFileNotFound": "导出文件不存在或已被移除",
     "exportLocation": "导出位置",
     "lastExport": "最近导出",
+    "recentExports": "最近导出",
     "openExport": "打开",
     "showInFolder": "在文件夹中显示",
     "openExportFolder": "打开文件夹",
     "emptyAll": "还没有任何会话记录，先去聊几句吧。",
     "projectCount": "{{count}} 个会话",
-    "openProjectFolder": "打开文件夹"
+    "openProjectFolder": "打开文件夹",
+    "actionFailed": "操作失败：{{error}}",
+    "actionFailedPlain": "操作失败，请重试。",
+    "deleteRunning": "会话正在运行，请先停止后再删除",
+    "actionErrorDismiss": "关闭"
   },
   "extensions": {
     "title": "Packages",
@@ -615,10 +816,41 @@
   },
   "skills": {
     "title": "Skills",
-    "readonlyHint": "Skills 由 pi 以下来源加载。单个 skill 的启用/禁用由 pi 自己管理，本应用不提供。",
+    "readonlyHint": "Skills 由 pi 发现并加载。你可以在此切换技能是否进入全局系统提示词（自动感知 vs 仅手动调用）。",
     "noRuntime": "先打开一个聊天会话——skills 从活动会话中读取。",
     "empty": "没有发现任何 skill。",
     "manualOnly": "仅手动调用",
+    "mode": {
+      "auto": "自动感知",
+      "autoDesc": "常驻系统提示词，AI 遇到相关任务时按需自动调用，也可手动指定",
+      "manual": "仅手动调用",
+      "manualDesc": "不进入系统提示词（0 Token 占用），仅在输入框手动选择或输入 /skill:xxx 时临时加载",
+      "readOnly": "只读（不可修改）",
+      "switching": "切换中…"
+    },
+    "filter": {
+      "all": "全部 ({{count}})",
+      "auto": "自动感知 ({{count}})",
+      "manual": "仅手动 ({{count}})"
+    },
+    "countSummary": "共 {{total}} 个技能 · {{auto}} 个自动感知 · {{manual}} 个仅手动",
+    "viewModal": {
+      "modeLabel": "调用模式",
+      "manual": "仅手动调用",
+      "auto": "自动感知",
+      "manualExplanation": "已在 SKILL.md 中声明 disable-model-invocation: true。此技能已从全局系统提示词 (<available_skills>) 彻底剔除（0 全局 Token 消耗）。仅当你在对话中输入 /skill:{{name}} 时按需加载。",
+      "autoExplanation": "此技能的名称与描述已注入全局系统提示词 (<available_skills>)。模型在任意对话中均可自动感知并在需要时自主读取指令。",
+      "switchToAuto": "切换为自动感知",
+      "switchToManual": "切换为仅手动 (省 Token)",
+      "descriptionLabel": "技能描述",
+      "instructionsLabel": "技能指令与正文指南",
+      "emptyInstructions": "该技能无正文指令说明。"
+    },
+    "batchOptimize": {
+      "title": "检测到 {{autoCount}} 个技能处于【自动感知】模式，正在占用全局系统提示词。建议将低频垂直技能设为【仅手动】，需要时按 /skill:名称 触发。",
+      "action": "全部设为仅手动",
+      "optimizing": "正在优化…"
+    },
     "view": "查看内容",
     "close": "关闭",
     "import": "导入",
@@ -665,7 +897,24 @@
       "downloading": "下载中…",
       "open": "打开安装包",
       "showInFolder": "显示文件位置",
-      "upgradePi": "升级 pi"
+      "upgradePi": "升级 pi",
+      "downloadFailedHint": "下载失败。如果在国内网络环境下，可在下方配置 GitHub 下载镜像加速（如 https://ghproxy.net/）后重试。",
+      "releaseNotesTitle": "✨ {{version}} 更新内容与特性",
+      "expand": "展开 ▾",
+      "collapse": "收起 ▴",
+      "downloadingStatus": "正在下载更新安装包…",
+      "remainingSeconds": "剩余 {{sec}} 秒",
+      "remainingMinutes": "剩余 {{min}} 分钟",
+      "newAvailable": "发现新版本",
+      "mirrorActive": "镜像加速中",
+      "alreadyLatest": "已是最新 ✓",
+      "alreadyLatestHint": "当前已是最新版本，无需更新"
+    },
+    "downloadMirror": {
+      "title": "下载镜像加速",
+      "desc": "GitHub 下载加速镜像前缀，如 https://ghproxy.net/",
+      "placeholder": "https://ghproxy.net/",
+      "activeBadge": "镜像加速已启用"
     },
     "exportLocation": "保存位置",
     "themeOptions": {
@@ -720,6 +969,11 @@
       "title": "Agent 默认值",
       "desc": "这些原生设置会写入 ~/.pi/agent/settings.json，作用于新会话。"
     },
+    "tools": {
+      "title": "可用工具",
+      "desc": "新会话中模型可调用的内置工具；核心工具（read/bash/edit/write）始终启用，只读检索工具（grep/find/ls）可按需开关。改动对新建会话生效（当前会话沿用启动时的工具集）。",
+      "coreLocked": "核心工具始终启用"
+    },
     "defaultThinking": {
       "title": "默认思考深度",
       "desc": "新会话的初始思考深度。"
@@ -743,7 +997,7 @@
       "urlDesc": "自动模式使用此地址；可按你的网络环境修改。",
       "placeholder": "http://127.0.0.1:7897",
       "status": "当前代理",
-      "detected": "已使用：{url}（{source}）",
+      "detected": "已使用：{{url}}（{{source}}）",
       "none": "代理已关闭，直连",
       "source": {
         "app": "Pi Desktop 设置",
@@ -783,6 +1037,12 @@
     "title": "评审",
     "refresh": "刷新",
     "empty": "还没有改动",
+    "emptySession": "本会话暂无文件改动",
+    "sessionChanges": "本会话改动",
+    "workspaceChanges": "工作区改动",
+    "sessionScope": "会话",
+    "workspaceScope": "工作区",
+    "editCount": "共编辑 {{count}} 次",
     "noDiff": "{{path}} 暂无差异",
     "readOnly": "只读",
     "revertFile": "回滚此文件",
@@ -810,9 +1070,17 @@
     "close": "关闭文件工作台",
     "closeAll": "关闭全部文件预览",
     "closeFile": "关闭 {{name}}",
+    "mode": {
+      "auto": "面板模式：自动（空间充足时并排，空间不足时覆盖）",
+      "docked": "面板模式：停靠（并排挤压）",
+      "overlay": "面板模式：覆盖（向右展开不挤压）"
+    },
     "files": "文件",
     "showFiles": "显示文件列表",
     "hideFiles": "隐藏文件列表",
+    "commands": "命令",
+    "commandsEmpty": "本会话还没有命令记录",
+    "commandsRunning": "执行中",
     "itemCount": "{{count}} 个根目录项目",
     "filter": "筛选文件…",
     "loadingFolder": "正在加载…",
@@ -850,6 +1118,7 @@
     "dropSplitTop": "松手在上方分栏",
     "dropSplitBottom": "松手在下方分栏",
     "dropReplace": "松手替换当前面板会话",
+    "dropAlreadyOpen": "该会话已在某面板打开",
     "dragHint": "拖到面板边缘分栏 / 中心替换；拖出窗口打开独立窗口；Esc 取消"
   },
   "trust": {
@@ -862,5 +1131,31 @@
       "distrust": "不信任",
       "distrustSession": "不信任（仅本次会话）"
     }
+  },
+  "versionUpdate": {
+    "title": "发现新版本",
+    "body": "Pi Desktop v{{version}} 现已发布。",
+    "bodyPi": "pi v{{version}} 现已发布。",
+    "download": "前往下载",
+    "upgradePi": "前往升级",
+    "releaseNotes": "更新日志",
+    "dismiss": "忽略"
+  },
+  "versionInstall": {
+    "title": "新版本已下载完成",
+    "bodyMac": "点击『打开安装包并退出』后将打开安装镜像，请将 Pi Desktop 拖入「应用程序」文件夹完成替换，然后重新启动。",
+    "bodyWin": "点击『打开安装程序并退出』后按安装向导完成安装。",
+    "bodyLinux": "安装包已下载完成，请在文件夹中查看并替换。",
+    "installAndQuit": "打开安装包并退出",
+    "later": "稍后",
+    "showInFolder": "在文件夹中显示",
+    "runningWarning": "检测到有会话正在运行，退出应用将中断当前任务。确定要退出并安装吗？",
+    "confirmQuit": "退出并安装",
+    "cancel": "取消",
+    "failed": "下载更新失败：{{error}}",
+    "waitingInstall": "已下载安装包，等待安装",
+    "waitingInstallVersion": "已下载 v{{version}}，等待安装",
+    "readyTitle": "安装包下载完成，准备就绪",
+    "readyDesc": "点击即可打开安装包完成升级"
   }
 }

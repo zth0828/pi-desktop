@@ -174,6 +174,18 @@ test.describe('Windows frameless 标题栏', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('menu-dropdown-file')).toHaveCount(0);
 
+    // 打开编辑菜单下拉
+    await page.getByTestId('menu-edit').click();
+    await expect(page.getByTestId('menu-dropdown-edit')).toBeVisible();
+    await expect(page.getByTestId('menu-item-edit-0')).toHaveText('Undo');
+    await expect(page.getByTestId('menu-item-edit-1')).toHaveText('Redo');
+    await expect(page.getByTestId('menu-item-edit-2')).toHaveText('Cut');
+    await expect(page.getByTestId('menu-item-edit-3')).toHaveText('Copy');
+    await expect(page.getByTestId('menu-item-edit-4')).toHaveText('Paste');
+    await expect(page.getByTestId('menu-item-edit-5')).toHaveText('Select All');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('menu-dropdown-edit')).toHaveCount(0);
+
     // 切中文：菜单文案立即切换（i18n useTranslation 驱动）
     await page.getByTestId('nav-settings').click();
     await expect(page.getByTestId('settings-language')).toBeVisible();
@@ -182,6 +194,17 @@ test.describe('Windows frameless 标题栏', () => {
     await page.getByTestId('menu-file').click();
     await expect(page.getByTestId('menu-dropdown-file')).toBeVisible();
     await expect(page.getByTestId('menu-item-file-0')).toHaveText('新建会话');
+    await page.keyboard.press('Escape');
+
+    await expect(page.getByTestId('menu-edit')).toHaveText('编辑');
+    await page.getByTestId('menu-edit').click();
+    await expect(page.getByTestId('menu-dropdown-edit')).toBeVisible();
+    await expect(page.getByTestId('menu-item-edit-0')).toHaveText('撤销');
+    await expect(page.getByTestId('menu-item-edit-1')).toHaveText('重做');
+    await expect(page.getByTestId('menu-item-edit-2')).toHaveText('剪切');
+    await expect(page.getByTestId('menu-item-edit-3')).toHaveText('复制');
+    await expect(page.getByTestId('menu-item-edit-4')).toHaveText('粘贴');
+    await expect(page.getByTestId('menu-item-edit-5')).toHaveText('全选');
     await page.keyboard.press('Escape');
 
     // 切回英文

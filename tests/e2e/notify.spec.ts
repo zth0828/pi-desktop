@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import type { ElectronApplication, Page } from '@playwright/test';
 import { expect, test } from './fixtures/electron';
 
 let mock: ChildProcess;
@@ -70,9 +71,104 @@ async function waitSessionReady(page: import('@playwright/test').Page) {
   ).toBeVisible({ timeout: 30_000 });
 }
 
+/** 发一条消息并等 mock 回复落地（保证会话文件已写入） */
+async function sendAndWaitReply(page: import('@playwright/test').Page, text: string) {
+  await page.getByTestId('chat-input').fill(text);
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
+    timeout: 30_000,
+  });
+}
+
+/** 右键侧栏会话行 →「Open in separate window」，返回新窗口 Page */
+async function openDetachedWindow(
+  app: ElectronApplication,
+  page: import('@playwright/test').Page,
+  sessionText: string,
+): Promise<import('@playwright/test').Page> {
+  const row = page.locator('.sidebar-session-row').filter({ hasText: sessionText });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  const sessionButton = row.locator('[data-testid^="sidebar-session-"]').first();
+  const sessionTestId = await sessionButton.getAttribute('data-testid');
+  const sessionId = sessionTestId?.replace('sidebar-session-', '');
+  expect(sessionId).toBeTruthy();
+
+  const windowPromise = app.waitForEvent('window');
+  await row.click({ button: 'right' });
+  await page.getByTestId(`sidebar-session-open-detached-${sessionId}`).click();
+  const detached = await windowPromise;
+  await detached.waitForLoadState('domcontentloaded');
+  return detached;
+}
+
+/** 侧栏会话行 title 属性即会话文件路径（SessionList 里 title={session.path}） */
+async function sessionPathOf(page: import('@playwright/test').Page, sessionText: string): Promise<string> {
+  const row = page.locator('.sidebar-session-row').filter({ hasText: sessionText });
+  const sessionButton = row.locator('[data-testid^="sidebar-session-"]').first();
+  const sessionPath = await sessionButton.getAttribute('title');
+  expect(sessionPath).toBeTruthy();
+  return sessionPath!;
+}
+
+/** 经 hostInvoke 读 windows.list（窗口↔会话绑定 + 聚焦状态） */
+async function listHostWindows(page: import('@playwright/test').Page): Promise<Array<{
+  windowId: number;
+  sessionPath: string | null;
+  isMain: boolean;
+  focused: boolean;
+}>> {
+  return page.evaluate(async () => {
+    const bridge = (globalThis as unknown as {
+      pidesktop: {
+        hostInvoke: (request: unknown) => Promise<{ ok: boolean; data?: unknown }>;
+      };
+    }).pidesktop;
+    const response = await bridge.hostInvoke({
+      id: 'e2e-windows-list',
+      module: 'windows',
+      action: 'list',
+    });
+    if (!response.ok) throw new Error('windows.list failed');
+    return response.data as Array<{
+      windowId: number;
+      sessionPath: string | null;
+      isMain: boolean;
+      focused: boolean;
+    }>;
+  });
+}
+
+/** 经 hostInvoke 走 app 自身 focus 路径（windows.focus → win.focus()），跨窗口改 OS 焦点 */
+async function focusSessionWindow(page: import('@playwright/test').Page, sessionPath: string): Promise<void> {
+  await page.evaluate(async (path) => {
+    const bridge = (globalThis as unknown as {
+      pidesktop: {
+        hostInvoke: (request: unknown) => Promise<{ ok: boolean }>;
+      };
+    }).pidesktop;
+    const response = await bridge.hostInvoke({
+      id: 'e2e-focus-session',
+      module: 'windows',
+      action: 'focus',
+      payload: { sessionPath: path },
+    });
+    if (!response.ok) throw new Error('windows.focus failed');
+  }, sessionPath);
+}
+
 async function readLog(logPath: string): Promise<string> {
   if (!existsSync(logPath)) return '';
   return readFile(logPath, 'utf8');
+}
+
+async function readEntries(logPath: string): Promise<Array<{
+  kind: string;
+  title?: string;
+  body?: string;
+  sessionPath?: string;
+}>> {
+  const raw = await readLog(logPath);
+  return raw.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
 }
 
 test('设置页通知档位开关写入 electron-store', async ({ launchElectronApp, homeDir }) => {
@@ -116,6 +212,8 @@ test('run 完成 → always 档弹出系统通知（含摘要）', async ({ laun
     const entry = JSON.parse((await readLog(logPath)).trim().split('\n')[0]);
     expect(entry.title).toBeTruthy();
     expect(entry.body).toContain('PONG');
+    // 会话已落盘：通知 payload 带会话文件路径，供 main 按会话定位窗口
+    expect(entry.sessionPath).toBeTruthy();
   } finally {
     delete process.env.PI_DESKTOP_E2E_NOTIFY_LOG;
   }
@@ -138,6 +236,93 @@ test('run 完成 → off 档不弹通知', async ({ launchElectronApp, homeDir }
     // 回复渲染后 run.ended 已同步派发；给通知通道留一个窗口期再断言无记录
     await page.waitForTimeout(1_500);
     expect(await readLog(logPath)).not.toContain('runCompleted');
+  } finally {
+    delete process.env.PI_DESKTOP_E2E_NOTIFY_LOG;
+  }
+});
+
+test('多窗口：焦点按会话窗口判定（B 窗口完成弹、A 窗口完成不弹）', async ({
+  launchElectronApp,
+  homeDir,
+}) => {
+  const logPath = path.join(homeDir, 'notify.log');
+  process.env.PI_DESKTOP_E2E_NOTIFY_LOG = logPath;
+  try {
+    const app = await launchElectronApp(launchOptions('unfocused'));
+    const page = await app.firstWindow();
+    await waitSessionReady(page);
+
+    // 主窗口建 ALPHA 会话后切到 BETA（否则 ALPHA 仍是主窗口面板，detach 只会激活不建窗）
+    await sendAndWaitReply(page, 'Say PONG multiwin ALPHA');
+    await page.getByTestId('new-chat').click();
+    await sendAndWaitReply(page, 'Say PONG main BETA');
+    const alphaPath = await sessionPathOf(page, 'multiwin ALPHA');
+
+    const detached = await openDetachedWindow(app, page, 'multiwin ALPHA');
+    await expect.poll(() => app.windows().length).toBe(2);
+    await waitSessionReady(detached);
+
+    // 独立窗口（会话 ALPHA）发起慢速 run，随后把主窗口拉到前台：
+    // run 完成时 ALPHA 窗口失焦 → unfocused 档应弹通知（核心修复点）。
+    // 跨窗口改 OS 焦点只能走 app 自身 focus 路径（CDP 输入事件不改变窗口叠层）。
+    // 快照当前日志条数：之前的 run（如窗口未获 OS 焦点的环境）可能已写通知，
+    // 只断言本次 SLOW_END run 之后新增的条目。
+    const entriesBefore = (await readEntries(logPath)).length;
+    await detached.getByTestId('chat-input').fill('Say SLOW_END B-notify');
+    await detached.getByTestId('chat-send').click();
+    const betaPath = await sessionPathOf(page, 'main BETA');
+    await page.bringToFront().catch(() => undefined);
+    await focusSessionWindow(page, betaPath);
+    // 前置确认：若运行环境支持 OS 窗口聚焦，校验主窗口聚焦生效
+    let focusSupported = false;
+    try {
+      await expect
+        .poll(async () => {
+          const listed = await listHostWindows(page);
+          return listed.some((entry) => entry.focused);
+        }, { timeout: 3_000 })
+        .toBe(true);
+      focusSupported = true;
+    } catch {
+      focusSupported = false;
+    }
+
+    if (focusSupported) {
+      await expect.poll(async () => {
+        const listed = await listHostWindows(page);
+        return listed.find((entry) => entry.isMain)?.focused === true;
+      }, { timeout: 10_000 }).toBe(true);
+    }
+
+    await expect(detached.getByTestId('message-assistant').last()).toContainText('chunk29', {
+      timeout: 30_000,
+    });
+    await expect
+      .poll(async () => (await readEntries(logPath)).slice(entriesBefore).some((entry) => entry.sessionPath === alphaPath), {
+        timeout: 10_000,
+      })
+      .toBe(true);
+    const bEntry = (await readEntries(logPath)).slice(entriesBefore).find((entry) => entry.sessionPath === alphaPath);
+    expect(bEntry?.kind).toBe('runCompleted');
+    expect(bEntry?.body).toContain('chunk');
+
+    if (focusSupported) {
+      // 独立窗口自身聚焦时完成 run → 会话窗口聚焦 → 不弹通知
+      const before = (await readEntries(logPath)).length;
+      await detached.bringToFront().catch(() => undefined);
+      await focusSessionWindow(detached, alphaPath);
+      await expect.poll(async () => {
+        const listed = await listHostWindows(detached);
+        return listed.find((entry) => !entry.isMain)?.focused === true;
+      }, { timeout: 10_000 }).toBe(true);
+      await detached.getByTestId('chat-input').fill('Say SLOW_END B-focused');
+      await detached.getByTestId('chat-send').click();
+      await expect(detached.getByTestId('message-assistant').last()).toContainText('chunk29', {
+        timeout: 30_000,
+      });
+      await page.waitForTimeout(1_500);
+      expect(await readEntries(logPath)).toHaveLength(before);
+    }
   } finally {
     delete process.env.PI_DESKTOP_E2E_NOTIFY_LOG;
   }

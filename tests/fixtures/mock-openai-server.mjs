@@ -3,6 +3,7 @@
 //   "USE_TOOL_LS" → 第一轮返回 tool_call(bash: ls)，之后回显工具结果
 //   "USE_TOOL_EDIT" / "update the release status" → 第一轮返回 tool_call(edit: alpha→beta)
 //   "USE_TOOL_WRITE" → 第一轮返回 tool_call(write: 新建 e2e-new-file.txt)
+//   "USE_TOOL_GREP" → 第一轮返回 tool_call(grep: pattern+path)；"USE_TOOL_GREP_NOPATH" → grep 无 path
 //   "USE_TOOL_READ_IMAGE" → 第一轮返回 tool_call(read: preview.png)
 //   "USE_TOOL_EDIT_WRITE" → 第一轮返回两个并行 tool_call（edit + write 各一）
 //   "USE_TOOL_WRITE_SIX" → 第一轮返回六个并行 write tool_call（改动卡折叠）
@@ -55,7 +56,16 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ data: [
       { id: "mock-2" },
-      { id: "mock-discovered", context_window: 256000, max_output_tokens: 16384 },
+      // input 上报：验证目录→models.json→UI 的多模态识别链路
+      { id: "mock-discovered", context_window: 256000, max_output_tokens: 16384, input: ["text", "image"] },
+      // OpenRouter 风格元数据（top_provider.max_completion_tokens）：验证最大输出 token 的通用映射
+      { id: "openrouter-style", context_length: 262144, top_provider: { max_completion_tokens: 65536 } },
+      // Claude / Gemini / DeepSeek（agentrouter 常见模型）：目录值取官方真实规格，
+      // 不上报 input 与价格：能力走 pi 内置目录识别，价格显示占位
+      { id: "claude-opus-4.8", context_length: 1000000, top_provider: { max_completion_tokens: 128000 } },
+      { id: "claude-opus-5", context_length: 1000000, top_provider: { max_completion_tokens: 128000 } },
+      { id: "gemini-2.5-pro", context_length: 1048576, top_provider: { max_completion_tokens: 65536 } },
+      { id: "deepseek-v4-flash", context_length: 1000000, top_provider: { max_completion_tokens: 384000 } },
     ] }));
     return;
   }
@@ -80,6 +90,15 @@ const server = http.createServer((req, res) => {
     res.writeHead(404).end("not found");
     return;
   }
+  // 错误 key 模拟：models.json 的 apiKey 被改错后，所有请求带错误 Bearer → 401。
+  // 正确 key 为 mock-key；既有 spec 不受影响。
+  if (req.headers.authorization === "Bearer wrong-key") {
+    res.writeHead(401, { "content-type": "application/json" });
+    res.end(JSON.stringify({
+      error: { code: "", message: "Invalid token (request id: 20260825e2eWrongKey0000000000000aa)", type: "new_api_error" },
+    }));
+    return;
+  }
   let body = "";
   req.on("data", (c) => (body += c));
   req.on("end", () => {
@@ -92,7 +111,7 @@ const server = http.createServer((req, res) => {
     const wantsTool = !hasToolResult && (
       lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") || lastUser.includes("update the release status") ||
       lastUser.includes("USE_TOOL_LONG") || lastUser.includes("USE_TOOL_LINES") ||
-      lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_READ_EXTERNAL_HISTORY") || lastUser.includes("USE_TOOL_EDIT_WRITE") || lastUser.includes("USE_TOOL_WRITE_SIX") ||
+      lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_GREP") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_READ_EXTERNAL_HISTORY") || lastUser.includes("USE_TOOL_EDIT_WRITE") || lastUser.includes("USE_TOOL_WRITE_SIX") ||
       lastUser.includes("USE_TOOL_FOREGROUND_SERVER") ||
       lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
     );
@@ -147,6 +166,17 @@ const server = http.createServer((req, res) => {
     if (lastUser.includes("ERR_QUOTA")) {
       res.writeHead(429, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: { message: "The usage limit has been reached", type: "usage_limit_reached", param: "", code: null } }));
+      return;
+    }
+
+    if (!parsed.stream) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        id: "chatcmpl-mock",
+        object: "chat.completion",
+        choices: [{ index: 0, message: { role: "assistant", content: "PONG" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }));
       return;
     }
 
@@ -292,6 +322,14 @@ const server = http.createServer((req, res) => {
       } else if (lastUser.includes("USE_TOOL_READ_IMAGE")) {
         toolName = "read";
         args = JSON.stringify({ path: "preview.png" });
+      } else if (lastUser.includes("USE_TOOL_GREP_NOPATH")) {
+        // 无 path 的 grep（搜索整个 cwd）：必须排在 USE_TOOL_GREP 之前，
+        // 否则 NOPATH 串会被 GREP 分支命中
+        toolName = "grep";
+        args = JSON.stringify({ pattern: "alpha" });
+      } else if (lastUser.includes("USE_TOOL_GREP")) {
+        toolName = "grep";
+        args = JSON.stringify({ pattern: "alpha", path: "e2e-edit-target.txt" });
       } else if (lastUser.includes("MCP_CALL")) {
         toolName = "mcp";
         args = JSON.stringify({ tool: "mockmcp_ping", args: { message: "hello" } });
@@ -334,6 +372,34 @@ const server = http.createServer((req, res) => {
       send({ role: "assistant", content: "" });
       const timer = setInterval(() => {
         if (!res.writableEnded && !res.destroyed) send({ content: `waiting${i++} ` });
+      }, 100);
+      res.on("close", () => clearInterval(timer));
+      return;
+    }
+
+    // SLOW_REASONING：慢速 reasoning_content（6 段）→ 慢速正文（20 段），
+    // 给「流式中思考块自动折叠」断言留出可观测窗口；须放在 SLOW 分支之前
+    if (lastUser.includes("SLOW_REASONING")) {
+      const thought = "THOUGHT: slow streaming reasoning. ";
+      const text = "FINAL: slow reasoning done";
+      send({ role: "assistant", reasoning_content: "" });
+      let i = 0;
+      const timer = setInterval(() => {
+        if (res.writableEnded || res.destroyed) {
+          clearInterval(timer);
+          return;
+        }
+        i++;
+        if (i <= 6) {
+          send({ reasoning_content: thought });
+        } else if (i <= 26) {
+          send({ content: text[i - 7] ?? "" });
+        } else {
+          clearInterval(timer);
+          send({}, "stop", { prompt_tokens: 10, completion_tokens: 26, total_tokens: 36 });
+          res.write("data: [DONE]\n\n");
+          res.end();
+        }
       }, 100);
       res.on("close", () => clearInterval(timer));
       return;

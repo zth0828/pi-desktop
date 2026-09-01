@@ -3,8 +3,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
-import { matchModelProfile } from '@shared/model-profiles';
+import { DEFAULT_CONTEXT_WINDOW, PI_DEFAULT_TOOLS } from '@shared/host-api/contract';
 import type {
   HostSuccess,
   PiDefaultModel,
@@ -15,17 +14,24 @@ import type {
   PiProviderSetKeyPayload,
   PiProviderProbePayload,
   PiProviderProbeResult,
+  PiProviderServerType,
+  PiProviderSetModelInputPayload,
   PiProviderSetModelReasoningPayload,
+  PiProviderUpdateCustomPayload,
   PiProviderSetKeyResult,
   PiCompactionSettings,
   PiRetrySettingsPayload,
   PiRetrySettingsResult,
   PiDefaultThinkingResult,
+  PiDefaultToolsResult,
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiAdapter, type PiModelRuntimeHandle } from './pi-adapter';
-import { isLmStudioProvider, syncLmStudioModels } from '../utils/lmstudio-models';
-import { syncConfiguredProviderModels } from '../utils/configured-provider-models';
+import { isLmStudioProvider, isLocalServer, syncLmStudioModels } from '../utils/lmstudio-models';
+import { compatForOpenAi, placeholderApiKey, resolveServerType, thinkingLevelMapFor } from '../utils/custom-provider-config';
+import { parseMaxOutputTokens, piClientUserAgent, syncConfiguredProviderModels } from '../utils/configured-provider-models';
+import { hostFetch } from '../utils/host-fetch';
+import { findBuiltinModel, loadBuiltinModelCatalog, type BuiltinModelCatalog } from '../utils/builtin-model-catalog';
 import {
   piRuntimeApi,
   reloadRuntimeSettings,
@@ -121,7 +127,7 @@ async function probeResponsesBaseUrl(options: {
   if (options.apiKey) headers.authorization = `Bearer ${options.apiKey}`;
   for (const candidate of candidates) {
     try {
-      const response = await fetch(`${candidate}/responses`, {
+      const response = await hostFetch(`${candidate}/responses`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ model: options.model, input: 'ping', max_output_tokens: 1 }),
@@ -148,6 +154,8 @@ async function syncConfiguredCatalogs(
   onlyProviderIds?: readonly string[],
 ): Promise<{ discovered: number; added: number; migrated: number; changed: boolean; errors: string[] }> {
   const configured = configuredProviders(agentDir);
+  // pi 内置目录（pi-ai 静态数据）：网关目录未上报的元数据用官方规格补全
+  const builtinCatalog = loadBuiltinModelCatalog(adapter.packageRoot);
   const selected = onlyProviderIds ? new Set(onlyProviderIds) : null;
   let discovered = 0;
   let added = 0;
@@ -179,11 +187,18 @@ async function syncConfiguredCatalogs(
           baseUrl: resolution.auth.baseUrl,
           headers,
         },
+        // 目录拉取走壳的应用代理设置（hostFetch）：代理环境下直连网关会被
+        // 劫持返回 HTML 错误页（"Unexpected token '<'"），同步必须与 pi 会话
+        // 一样经代理出网
+        fetchImpl: hostFetch,
+        catalog: builtinCatalog,
       });
       if (result) {
         discovered += result.discovered;
         added += result.added;
         changed ||= result.changed;
+        // 目录不可达但已完成官方目录降级纠正：仍上报失败原因（key 无效等）
+        if (result.warning) errors.push(`${providerId}: ${result.warning}`);
       }
       if (api !== 'openai-responses' && model) {
         const responsesBaseUrl = await probeResponsesBaseUrl({
@@ -224,6 +239,17 @@ function providerLabel(id: string, name: string, baseUrl?: string): string {
   return name || id;
 }
 
+/** 自定义供应商展示名：models.json 里用户命名的 name 优先，避免被 providerLabel
+ *  的 hostname/ID 推断覆盖（首页模型菜单等处的分组名即来自这里）。 */
+function customProviderLabel(
+  providerId: string,
+  fallbackName: string,
+  configured: Record<string, ConfiguredProvider>,
+): string {
+  return configured[providerId]?.name
+    ?? providerLabel(providerId, fallbackName, configured[providerId]?.baseUrl);
+}
+
 /** 凭证变化后调用：下次使用时重建 ModelRuntime。 */
 export function invalidateModelRuntime(): void {
   runtimePromise = null;
@@ -235,6 +261,19 @@ async function resolveStandaloneCwd(): Promise<string> {
     .get({ key: 'workspaceCwd' })
     .catch(() => undefined);
   return workspace ?? os.homedir();
+}
+
+/** 全局或项目 settings.json 里是否已显式写过 compaction（区分 pi 默认值与用户自配）。 */
+function hasExplicitCompaction(agentDir: string, cwd: string): boolean {
+  for (const file of [path.join(agentDir, 'settings.json'), path.join(cwd, '.pi', 'settings.json')]) {
+    try {
+      const doc = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+      if (doc.compaction != null) return true;
+    } catch {
+      // 文件不存在或解析失败：按未显式配置处理
+    }
+  }
+  return false;
 }
 
 export const providersApi = {
@@ -253,8 +292,9 @@ export const providersApi = {
       const auth = provider.auth as { apiKey?: unknown; oauth?: unknown };
       rows.push({
         id: provider.id,
-        name: providerLabel(provider.id, provider.name, configuredProvidersById[provider.id]?.baseUrl),
+        name: customProviderLabel(provider.id, provider.name, configuredProvidersById),
         baseUrl: configuredProvidersById[provider.id]?.baseUrl ?? provider.baseUrl,
+        api: configuredProvidersById[provider.id]?.api,
         source: extensionProviderIds.has(provider.id)
           ? 'extension'
           : configuredProvidersById[provider.id]
@@ -275,28 +315,48 @@ export const providersApi = {
     const configuredProvidersById = configuredProviders(agentDir);
     const providerNames = new Map(adapter.providers.listProviders(runtime).map((provider) => [provider.id, provider.name]));
     const available = await adapter.providers.getAvailable(runtime);
+    // pi 组装模型时对缺失 cost 强制填 0（provider-composer: definition.cost ?? {input:0,...}），
+    // 无法区分「未知价格」与「真 0」；对自定义供应商读 models.json 原始记录还原：
+    // 原始记录没写 cost → UI 显示占位。
+    const modelsWithCost = new Map<string, Set<string>>();
+    for (const [providerId, provider] of Object.entries(configuredProvidersById)) {
+      const ids = new Set<string>();
+      for (const raw of provider.models ?? []) {
+        if (raw && typeof raw === 'object' && (raw as { cost?: unknown }).cost !== undefined) {
+          ids.add(String((raw as { id?: unknown }).id ?? ''));
+        }
+      }
+      modelsWithCost.set(providerId, ids);
+    }
     return {
-      models: available.map((m) => ({
-        provider: m.provider,
-        providerLabel: providerLabel(
-          m.provider,
-          providerNames.get(m.provider) ?? m.provider,
-          configuredProvidersById[m.provider]?.baseUrl,
-        ),
-        id: m.id,
-        name: m.name,
-        api: m.api,
-        reasoning: m.reasoning,
-        input: m.input,
-        contextWindow: m.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
-        maxTokens: m.maxTokens,
-        cost: {
-          input: m.cost?.input ?? 0,
-          output: m.cost?.output ?? 0,
-          cacheRead: m.cost?.cacheRead ?? 0,
-          cacheWrite: m.cost?.cacheWrite ?? 0,
-        },
-      })),
+      models: available.map((m) => {
+        const hasExplicitCost = modelsWithCost.get(m.provider)?.has(m.id)
+          ?? !configuredProvidersById[m.provider]; // 内置/扩展供应商：pi 目录的价格即真实值
+        const cost = m.cost && typeof m.cost === 'object'
+          ? {
+            input: m.cost.input ?? 0,
+            output: m.cost.output ?? 0,
+            cacheRead: m.cost.cacheRead ?? 0,
+            cacheWrite: m.cost.cacheWrite ?? 0,
+          }
+          : undefined;
+        return {
+          provider: m.provider,
+          providerLabel: customProviderLabel(
+            m.provider,
+            providerNames.get(m.provider) ?? m.provider,
+            configuredProvidersById,
+          ),
+          id: m.id,
+          name: m.name,
+          api: m.api,
+          reasoning: m.reasoning,
+          input: m.input,
+          contextWindow: m.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+          maxTokens: m.maxTokens,
+          cost: hasExplicitCost ? cost : undefined,
+        };
+      }),
     };
   },
 
@@ -392,7 +452,21 @@ export const providersApi = {
     const { adapter, runtime } = await getModelRuntime(ctx);
     try {
       await adapter.providers.login(runtime, payload.providerId, 'oauth', {
-        prompt: async () => '',
+        // pi 的 OAuth 流程（OpenRouter/Anthropic 等）把「手动粘贴授权码」prompt 与
+        // 浏览器回环回调竞争：浏览器完成后 pi 会 abort prompt 请求携带的 signal。
+        // 这里必须保持 pending 直到 signal abort——立即返回空串会触发 pi 的
+        // cancelWait 提前关掉回环服务器，整个登录以 "Missing authorization code" 失败。
+        prompt: (request) =>
+          new Promise<string>((_resolve, reject) => {
+            const signal = (request as { signal?: AbortSignal } | undefined)?.signal;
+            if (!signal) {
+              reject(new Error('OAuth prompt requires user input, which is not supported yet'));
+              return;
+            }
+            const cancel = () => reject(new Error('Login cancelled'));
+            if (signal.aborted) cancel();
+            else signal.addEventListener('abort', cancel, { once: true });
+          }),
         notify: (event) => {
           sendHostEvent('providers', 'oauthProgress', {
             providerId: payload.providerId,
@@ -411,33 +485,57 @@ export const providersApi = {
     try {
       const adapter = await loadPiAdapter();
       const agentDir = adapter.paths.getAgentDir();
+      // id 冲突保护：与已有自定义/内置供应商同 id 的写入会静默覆盖对方配置
+      const { runtime: currentRuntime } = await getModelRuntime(ctx);
+      const existingIds = new Set(adapter.providers.listProviders(currentRuntime).map((provider) => provider.id));
+      if (existingIds.has(payload.id)) {
+        return { success: false, error: `provider id already exists: ${payload.id}` };
+      }
+      // pi 内置目录官方规格：探测不到的字段（上下文/输出/能力/价格）以此兜底
+      const builtinCatalog = loadBuiltinModelCatalog(adapter.packageRoot);
       await adapter.settings.updateJson(agentDir, 'models.json', (doc) => {
         const providers = doc.providers && typeof doc.providers === 'object' && !Array.isArray(doc.providers)
           ? doc.providers as Record<string, unknown>
           : {};
         doc.providers = providers;
+        // 本机回环服务器（LM Studio/Ollama/vLLM 等）不需要鉴权，但 pi 在请求时
+        // 强制要求 apiKey 或 headers（models.md：keyless 本地服务器应保留占位值），
+        // 否则会话报 "No API key found"。写入服务器会忽略的占位 key 解除门槛。
+        const localServer = isLocalServer(payload.baseUrl);
+        const serverType = resolveServerType(payload.serverType, payload.id, payload.baseUrl);
+        const lmStudio = serverType === 'lm-studio';
+        // 思考控制按服务器类型决定（见 custom-provider-config.ts）：LM Studio 走
+        // reasoning_effort + off 映射；vLLM（Qwen3 等）走 chat_template_kwargs。
+        const compat = compatForOpenAi(serverType);
+        const thinkingMap = thinkingLevelMapFor(serverType);
         providers[payload.id] = {
+        name: payload.name.trim() || payload.id,
         baseUrl: normalizeBaseUrlForApi(payload.baseUrl, payload.api),
         api: payload.api,
+        ...(localServer && !payload.apiKey ? { apiKey: placeholderApiKey(serverType) } : {}),
         // 第三方 OpenAI 兼容服务器（vLLM/SGLang/Ollama/LM Studio 等）普遍不接受
         // developer role 与 reasoning_effort 参数：推理模型（Qwen3 等）直接 400。
         // 自定义供应商缺省声明关闭，pi 改发 system role；需要 developer role 的
         // 网关可在 models.json 手动改回 true。
         ...(payload.api === 'openai-completions' || payload.api === 'openai-responses'
-          ? { compat: { supportsDeveloperRole: false, supportsReasoningEffort: false } }
+          ? { compat }
           : {}),
         // 第三方模型缺省按支持推理处理：思考深度菜单可用；网关拒绝思考参数时
         // 用户可在 Models 页逐模型关闭。
         models: payload.models.map((m) => {
-          const profile = matchModelProfile(m.id);
+          const builtin = findBuiltinModel(builtinCatalog, m.id);
+          const tlm = m.thinkingLevelMap ?? (lmStudio && (m.reasoning ?? true) && thinkingMap ? thinkingMap : undefined);
           return {
             id: m.id,
             name: m.name ?? m.id,
             reasoning: m.reasoning ?? true,
-            input: ['text'],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            contextWindow: m.contextWindow ?? profile.contextWindow,
-            maxTokens: m.maxTokens ?? profile.maxTokens,
+            ...(tlm ? { thinkingLevelMap: tlm } : {}),
+            // 输入模态：pi 内置官方目录（能力声明最高权威）> 探测目录上报 > 纯文本。
+            input: builtin?.input ?? m.input ?? ['text'],
+            // 官方目录价格透传；未知时不写 cost（前端显示占位，与真 0 区分）
+            ...(builtin?.cost ? { cost: builtin.cost } : {}),
+            contextWindow: m.contextWindow ?? builtin?.contextWindow,
+            maxTokens: m.maxTokens ?? builtin?.maxTokens,
           };
         }),
         };
@@ -452,6 +550,40 @@ export const providersApi = {
           notify: () => {},
         });
       }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /**
+   * 编辑自定义供应商基本信息（名称/baseUrl/请求协议）。已配置的模型与凭证
+   * 保持不变——添加模型后仍可改名、换地址或换协议，无需删除重建。
+   */
+  updateCustom: async (payload: PiProviderUpdateCustomPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    try {
+      const adapter = await loadPiAdapter();
+      const agentDir = adapter.paths.getAgentDir();
+      const existing = configuredProviders(agentDir)[payload.providerId];
+      if (!existing) {
+        return { success: false, error: `custom provider not found: ${payload.providerId}` };
+      }
+      // baseUrl 规范化依赖 api（anthropic 需去掉 /v1 后缀）：优先用本次提交的 api
+      const nextApi = payload.api ?? existing.api ?? '';
+      const found = await updateConfiguredProvider(agentDir, payload.providerId, (provider) => {
+        if (payload.name !== undefined) provider.name = payload.name.trim() || payload.providerId;
+        if (payload.api !== undefined) provider.api = payload.api;
+        if (payload.baseUrl !== undefined) {
+          provider.baseUrl = normalizeBaseUrlForApi(payload.baseUrl, nextApi);
+        }
+      });
+      if (!found) {
+        return { success: false, error: `custom provider not found: ${payload.providerId}` };
+      }
+      invalidateModelRuntime();
+      const active = await resolveRuntimeForContextReady(ctx);
+      const { runtime } = await getModelRuntime(ctx);
+      if (active) await adapter.providers.refresh(runtime, { allowNetwork: false });
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -503,16 +635,67 @@ export const providersApi = {
   },
 
   /**
+   * 切换 models.json 自定义模型的图像输入声明（多模态）。规格表识别不到的
+   * 新模型或网关剥离视觉时用户由此手动声明；活动会话正在使用该模型时用
+   * pi 原生 setModel 重新应用定义，图片附件能力立即生效。
+   */
+  setModelInput: async (payload: PiProviderSetModelInputPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    try {
+      const adapter = await loadPiAdapter();
+      const agentDir = adapter.paths.getAgentDir();
+      let found = false;
+      const providerExists = await updateConfiguredProvider(agentDir, payload.providerId, (provider) => {
+        const models = Array.isArray(provider.models) ? provider.models : [];
+        for (const raw of models) {
+          const model = raw && typeof raw === 'object' && !Array.isArray(raw)
+            ? (raw as Record<string, unknown>)
+            : null;
+          if (model && model.id === payload.modelId) {
+            model.input = payload.image ? ['text', 'image'] : ['text'];
+            // 用户显式声明：发现合并刷新陈旧字段时不覆盖（models.json 纯 JSON 解析，额外字段安全）
+            model.inputPinned = true;
+            found = true;
+          }
+        }
+      });
+      if (!providerExists) {
+        return { success: false, error: `custom provider not found: ${payload.providerId}` };
+      }
+      if (!found) {
+        return { success: false, error: `model not found: ${payload.providerId}/${payload.modelId}` };
+      }
+      invalidateModelRuntime();
+      const active = await resolveRuntimeForContextReady(ctx);
+      if (active) {
+        await active.adapter.providers.refresh(active.modelRuntimeHandle, { allowNetwork: false });
+        const current = active.adapterRuntime.session.model;
+        if (current?.provider === payload.providerId && current?.id === payload.modelId) {
+          const result = await piRuntimeApi.setModel({ provider: payload.providerId, id: payload.modelId }, ctx);
+          if (!result.success) return { success: false, error: result.error };
+        }
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /**
    * 探测自定义供应商，分两层，都在这一个 action 里：
    * - 模型目录（GET /models 等，元数据请求，不产生生成费用）：恒执行。
    * - 协议验证（POST 最小化生成请求，约 1 token）：仅 payload.verifyProtocols=true 时执行，
    *   由用户在 UI 显式触发；未验证的协议仍可在 UI 手动选择。
-   * 全程 raw fetch，刻意不创建 pi session 也不改供应商状态。
+   * 全程经 hostFetch（应用代理设置）直连供应商端点，刻意不创建 pi session
+   * 也不改供应商状态。
    */
   probe: async (payload: PiProviderProbePayload): Promise<PiProviderProbeResult> => {
     const base = payload.baseUrl.replace(/\/+$/, '');
     const openAiBases = /\/v1$/i.test(base) ? [base] : [base, `${base}/v1`];
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    // 目录探测同样带 pi UA：agentrouter 等网关按客户端白名单拦截未知 UA
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      'user-agent': piClientUserAgent(),
+    };
     if (payload.apiKey) {
       headers.authorization = `Bearer ${payload.apiKey}`;
       headers['x-api-key'] = payload.apiKey;
@@ -524,8 +707,10 @@ export const providersApi = {
     const isProtocolPayload = (response: Response, json: Record<string, unknown>): boolean => {
       const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
       if (contentType.includes('text/html')) return false;
-      return contentType.includes('text/event-stream')
-        || (contentType.includes('json') && Object.keys(json).length > 0);
+      if (contentType.includes('text/event-stream')) return true;
+      if (typeof json !== 'object' || json === null) return false;
+      if (json.error && !json.choices && !json.candidates && !json.output) return false;
+      return Object.keys(json).length > 0;
     };
     const hasCache = (value: unknown): boolean => {
       if (!value || typeof value !== 'object') return false;
@@ -536,17 +721,32 @@ export const providersApi = {
       ) || Object.values(record).some(hasCache);
     };
     const models: string[] = [];
-    const modelDetails: Array<{ id: string; contextWindow?: number }> = [];
+    const modelDetails: Array<{ id: string; contextWindow?: number; maxTokens?: number; input?: Array<'text' | 'image'> }> = [];
     const advertisedEndpointTypes = new Set<string>();
     // 目录命中在哪个 base 上：/v1 下命中时把 baseUrl 顺带纠正，与协议验证的 resolvedBaseUrl 语义一致。
     let modelsBaseUrl: string | undefined;
+    // 模型目录请求失败原因（首个候选的失败原因即可）：界面在 models 为空时展示，
+    // 避免“探测后没有模型列表”却毫无提示（连接拒绝/超时/地址不对最常见）。
+    let catalogError: string | undefined;
+    const describeFetchError = (error: unknown): string => {
+      const cause = (error as { cause?: { code?: string } })?.cause;
+      if (cause?.code) return `${cause.code} (${error instanceof Error ? error.message : String(error)})`;
+      return error instanceof Error ? error.message : String(error);
+    };
     for (const candidateBase of openAiBases) {
       try {
-        const response = await fetch(`${candidateBase}/models`, { headers, signal: AbortSignal.timeout(9000) });
-        if (!response.ok) continue;
+        const response = await hostFetch(`${candidateBase}/models`, { headers, signal: AbortSignal.timeout(9000) });
+        if (!response.ok) {
+          catalogError ??= `HTTP ${response.status} at ${candidateBase}/models`;
+          continue;
+        }
         const json = await readJson(response);
         const rows = Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : [];
-        if (rows.length === 0) continue;
+        if (rows.length === 0) {
+          catalogError ??= `no models at ${candidateBase}/models`;
+          continue;
+        }
+        catalogError = undefined;
         modelsBaseUrl = candidateBase;
         for (const raw of rows) {
           if (!raw || typeof raw !== 'object') continue;
@@ -558,24 +758,63 @@ export const providersApi = {
             row.contextWindow ?? row.context_window ?? row.context_length
               ?? row.max_context_length ?? row.max_model_len ?? 0,
           );
-          if (contextWindow > 0) modelDetails.push({ id, contextWindow });
+          const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities)
+            ? row.capabilities as Record<string, unknown>
+            : undefined;
+          const rawTlm = row.thinkingLevelMap ?? row.thinking_level_map
+            ?? capabilities?.thinkingLevelMap ?? capabilities?.thinking_level_map;
+          const tlmObj = rawTlm && typeof rawTlm === 'object' && !Array.isArray(rawTlm)
+            ? rawTlm as Record<string, unknown>
+            : undefined;
+          const thinkingLevelMap = tlmObj
+            ? Object.fromEntries(
+                Object.entries(tlmObj).filter(
+                  ([, v]) => v === null || typeof v === 'string',
+                ),
+              ) as Record<string, string | null>
+            : undefined;
+          // 目录上报的输入模态：input 数组或 capabilities.vision/image（与
+          // parseProviderModelDirectory 同构）。
+          const rawInput = Array.isArray(row.input) ? row.input : undefined;
+          const input = rawInput
+            ?.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image');
+          const vision = capabilities?.vision === true || capabilities?.image === true;
+          const detail: { id: string; contextWindow?: number; maxTokens?: number; input?: Array<'text' | 'image'>; thinkingLevelMap?: Record<string, string | null> } = { id };
+          if (contextWindow > 0) detail.contextWindow = contextWindow;
+          // 最大输出 token：OpenAI/Anthropic/OpenRouter 各家目录字段变体统一解析
+          const maxTokens = parseMaxOutputTokens(row);
+          if (maxTokens) detail.maxTokens = maxTokens;
+          if (input?.length) detail.input = input;
+          else if (vision) detail.input = ['text', 'image'];
+          if (thinkingLevelMap && Object.keys(thinkingLevelMap).length > 0) detail.thinkingLevelMap = thinkingLevelMap;
+          if (contextWindow > 0 || maxTokens || (input?.length ?? 0) > 0 || vision || (thinkingLevelMap && Object.keys(thinkingLevelMap).length > 0)) {
+            modelDetails.push(detail);
+          }
           const endpointTypes = Array.isArray(row.supported_endpoint_types)
             ? row.supported_endpoint_types
             : [];
           for (const endpointType of endpointTypes) advertisedEndpointTypes.add(String(endpointType));
         }
         break;
-      } catch { /* Try the next conventional OpenAI base URL. */ }
+      } catch (error) {
+        // Try the next conventional OpenAI base URL.
+        catalogError ??= `${describeFetchError(error)} at ${candidateBase}/models`;
+      }
     }
     // LM Studio's OpenAI-compatible /models currently omits loaded context metadata.
     // Its native endpoint exposes both the model maximum and the active instance value.
+    let serverType: PiProviderServerType = 'generic';
+    const nativeBase = base.replace(/\/v1$/, '');
     try {
-      const nativeBase = base.replace(/\/v1$/, '');
-      const response = await fetch(`${nativeBase}/api/v1/models`, {
+      const response = await hostFetch(`${nativeBase}/api/v1/models`, {
         headers,
         signal: AbortSignal.timeout(4000),
       });
       if (response.ok) {
+        serverType = 'lm-studio';
+        // 原生端点命中说明 OpenAI 兼容端点必然在 /v1 下；目录循环没命中时
+        // （超时/瞬时不可达）兜底纠正推荐 base，否则保存后请求会打到根路径。
+        modelsBaseUrl ??= `${nativeBase}/v1`;
         const json = await readJson(response);
         const rows = Array.isArray(json.models) ? json.models : Array.isArray(json.data) ? json.data : [];
         for (const raw of rows) {
@@ -587,16 +826,60 @@ export const providersApi = {
           const first = instances[0] as { config?: { context_length?: unknown } } | undefined;
           const loaded = Number(first?.config?.context_length ?? 0);
           const maximum = Number(row.max_context_length ?? 0);
-          modelDetails.push({ id, ...(loaded > 0 || maximum > 0 ? { contextWindow: loaded || maximum } : {}) });
+          const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities)
+            ? row.capabilities as Record<string, unknown>
+            : undefined;
+          const vision = capabilities?.vision === true || capabilities?.image === true;
+          modelDetails.push({
+            id,
+            ...(loaded > 0 || maximum > 0 ? { contextWindow: loaded || maximum } : {}),
+            ...(vision ? { input: ['text' as const, 'image' as const] } : {}),
+          });
           if (!models.includes(id)) models.push(id);
         }
       }
-    } catch { /* Native metadata is optional and only available on LM Studio. */ }
+    } catch (error) {
+      // Native metadata is optional and only available on LM Studio.
+      catalogError ??= `${describeFetchError(error)} at ${nativeBase}/api/v1/models`;
+    }
+    // vLLM 的 OpenAI 兼容层在根路径暴露 /version（vllm-<版本>）。Qwen3 等推理
+    // 模型在 vLLM 上的思考控制走 chat_template_kwargs.enable_thinking（见
+    // compatForOpenAi），与 LM Studio 的 reasoning_effort 不同，必须先识别。
+    if (serverType === 'generic') {
+      try {
+        const root = base.replace(/\/v1$/, '');
+        const versionResponse = await hostFetch(`${root}/version`, { headers, signal: AbortSignal.timeout(3000) });
+        if (versionResponse.ok) {
+          const versionJson = await readJson(versionResponse);
+          if (typeof versionJson.version === 'string' && /^vllm/i.test(versionJson.version)) {
+            serverType = 'vllm';
+          }
+        }
+      } catch { /* 非 vLLM 服务器没有 /version 端点。 */ }
+    }
     const model = payload.model || models[0] || 'test-model';
-    // 目录未上报上下文的模型补上前缀规格表（探测不出时给用户一个合理的默认展示）。
+    // 目录未上报的元数据用 pi 内置目录官方规格补全（上下文/输出/输入模态），
+    // 让「添加模型」预览与最终落库都拿到准确默认值。probe 无 runtime，
+    // 复用 loadPiAdapter 的热路径缓存取包根；pi 不可用时无兜底（不阻断探测）。
+    let builtinCatalog: BuiltinModelCatalog = new Map();
+    try {
+      builtinCatalog = loadBuiltinModelCatalog((await loadPiAdapter()).packageRoot);
+    } catch { /* pi 未就绪时跳过官方规格补全 */ }
     for (const modelId of models) {
-      if (!modelDetails.some((detail) => detail.id === modelId)) {
-        modelDetails.push({ id: modelId, contextWindow: matchModelProfile(modelId).contextWindow });
+      const builtin = findBuiltinModel(builtinCatalog, modelId);
+      let detail = modelDetails.find((entry) => entry.id === modelId);
+      if (!detail) {
+        detail = { id: modelId };
+        modelDetails.push(detail);
+      }
+      if (!detail.contextWindow && builtin?.contextWindow) detail.contextWindow = builtin.contextWindow;
+      if (!detail.maxTokens && builtin?.maxTokens) detail.maxTokens = builtin.maxTokens;
+      // input 补全优先级：pi 内置官方目录 > 网关 /models 目录上报 > 纯文本。
+      // 官方目录明确声明的 input 直接采用，避免网关错误覆盖多模态能力。
+      if (builtin?.input) {
+        detail.input = builtin.input.filter((kind): kind is 'text' | 'image' => kind === 'text' || kind === 'image');
+      } else if (!detail.input?.length) {
+        detail.input = ['text'];
       }
     }
     // 服务端 supported_endpoint_types 声明 → 对应协议（不经请求的软提示）。
@@ -619,67 +902,105 @@ export const providersApi = {
       'anthropic-messages',
       'google-generative-ai',
     ] as const;
+    const findBestModelForApi = (api: string): string => {
+      if (payload.model) return payload.model;
+      if (!models.length) return 'test-model';
+      if (api === 'anthropic-messages') {
+        return models.find((m) => /claude/i.test(m)) ?? models[0];
+      }
+      if (api === 'google-generative-ai') {
+        return models.find((m) => /gemini/i.test(m)) ?? models[0];
+      }
+      if (api.startsWith('openai')) {
+        return models.find((m) => /(gpt|deepseek|qwen|glm|o1|o3|o4|text|chat|llama|mistral)/i.test(m)) ?? models[0];
+      }
+      return models[0];
+    };
     const protocols: PiProviderProbeResult['protocols'] = [];
     if (payload.verifyProtocols) {
-      // 真实验证：每个协议发一次最小化生成请求（约 1 token）。只取首个成功的候选，
-      // 不再补发二次请求——首次成功即已判定可用，二次请求的超时不应回灌 error。
+      // 真实验证：每个协议发一次最小化生成请求（约 1 token）。并发执行以减少等待时间。
+      const prioritizedOpenAiBases = modelsBaseUrl
+        ? [modelsBaseUrl, ...openAiBases.filter((candidateBase) => candidateBase !== modelsBaseUrl)]
+        : (/\/v1$/i.test(base) ? [base] : [`${base}/v1`, base]);
       const anthropicUrl = /\/v1$/i.test(base) ? `${base}/messages` : `${base}/v1/messages`;
       type ProbeCandidate = { url: string; resolvedBaseUrl: string };
       const requests: Array<{ api: string; candidates: ProbeCandidate[]; body: Record<string, unknown>; headers?: Record<string, string> }> = [
         {
           api: 'openai-completions',
-          candidates: openAiBases.map((candidateBase) => ({ url: `${candidateBase}/chat/completions`, resolvedBaseUrl: candidateBase })),
-          body: { model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 },
+          candidates: prioritizedOpenAiBases.map((candidateBase) => ({ url: `${candidateBase}/chat/completions`, resolvedBaseUrl: candidateBase })),
+          body: { model: findBestModelForApi('openai-completions'), messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 },
         },
         {
           api: 'openai-responses',
-          candidates: openAiBases.map((candidateBase) => ({ url: `${candidateBase}/responses`, resolvedBaseUrl: candidateBase })),
-          body: { model, input: 'ping', max_output_tokens: 1 },
+          candidates: prioritizedOpenAiBases.map((candidateBase) => ({ url: `${candidateBase}/responses`, resolvedBaseUrl: candidateBase })),
+          body: { model: findBestModelForApi('openai-responses'), input: 'ping', max_output_tokens: 1 },
         },
         {
           api: 'anthropic-messages',
           candidates: [{ url: anthropicUrl, resolvedBaseUrl: normalizeBaseUrlForApi(base, 'anthropic-messages') }],
-          body: { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] },
+          body: { model: findBestModelForApi('anthropic-messages'), max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] },
           headers: { ...headers, 'anthropic-version': '2023-06-01' },
         },
         {
           api: 'google-generative-ai',
-          candidates: [{ url: `${base}/models/${encodeURIComponent(model)}:generateContent`, resolvedBaseUrl: base }],
+          candidates: [{ url: `${base}/models/${encodeURIComponent(findBestModelForApi('google-generative-ai'))}:generateContent`, resolvedBaseUrl: base }],
           body: { contents: [{ parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } },
         },
       ];
-      for (const request of requests) {
-        let available = false;
-        let cacheStats = false;
-        let error: string | undefined;
-        let resolvedBaseUrl: string | undefined;
-        for (const candidate of request.candidates) {
-          try {
-            const first = await fetch(candidate.url, { method: 'POST', headers: request.headers ?? headers, body: JSON.stringify(request.body), signal: AbortSignal.timeout(9000) });
-            const firstJson = await readJson(first);
-            if (first.ok && isProtocolPayload(first, firstJson)) {
-              available = true;
-              cacheStats = hasCache(firstJson);
-              resolvedBaseUrl = candidate.resolvedBaseUrl;
-              error = undefined;
-              break;
+      const verifiedProtocols = await Promise.all(
+        requests.map(async (request) => {
+          let available = false;
+          let cacheStats = false;
+          let error: string | undefined;
+          let resolvedBaseUrl: string | undefined;
+          for (const candidate of request.candidates) {
+            try {
+              const first = await hostFetch(candidate.url, {
+                method: 'POST',
+                headers: request.headers ?? headers,
+                body: JSON.stringify(request.body),
+                signal: AbortSignal.timeout(12000),
+              });
+              const firstJson = await readJson(first);
+              if (first.ok && isProtocolPayload(first, firstJson)) {
+                available = true;
+                cacheStats = hasCache(firstJson);
+                resolvedBaseUrl = candidate.resolvedBaseUrl;
+                error = undefined;
+                break;
+              }
+              const extractErrorMessage = (json: Record<string, unknown>, status: number): string => {
+                const errObj = json.error && typeof json.error === 'object' ? (json.error as Record<string, unknown>) : json;
+                const msg = typeof errObj.message === 'string' ? errObj.message : typeof errObj.error === 'string' ? errObj.error : '';
+                if (msg) return `HTTP ${status}: ${msg}`;
+                const code = typeof errObj.code === 'string' ? errObj.code : '';
+                if (code) return `HTTP ${status} (${code})`;
+                if (status === 503) return `HTTP 503 (No available channel / unsupported protocol)`;
+                if (status === 403) return `HTTP 403 (Endpoint forbidden / not enabled)`;
+                if (status === 404) return `HTTP 404 (Endpoint not found)`;
+                if (status === 401) return `HTTP 401 (Invalid API key)`;
+                return `HTTP ${status}`;
+              };
+              error = first.ok
+                ? (firstJson.error && typeof (firstJson.error as Record<string, unknown>).message === 'string'
+                  ? String((firstJson.error as Record<string, unknown>).message)
+                  : `unexpected content-type: ${first.headers.get('content-type') ?? 'unknown'}`)
+                : extractErrorMessage(firstJson, first.status);
+            } catch (candidateError) {
+              error = candidateError instanceof Error ? candidateError.message : String(candidateError);
             }
-            error = first.ok
-              ? `unexpected content-type: ${first.headers.get('content-type') ?? 'unknown'}`
-              : `HTTP ${first.status}`;
-          } catch (candidateError) {
-            error = candidateError instanceof Error ? candidateError.message : String(candidateError);
           }
-        }
-        protocols.push({
-          api: request.api,
-          available,
-          verified: true,
-          cacheStats,
-          ...(error ? { error } : {}),
-          ...(resolvedBaseUrl ? { resolvedBaseUrl } : {}),
-        });
-      }
+          return {
+            api: request.api,
+            available,
+            verified: true,
+            cacheStats,
+            ...(error ? { error } : {}),
+            ...(resolvedBaseUrl ? { resolvedBaseUrl } : {}),
+          };
+        }),
+      );
+      protocols.push(...verifiedProtocols);
     } else {
       // 列表探测：不发生成请求，仅标注服务端声明的协议，其余留给用户手动选择。
       for (const api of protocolOrder) {
@@ -687,8 +1008,8 @@ export const providersApi = {
       }
     }
     const protocolPreference = [
-      'openai-responses',
       'openai-completions',
+      'openai-responses',
       'anthropic-messages',
       'google-generative-ai',
     ];
@@ -702,14 +1023,18 @@ export const providersApi = {
       recommendedApi: recommended?.api,
       // 协议验证得到的真实 base 优先；没验证时用目录命中的 base 纠正 /v1。
       recommendedBaseUrl: recommended?.resolvedBaseUrl ?? modelsBaseUrl,
+      serverType,
+      ...(catalogError && models.length === 0 ? { catalogError } : {}),
     };
   },
 
   getCompaction: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiCompactionSettings> => {
     const active = resolveRuntimeForContext(ctx);
     const adapter = await loadPiAdapter();
-    const handle = active?.settingsHandle ?? adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
-    return adapter.settings.getCompaction(handle);
+    const cwd = active?.cwd ?? (await resolveStandaloneCwd());
+    const agentDir = adapter.paths.getAgentDir();
+    const handle = active?.settingsHandle ?? adapter.settings.open({ cwd, agentDir });
+    return { ...adapter.settings.getCompaction(handle), configured: hasExplicitCompaction(agentDir, cwd) };
   },
 
   setCompaction: async (payload: { reserveTokens?: number; keepRecentTokens?: number; enabled?: boolean }): Promise<HostSuccess> => {
@@ -776,6 +1101,25 @@ export const providersApi = {
       const handle = adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
       adapter.settings.setDefaultThinking(handle, payload.level);
       await adapter.settings.flush(handle);
+      return { success: true };
+    } catch (err) { return { success: false, error: err instanceof Error ? err.message : String(err) }; }
+  },
+
+  getDefaultTools: async (): Promise<PiDefaultToolsResult> => {
+    const adapter = await loadPiAdapter();
+    const handle = adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
+    const configured = adapter.settings.getDefaultTools(handle);
+    return { tools: configured ?? [...PI_DEFAULT_TOOLS] };
+  },
+
+  setDefaultTools: async (payload: { tools: string[] }): Promise<HostSuccess> => {
+    try {
+      const adapter = await loadPiAdapter();
+      // defaultTools 是整表覆盖语义：设置页按完整列表写回，未勾选的内置工具即被关闭
+      await adapter.settings.updateJson(adapter.paths.getAgentDir(), 'settings.json', (doc) => {
+        doc.defaultTools = payload.tools;
+      });
+      await reloadRuntimeSettings();
       return { success: true };
     } catch (err) { return { success: false, error: err instanceof Error ? err.message : String(err) }; }
   },

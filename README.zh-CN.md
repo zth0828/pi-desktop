@@ -2,7 +2,7 @@
   <img src="./resources/icon.png" width="128" height="128" alt="Pi Desktop 图标">
   <h1>Pi Desktop</h1>
   <p><strong>为 pi coding agent 打造的桌面工作台。</strong></p>
-  <p>在一个专注的应用中完成对话、工具执行、代码评审、会话管理和能力扩展。</p>
+  <p>流式对话、逐 hunk 评审改动、直接运行 shell 命令，并用分栏与多窗口同时推进多个会话。</p>
   <p>
     <a href="README.md">English</a> ·
     <a href="README.zh-CN.md">简体中文</a>
@@ -14,13 +14,19 @@
   </p>
 </div>
 
-Pi Desktop 将 [pi](https://github.com/badlogic/pi-mono) 变成具有原生软件体验的桌面
-工作区，同时不会替换 pi 的运行时。模型、会话、工具、Skills、Packages、扩展和
-配置仍然来自 pi；桌面端负责让这些能力更直观、更易控制，也更适合日常使用。
+Pi Desktop 让 [pi](https://github.com/badlogic/pi-mono) 在桌面上有了一个真正的家：
+带 Plan mode、Skills 和文件附件的流式对话；并排工作台，可预览文件、逐 hunk
+评审改动、记录每一条运行过的 shell 命令；像项目资产一样的会话——可搜索、可
+fork，多任务时可以分栏或拆成独立窗口；以及覆盖整个模型栈的控制界面，从
+API Key、OAuth 到本地服务器。
+
+一切都运行在你全局安装的 pi 之上。会话、凭证、Skills、Packages 和设置都保留在
+pi 原生的位置与格式，你在这里完成的工作与 pi CLI 及整个生态完全兼容。
 
 > [!IMPORTANT]
-> Pi Desktop 不内置也不 fork pi。它加载用户全局安装的 pi SDK，并继续使用 pi
-> 原生配置和会话文件。项目仍在积极开发，当前下载版本为未签名预览包。
+> Pi Desktop 运行在你已有的 pi 之上：加载全局安装的 pi SDK，继续使用 pi 原生的
+> 配置、凭证和会话文件——不 fork、不替换、不锁定。项目仍在积极开发，当前下载
+> 版本为未签名预览包。
 
 ![Pi Desktop 流式对话与富 Markdown 输出](./resources/screenshots/chat.png)
 
@@ -31,10 +37,16 @@ Pi Desktop 将 [pi](https://github.com/badlogic/pi-mono) 变成具有原生软�
 让 pi 调查项目，实时查看它的工作过程和工具调用，在同一窗口检查文件与 diff，
 然后继续当前会话。对话、工作区和改动评审始终相互关联。
 
-### 原生复用 pi，不实现第二套 agent
+### 为并行工作而生
 
-Pi Desktop 不运行自己的 LLM 循环，也不会发明桌面端专属会话格式。它适配 pi 的
-SDK、事件、设置、包管理器和扩展系统。在桌面端创建的工作仍然是原生 pi 工作。
+把窗口拆成分栏，把会话拆成任意多个独立窗口，同时推进所有对话。流式输出、
+通知和焦点都会跟随每个会话去到正确的窗口。
+
+### 完全 pi 原生，零锁定
+
+应用接触的每个会话、每项设置和凭证都保留在 pi 原生的格式与位置。Pi Desktop
+直接适配 pi 的 SDK、事件、包管理器和扩展系统，你可以在 CLI 与桌面端之间自由
+切换，不丢任何东西。
 
 ### 自由选择模型与供应商
 
@@ -56,13 +68,13 @@ Skills、Prompt 模板、主题、扩展和 MCP 仍然使用 pi 原生机制。P
 
 | 领域 | 已实现能力 |
 | --- | --- |
-| **Agent 对话** | 流式文本与思考过程、工具调用进度、停止/排队/插队、斜杠命令、Plan mode 集成、富 Markdown、任务列表、表格、代码块、复制操作、文件引用和图片附件 |
-| **工作区** | 按需展开的文件浏览器；文本、代码、图片、Markdown、PDF、DOCX、XLSX、CSV 预览；使用本机应用打开；响应式停靠或覆盖布局 |
+| **Agent 对话** | 流式文本与思考过程、工具调用进度、停止/排队/插队、斜杠命令、Plan mode 开关、消息编辑与 fork（附件自动恢复）、bash 命令模式（可控是否进入上下文）、富 Markdown、任务列表、表格、代码块、复制操作、工作区文件引用和图片附件 |
+| **工作区** | 按需展开的文件浏览器；文本、代码、图片、Markdown、PDF、DOCX、XLSX、CSV 预览；使用本机应用打开；会话 bash 运行记录；停靠并排或覆盖布局，可向右扩展窗口 |
 | **改动评审** | Git 与非 Git 改动检测、staged/unstaged/untracked/conflict 状态、双栏或统一 diff、文件级与 hunk 级确认回滚、每轮结束后的编辑文件汇总 |
-| **会话管理** | 按项目组织历史记录、按标题和消息搜索、重命名、运行状态、切换、fork、分支树、归档/恢复、删除、上下文压缩和独立 HTML 导出 |
-| **模型管理** | 内置与扩展 Provider、API Key、OAuth、自定义兼容端点、协议探测、模型发现、上下文与输出限制、Token 价格、思考等级、用量和费用详情 |
+| **会话管理** | 按项目组织历史记录、分组展开/收起、按标题和消息搜索、重命名、运行状态、切换、fork、分支树、归档/恢复、删除、上下文压缩和独立 HTML 导出 |
+| **模型管理** | 内置与扩展 Provider、API Key、OAuth、自定义兼容端点、协议探测、模型发现、上下文与输出限制、Token 价格、思考等级、用量和费用详情、composer 选择器按供应商分组并支持组内搜索 |
 | **pi 生态** | 读取当前 Skills、浏览官方包目录、查看包元数据与 README、安装/更新/卸载包、配置全局或项目 MCP Server、渲染受支持的扩展对话框/Widget/通知 |
-| **桌面体验** | 浅色/深色/跟随系统主题、中英文界面、会话搜索快捷键、可折叠侧栏、通知策略、发送键与后续消息行为、阻止休眠和 pi 环境诊断 |
+| **桌面体验** | 浅色/深色/跟随系统主题、中英文界面、分栏与独立会话窗口、会话搜索快捷键、可折叠侧栏、通知策略、发送键与后续消息行为、阻止休眠、版本更新通知与镜像加速下载、pi 环境诊断 |
 
 ## 产品导览
 
@@ -73,6 +85,20 @@ Skills、Prompt 模板、主题、扩展和 MCP 仍然使用 pi 原生机制。P
 右侧工作台让源文件和改动始终贴近对话。工具活动会折叠为易读的回合记录，编辑过的
 文件则持续可见，方便检查或回滚。
 
+### 从输入框工具栏驱动会话
+
+![Pi Desktop 输入框工具栏与工作区文件引用树](./resources/screenshots/composer.png)
+
+Plan mode、Skills、工作区与 git 分支切换、模型选择都固定在常驻工具栏上。@ 引用面板
+以文件树浏览整个工作区，可以把任意文件（不只是图片）暂存为下一条消息的附件。
+
+### 在对话旁直接运行 shell 命令
+
+![Pi Desktop 命令模式与运行记录](./resources/screenshots/commands.png)
+
+命令模式从输入框直接执行 bash，可一键将输出排除在模型上下文之外。运行可独立于对话
+回合停止，工作区 Commands 标签页保留每条命令的输出与退出码。
+
 ### 为每个项目选择合适的模型栈
 
 ![Pi Desktop 模型与供应商](./resources/screenshots/models.png)
@@ -80,12 +106,28 @@ Skills、Prompt 模板、主题、扩展和 MCP 仍然使用 pi 原生机制。P
 凭证仍保存在 pi 原生存储中。Pi Desktop 为 Provider 状态、可用模型、上下文窗口、
 输出限制和当前模型提供清晰的管理界面。
 
+会话中可随时从 composer 选择器切换模型，按供应商分组并支持组内搜索：
+
+![Pi Desktop composer 模型选择器](./resources/screenshots/model-menu.png)
+
 ### 把会话当作长期项目资产
 
 ![Pi Desktop 会话管理](./resources/screenshots/sessions.png)
 
 会话不是一次性的聊天标签。你可以继续旧工作、fork 另一种实现思路、归档已完成的
 任务，或者导出一份独立 HTML 记录。
+
+### 用分栏与多窗口并行推进
+
+![Pi Desktop 单窗口分栏并行两个会话](./resources/screenshots/panes.png)
+
+把会话拖到面板边缘即可分栏，左右并排跟进两段对话，各自保持独立的流式状态
+与工作区。
+
+![Pi Desktop 在独立窗口中并行运行会话](./resources/screenshots/windows.png)
+
+需要更大空间时，可以把任意多个会话拆成独立窗口——两个、三个，甚至更多。
+每个窗口都独立流式工作，点击通知会直接跳回发起它的那个会话。
 
 ### 通过 pi Packages 扩展能力
 

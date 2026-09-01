@@ -3,15 +3,15 @@ import { hostApi } from './host-api';
 import i18n from './i18n';
 
 /** agent 一次 run 结束（非重试中）：正文带最后一条 assistant 消息摘要。 */
-export function reportRunCompleted(summary: string): void {
+export function reportRunCompleted(summary: string, sessionPath?: string): void {
   void hostApi.notify
-    .dispatch({ kind: 'runCompleted', title: i18n.t('notify.runCompleted'), body: summary })
+    .dispatch({ kind: 'runCompleted', title: i18n.t('notify.runCompleted'), body: summary, sessionPath })
     .catch(() => {});
 }
 
 /** 扩展 UI 桥挂起对话框请求（confirm/select/input 等待用户）。 */
-export function reportUiRequest(requestTitle: string): void {
+export function reportUiRequest(requestTitle: string, sessionPath?: string): void {
   void hostApi.notify
-    .dispatch({ kind: 'uiRequest', title: i18n.t('notify.uiRequest'), body: requestTitle })
+    .dispatch({ kind: 'uiRequest', title: i18n.t('notify.uiRequest'), body: requestTitle, sessionPath })
     .catch(() => {});
 }

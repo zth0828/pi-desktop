@@ -49,6 +49,13 @@ test.beforeAll(async () => {
   await writeFile(path.join(plainWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
   await writeFile(path.join(foldWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
 
+  // 显式启用 grep/find/ls：pi 运行时默认只激活 read/bash/edit/write，
+  // 不配置 defaultTools 时 mock 的 grep tool_call 会返回 "Tool grep not found"
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({ defaultTools: ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls'] }),
+  );
+
   await writeFile(
     path.join(agentDir, 'models.json'),
     JSON.stringify({
@@ -140,6 +147,8 @@ test('一轮 edit+write → 聚合编辑卡（清单 + 增删统计）→ 撤销
   await expect(editRow.locator('.turn-stat-del')).toHaveText('-1');
   await editRow.getByTestId('turn-changes-open-file').click();
   await expect(page.getByTestId('workspace-preview')).toContainText('beta');
+  await page.getByTestId('workspace-close').click();
+  await expect(page.getByTestId('review-panel')).toBeHidden();
   const writeRow = card.getByTestId('turn-changes-file').filter({ hasText: 'e2e-new-file.txt' });
   await expect(writeRow).toBeVisible();
   await expect(writeRow.locator('.turn-stat-add')).toHaveText('+1');
@@ -172,10 +181,11 @@ test('非 Git 目录：聚合编辑卡可回滚，Review 按钮打开完整评�
   await card.getByTestId('turn-changes-review').click();
   await expect(page.getByTestId('review-panel')).toBeVisible();
   await expect(page.getByTestId('review-fallback')).toHaveCount(0);
-  await expect(page.getByTestId('review-file')).toHaveCount(2);
+  await expect(page.getByTestId('review-group-workspace').getByTestId('review-file')).toHaveCount(2);
+  await expect(page.getByTestId('review-group-session').getByTestId('review-file')).toHaveCount(2);
 });
 
-test('六个改动初始显示五个，展开后显示完整清单，查看更改直达评审', async ({
+test('六个改动初始显示五个，展开后显示完整清单与收起按钮，收起恢复五个，查看更改直达评审', async ({
   launchElectronApp,
 }) => {
   const app = await launchElectronApp(launchOptions(plainWorkspace));
@@ -191,18 +201,29 @@ test('六个改动初始显示五个，展开后显示完整清单，查看更�
   await expect(card.getByTestId('turn-changes-file')).toHaveCount(5);
   const more = card.getByTestId('turn-changes-more');
   await expect(more).toContainText(/Show 1 more file|再显示 1 个文件/);
+  await expect(card.getByTestId('turn-changes-less')).toHaveCount(0);
   await page.screenshot({ path: 'output/playwright/turn-changes-five-file-limit.png', fullPage: false });
 
   await more.click();
   await expect(card.getByTestId('turn-changes-file')).toHaveCount(6);
   await expect(more).toHaveCount(0);
+  const less = card.getByTestId('turn-changes-less');
+  await expect(less).toContainText(/Show less|收起/);
+
+  await less.click();
+  await expect(card.getByTestId('turn-changes-file')).toHaveCount(5);
+  await expect(card.getByTestId('turn-changes-more')).toBeVisible();
+  await expect(card.getByTestId('turn-changes-less')).toHaveCount(0);
+
+  await card.getByTestId('turn-changes-more').click();
+  await expect(card.getByTestId('turn-changes-file')).toHaveCount(6);
 
   await card.getByTestId('turn-changes-view').click();
   const panel = page.getByTestId('review-panel');
   await expect(panel).toBeVisible();
   await expect(panel.getByTestId('workspace-review-tab')).toHaveAttribute('aria-selected', 'true');
   for (let index = 1; index <= 6; index += 1) {
-    await expect(panel.getByTestId('review-file').filter({ hasText: `generated-${index}.txt` })).toBeVisible();
+    await expect(panel.getByTestId('review-group-workspace').getByTestId('review-file').filter({ hasText: `generated-${index}.txt` })).toBeVisible();
   }
 });
 
@@ -294,6 +315,38 @@ test('thinking 与最终文本在同一消息时，折叠只保留最终答复',
   await expect(restoredPage.locator('.thinking-block pre')).toContainText('THOUGHT: inspect the request');
 });
 
+test('流式中思考块随进度自动折叠：思考流式时展开，正文开始后折叠，回合结束整体收起', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions(foldWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendPrompt(page, 'SLOW_REASONING');
+  const thinking = page.locator('details.thinking-block');
+
+  // 思考流式期间：块展开且带 streaming 标记
+  await expect(thinking).toBeVisible({ timeout: 30_000 });
+  await expect(thinking).toHaveClass(/streaming/);
+  await expect(thinking).toHaveJSProperty('open', true);
+
+  // 正文开始流式后：思考不再是活动块，应自动折叠（回归：程序性 open 变化
+  // 触发的 toggle 事件曾把自动展开误记为用户手动展开，导致块停在展开态）
+  const streamingReply = page.getByTestId('message-assistant').filter({ hasText: 'FINAL:' });
+  await expect(streamingReply).toBeVisible({ timeout: 15_000 });
+  await expect(thinking).not.toHaveClass(/streaming/);
+  await expect(thinking).toHaveJSProperty('open', false);
+
+  // 回合结束：整轮折叠，思考块不再直接出现在消息流里
+  await expect(page.getByTestId('turn-fold-toggle')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('.thinking-block')).toHaveCount(0);
+
+  // 展开回合与阶段后思考内容仍可查看（折叠不丢内容）
+  await page.getByTestId('turn-fold-toggle').click();
+  await page.getByTestId('process-stage-toggle').click();
+  await expect(page.locator('.thinking-block pre')).toContainText('THOUGHT: slow streaming reasoning');
+});
+
 test('展开本轮过程会显示完整工具输出，工具卡仍可单独收起', async ({
   launchElectronApp,
 }) => {
@@ -318,4 +371,35 @@ test('展开本轮过程会显示完整工具输出，工具卡仍可单独收�
   const preview = page.getByTestId('turn-fold-content').locator('.tool-card-preview pre');
   await expect(preview).toContainText('line-12');
   await expect(preview).not.toContainText('line-01');
+});
+
+test('grep 工具卡：args.path 出「在工作台预览」入口并直达文件预览', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendPrompt(page, 'USE_TOOL_GREP now');
+  await waitToolsDone(page, 1);
+
+  const card = page.getByTestId('tool-card').last();
+  await expect(card.getByTestId('tool-preview-file')).toBeVisible();
+  await card.getByTestId('tool-preview-file').click();
+  await expect(
+    page.getByTestId('workspace-file-tab').filter({ hasText: 'e2e-edit-target.txt' }),
+  ).toBeVisible();
+  await expect(page.getByTestId('workspace-preview')).toContainText('alpha');
+  await app.close();
+});
+
+test('grep 无 path 参数（搜索整个 cwd）：工具卡不出文件预览入口', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendPrompt(page, 'USE_TOOL_GREP_NOPATH now');
+  await waitToolsDone(page, 1);
+
+  const card = page.getByTestId('tool-card').last();
+  await expect(card.getByTestId('tool-preview-file')).toHaveCount(0);
+  await app.close();
 });

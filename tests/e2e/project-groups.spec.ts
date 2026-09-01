@@ -193,11 +193,9 @@ test('大量会话按项目分批显示，侧栏可独立滚动', async ({ launc
   await expect(group.locator('.sidebar-session-row')).toHaveCount(10, { timeout: 15_000 });
 
   const showMore = page.getByTestId(`session-group-show-more-${nameA}`);
-  // 25 条 fixture；启动时未发送内容的空会话不再占位（messageCount=0 不展示）
+  // 25 条 fixture；启动时未发送内容的空会话不再占位（messageCount=0 不展示）。
+  // show more 是一次性全量展开（配合 show less 收起），不是分页加载。
   await expect(showMore).toContainText('15 remaining');
-  await showMore.click();
-  await expect(group.locator('.sidebar-session-row')).toHaveCount(20);
-  await expect(showMore).toContainText('5 remaining');
   await showMore.click();
   await expect(group.locator('.sidebar-session-row')).toHaveCount(25);
   await expect(showMore).toHaveCount(0);

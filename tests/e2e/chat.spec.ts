@@ -1,7 +1,7 @@
 // 聊天主链路 E2E（真 pi + mock provider，不烧 API quota）。
 // 覆盖：事件完整性（流式渲染）、工具卡片、中断语义、新会话。
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from './fixtures/electron';
@@ -31,6 +31,11 @@ test.beforeAll(async () => {
   workspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-workspace-'));
   // edit 工具 E2E 的目标文件（mock 会把 alpha → beta）
   await writeFile(path.join(workspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
+  await mkdir(path.join(workspace, 'nested-e2e'));
+  await writeFile(path.join(workspace, 'nested-e2e', 'deep-e2e.txt'), 'deep content\n');
+  // 1x1 PNG + 假 docx：@ 文件选择应能作为图片/文件附件加入
+  await writeFile(path.join(workspace, 'e2e-image.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
+  await writeFile(path.join(workspace, 'e2e-doc.docx'), Buffer.from('PK\x03\x04fake docx content\x00\x01'));
   await writeFile(
     path.join(agentDir, 'models.json'),
     JSON.stringify({
@@ -115,9 +120,9 @@ test('会话标题、消息复制与 composer 加号菜单', async ({ launchElec
   await expect.poll(() => page.evaluate(() => (navigator as Navigator & { clipboard: { readText: () => Promise<string> } }).clipboard.readText())).toContain('PONG');
   await expect(page.getByTestId('copy-markdown')).toHaveCount(0);
   await page.getByTestId('composer-menu').click();
-  await expect(page.getByTestId('composer-file-reference')).toBeVisible();
+  await expect(page.getByTestId('attach-image')).toBeVisible();
   await page.getByTestId('chat-input').click();
-  await expect(page.getByTestId('composer-file-reference')).toBeHidden();
+  await expect(page.getByTestId('attach-image')).toBeHidden();
   await page.getByTestId('token-usage').click();
   await expect(page.getByTestId('token-usage-popover')).toBeVisible();
   await page.getByTestId('chat-input').click();
@@ -132,20 +137,43 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   const isMac = process.platform === 'darwin';
   const sidebar = page.locator('.sidebar');
   const windowControls = page.getByTestId('app-window-controls');
-  // macOS：折叠/搜索悬浮层常驻（红绿灯右侧）；Windows：与新会话按钮同一行
-  // （侧边栏顶部 sidebar-head），收起后由 is-native-frame 悬浮层提供展开入口
+  // Windows/Linux：内嵌自绘标题栏（window-chrome）；macOS：原生规范
+  // （系统菜单栏 + 原生红绿灯），内部不渲染自绘标题栏，折叠/搜索常驻红绿灯右侧。
+  if (isMac) {
+    await expect(page.getByTestId('window-chrome')).toHaveCount(0);
+    await expect(page.getByTestId('titlebar')).toHaveCount(0);
+    await expect(page.getByTestId('menu-file')).toHaveCount(0);
+    await expect(page.getByTestId('window-controls')).toHaveCount(0);
+  } else {
+    await expect(page.getByTestId('window-chrome')).toHaveCount(1);
+    await expect(page.getByTestId('titlebar')).toBeVisible();
+    await expect(page.getByTestId('menu-file')).toBeVisible();
+    await expect(page.getByTestId('window-close')).toBeVisible();
+  }
   const expandedSidebarBox = await sidebar.boundingBox();
   expect(expandedSidebarBox).not.toBeNull();
+  const newChatBox = await page.getByTestId('new-chat').boundingBox();
+  expect(newChatBox).not.toBeNull();
   if (isMac) {
+    // mac：折叠/搜索在红绿灯右侧悬浮层（顶部带内），右缘与侧边栏右缘（224px）对齐
     await expect(windowControls).toBeVisible();
-    await expect(windowControls).not.toContainText('Pi');
+    const trafficBox = await windowControls.boundingBox();
+    expect(trafficBox).not.toBeNull();
+    expect(trafficBox!.x).toBeGreaterThanOrEqual(140);
+    expect(trafficBox!.x + trafficBox!.width).toBeGreaterThanOrEqual(218);
+    expect(trafficBox!.x + trafficBox!.width).toBeLessThanOrEqual(230);
+    expect(trafficBox!.y + trafficBox!.height).toBeLessThanOrEqual(40);
+    await expect(windowControls.getByTestId('sidebar-toggle')).toBeVisible();
+    await expect(windowControls.getByTestId('session-search-trigger')).toBeVisible();
+    // 侧边栏内不再有折叠/搜索（只保留全宽新会话按钮）
+    await expect(sidebar.getByTestId('sidebar-toggle')).toHaveCount(0);
+    expect(newChatBox!.x - expandedSidebarBox!.x).toBeGreaterThanOrEqual(8);
+    expect(Math.abs(newChatBox!.width - expandedSidebarBox!.width)).toBeLessThan(110);
   } else {
-    await expect(page.getByTestId('titlebar')).toBeVisible();
-    // 新会话按钮与折叠/搜索同一行：y 相等，新会话在左、折叠/搜索在右（侧边栏内）
-    const newChatBox = await page.getByTestId('new-chat').boundingBox();
+    // Windows/Linux：折叠/搜索与「新会话」同一行（sidebar-head），展开态无悬浮层
+    await expect(windowControls).toHaveCount(0);
     const toggleBox = await page.getByTestId('sidebar-toggle').boundingBox();
     const searchBox = await page.getByTestId('session-search-trigger').boundingBox();
-    expect(newChatBox).not.toBeNull();
     expect(toggleBox).not.toBeNull();
     expect(searchBox).not.toBeNull();
     // 同一行：y 相差在按钮高度差（30px vs 36px 垂直居中）容差内
@@ -159,29 +187,25 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
     expect(newChatBox!.x - expandedSidebarBox!.x).toBeLessThanOrEqual(20);
     expect(Math.abs(newChatBox!.width - expandedSidebarBox!.width)).toBeLessThan(110);
   }
-  await expect(page.getByTestId('session-search-trigger')).toBeVisible();
-  const controlsBox = isMac ? await windowControls.boundingBox() : null;
-  if (isMac) {
-    expect(controlsBox).not.toBeNull();
-    expect(controlsBox!.x + controlsBox!.width).toBeLessThanOrEqual(expandedSidebarBox!.x + expandedSidebarBox!.width - 8);
-    expect(controlsBox!.x).toBeGreaterThan(expandedSidebarBox!.x + expandedSidebarBox!.width / 2);
-    expect(controlsBox!.y).toBeLessThan(12);
-  }
   await expect(page.locator('.content')).toHaveCSS('border-top-left-radius', '0px');
 
   const composerBox = await page.locator('.chat-input-card').boundingBox();
   expect(composerBox).not.toBeNull();
-  expect(composerBox!.width).toBeGreaterThan(820);
+  // 聊天列有 960px 上限，composer 填满聊天列（留 padding 容差）；
+  // 断言相对宽度而非绝对像素，兼容 CI 小分辨率屏幕。
+  const chatColumnBox = await page.locator('.chat-column').boundingBox();
+  expect(chatColumnBox).not.toBeNull();
+  expect(composerBox!.width).toBeGreaterThan(chatColumnBox!.width - 80);
   expect(composerBox!.height).toBeGreaterThanOrEqual(110);
   await page.screenshot({ path: 'output/playwright/chat-chrome-refined.png', fullPage: false });
 
   const expandedWidth = (await sidebar.boundingBox())!.width;
-  const titlebarBox = await page.getByTestId('titlebar').boundingBox();
-  expect(titlebarBox).not.toBeNull();
+  const titlebarBox = isMac ? null : await page.getByTestId('titlebar').boundingBox();
+  if (!isMac) expect(titlebarBox).not.toBeNull();
   await page.getByTestId('sidebar-toggle').click();
   await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByTestId('sidebar-sessions')).toBeHidden();
-  // 新会话按钮在侧边栏内：mac 与 Windows 折叠后都随侧栏隐藏
+  // 新会话按钮在侧边栏内：折叠后随侧栏隐藏
   await expect(page.getByTestId('new-chat')).toBeHidden();
   await expect(page.getByTestId('nav-chat')).toBeHidden();
   await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(0);
@@ -191,21 +215,19 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   expect(collapsedContentBox).not.toBeNull();
   expect(collapsedSidebarBox!.width).toBe(0);
   expect(collapsedContentBox!.x).toBe(0);
+  // 收起后：悬浮层提供展开入口（mac 常驻层仍在红绿灯右侧；win 出现在内容区左上角）
+  await expect(windowControls).toBeVisible();
+  const collapsedControlsBox = await windowControls.boundingBox();
+  expect(collapsedControlsBox).not.toBeNull();
   if (isMac) {
-    await expect(windowControls).toBeVisible();
-    const collapsedControlsBox = await windowControls.boundingBox();
-    expect(collapsedControlsBox).not.toBeNull();
-    expect(collapsedControlsBox!.x).toBe(controlsBox!.x);
-    expect(collapsedControlsBox!.y).toBeLessThan(12);
+    expect(collapsedControlsBox!.y + collapsedControlsBox!.height).toBeLessThanOrEqual(40);
   } else {
-    // Windows：收起后 is-native-frame 悬浮层落在内容区左上角（标题栏之下），提供展开入口
-    await expect(windowControls).toBeVisible();
-    const collapsedControlsBox = await windowControls.boundingBox();
-    expect(collapsedControlsBox).not.toBeNull();
     expect(collapsedControlsBox!.x).toBeLessThan(60);
     expect(collapsedControlsBox!.y).toBeGreaterThanOrEqual(30);
     expect(collapsedControlsBox!.y).toBeLessThan(60);
-    // Row 1 标题栏位置不随侧栏折叠变化
+  }
+  // Row 1 标题栏位置不随侧栏折叠变化（仅 Windows/Linux 有自绘标题栏）
+  if (!isMac) {
     const collapsedTitlebarBox = await page.getByTestId('titlebar').boundingBox();
     expect(collapsedTitlebarBox).not.toBeNull();
     expect(collapsedTitlebarBox!.x).toBe(titlebarBox!.x);
@@ -412,7 +434,7 @@ test('富文本答复渲染任务卡、表格、代码块和外链', async ({ la
   await expect(renderedCode).toContainText('console.log(answer)');
   // streamdown 用 block 级 span 分行：textContent 不含换行，须按 innerText 语义断言并自动重试
   await expect(renderedCode).toContainText('const answer = 42;\nif (answer)', { useInnerText: true });
-  expect(await renderedCode.evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).whiteSpace)).toBe('pre');
+  await expect(renderedCode).toHaveCSS('white-space', /pre/);
   await expect(page.locator('.markdown blockquote')).toBeVisible();
   await expect(page.locator('.markdown a[href="https://example.com/docs"]')).toBeVisible();
   await page.screenshot({ path: 'output/playwright/rich-text-light.png', fullPage: false });
@@ -492,13 +514,315 @@ test('! bash 命令：本地执行并渲染输出卡片（!! 不入上下文）'
   await expect(excluded).toContainText(/不入上下文|excluded from context/);
 });
 
+test('! bash 长输出：默认折叠尾部预览，点击展开/收回', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 短输出：无折叠 UI，全文直出（回归）
+  await page.getByTestId('chat-input').fill('!echo pi-desktop-bash-short');
+  await page.getByTestId('chat-send').click();
+  const short = page.getByTestId('message-bash').last();
+  await expect(short.getByTestId('bash-output')).toContainText('pi-desktop-bash-short', { timeout: 15_000 });
+  await expect(short.getByTestId('bash-output')).toHaveAttribute('data-expanded', 'true');
+  await expect(short.getByTestId('bash-output-more')).toHaveCount(0);
+
+  // 长输出（seq 1 20）：默认只显示尾部 5 行（16..20），首行 1 不可见，提示更早 15 行
+  await page.getByTestId('chat-input').fill('!seq 1 20');
+  await page.getByTestId('chat-send').click();
+  const long = page.getByTestId('message-bash').last();
+  const output = long.getByTestId('bash-output');
+  await expect(output).toContainText('20', { timeout: 15_000 });
+  await expect(output).toHaveAttribute('data-expanded', 'false');
+  await expect.poll(() => output.textContent().then((text) => text?.startsWith('1\n') ?? false)).toBe(false);
+  await expect(long.getByTestId('bash-output-more')).toContainText('15');
+
+  // 点击输出区展开全文，再点收回
+  await output.click();
+  await expect(output).toHaveAttribute('data-expanded', 'true');
+  await expect.poll(() => output.textContent().then((text) => text?.startsWith('1\n') ?? false)).toBe(true);
+  await output.click();
+  await expect(output).toHaveAttribute('data-expanded', 'false');
+});
+
+test('! bash 流式窗口：执行中只见尾部预览，无展开交互', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 慢速命令保证落盘前有足够的流式窗口（50 行 × 0.1s ≈ 5s）
+  await page.getByTestId('chat-input').fill("!bash -c 'for i in $(seq 1 50); do echo $i; sleep 0.1; done'");
+  await page.getByTestId('chat-send').click();
+  const streaming = page.getByTestId('message-bash').last();
+  await expect(streaming).toBeVisible();
+  // 执行中（未落盘）：无 exit code、无展开提示、输出区标记 streaming
+  await expect(streaming.getByTestId('bash-exit-code')).toHaveCount(0, { timeout: 5_000 });
+  await expect(streaming.getByTestId('bash-output-more')).toHaveCount(0);
+  await expect(streaming.getByTestId('bash-output')).toHaveAttribute('data-expanded', 'streaming');
+  // 落盘后：转为非流式折叠态，可展开
+  await expect(streaming.getByTestId('bash-exit-code')).toContainText('0', { timeout: 20_000 });
+  await expect(streaming.getByTestId('bash-output')).toHaveAttribute('data-expanded', 'false');
+  await expect(streaming.getByTestId('bash-output-more')).toContainText('45');
+});
+
+test('命令模式：加号菜单进入、默认不入上下文、发送后自动退出', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 加号菜单 → 运行命令 → 命令模式指示条出现，默认「不入上下文」
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  const bar = page.getByTestId('command-mode-bar');
+  await expect(bar).toBeVisible();
+  await expect(page.getByTestId('command-context-toggle')).toContainText(/不入上下文|excluded from context/);
+
+  // 不带 ! 前缀直接输入命令并发送
+  await page.getByTestId('chat-input').fill('echo pi-desktop-command-mode');
+  await page.getByTestId('chat-send').click();
+
+  // 消息流卡片出现且带「不入上下文」徽标；发送后命令模式自动退出
+  const card = page.getByTestId('message-bash').last();
+  await expect(card.getByTestId('bash-command')).toContainText('echo pi-desktop-command-mode', { timeout: 15_000 });
+  await expect(card).toContainText(/不入上下文|excluded from context/);
+  await expect(bar).toBeHidden();
+});
+
+test('右侧「命令」tab：bash 历史记录与消息流同源，可点击展开', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 命令模式执行一条命令（默认不入上下文），供右侧面板展示
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('chat-input').fill('echo pi-desktop-command-panel');
+  await page.getByTestId('chat-send').click();
+  const card = page.getByTestId('message-bash').last();
+  await expect(card.getByTestId('bash-command')).toContainText('echo pi-desktop-command-panel', { timeout: 15_000 });
+
+  // 右侧「命令」tab：历史记录与消息流同源，默认折叠，点击展开全文
+  await page.getByTestId('workspace-toggle').click();
+  await page.getByTestId('workspace-commands-tab').click();
+  const run = page.getByTestId('command-run').last();
+  await expect(run).toContainText('echo pi-desktop-command-panel');
+  await expect(run).toContainText(/不入上下文|excluded from context/);
+  await run.getByTestId('command-run-toggle').click();
+  await expect(run.getByTestId('command-run-output')).toContainText('pi-desktop-command-panel');
+});
+
+test('命令模式：上下文开关切到入上下文、全角 ！ 前缀兼容', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 进入命令模式，切换到「入上下文」
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('command-context-toggle').click();
+  await expect(page.getByTestId('command-context-toggle')).toContainText(/入上下文|In context/);
+  await page.getByTestId('chat-input').fill('echo pi-desktop-command-in-context');
+  await page.getByTestId('chat-send').click();
+  const card = page.getByTestId('message-bash').last();
+  await expect(card.getByTestId('bash-command')).toContainText('echo pi-desktop-command-in-context', { timeout: 15_000 });
+  await expect(card).not.toContainText(/不入上下文|excluded from context/);
+  // bash 一次一个：等第一条命令退出再发第二条，避免慢平台上并发 executeBash 互斥导致丢卡
+  await expect(card.getByTestId('bash-exit-code')).toBeVisible({ timeout: 30_000 });
+
+  // 全角 ！ 前缀（中文输入法）直接识别为 bash 命令：单 ！ 入上下文，无徽标
+  await page.getByTestId('chat-input').fill('！echo pi-desktop-fullwidth-bang');
+  await page.getByTestId('chat-send').click();
+  const full = page.getByTestId('message-bash').last();
+  await expect(full.getByTestId('bash-command')).toContainText('echo pi-desktop-fullwidth-bang', { timeout: 15_000 });
+  await expect(full).not.toContainText(/不入上下文|excluded from context/);
+});
+
+test('bash 执行中：普通消息发送不被阻塞，完成后命令正常落盘', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('chat-input').fill("bash -c 'for i in $(seq 1 50); do echo $i; sleep 0.1; done'");
+  await page.getByTestId('chat-send').click();
+  // bash 执行中：输入内容后发送按钮保持可用（pi 允许 bash 运行中提交 prompt）
+  await page.getByTestId('chat-input').fill('ECHO_USER 普通消息不被 bash 阻塞');
+  await expect(page.getByTestId('chat-send')).toBeEnabled({ timeout: 10_000 });
+  await expect(page.getByTestId('chat-send')).not.toHaveAttribute('title', /仍在执行|still running/);
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('ECHO_USER 普通消息不被 bash 阻塞', { timeout: 30_000 });
+  // bash 完成后正常落盘
+  const card = page.getByTestId('message-bash').last();
+  await expect(card.getByTestId('bash-exit-code')).toContainText('0', { timeout: 20_000 });
+});
+
+test('bash 执行中可单独停止：流式卡停止按钮取消命令', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 命令模式跑慢命令，留出停止窗口（先 echo 一行再 sleep，保证取消时已有输出）
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('chat-input').fill("bash -c 'echo pi-desktop-stop-me; sleep 30'");
+  await page.getByTestId('chat-send').click();
+
+  // 流式卡出现停止按钮
+  await expect(page.getByTestId('bash-stop').first()).toBeVisible({ timeout: 10_000 });
+
+  // 点停止：命令被取消，落盘 cancelled 卡（无 exit code）；取消瞬间输出可能为空
+  // （Windows 上 bash 取消时 stdout 可能丢），有输出时断言直接展开不折叠
+  await page.getByTestId('bash-stop').first().click();
+  const card = page.getByTestId('message-bash').last();
+  await expect(card).toContainText(/已取消|cancelled/, { timeout: 15_000 });
+  await expect(card.getByTestId('bash-exit-code')).toHaveCount(0);
+  const out = card.getByTestId('bash-output');
+  if (await out.count()) {
+    await expect(out).toHaveAttribute('data-expanded', 'true');
+  }
+});
+
+test('计划模式：常驻切换，开启后发送带 /plan 前缀，可退出', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 默认关闭（直接执行）
+  await expect(page.getByTestId('composer-plan-toggle')).toHaveAttribute('aria-pressed', 'false');
+  // 开启：发送带 /plan 前缀（ECHO_USER 回显收到的 user 文本验证）
+  await page.getByTestId('composer-plan-toggle').click();
+  await expect(page.getByTestId('composer-plan-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('chat-input').fill('ECHO_USER 帮我设计架构');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('/plan ECHO_USER 帮我设计架构', { timeout: 30_000 });
+  // 退出：恢复直接执行
+  await page.getByTestId('composer-plan-toggle').click();
+  await expect(page.getByTestId('composer-plan-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await page.getByTestId('chat-input').fill('ECHO_USER 直接执行这条');
+  await page.getByTestId('chat-send').click();
+  const last = page.getByTestId('message-assistant').last();
+  await expect(last).toContainText('ECHO_USER 直接执行这条', { timeout: 30_000 });
+  await expect(last).not.toContainText('/plan');
+});
+
+test('引用文件：目录树逐层展开，选中作为附件，点击面板外关闭', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 加号菜单「引用文件」：无需先输入 @ 即弹出目录树
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-file-reference').click();
+  await expect(page.getByTestId('file-panel')).toBeVisible();
+  // 根层目录节点出现，展开后能看到深层文件
+  await expect(page.getByTestId('file-dir').filter({ hasText: 'nested-e2e' })).toBeVisible();
+  await page.getByTestId('file-dir').filter({ hasText: 'nested-e2e' }).click();
+  const deep = page.getByTestId('file-option').filter({ hasText: 'deep-e2e.txt' });
+  await expect(deep).toBeVisible();
+  // 选中深层文件 → 作为附件（staged-file）暂存
+  await deep.click();
+  await expect(page.getByTestId('staged-file')).toContainText('deep-e2e.txt');
+  await expect(page.getByTestId('file-panel')).toBeHidden();
+
+  // 再次打开，点击面板外部（输入框）关闭
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-file-reference').click();
+  await expect(page.getByTestId('file-panel')).toBeVisible();
+  await page.getByTestId('chat-input').click();
+  await expect(page.getByTestId('file-panel')).toBeHidden();
+});
+
+test('@ 文件选择：图片与 docx 也能作为附件加入', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-file-reference').click();
+  // 图片 → staged-image 附件（可预览）
+  await page.getByTestId('file-option').filter({ hasText: 'e2e-image.png' }).click();
+  await expect(page.getByTestId('staged-image')).toBeVisible();
+  await expect(page.getByTestId('staged-image').locator('img')).toHaveAttribute('alt', 'e2e-image.png');
+  // docx（二进制）→ staged-file 引用附件
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-file-reference').click();
+  await page.getByTestId('file-option').filter({ hasText: 'e2e-doc.docx' }).click();
+  await expect(page.getByTestId('staged-file')).toContainText('e2e-doc.docx');
+});
+test('bash 执行中：composer 停止按钮不显示，命令停止走 bash 卡', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('chat-input').fill("bash -c 'for i in $(seq 1 40); do echo $i; sleep 0.1; done'");
+  await page.getByTestId('chat-send').click();
+  // bash 执行中（无消息回合）：bash 卡有停止按钮，composer 不显示 stop（命令与会话停止分离）
+  await expect(page.getByTestId('bash-stop').first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('chat-stop')).toHaveCount(0);
+  // 用 bash 卡按钮停止命令 → cancelled 落盘
+  await page.getByTestId('bash-stop').first().click();
+  const card = page.getByTestId('message-bash').last();
+  await expect(card).toContainText(/已取消|cancelled/, { timeout: 15_000 });
+  await expect(card.getByTestId('bash-exit-code')).toHaveCount(0);
+});
+
+test('回合中断不影响后台 bash：stop 停回合，命令继续跑完', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 后台慢命令（6s），随后发一个慢回合
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('chat-input').fill("bash -c 'for i in $(seq 1 30); do echo $i; sleep 0.2; done'");
+  await page.getByTestId('chat-send').click();
+  await page.getByTestId('chat-input').fill('SLOW_END stream');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 30_000 });
+  // 停回合（composer stop）：bash 继续后台跑，不被连带取消
+  await page.getByTestId('chat-stop').click();
+  await expect(page.getByTestId('chat-stop')).not.toBeVisible({ timeout: 30_000 });
+  // bash 完成后正常落盘（exit 0）
+  const card = page.getByTestId('message-bash').last();
+  await expect(card.getByTestId('bash-exit-code')).toContainText('0', { timeout: 25_000 });
+});
+
+test('技能：加号菜单选择后以 badge 显示在输入框上方，不写入输入框', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('chat-input').fill('帮我写个脚本');
+  await page.getByTestId('composer-menu').click();
+  const skillOption = page.locator('[data-testid^="composer-skill-"]').first();
+  if (await skillOption.count() === 0) {
+    // 环境无 skill：菜单内显示空态提示
+    await expect(page.getByTestId('composer-menu-panel')).toContainText(/暂无|No skills/);
+  } else {
+    // 选中后输入框上方出现 skill badge，输入框内容不被破坏
+    await skillOption.click();
+    await expect(page.getByTestId('skill-mode-bar')).toBeVisible();
+    await expect(page.getByTestId('chat-input')).toHaveValue('帮我写个脚本');
+    // 点 × 移除
+    await page.getByTestId('skill-mode-remove').click();
+    await expect(page.getByTestId('skill-mode-bar')).toBeHidden();
+  }
+});
+
 test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当前轮插入', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.getByTestId('workspace-toggle').click();
-  await expect(page.getByTestId('review-panel')).toBeVisible();
+  const panel = page.getByTestId('review-panel');
+  await expect(panel).toBeVisible();
+  // 默认即 docked（向右弹开并排），无需手动切换
+  await expect(panel).toHaveAttribute('data-mode', 'docked');
+  await expect(panel).toHaveAttribute('data-mode-preference', 'docked');
 
   await page.getByTestId('chat-input').fill('SLOW stream please');
   await page.getByTestId('chat-send').click();
@@ -509,9 +833,13 @@ test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当
   const stopBox = await page.getByTestId('chat-stop').boundingBox();
   expect(stopBox?.width).toBe(30);
   expect(stopBox?.height).toBe(30);
-  const panelBox = await page.getByTestId('review-panel').boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect(Math.abs(panelBox!.x + panelBox!.width - 1200)).toBeLessThan(2);
+  // docked 展开会触发窗口向右加宽（动画进行中 boundingBox 含 transform/中间帧），
+  // 轮询到稳定后面板右缘与当前视口右缘对齐
+  await expect.poll(async () => {
+    const box = await page.getByTestId('review-panel').boundingBox();
+    const viewport = page.viewportSize();
+    return box && viewport ? Math.abs(box.x + box.width - viewport.width) : Number.POSITIVE_INFINITY;
+  }).toBeLessThan(2);
   expect(await page.locator('.chat-input-card').evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   await page.screenshot({ path: 'output/playwright/narrow-composer-workspace.png', fullPage: false });
 
@@ -605,6 +933,28 @@ test('切回历史会话后恢复上下文与整个会话 Token 统计', async (
   await page.getByTestId('token-usage').click();
   await expect(page.getByTestId('usage-context-used').locator('strong')).not.toHaveText(/^(0|—)$/);
   await expect(page.getByTestId('usage-session-input').locator('strong')).not.toHaveText(/^(0|—)$/);
+});
+
+test('切换到新会话后 usage 弹层归零：不残留上一会话的 session totals', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('chat-input').fill('USAGE RESIDUE OLD');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+
+  // 旧会话的 session totals 非零
+  await page.getByTestId('token-usage').click();
+  await expect(page.getByTestId('usage-session-input').locator('strong')).not.toHaveText(/^0$/);
+  await page.getByTestId('token-usage').click();
+
+  // 新建空会话：轮询返回新会话数据前 usage 快照已被清空，
+  // totals 归零而不是带着旧会话的累计数
+  await page.getByTestId('new-chat').click();
+  await expect(page.getByTestId('message-user')).toHaveCount(0, { timeout: 15_000 });
+  await page.getByTestId('token-usage').click();
+  await expect(page.getByTestId('usage-session-input').locator('strong')).toHaveText(/^0$/, { timeout: 10_000 });
 });
 
 test('缓存失效 → assistant 尾部显示 cache miss 警告', async ({ launchElectronApp }) => {

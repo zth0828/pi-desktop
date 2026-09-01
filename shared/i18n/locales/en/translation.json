@@ -16,8 +16,14 @@
     "closeWindow": "Close Window",
     "collapseSidebar": "Collapse Sidebar",
     "searchChats": "Search Chats",
+    "undo": "Undo",
+    "redo": "Redo",
+    "cut": "Cut",
     "copy": "Copy",
     "paste": "Paste",
+    "pastePlain": "Paste as Plain Text",
+    "delete": "Delete",
+    "selectAll": "Select All",
     "comingSoon": "Coming soon",
     "maximize": "Maximize",
     "restore": "Restore",
@@ -82,8 +88,8 @@
     "settings": "Settings"
   },
   "chat": {
-    "placeholder": "Message pi…  (Enter to send, Shift+Enter for newline)",
-    "placeholderCmdEnter": "Message pi…  (Cmd/Ctrl+Enter to send, Enter for newline)",
+    "placeholder": "Message pi… (type @ for files, / for commands, drag & drop files; Enter to send)",
+    "placeholderCmdEnter": "Message pi… (type @ for files, / for commands, drag & drop files; ⌘Enter to send)",
     "send": "Send",
     "stop": "Stop",
     "sendTip": "Send (Enter)",
@@ -93,6 +99,17 @@
     "gitBranchTitle": "Git branch: {{branch}}",
     "gitDetachedTitle": "Detached HEAD",
     "gitDetached": "detached",
+    "branchSwitch": {
+      "title": "Switch branch",
+      "locked": "Cannot switch branch after conversation has started",
+      "dirty": "Working tree has uncommitted changes, cannot switch branch",
+      "dirtyHint": "Working tree has uncommitted changes. Commit or stash them before switching.",
+      "running": "Session is running, cannot switch branch",
+      "failed": "Failed to switch branch: {{error}}",
+      "success": "Switched to branch {{branch}}",
+      "empty": "No local branches found",
+      "loading": "Loading branches..."
+    },
     "queueSend": "Follow up",
     "steerSend": "Guide turn",
     "stopTip": "Stop the current run",
@@ -114,8 +131,8 @@
       "followUp": "Follow up ×{{count}}: {{preview}}",
       "steeringLabel": "Guide reply",
       "followUpLabel": "Send later",
-      "sendNow": "Guide this turn",
-      "sendNowTip": "Move into the current turn and deliver after the active tool call",
+      "sendNow": "Send now",
+      "sendNowTip": "Send now: steer into the current turn while streaming, deliver immediately when idle",
       "send": "Send later",
       "steer": "Guide reply",
       "sendTip": "Send after the current task finishes",
@@ -138,7 +155,9 @@
     "workspace": {
       "required": "Pick a working directory for pi sessions first.",
       "choose": "Choose folder",
-      "change": "Change"
+      "change": "Change",
+      "riskyHome": "The user home directory cannot be used as a workspace (the agent would scan or touch all your personal files). Pick a project directory instead.",
+      "riskyRoot": "The filesystem root cannot be used as a workspace. Pick a project directory instead."
     },
     "tool": {
       "running": "running",
@@ -174,6 +193,16 @@
           "done": "Searched {{summary}}{{durationPart}}",
           "stopped": "Stopped searching"
         },
+        "find": {
+          "running": "Finding {{summary}}…",
+          "done": "Found {{summary}}{{durationPart}}",
+          "stopped": "Stopped finding"
+        },
+        "ls": {
+          "running": "Listing {{summary}}…",
+          "done": "Listed {{summary}}{{durationPart}}",
+          "stopped": "Stopped listing"
+        },
         "default": {
           "running": "Running {{tool}}…",
           "done": "Ran {{tool}}{{durationPart}}",
@@ -185,7 +214,8 @@
       "truncatedLines": "Truncated: showing {{outputLines}} of {{totalLines}} lines",
       "truncatedBytes": "Output exceeded size limit, showing {{outputLines}} lines",
       "matchLimit": "Match limit reached ({{limit}})",
-      "linesTruncated": "Some long lines were truncated"
+      "linesTruncated": "Some long lines were truncated",
+      "readingSkill": "Loading skill: {{name}}"
     },
     "turnChanges": {
       "title": "Edited {{count}} files",
@@ -196,6 +226,7 @@
       "review": "Review",
       "viewChanges": "View changes",
       "showMore": "Show {{count}} more files",
+      "showLess": "Show less",
       "openFile": "Open file"
     },
     "workLog": {
@@ -209,6 +240,7 @@
     "turnFold": {
       "expand": "Show turn process",
       "collapse": "Hide turn process",
+      "interrupted": "Interrupted",
       "stage": "Stage {{index}} · {{count}} process messages",
       "duration": "Took {{duration}}",
       "durationSeconds": "{{seconds}}s",
@@ -230,6 +262,7 @@
     "expandTools": "Expand all tools",
     "collapseTools": "Collapse all tools",
     "forkFromHere": "Fork from here",
+    "editMessage": "Edit and resend",
     "branches": "Branches",
     "tree": {
       "title": "Session branches",
@@ -268,7 +301,36 @@
     "cacheHitRateLast": "Last turn hit rate",
     "totalCost": "Session cost",
     "tokenUnknown": "—",
-    "greeting": "What can I do for you?",
+    "greeting": "What would you like to build today",
+    "greetingRotating": [
+      "What would you like to build today",
+      "Refactor codebase architecture",
+      "Develop a brand new feature",
+      "Diagnose and fix failing tests",
+      "Analyze core module structure"
+    ],
+    "greetingCards": {
+      "architecture": {
+        "title": "Explore Architecture",
+        "desc": "Overview of core structure and modules",
+        "prompt": "Please give an overview of this project's core architecture, directory structure, and key modules."
+      },
+      "inspect": {
+        "title": "Code Review & Audit",
+        "desc": "Check recent changes and potential issues",
+        "prompt": "Please inspect recent code changes or potential issues in this project and provide suggestions."
+      },
+      "feature": {
+        "title": "Develop New Feature",
+        "desc": "Describe needs and let pi implement",
+        "prompt": "I want to add a new feature to this project: "
+      },
+      "test": {
+        "title": "Run Tests & Debug",
+        "desc": "Run project test suites and diagnose errors",
+        "prompt": "Please run the project test suite and help diagnose any failures."
+      }
+    },
     "scrollToBottom": "Scroll to bottom",
     "untitled": "Untitled session",
     "imageSessionTitle": "Image conversation",
@@ -281,6 +343,15 @@
     "copyMarkdown": "Copy Markdown",
     "imagePreview": "Image preview",
     "closeImagePreview": "Close image preview",
+    "imageCopy": "Copy image",
+    "imageCopySuccess": "Image copied to clipboard",
+    "imageCopyFailed": "Failed to copy image",
+    "imageSave": "Save image",
+    "imageSaveSuccess": "Image saved",
+    "imageSaveFailed": "Failed to save image",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomReset": "Fit to window",
     "copied": "Copied",
     "thinkingLevel": "Thinking depth",
     "thinkingLevels": {
@@ -299,6 +370,11 @@
     "planMode": "Plan mode",
     "planModeUnavailable": "Install the plan-mode extension to enable this",
     "cacheStatsNote": "Some local models do not report cache statistics.",
+    "mentionsHint": {
+      "tree": "↑↓ Navigate · ←→ Folders · Space/Tab Pick · Esc Cancel",
+      "filter": "↑↓ Navigate · Space/Tab Pick · Esc Cancel",
+      "command": "↑↓ Navigate · Space/Tab Pick · Esc Cancel"
+    },
     "commands": {
       "new": "Start a new session",
       "compact": "Compact this chat's context ({{percent}}% full)",
@@ -327,34 +403,90 @@
       "reloaded": "Reloaded extensions, skills, prompts and context files",
       "reloadFailed": "Reload failed: {{message}}",
       "modelSet": "Model set: {{model}}",
-      "modelNotFound": "Model not found: {{model}}"
+      "modelNotFound": "Model not found: {{model}}",
+      "commandNotFound": "Unknown command: {{command}}"
+    },
+    "confirmSlashSend": {
+      "title": "Send slash command?",
+      "description": "Detected unknown slash command \"{{command}}\", which is not a local built-in command. Do you want to send it to the AI as a prompt?",
+      "send": "Send anyway",
+      "cancel": "Cancel"
+    },
+    "confirmMentionSend": {
+      "title": "Send file mention?",
+      "description": "Detected file reference \"{{mention}}\", but no matching file was found in the workspace. Do you want to send it to the AI as plain text?",
+      "send": "Send anyway",
+      "cancel": "Cancel"
     },
     "sessionInfo": {
       "title": "Session Info",
       "name": "Name",
-      "id": "ID",
+      "id": "Session ID",
       "file": "File",
       "inMemory": "In-memory",
+      "notSavedYet": "Not saved yet",
+      "notSavedYetHint": "Saved to disk upon sending the first message",
       "model": "Model",
       "messages": "Messages",
       "messagesValue": "{{total}} (user {{user}} / assistant {{assistant}})",
       "tools": "Tools",
-      "toolsValue": "{{calls}} calls, {{results}} results",
-      "input": "Input",
-      "output": "Output",
-      "total": "Total",
-      "cost": "Cost"
+      "toolsValue": "{{calls}} calls ({{results}} results)",
+      "tokens": "Token Usage",
+      "input": "Input Tokens",
+      "output": "Output Tokens",
+      "total": "Total Tokens",
+      "cost": "Cost",
+      "copied": "Copied",
+      "copyId": "Copy ID",
+      "copyPath": "Copy File Path",
+      "showInFolder": "Show in Folder"
     },
     "startTimeout": "Session start timed out. Please try again.",
     "startRetry": "Retry",
+    "switchFailedNote": "Failed to open that session. The previous session is still shown and remains usable.",
+    "runtimeErrorTitle": "Action failed",
+    "runtimeErrorDismiss": "Dismiss",
+    "error": {
+      "modelUnavailable": "The model used by this session is unavailable ({{provider}}/{{model}}). Please choose another model.",
+      "chooseModel": "Choose model",
+      "retrySwitch": "Retry opening session"
+    },
     "modelMenu": {
       "model": "Model",
-      "empty": "No models available"
+      "empty": "No models available",
+      "search": "Search models…",
+      "noResults": "No matching models",
+      "expandProvider": "Expand {{provider}}",
+      "collapseProvider": "Collapse {{provider}}",
+      "currentLimit": "Current limit",
+      "quickPresets": "Quick presets",
+      "resetMax": "Reset to max",
+      "usedTokens": "Currently used",
+      "compactionWarning": "Below current usage; compaction will trigger automatically on the next turn",
+      "maxSupported": "Model native max: {{max}}"
     },
     "bash": {
       "excluded": "excluded from context",
       "cancelled": "cancelled",
       "exitCode": "exit {{code}}"
+    },
+    "command": {
+      "run": "Run command",
+      "mode": "Command mode",
+      "placeholder": "Type a bash command, Enter to run",
+      "inContext": "In context",
+      "includeContext": "Excluded from context; click to include",
+      "excludeContext": "In context; click to exclude",
+      "exit": "Exit command mode",
+      "runningHint": "A command is still running",
+      "stopBash": "Stop command",
+      "planModeOn": "Plan mode is on (sent messages get /plan prefix)",
+      "skillRemove": "Remove skill"
+    },
+    "skillBlock": {
+      "title": "Loaded skill: {{name}}",
+      "viewDetails": "View instructions",
+      "collapse": "Collapse"
     },
     "errors": {
       "invalidKey": "API key issue: the key may be invalid, expired or revoked — update it in provider settings.",
@@ -362,6 +494,30 @@
       "upstream": "Upstream issue: the request reached the server, but the provider's own upstream is failing. Retry later, or contact the provider with the request ID below.",
       "rateLimit": "Rate limited: too many requests — wait a moment and retry.",
       "quota": "Account quota or usage limit reached: contact the provider to top up or renew.",
+      "network": "Network issue: couldn't reach the provider. Check your network or proxy settings, then retry.",
+      "timeout": "Request timed out: the provider didn't respond in time. Please retry.",
+      "stream": "Stream interrupted: the connection was closed during generation. Please try again.",
+      "unsupportedRelay": "The provider does not support the Responses protocol (/v1/responses). Please switch the provider's adapter type to openai-completions (/v1/chat/completions) in Model Settings.",
+      "replacementTimeout": "Session replacement timed out without confirmation. Please retry or switch sessions.",
+      "hostInvokeTimeout": "Main-process communication timed out ({{action}}). Please retry.",
+      "sessionNotStarted": "Session not started or has expired. Please retry or start a new session.",
+      "sessionIsRunning": "Session is currently running. Please wait for it to complete or abort it first.",
+      "sessionIsStreaming": "Session is generating output. Please try again in a moment.",
+      "sessionIsCompacting": "Session is compacting history. Please try again in a moment.",
+      "sessionHasNoFile": "Session file not found.",
+      "projectHasRunningSession": "The project has a running session. Please wait for it to complete.",
+      "emptyName": "Name cannot be empty.",
+      "emptySource": "Source cannot be empty.",
+      "queueIndexOutOfRange": "Queue item no longer exists or index is out of range.",
+      "cancelled": "Operation cancelled.",
+      "cannotCreate": "Failed to create session. Please retry.",
+      "packageSourceNotFound": "Package source not found.",
+      "piNotFound": "Pi executable not found. Please check your installation.",
+      "piNotInstalled": "Pi is not installed.",
+      "installTimeout": "Installation timed out. Please check your network and retry.",
+      "running": "Operation is currently running. Please retry later.",
+      "notGitRepo": "Not a Git repository.",
+      "gitDirty": "Workspace has uncommitted changes. Please commit or stash them first.",
       "requestId": "Request ID: {{id}}"
     }
   },
@@ -377,7 +533,19 @@
       "config": "models.json",
       "extension": "Extension"
     },
-    "modelMeta": "{{api}} · context {{context}} · max output {{output}}",
+    "metaContext": "context {{context}}",
+    "metaOutput": "max output {{output}}",
+    "fieldName": "Provider name",
+    "fieldNameHint": "Display name for this provider",
+    "fieldBaseUrl": "Base URL",
+    "fieldBaseUrlHint": "The provider's OpenAI-compatible endpoint, usually ending with /v1",
+    "fieldApi": "Adapter type",
+    "apiHint": {
+      "openai-responses": "OpenAI Responses protocol, supports reasoning models",
+      "openai-completions": "Legacy Chat Completions protocol, used by most third-party APIs / OpenRouter",
+      "anthropic-messages": "Anthropic Messages protocol, for the official Anthropic API",
+      "google-generative-ai": "Google Generative AI protocol, for the official Gemini API"
+    },
     "pricing": "Per 1M tokens: input {{input}}, output {{output}}, cache read {{cacheRead}}, cache write {{cacheWrite}}",
     "keyPlaceholder": "API key",
     "saveKey": "Save key",
@@ -386,10 +554,22 @@
     "removeKey": "Remove credential",
     "deleteProvider": "Delete provider",
     "deleteProviderConfirm": "Delete provider \"{{name}}\" together with all of its models and credentials? This cannot be undone.",
+    "editProvider": "Edit info",
+    "editProviderTitle": "Edit provider info",
+    "editProviderDesc": "Update display name, API base URL, or request adapter protocol for this provider.",
+    "saveEdit": "Save changes",
     "oauth": "Sign in with browser",
     "oauthStarted": "Authorization started — complete it in your browser.",
     "addCustom": "Add custom provider",
-    "customId": "Provider id (e.g. my-llm)",
+    "addCustomTitle": "Add Custom Provider",
+    "addCustomDesc": "Connect third-party APIs or local models compatible with OpenAI, Anthropic, or Google protocols.",
+    "fieldApiKey": "API Key (Credentials)",
+    "fieldApiKeyHint": "Access credential. Can be left blank for local keyless services (LM Studio, Ollama, vLLM).",
+    "fieldModels": "Model IDs",
+    "fieldModelsHint": "Manually specify supported model IDs if undetected, separated by commas.",
+    "probeSectionTitle": "Endpoint Discovery & Verification",
+    "probeSectionDesc": "Automatically detect supported models and recommended protocol, or verify connectivity.",
+    "customName": "Provider name (e.g. My LLM)",
     "customBaseUrl": "baseURL",
     "customApi": "Request protocol",
     "detectedApi": "Detected request protocol",
@@ -421,6 +601,7 @@
     "contextUsingDefault": "No context was reported; the 256K context default will be used.",
     "usePiContextDefault": "Use default context (256K)",
     "cancel": "Cancel",
+    "closeDialog": "Close",
     "configured": "Configured",
     "notConfigured": "Not configured",
     "availableModels": "Available models",
@@ -429,7 +610,11 @@
     "current": "Current",
     "reasoningSupport": "Reasoning",
     "reasoningHint": "Third-party models are treated as reasoning-capable by default so the thinking-depth menu stays available. Turn off only if the provider rejects thinking parameters.",
-    "probeSpec": "Context {{contextWindow}} · Max output {{maxOutput}}"
+    "imageSupport": "Images",
+    "imageSupportHint": "Image input support is auto-detected from mainstream model specs. Adjust manually when the gateway drops image support or detection is off.",
+    "visionMeta": "Image input",
+    "probeSpec": "Context {{contextWindow}} · Max output {{maxOutput}}",
+    "probeCatalogFailed": "Could not fetch the model list: {{error}}. Make sure the server is running and the address/port is correct (open LM Studio first for local models)."
   },
   "sessions": {
     "title": "Sessions",
@@ -444,10 +629,14 @@
     "openInPane": "Open in a pane",
     "continueNewChat": "Continue in new chat",
     "showMore": "Show more ({{count}} remaining)",
+    "showLess": "Show less",
     "save": "Save",
     "cancel": "Cancel",
     "fork": "Fork",
     "export": "Export HTML",
+    "pin": "Pin session",
+    "unpin": "Unpin session",
+    "pinned": "Pinned",
     "archive": "Archive chats",
     "unarchive": "Restore archive",
     "archived": "Archived",
@@ -456,14 +645,26 @@
     "delete": "Delete",
     "confirmDelete": "Confirm delete",
     "exported": "Exported to {{path}}",
+    "exportedBadge": "Exported",
+    "openExported": "View export",
+    "showExportedInFolder": "Show in folder",
+    "reExport": "Re-export",
+    "openExportedTooltip": "Open exported HTML file in browser",
+    "showExportedInFolderTooltip": "Locate exported HTML file in folder",
+    "exportFileNotFound": "Exported file does not exist or has been removed",
     "exportLocation": "Export location",
     "lastExport": "Last export",
+    "recentExports": "Recent exports",
     "openExport": "Open",
     "showInFolder": "Show in folder",
     "openExportFolder": "Open folder",
     "emptyAll": "No sessions yet. Start chatting first.",
     "projectCount": "{{count}} sessions",
-    "openProjectFolder": "Open folder"
+    "openProjectFolder": "Open folder",
+    "actionFailed": "Action failed: {{error}}",
+    "actionFailedPlain": "Action failed. Please try again.",
+    "deleteRunning": "This session is running. Stop it before deleting.",
+    "actionErrorDismiss": "Dismiss"
   },
   "extensions": {
     "title": "Packages",
@@ -615,10 +816,41 @@
   },
   "skills": {
     "title": "Skills",
-    "readonlyHint": "Skills are loaded by pi from the locations below. Enabling/disabling individual skills is managed by pi, not this app.",
+    "readonlyHint": "Skills are discovered and loaded by pi. You can toggle whether each skill enters the global system prompt (auto-detected vs manual only).",
     "noRuntime": "Start a chat session first — skills are read from the active session.",
     "empty": "No skills found.",
     "manualOnly": "manual only",
+    "mode": {
+      "auto": "Auto-detected",
+      "autoDesc": "In system prompt; AI automatically loads instructions when relevant",
+      "manual": "Manual only",
+      "manualDesc": "Out of system prompt (0 tokens); loads only when explicitly invoked via /skill:name",
+      "readOnly": "Read-only (cannot modify)",
+      "switching": "Updating…"
+    },
+    "filter": {
+      "all": "All ({{count}})",
+      "auto": "Auto-detected ({{count}})",
+      "manual": "Manual only ({{count}})"
+    },
+    "countSummary": "{{total}} skills total · {{auto}} auto-detected · {{manual}} manual only",
+    "viewModal": {
+      "modeLabel": "Invocation Mode",
+      "manual": "Manual Only",
+      "auto": "Auto-detected",
+      "manualExplanation": "disable-model-invocation: true is declared in SKILL.md. This skill is omitted from the global system prompt (<available_skills>) with 0 token overhead, and will only load when explicitly invoked via /skill:{{name}}.",
+      "autoExplanation": "This skill's name and description are injected into the global system prompt (<available_skills>). The model will auto-detect and read its instructions when relevant.",
+      "switchToAuto": "Switch to Auto",
+      "switchToManual": "Switch to Manual (Save Tokens)",
+      "descriptionLabel": "Description",
+      "instructionsLabel": "Instructions & Guidelines",
+      "emptyInstructions": "No additional instructions found in this skill."
+    },
+    "batchOptimize": {
+      "title": "{{autoCount}} skills are currently in [Auto] mode and occupying global system prompt tokens. Consider setting specialized skills to [Manual Only] to invoke on-demand with /skill:name.",
+      "action": "Set all to Manual",
+      "optimizing": "Optimizing…"
+    },
     "view": "View content",
     "close": "Close",
     "import": "Import",
@@ -665,7 +897,24 @@
       "downloading": "Downloading…",
       "open": "Open installer",
       "showInFolder": "Show in folder",
-      "upgradePi": "Upgrade pi"
+      "upgradePi": "Upgrade pi",
+      "downloadFailedHint": "Download failed. You can configure a GitHub download mirror (e.g. https://ghproxy.net/) below and retry.",
+      "releaseNotesTitle": "✨ What's new in {{version}}",
+      "expand": "Expand ▾",
+      "collapse": "Collapse ▴",
+      "downloadingStatus": "Downloading update package…",
+      "remainingSeconds": "{{sec}}s remaining",
+      "remainingMinutes": "{{min}}m remaining",
+      "newAvailable": "New version available",
+      "mirrorActive": "Mirror active",
+      "alreadyLatest": "Up to date ✓",
+      "alreadyLatestHint": "Already running the latest version"
+    },
+    "downloadMirror": {
+      "title": "Download Mirror",
+      "desc": "GitHub download acceleration mirror prefix, e.g. https://ghproxy.net/",
+      "placeholder": "https://ghproxy.net/",
+      "activeBadge": "Download mirror enabled"
     },
     "exportLocation": "Location",
     "themeOptions": {
@@ -720,6 +969,11 @@
       "title": "Agent Defaults",
       "desc": "These native settings are written to ~/.pi/agent/settings.json and apply to new sessions."
     },
+    "tools": {
+      "title": "Available tools",
+      "desc": "Built-in tools the model can call in new sessions. Core tools (read/bash/edit/write) are always enabled; read-only search tools (grep/find/ls) can be toggled. Changes apply to new sessions (the current session keeps the toolset from startup).",
+      "coreLocked": "Core tools are always enabled"
+    },
     "defaultThinking": {
       "title": "Default thinking level",
       "desc": "Initial thinking level for new sessions."
@@ -743,7 +997,7 @@
       "urlDesc": "Auto mode uses this address; change it for your network.",
       "placeholder": "http://127.0.0.1:7897",
       "status": "Current proxy",
-      "detected": "Using: {url} ({source})",
+      "detected": "Using: {{url}} ({{source}})",
       "none": "Proxy off, direct connection",
       "source": {
         "app": "Pi Desktop settings",
@@ -783,6 +1037,12 @@
     "title": "Review",
     "refresh": "Refresh",
     "empty": "No changes yet",
+    "emptySession": "No changes in this session",
+    "sessionChanges": "Session changes",
+    "workspaceChanges": "Workspace changes",
+    "sessionScope": "Session",
+    "workspaceScope": "Workspace",
+    "editCount": "{{count}} edits",
     "noDiff": "No diff for {{path}}",
     "readOnly": "Read only",
     "revertFile": "Revert file",
@@ -810,9 +1070,17 @@
     "close": "Close workspace panel",
     "closeAll": "Close all file previews",
     "closeFile": "Close {{name}}",
+    "mode": {
+      "auto": "Panel mode: Auto (dock when wide, overlay when narrow)",
+      "docked": "Panel mode: Docked (side by side)",
+      "overlay": "Panel mode: Overlay (slides over without squeezing)"
+    },
     "files": "Files",
     "showFiles": "Show file list",
     "hideFiles": "Hide file list",
+    "commands": "Commands",
+    "commandsEmpty": "No commands in this session yet",
+    "commandsRunning": "Running",
     "itemCount": "{{count}} root items",
     "filter": "Filter files…",
     "loadingFolder": "Loading…",
@@ -850,6 +1118,7 @@
     "dropSplitTop": "Release to split above",
     "dropSplitBottom": "Release to split below",
     "dropReplace": "Release to replace this pane's session",
+    "dropAlreadyOpen": "This session is already open in a pane",
     "dragHint": "Drop on a pane edge to split, center to replace; drag outside the window to open a detached window; Esc to cancel"
   },
   "trust": {
@@ -862,5 +1131,31 @@
       "distrust": "Do not trust",
       "distrustSession": "Do not trust (this session only)"
     }
+  },
+  "versionUpdate": {
+    "title": "Update Available",
+    "body": "Pi Desktop v{{version}} is now available.",
+    "bodyPi": "pi v{{version}} is now available.",
+    "download": "Go to Download",
+    "upgradePi": "Upgrade Pi",
+    "releaseNotes": "Release Notes",
+    "dismiss": "Dismiss"
+  },
+  "versionInstall": {
+    "title": "Update Downloaded",
+    "bodyMac": "Click \"Install and Quit\" to open the disk image. Drag Pi Desktop to the Applications folder to replace the existing version, then restart.",
+    "bodyWin": "Click \"Install and Quit\" to launch the installer and follow the setup wizard.",
+    "bodyLinux": "The update package has been downloaded. Please view it in folder and replace manually.",
+    "installAndQuit": "Install and Quit",
+    "later": "Later",
+    "showInFolder": "Show in Folder",
+    "runningWarning": "Active sessions are still running. Quitting now will abort ongoing tasks. Are you sure you want to quit and install?",
+    "confirmQuit": "Quit and Install",
+    "cancel": "Cancel",
+    "failed": "Failed to download update: {{error}}",
+    "waitingInstall": "Installer downloaded, waiting to install",
+    "waitingInstallVersion": "Downloaded v{{version}}, waiting to install",
+    "readyTitle": "Update downloaded and ready",
+    "readyDesc": "Click to open installer and finish updating"
   }
 }

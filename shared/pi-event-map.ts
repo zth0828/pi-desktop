@@ -1,6 +1,15 @@
 // pi raw events are normalized here and nowhere else. Renderer receives only this contract.
 export type CompactionReason = 'manual' | 'threshold' | 'overflow';
 
+/** 事件被丢弃/纠正的原因：unknown-type = pi 新增未知事件；malformed-payload = 结构与映射约定不符。 */
+export type PiEventDropReason = 'unknown-type' | 'malformed-payload';
+
+/** 丢弃通知（可选）：main 侧注入诊断采样；不传时行为与无该参数完全一致。 */
+export type PiEventDropCallback = (reason: PiEventDropReason, rawType: string) => void;
+
+/** pi 会发但壳刻意不映射的 turn 级事件：属已知行为，不算结构漂移，不上报 onDrop。 */
+const DELIBERATELY_UNMAPPED_TYPES = new Set(['turn_start', 'turn_end', 'agent_settled']);
+
 export type PiCompactionUsage = {
   input: number;
   output: number;
@@ -89,7 +98,7 @@ function normalizeMessage(value: unknown): PiDesktopMessage | null {
   };
 }
 
-export function mapPiSessionEvent(value: unknown): PiChatEvent | null {
+export function mapPiSessionEvent(value: unknown, onDrop?: PiEventDropCallback): PiChatEvent | null {
   const event = record(value);
   if (!event || typeof event.type !== 'string') return null;
   switch (event.type) {
@@ -101,8 +110,13 @@ export function mapPiSessionEvent(value: unknown): PiChatEvent | null {
     }
     case 'message_update': {
       const update = record(event.assistantMessageEvent);
-      const partial = normalizeMessage(update?.partial);
-      return partial ? { type: 'assistant.partial', message: partial } : null;
+      const partial = normalizeMessage(update?.partial ?? event.message);
+      if (!partial) {
+        // 流式 partial 结构不符：整条事件丢弃（pi 端结构变化时流式输出会静默停止，需要留痕）
+        onDrop?.('malformed-payload', 'message_update');
+        return null;
+      }
+      return { type: 'assistant.partial', message: partial };
     }
     case 'message_end': {
       const message = normalizeMessage(event.message);
@@ -127,9 +141,17 @@ export function mapPiSessionEvent(value: unknown): PiChatEvent | null {
     case 'compaction_end': {
       const result = record(event.result);
       const usage = record(result?.usage);
+      const rawReason = event.reason;
+      const reason: CompactionReason = rawReason === 'manual' || rawReason === 'threshold' || rawReason === 'overflow'
+        ? rawReason
+        : 'manual';
+      if (reason !== rawReason) {
+        // 保留纠正为 'manual' 的既有行为，但结构漂移要有迹可循
+        onDrop?.('malformed-payload', 'compaction_end');
+      }
       return {
         type: 'compaction.ended',
-        reason: event.reason === 'manual' || event.reason === 'threshold' || event.reason === 'overflow' ? event.reason : 'manual',
+        reason,
         aborted: typeof event.aborted === 'boolean' ? event.aborted : undefined,
         willRetry: typeof event.willRetry === 'boolean' ? event.willRetry : undefined,
         message: typeof event.errorMessage === 'string' ? event.errorMessage : undefined,
@@ -139,6 +161,9 @@ export function mapPiSessionEvent(value: unknown): PiChatEvent | null {
     case 'auto_retry_start': return { type: 'retry.started', attempt: typeof event.attempt === 'number' ? event.attempt : undefined, maxAttempts: typeof event.maxAttempts === 'number' ? event.maxAttempts : undefined, delayMs: typeof event.delayMs === 'number' ? event.delayMs : undefined, message: typeof event.errorMessage === 'string' ? event.errorMessage : undefined };
     case 'auto_retry_end': return { type: 'retry.ended', success: typeof event.success === 'boolean' ? event.success : undefined };
     case 'bash_execution_update': return typeof event.delta === 'string' ? { type: 'bash.execution.update', delta: event.delta } : null;
-    default: return null;
+    default:
+      // pi 升级新增事件类型时在此静默丢弃；调用方可通过 onDrop 感知结构漂移
+      if (!DELIBERATELY_UNMAPPED_TYPES.has(event.type)) onDrop?.('unknown-type', event.type);
+      return null;
   }
 }

@@ -1,16 +1,60 @@
 import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Copy, FileText, GitFork } from 'lucide-react';
-import { parseUserMessage } from '@shared/message-attachments';
-import { parseProviderError } from '../../lib/provider-error';
+import { Check, ChevronRight, Copy, GitFork, Pencil, Sparkles, Square } from 'lucide-react';
+import { parseUserMessage, type ParsedSkillBlock } from '@shared/message-attachments';
+import { parseProviderError, PROVIDER_ERROR_HINT_KEYS } from '../../lib/provider-error';
 import { Markdown } from '../../components/Markdown';
+import { FileIcon, getFileBadgeText } from '../../components/FileIcon';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
-import { formatDuration } from '../../lib/tool-display';
+import { formatDuration, tailLines } from '../../lib/tool-display';
 import { hostApi } from '../../lib/host-api';
 import type { ChatMessage, ContentBlock, TurnStats } from '../../stores/chat';
-import { usePaneChatStore } from './chat-store-context';
+import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
+
+/**
+ * 技能指令折叠块：用户指定技能发送时展开的说明书与规则。
+ * 默认单行折叠展示技能徽章与指令查看按钮，点击展开展示具体指南 Markdown。
+ */
+function SkillInvocationBlock({ skill }: { skill: ParsedSkillBlock }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="message-skill-card" data-testid={`message-skill-${skill.name}`}>
+      <button
+        type="button"
+        className="message-skill-header"
+        data-testid={`message-skill-toggle-${skill.name}`}
+        onClick={() => setExpanded((prev) => !prev)}
+        aria-expanded={expanded}
+      >
+        <Sparkles size={13} className="message-skill-icon" />
+        <span className="message-skill-title">
+          {t('chat.skillBlock.title', { name: skill.name })}
+        </span>
+        <span className="message-skill-action">
+          {expanded ? t('chat.skillBlock.collapse') : t('chat.skillBlock.viewDetails')}
+        </span>
+        <ChevronRight size={13} className={`message-skill-chevron${expanded ? ' expanded' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="message-skill-body" data-testid={`message-skill-body-${skill.name}`}>
+          {skill.location && (
+            <div className="message-skill-location hint" title={skill.location}>
+              {skill.location}
+            </div>
+          )}
+          <Markdown text={skill.content} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** bash 执行输出折叠预览的尾部行数（与工具卡 PREVIEW_LINES 同口径） */
+const BASH_PREVIEW_LINES = 5;
 
 /**
  * thinking 折叠块（Codex reasoningItem 范式）：流式中 "Thinking…"，
@@ -20,6 +64,7 @@ import { ToolCallCard } from './ToolCallCard';
 function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: string; active: boolean; expanded?: boolean; grouped?: boolean }) {
   const { t } = useTranslation();
   const hiddenThinkingLabel = usePaneChatStore((s) => s.extensionUi?.hiddenThinkingLabel);
+  const [userToggled, setUserToggled] = useState<boolean | null>(null);
   const startedRef = useRef<number | null>(null);
   const endedRef = useRef<number | null>(null);
   if (active && startedRef.current === null) startedRef.current = Date.now();
@@ -29,9 +74,16 @@ function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: stri
       ? formatDuration(startedRef.current, endedRef.current)
       : null;
   if (grouped) return <div className="thinking-block grouped"><pre>{thinking}</pre></div>;
+  const isOpen = userToggled ?? Boolean(expanded || active);
   return (
-    <details className={`thinking-block${active ? ' streaming' : ''}`} open={expanded || active}>
-      <summary>
+    <details
+      className={`thinking-block${active ? ' streaming' : ''}`}
+      open={isOpen}
+    >
+      {/* 受控 details：拦截 summary 原生开关，open 只由状态驱动。不能监听 toggle
+          事件推断用户意图——React 程序性改写 open 属性同样触发 toggle，会把流式
+          期间的自动展开误记为用户手动展开，导致思考块在流式推进/结束后偶发不折叠 */}
+      <summary onClick={(e) => { e.preventDefault(); setUserToggled(!isOpen); }}>
         {active
           ? t('chat.thinkingStreaming')
           : !expanded && hiddenThinkingLabel
@@ -45,22 +97,26 @@ function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: stri
   );
 }
 
-/** 供应商错误提示：保留 pi 原文，按状态码/关键词附一条归属提示（谁的问题）。
- *  归属提示只在能识别时显示；识别不了的错误保持原样，避免误导。 */
+/** 供应商错误提示：能识别类别时以本地化说明为主文案，pi 原文降级为次要行
+ *  保留（排查/报障仍需原文与请求 ID）；识别不了的错误保持原样，避免误导。 */
 function ErrorNotice({ message, responseId }: { message: string; responseId?: string }) {
   const { t } = useTranslation();
   const parsed = parseProviderError(message);
   const requestId = parsed.requestId ?? responseId;
   return (
-    <div className="message-notice error" data-testid="message-error">
-      <div className="error-message-raw">{message}</div>
-      {parsed.category !== 'unknown' && (
+    <div
+      className={`message-notice error${parsed.category !== 'unknown' ? ' known' : ''}`}
+      data-testid="message-error"
+    >
+      {parsed.category !== 'unknown' ? (
         <div className="error-hint" data-testid={`error-hint-${parsed.category}`}>
-          {t(`chat.errors.${parsed.category}`)}
+          {t(`chat.errors.${PROVIDER_ERROR_HINT_KEYS[parsed.category]}`)}
           {requestId && (
             <span className="error-request-id"> {t('chat.errors.requestId', { id: requestId })}</span>
           )}
         </div>
+      ) : (
+        <div className="error-message-raw">{message}</div>
       )}
     </div>
   );
@@ -175,10 +231,13 @@ function MessageItemView({
   suppressTail,
 }: MessageItemProps) {
   const { t } = useTranslation();
+  const paneApi = usePaneHostApi();
   const forkFrom = usePaneChatStore((s) => s.forkFrom);
+  const editMessage = usePaneChatStore((s) => s.editMessage);
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
   const [copied, setCopied] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
+  const [bashExpanded, setBashExpanded] = useState(false);
   if (message.role === 'user') {
     const rawText = message.content
       .filter((b) => b.type === 'text')
@@ -233,22 +292,41 @@ function MessageItemView({
         id={anchorId}
         tabIndex={highlighted ? -1 : undefined}
       >
-        {message.entryId && !isStreaming && (
-          <button
-            className="message-fork-btn"
-            data-testid="fork-message"
-            title={t('chat.forkFromHere')}
-            onClick={() => void forkFrom(message.entryId!)}
-          >
-            <GitFork size={14} />
-          </button>
+        {message.entryId && (
+          <div className="message-user-actions">
+            <button
+              className="message-user-btn"
+              data-testid="edit-message"
+              title={t('chat.editMessage')}
+              onClick={() => void editMessage(message.entryId!)}
+            >
+              <Pencil size={13} />
+            </button>
+            {!isStreaming && (
+              <button
+                className="message-user-btn message-fork-btn"
+                data-testid="fork-message"
+                title={t('chat.forkFromHere')}
+                onClick={() => void forkFrom(message.entryId!)}
+              >
+                <GitFork size={13} />
+              </button>
+            )}
+          </div>
         )}
         <div className="message-user-content">
+          {parsed.skills && parsed.skills.length > 0 && (
+            <div className="message-skills" data-testid="message-skills">
+              {parsed.skills.map((skill) => (
+                <SkillInvocationBlock key={`${skill.name}-${skill.location ?? ''}`} skill={skill} />
+              ))}
+            </div>
+          )}
           {orderedAttachments.length > 0 && (
             <div className="message-attachments" data-testid="message-attachments">
               {orderedAttachments.map((attachment) => attachment.kind === 'image' ? (
                 <div className="message-attachment message-image-attachment" data-testid="message-attachment" data-attachment-index={attachment.index} key={`${attachment.index}-${attachment.name}`}>
-                  <button className="message-image-button" onClick={() => setPreviewImage(attachment.url)} aria-label={t('chat.imageAttachment', { index: attachment.index, name: attachment.name })}>
+                  <button className="message-image-button" onClick={() => setPreviewImage({ url: attachment.url, name: attachment.name })} aria-label={t('chat.imageAttachment', { index: attachment.index, name: attachment.name })}>
                     <img className="message-image" data-testid="message-image" src={attachment.url} alt={attachment.name} />
                     <span className="attachment-order">{attachment.index}</span>
                   </button>
@@ -257,15 +335,22 @@ function MessageItemView({
               ) : (
                 <div className="message-attachment message-file-attachment" data-testid="message-attachment" data-attachment-index={attachment.index} key={`${attachment.index}-${attachment.name}`}>
                   <span className="attachment-order">{attachment.index}</span>
-                  <FileText size={18} />
-                  <span className="message-attachment-name" data-testid="message-file" title={attachment.name}>{attachment.name}</span>
+                  <div className="message-file-icon">
+                    <FileIcon name={attachment.name} size={18} />
+                  </div>
+                  <div className="message-file-info">
+                    <div className="message-file-header">
+                      <span className="message-attachment-name" data-testid="message-file" title={attachment.name}>{attachment.name}</span>
+                      <span className="file-ext-badge">{getFileBadgeText(attachment.name)}</span>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
           )}
           {parsed.text && <div className="message-bubble" data-testid="message-user-text">{parsed.text}</div>}
         </div>
-        {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
+        {previewImage && <ImageLightbox src={previewImage.url} name={previewImage.name} onClose={() => setPreviewImage(null)} />}
       </div>
     );
   }
@@ -299,6 +384,16 @@ function MessageItemView({
       truncated?: boolean;
       excludeFromContext?: boolean;
     } | undefined;
+    // 落盘输出超过预览阈值时默认折叠为尾部 N 行，点击输出区/提示行展开；
+    // 流式草稿永远只看尾部预览（命令还在跑，展开没有意义），trimEnd 避免
+    // 尾随换行被 tailLines 计成一行（seq 输出每行都带 \n）。
+    const bashPreview = rawBash?.output ? tailLines(rawBash.output.trimEnd(), BASH_PREVIEW_LINES) : null;
+    const bashCollapsed = !message.streaming && bashPreview !== null && bashPreview.hidden > 0 && !bashExpanded;
+    // 流式草稿初始 output 为空时 bashPreview 为 null，?. 兜底；空串时下方 pre 不渲染
+    const bashVisible = bashCollapsed || message.streaming
+      ? bashPreview?.lines.join('\n') ?? rawBash?.output ?? ''
+      : rawBash!.output;
+    const bashExpandedAttr = message.streaming ? 'streaming' : bashCollapsed ? 'false' : 'true';
     return (
       <div className="message message-bash" data-testid="message-bash">
         <div className="bash-header">
@@ -315,9 +410,36 @@ function MessageItemView({
               {t('chat.bash.exitCode', { code: rawBash.exitCode })}
             </span>
           )}
+          {message.streaming && (
+            <button
+              className="bash-stop"
+              data-testid="bash-stop"
+              title={t('chat.command.stopBash')}
+              aria-label={t('chat.command.stopBash')}
+              onClick={() => void paneApi.piRuntime.abortBash()}
+            >
+              <Square size={11} />
+            </button>
+          )}
         </div>
+        {bashCollapsed && bashPreview!.hidden > 0 && (
+          <div
+            className="tool-preview-more bash-output-more"
+            data-testid="bash-output-more"
+            onClick={() => setBashExpanded(true)}
+          >
+            {t('chat.tool.earlierLines', { count: bashPreview!.hidden })}
+          </div>
+        )}
         {rawBash?.output && (
-          <pre className="bash-output" data-testid="bash-output">{rawBash.output}</pre>
+          <pre
+            className="bash-output"
+            data-testid="bash-output"
+            data-expanded={bashExpandedAttr}
+            onClick={() => { if (!message.streaming) setBashExpanded((v) => !v); }}
+          >
+            {bashVisible}
+          </pre>
         )}
         {message.streaming && <span className="cursor-blink">▍</span>}
       </div>

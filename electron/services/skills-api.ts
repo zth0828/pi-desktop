@@ -2,8 +2,8 @@
 // resourceLoader.getSkills()，runtime 未启动时返回空。SettingsManager 没有
 // per-skill 启停 API（只有路径增减），启停交给 pi 自己的配置，壳不乱造 settings.json 格式。
 // 导入 = 复制目录到 agentDir/skills（不建软链），目标目录与 pi 的用户级 skills 目录一致。
-import { cp, mkdir, readdir, readFile, rm } from 'node:fs/promises';
-import { existsSync, lstatSync, realpathSync } from 'node:fs';
+import { access, cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { constants, existsSync, lstatSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type {
@@ -16,6 +16,8 @@ import type {
   PiSkillRow,
   PiSkillScanExternalPayload,
   PiSkillScanExternalResult,
+  PiSkillSetModePayload,
+  PiSkillSetModeResult,
   PiSkillSource,
 } from '@shared/host-api/contract';
 import { resolveRuntimeForContext } from './pi-runtime-api';
@@ -97,6 +99,38 @@ async function freeSkillName(targetDir: string, name: string): Promise<string> {
   }
 }
 
+/** 更新 SKILL.md Frontmatter 中的 disable-model-invocation 属性，保持正文与其它属性不变 */
+export function updateDisableModelInvocation(content: string, disable: boolean): string {
+  const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n[\s\S]*)$/);
+  if (!frontmatterMatch) {
+    if (disable) {
+      return `---\ndisable-model-invocation: true\n---\n\n${content}`;
+    }
+    return content;
+  }
+
+  const [, yamlBlock, rest] = frontmatterMatch;
+  const disableKeyRegex = /^[ \t]*disable-model-invocation\s*:[ \t]*[^\r\n]*$/m;
+
+  let newYaml = yamlBlock;
+  if (disable) {
+    if (disableKeyRegex.test(newYaml)) {
+      newYaml = newYaml.replace(disableKeyRegex, 'disable-model-invocation: true');
+    } else {
+      newYaml = `${newYaml.trimEnd()}\ndisable-model-invocation: true`;
+    }
+  } else {
+    if (disableKeyRegex.test(newYaml)) {
+      newYaml = newYaml
+        .split(/\r?\n/)
+        .filter((line) => !disableKeyRegex.test(line))
+        .join('\n');
+    }
+  }
+
+  return `---\n${newYaml.trim()}\n---${rest}`;
+}
+
 export const skillsApi = {
   list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiSkillListResult> => {
     const active = resolveRuntimeForContext(ctx);
@@ -109,18 +143,60 @@ export const skillsApi = {
       sourceInfo?: { origin?: string; scope?: string; source?: string };
       disableModelInvocation?: boolean;
     });
-    const rows: PiSkillRow[] = skills.map((s) => ({
-      name: s.name,
-      description: s.description,
-      filePath: s.filePath,
-      source: classifySource(s, agentDir, active.cwd),
-      sourceDetail: s.sourceInfo
-        ? `${s.sourceInfo.source} · ${s.sourceInfo.scope}`
-        : undefined,
-      disableModelInvocation: s.disableModelInvocation === true,
-    }));
+    const rows: PiSkillRow[] = await Promise.all(
+      skills.map(async (s) => {
+        let isReadOnly = false;
+        try {
+          await access(safeRealpath(s.filePath), constants.W_OK);
+        } catch {
+          isReadOnly = true;
+        }
+        return {
+          name: s.name,
+          description: s.description,
+          filePath: s.filePath,
+          source: classifySource(s, agentDir, active.cwd),
+          sourceDetail: s.sourceInfo
+            ? `${s.sourceInfo.source} · ${s.sourceInfo.scope}`
+            : undefined,
+          disableModelInvocation: s.disableModelInvocation === true,
+          isReadOnly,
+        };
+      }),
+    );
     rows.sort((a, b) => a.name.localeCompare(b.name));
     return { skills: rows, runtimeActive: true };
+  },
+
+  setInvocationMode: async (
+    payload: PiSkillSetModePayload,
+    ctx?: HostActionContext,
+  ): Promise<PiSkillSetModeResult> => {
+    try {
+      const resolved = safeRealpath(payload.filePath);
+      if (!existsSync(resolved)) {
+        return { ok: false, error: 'Skill file does not exist' };
+      }
+      try {
+        await access(resolved, constants.W_OK);
+      } catch {
+        return { ok: false, error: 'Skill file is read-only' };
+      }
+
+      const content = await readFile(resolved, 'utf8');
+      const updated = updateDisableModelInvocation(content, payload.disableModelInvocation);
+      await writeFile(resolved, updated, 'utf8');
+
+      // 触发活动 runtime 重载以即时刷新 System Prompt
+      const active = resolveRuntimeForContext(ctx);
+      if (active) {
+        await active.adapterRuntime.session.reload().catch(() => undefined);
+      }
+
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
   },
 
   read: async (payload: PiSkillReadPayload): Promise<PiSkillReadResult> => {

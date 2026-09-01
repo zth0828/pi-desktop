@@ -80,3 +80,6 @@ output/
 
 # Agents
 AGENTS.md
+
+# macOS dev 自定义 Electron bundle（clone 自 node_modules，可随时重建）
+.dev/

@@ -42,3 +42,72 @@ describe('filterFiles', () => {
     expect(filterFiles(['README.md'], 'readme')).toEqual(['README.md']);
   });
 });
+
+import { getVisibleTreeItems } from '../../src/pages/Chat/chat-input/useFileMentions';
+import { detectAtToken } from '../../src/pages/Chat/chat-input/types';
+
+describe('getVisibleTreeItems', () => {
+  it('返回根目录与根文件的拍平树结构', () => {
+    const dirTree = {
+      dir: '',
+      dirs: ['docs', 'src'],
+      files: ['package.json', 'README.md'],
+    };
+    const items = getVisibleTreeItems(dirTree, {}, new Set());
+    expect(items).toEqual([
+      { kind: 'dir', name: 'docs', full: 'docs', parent: '', depth: 0, open: false },
+      { kind: 'dir', name: 'src', full: 'src', parent: '', depth: 0, open: false },
+      { kind: 'file', name: 'package.json', full: 'package.json', parent: '', depth: 0 },
+      { kind: 'file', name: 'README.md', full: 'README.md', parent: '', depth: 0 },
+    ]);
+  });
+
+  it('展开子目录后包含子目录及子文件，并正确计算深度', () => {
+    const dirTree = {
+      dir: '',
+      dirs: ['src'],
+      files: ['package.json'],
+    };
+    const dirContents = {
+      src: {
+        dirs: ['components'],
+        files: ['App.tsx', 'main.ts'],
+      },
+      'src/components': {
+        dirs: [],
+        files: ['Button.tsx'],
+      },
+    };
+    const expandedDirs = new Set(['src', 'src/components']);
+    const items = getVisibleTreeItems(dirTree, dirContents, expandedDirs);
+
+    expect(items).toEqual([
+      { kind: 'dir', name: 'src', full: 'src', parent: '', depth: 0, open: true },
+      { kind: 'dir', name: 'components', full: 'src/components', parent: 'src', depth: 1, open: true },
+      { kind: 'file', name: 'Button.tsx', full: 'src/components/Button.tsx', parent: 'src/components', depth: 2 },
+      { kind: 'file', name: 'App.tsx', full: 'src/App.tsx', parent: 'src', depth: 1 },
+      { kind: 'file', name: 'main.ts', full: 'src/main.ts', parent: 'src', depth: 1 },
+      { kind: 'file', name: 'package.json', full: 'package.json', parent: '', depth: 0 },
+    ]);
+  });
+
+  it('空 dirTree 返回空数组', () => {
+    expect(getVisibleTreeItems(null, {}, new Set())).toEqual([]);
+  });
+});
+
+describe('detectAtToken', () => {
+  it('检测行首的 @', () => {
+    expect(detectAtToken('@', 1)).toEqual({ start: 0, end: 1, query: '' });
+    expect(detectAtToken('@src', 4)).toEqual({ start: 0, end: 4, query: 'src' });
+  });
+
+  it('检测空格后的 @', () => {
+    expect(detectAtToken('hello @', 7)).toEqual({ start: 6, end: 7, query: '' });
+    expect(detectAtToken('hello @app', 10)).toEqual({ start: 6, end: 10, query: 'app' });
+  });
+
+  it('非有效边界不识别为 token（如 email）', () => {
+    expect(detectAtToken('abc@def.com', 4)).toBeNull();
+  });
+});

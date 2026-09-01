@@ -9,6 +9,7 @@ import { DEV_RESTART_READY, DEV_RESTART_REQUEST } from '@shared/dev-reload';
 import { resolveAppIconPath } from '../utils/app-icon';
 import { safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { scheduleVersionChecks } from '../services/version-check-api';
+import { installNativeMacMenu } from './menu';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
@@ -104,6 +105,7 @@ if (!hasSingleInstanceLock) {
         resourcesPath: process.resourcesPath,
         mainDir: __dirname,
       }));
+      installNativeMacMenu();
     }
     createMainWindow();
     createTray();

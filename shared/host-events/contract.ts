@@ -27,6 +27,9 @@ export type HostEventContract = {
   appUpdate: {
     progress: (payload: import('../host-api/contract').AppUpdateProgressEvent) => void;
   };
+  versionCheck: {
+    updateAvailable: (payload: { current: string; latest: string; releaseUrl?: string; kind: 'app' | 'pi' }) => void;
+  };
   piSystem: {
     installProgress: (payload: PiInstallProgressEvent) => void;
     /** 兼容性报告异步补齐后推送完整环境；主界面无需阻塞等待 SDK 加载。 */
@@ -41,8 +44,9 @@ export type HostEventContract = {
     sessionReplaced: (payload: PiRuntimeStateResult) => void;
     /** 任一保活 runtime 的运行状态变化；会话列表据此刷新后台任务指示（sessionId 供窗口过滤）。 */
     runtimeStateChanged: (payload: { sessionId: string; sessionPath?: string; running: boolean }) => void;
-    /** 会话元数据变更（删除/归档/重命名/分叉）；侧栏与会话页据此即时刷新。 */
-    sessionsChanged: (payload: { reason: 'remove' | 'archive' | 'rename' | 'fork' }) => void;
+    /** 会话元数据变更（删除/归档/重命名/分叉/置顶）；侧栏与会话页据此即时刷新。 */
+    sessionsChanged: (payload: { reason: 'remove' | 'archive' | 'rename' | 'fork' | 'pin' }) => void;
+
     /** 扩展 UI 请求（ctx.ui.confirm/select/input）：渲染层弹对话框，经 piRuntime.uiResponse 回传 */
     uiRequest: (payload: PiUiRequestPayload) => void;
     /** 扩展 UI 请求被取消（超时/signal abort/会话替换），渲染层移除对应对话框 */
@@ -72,6 +76,10 @@ export type HostEventContract = {
     /** trust.json 记录被修改（Settings 页外部改动同步） */
     changed: (payload: PiTrustListResult) => void;
   };
+  menu: {
+    /** macOS 原生系统菜单栏业务项被点击（App.tsx 绑定后走与自绘菜单相同的 action） */
+    action: (payload: { action: 'new-chat' | 'collapse-sidebar' | 'search-chats' }) => void;
+  };
 };
 
 export type HostEventModule = keyof HostEventContract;
@@ -91,6 +99,9 @@ export const HOST_EVENT_CHANNELS = {
   },
   appUpdate: {
     progress: 'app-update:progress',
+  },
+  versionCheck: {
+    updateAvailable: 'version-check:update-available',
   },
   piSystem: {
     installProgress: 'pi-system:install-progress',
@@ -120,6 +131,9 @@ export const HOST_EVENT_CHANNELS = {
     request: 'pi-trust:request',
     settled: 'pi-trust:settled',
     changed: 'pi-trust:changed',
+  },
+  menu: {
+    action: 'menu:action',
   },
 } as const satisfies {
   [M in HostEventModule]: { [E in HostEventName<M>]: string };

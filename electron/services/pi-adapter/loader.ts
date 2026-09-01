@@ -78,7 +78,7 @@ function readInstallation(packageRootValue: string): Installation {
  */
 async function applyPiHttpProxy(packageRoot: string): Promise<void> {
   try {
-    const { clearProxyEnvironment, resolveProxy } = await import('../proxy-api');
+    const { clearProxyEnvironment, ensureLoopbackProxyBypass, resolveProxy } = await import('../proxy-api');
     const resolved = await resolveProxy();
     const mod = await import(pathToFileURL(path.join(packageRoot, 'dist/core/http-dispatcher.js')).href) as {
       applyHttpProxySettings?: (proxy?: string) => void;
@@ -86,6 +86,9 @@ async function applyPiHttpProxy(packageRoot: string): Promise<void> {
     };
     // Pi Desktop 的代理设置覆盖启动环境，避免外部空值或其他代理抢占配置。
     clearProxyEnvironment();
+    // 本地回环强制绕过代理（EnvHttpProxyAgent 不豁免 loopback），否则探测
+    // 127.0.0.1 上的本地服务器会被转发到代理并 502。
+    ensureLoopbackProxyBypass();
     mod.applyHttpProxySettings?.(resolved.url);
     mod.configureHttpDispatcher?.();
   } catch (error) {
@@ -107,7 +110,7 @@ export async function loadPiAdapter(): Promise<PiRuntimeAdapter> {
       // 磁盘不可读：走完整检测路径
     }
   }
-  const environment = detectPiEnvironment();
+  const environment = await detectPiEnvironment();
   if (!environment.pi.found || !environment.pi.packageRoot) {
     throw new PiAdapterNotReadyError('not-installed');
   }
@@ -192,7 +195,7 @@ export async function inspectPiCompatibility(): Promise<PiCompatibilityReport | 
   try {
     return (await loadPiAdapter()).compatibility;
   } catch (error) {
-    const environment = detectPiEnvironment();
+    const environment = await detectPiEnvironment();
     if (!environment.pi.found || !environment.pi.packageRoot || !environment.pi.version) return undefined;
     const failureCode = error instanceof PiAdapterNotReadyError
       ? error.reason as PiCompatibilityFailureCode

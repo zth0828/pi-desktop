@@ -6,6 +6,7 @@ import type { WorkspaceReadResult } from '@shared/host-api/contract';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { Markdown } from '../../components/Markdown';
 import { hostApi } from '../../lib/host-api';
+import { ImageLightbox } from './ImageLightbox';
 
 const MAX_SHEET_ROWS = 200;
 const MAX_SHEET_COLUMNS = 50;
@@ -298,13 +299,39 @@ function SpreadsheetPreview({ result }: { result: WorkspaceReadResult }) {
   );
 }
 
+function ImageFilePreview({ result }: { result: WorkspaceReadResult }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const src = `data:${result.mimeType};base64,${result.data}`;
+  return (
+    <>
+      <div className="workspace-image-preview" data-testid="workspace-image-preview">
+        <button
+          type="button"
+          className="workspace-image-preview-button"
+          data-testid="workspace-image-preview-button"
+          onClick={() => setLightboxOpen(true)}
+        >
+          <img src={src} alt={result.name} />
+        </button>
+      </div>
+      {lightboxOpen && (
+        <ImageLightbox
+          src={src}
+          name={result.name}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
 export function FilePreviewContent({ result, wrapLines = true }: { result: WorkspaceReadResult; wrapLines?: boolean }) {
   const { t } = useTranslation();
   if (result.truncated && !result.data && !result.text) {
     return <div className="workspace-empty">{t('workspace.tooLarge', { size: result.size.toLocaleString() })}</div>;
   }
   if (result.kind === 'image' && result.data) {
-    return <div className="workspace-image-preview" data-testid="workspace-image-preview"><img src={`data:${result.mimeType};base64,${result.data}`} alt={result.name} /></div>;
+    return <ImageFilePreview result={result} />;
   }
   if (result.kind === 'markdown') return <MarkdownFilePreview result={result} wrapLines={wrapLines} />;
   if (result.kind === 'text') return <TextSourcePreview name={result.name} text={result.text ?? ''} truncated={result.truncated} wrapLines={wrapLines} />;

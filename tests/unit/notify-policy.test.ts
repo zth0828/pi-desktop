@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldNotify } from '@electron/services/notify-policy';
+import { resolveNotifyFocused, shouldNotify } from '@electron/services/notify-policy';
 
 describe('notify-policy 档位判定', () => {
   it('off：任何焦点状态都不通知', () => {
@@ -40,5 +40,26 @@ describe('notifyUiRequest 分类开关', () => {
   it('runCompleted 不受 notifyUiRequest 开关影响', () => {
     expect(shouldNotify('always', true, 'runCompleted', false)).toBe(true);
     expect(shouldNotify('unfocused', false, 'runCompleted', false)).toBe(true);
+  });
+});
+
+describe('resolveNotifyFocused 会话寻址焦点判定', () => {
+  it('会话窗口聚焦：视为聚焦', () => {
+    expect(resolveNotifyFocused('/s/a.jsonl', true, false)).toBe(true);
+    expect(resolveNotifyFocused('/s/a.jsonl', true, true)).toBe(true);
+  });
+
+  it('会话窗口存在但未聚焦（其他窗口聚焦）：视为失焦，通知不吞', () => {
+    expect(resolveNotifyFocused('/s/a.jsonl', false, true)).toBe(false);
+  });
+
+  it('会话窗口已关（找不到）：按失焦处理，不吞通知', () => {
+    expect(resolveNotifyFocused('/s/a.jsonl', null, true)).toBe(false);
+    expect(resolveNotifyFocused('/s/a.jsonl', null, false)).toBe(false);
+  });
+
+  it('未指定会话（in-memory）：回退任一窗口聚焦旧口径', () => {
+    expect(resolveNotifyFocused(undefined, null, true)).toBe(true);
+    expect(resolveNotifyFocused(undefined, null, false)).toBe(false);
   });
 });

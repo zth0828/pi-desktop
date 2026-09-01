@@ -28,7 +28,12 @@ async function makeFakeNodeBin(version: string): Promise<{ binDir: string; clean
  *  POSIX：<root>/bin/pi → lib/node_modules/.../dist/cli.js（symlink）
  *  Windows：<root>/pi.cmd + <root>/node_modules/...（.cmd shim，无 symlink） */
 async function makeFakeNpmPrefix(version: string): Promise<{ prefix: string; npmRoot: string; cleanup: () => Promise<void> }> {
-  const prefix = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-prefix-'));
+  // Windows runner 的 %TEMP% 可能是 8.3 短名（RUNNER~1），而 realpath 返回长名
+  // （runneradmin）。检测器比较 shim 目录与 npm root 父目录的 realpath 字符串，
+  // 长短名不一致会误判非 npm 安装。统一用 realpath 后的长路径建 prefix，
+  // 使 PATH 里的 shim 与 globalRoot 解析到同一字符串。
+  const rawPrefix = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-prefix-'));
+  const prefix = await realpath(rawPrefix);
   const pkgSubPath = '@earendil-works/pi-coding-agent';
   if (isWin) {
     const pkgDir = path.join(prefix, 'node_modules', ...pkgSubPath.split('/'));
@@ -134,7 +139,7 @@ test('场景4：npm 安装但版本过低 → 阻断升级页', async ({ launchE
       npmRoot: fake.npmRoot,
     });
     const page = await app.firstWindow();
-    await expect(page.getByRole('heading', { name: 'pi is too old' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'pi is too old' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/v0\.82\.0/)).toBeVisible();
   } finally {
     await fake.cleanup();
@@ -149,7 +154,7 @@ test('场景5：npm 安装且版本达标 → 进入主界面', async ({ launchE
       npmRoot: fake.npmRoot,
     });
     const page = await app.firstWindow();
-    await expect(page.getByTestId('nav-chat')).toBeVisible();
+    await expect(page.getByTestId('nav-chat')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: 'Choose folder' })).toBeVisible();
   } finally {
     await fake.cleanup();

@@ -1,6 +1,12 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
+import {
+  findBuiltinModel,
+  normalizeBuiltinModelId,
+  type BuiltinModelCatalog,
+} from './builtin-model-catalog';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -15,7 +21,11 @@ export type ProviderModelSyncResult = {
   discovered: number;
   added: number;
   changed: boolean;
+  /** 目录不可达但已完成官方目录降级纠正时的失败原因（供上层提示）。 */
+  warning?: string;
 };
+
+export type ThinkingLevelMap = Record<string, string | null>;
 
 type DetectedModel = {
   id: string;
@@ -24,6 +34,7 @@ type DetectedModel = {
   input?: Array<'text' | 'image'>;
   contextWindow?: number;
   maxTokens?: number;
+  thinkingLevelMap?: ThinkingLevelMap;
 };
 
 function record(value: unknown): JsonRecord | null {
@@ -32,12 +43,42 @@ function record(value: unknown): JsonRecord | null {
     : null;
 }
 
+function parseThinkingLevelMap(value: unknown): ThinkingLevelMap | undefined {
+  const obj = record(value);
+  if (!obj) return undefined;
+  const result: ThinkingLevelMap = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === null || typeof val === 'string') {
+      result[key] = val;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 function positiveNumber(...values: unknown[]): number | undefined {
   for (const value of values) {
     const parsed = Number(value);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
   }
   return undefined;
+}
+
+/**
+ * 目录行 → 最大输出 token。字段变体按各家目录兼容：
+ * OpenAI 风格 max_tokens/max_output_tokens、Anthropic/部分网关
+ * max_completion_tokens、OpenRouter 风格 top_provider.max_completion_tokens
+ * （agentrouter 等 OpenRouter 兼容网关同构）。
+ */
+export function parseMaxOutputTokens(row: JsonRecord): number | undefined {
+  const topProvider = record(row.top_provider);
+  return positiveNumber(
+    row.maxTokens,
+    row.max_tokens,
+    row.max_output_tokens,
+    row.max_completion_tokens,
+    topProvider?.max_completion_tokens,
+    topProvider?.max_tokens,
+  );
 }
 
 function setHeader(headers: Record<string, string>, name: string, value: string): void {
@@ -61,8 +102,21 @@ function directoryUrlCandidates(baseUrl: string, api: string): string[] {
   return roots.map((root) => `${root}/models`);
 }
 
+/**
+ * pi 生态客户端 UA（与 pi-ai getPiUserAgent 同格式）。部分网关（agentrouter
+ * 等）对 /models 目录做客户端白名单：未知 UA 一律 401 unauthorized client，
+ * pi 在白名单内；所有目录探测请求统一带此 UA。
+ */
+export function piClientUserAgent(): string {
+  return `pi (${process.platform} ${os.release()}; ${process.arch})`;
+}
+
 function directoryHeaders(api: string, auth: ProviderDirectoryAuth): Record<string, string> {
-  const headers: Record<string, string> = { accept: 'application/json' };
+  // 用户在 provider 配置里自定义的 headers 仍可覆盖 UA（setHeader 后写）。
+  const headers: Record<string, string> = {
+    accept: 'application/json',
+    'user-agent': piClientUserAgent(),
+  };
   if (auth.apiKey) {
     if (api === 'anthropic-messages') {
       setHeader(headers, 'x-api-key', auth.apiKey);
@@ -102,57 +156,137 @@ export function parseProviderModelDirectory(payload: unknown, api: string): Dete
       : capabilities?.reasoning === true || record(capabilities?.reasoning) !== null
         ? true
         : undefined;
+    const rawThinkingLevelMap = row.thinkingLevelMap ?? row.thinking_level_map
+      ?? capabilities?.thinkingLevelMap ?? capabilities?.thinking_level_map;
+    const thinkingLevelMap = parseThinkingLevelMap(rawThinkingLevelMap);
     detected.push({
       id,
       ...(displayName ? { name: displayName } : {}),
       ...(reasoning === undefined ? {} : { reasoning }),
+      ...(thinkingLevelMap ? { thinkingLevelMap } : {}),
       ...(input?.length ? { input } : vision ? { input: ['text', 'image'] } : {}),
       ...(positiveNumber(row.contextWindow, row.context_window, row.context_length, row.max_context_length, row.max_model_len)
         ? { contextWindow: positiveNumber(row.contextWindow, row.context_window, row.context_length, row.max_context_length, row.max_model_len) }
         : {}),
-      ...(positiveNumber(row.maxTokens, row.max_tokens, row.max_output_tokens)
-        ? { maxTokens: positiveNumber(row.maxTokens, row.max_tokens, row.max_output_tokens) }
-        : {}),
+      ...(parseMaxOutputTokens(row) ? { maxTokens: parseMaxOutputTokens(row) } : {}),
     });
   }
   return detected;
 }
 
-export function mergeDiscoveredProviderModels(existing: unknown[], detected: DetectedModel[]): JsonRecord[] {
+/** 历史兜底 contextWindow：这些值说明记录来自旧版缺省写入而非真实目录/规格数据。 */
+const LEGACY_FALLBACK_CONTEXT_WINDOWS = new Set([DEFAULT_CONTEXT_WINDOW, 128000]);
+
+/** current.input 是否为历史默认（缺失或 ['text']）：可被目录/内置目录升级。 */
+function isLegacyDefaultInput(current: JsonRecord): boolean {
+  const input = current.input;
+  if (!Array.isArray(input)) return true;
+  return input.length === 1 && input[0] === 'text';
+}
+
+/** cost 是否为旧版"价格未知"占位（全 0）：与官方目录真实免费（有明确条目）区分。 */
+function isPlaceholderZeroCost(value: unknown): boolean {
+  const cost = record(value);
+  if (!cost) return false;
+  return ['input', 'output', 'cacheRead', 'cacheWrite']
+    .every((key) => Number(cost[key] ?? 0) === 0);
+}
+
+/**
+ * 已存在模型的陈旧字段刷新。
+ * 元数据优先级：网关目录上报 > pi 内置目录（官方规格）> template 兜底。
+ * contextWindow/maxTokens 无 UI 编辑入口、全部为机器写入（旧手写规格表的
+ * 错值也混在其中），因此目录或官方目录命中即直接纠正历史存量；template
+ * （兄弟模型继承）仅在两者都无数据时兜底未知模型。
+ * - input：未 pin（inputPinned !== true）且当前为历史默认 → 目录/内置目录升级。
+ * - cost：全 0 占位且官方目录有价 → 替换为官方价（$0 与未知价区分）。
+ * reasoning/name 保持原样。
+ */
+function refreshStaleModel(
+  current: JsonRecord,
+  model: DetectedModel | null,
+  template: JsonRecord,
+  catalog: BuiltinModelCatalog,
+): JsonRecord {
+  const next: JsonRecord = { ...current };
+  const builtin = findBuiltinModel(catalog, String(current.id ?? ''));
+  // input 刷新优先级：pi 内置官方目录 > 网关 /models 目录上报。
+  // 知名模型的官方规格比网关目录更可靠；网关目录错误声明 text-only 时
+  // 不应覆盖官方声明的多模态能力。
+  const detectedInput = builtin?.input ?? model?.input;
+  if (current.inputPinned !== true && isLegacyDefaultInput(current) && detectedInput) {
+    next.input = detectedInput;
+  }
+  const currentContext = positiveNumber(current.contextWindow);
+  const betterContext = model?.contextWindow ?? builtin?.contextWindow;
+  if (betterContext && betterContext !== currentContext) {
+    next.contextWindow = betterContext;
+  } else if ((!currentContext || LEGACY_FALLBACK_CONTEXT_WINDOWS.has(currentContext))
+    && positiveNumber(template.contextWindow)) {
+    next.contextWindow = positiveNumber(template.contextWindow);
+  }
+  const currentMax = positiveNumber(current.maxTokens);
+  const betterMax = model?.maxTokens ?? builtin?.maxTokens;
+  if (betterMax && betterMax !== currentMax) {
+    next.maxTokens = betterMax;
+  } else if (!currentMax && positiveNumber(template.maxTokens)) {
+    next.maxTokens = positiveNumber(template.maxTokens);
+  }
+  if (builtin?.cost && isPlaceholderZeroCost(current.cost)) {
+    next.cost = { ...builtin.cost };
+  }
+  return next;
+}
+
+export function mergeDiscoveredProviderModels(
+  existing: unknown[],
+  detected: DetectedModel[],
+  catalog: BuiltinModelCatalog = new Map(),
+): JsonRecord[] {
   const existingModels = existing.map(record).filter((model): model is JsonRecord => model !== null);
-  const byId = new Map(existingModels.map((model) => [String(model.id ?? ''), model]));
+  // 网关目录与本地存量可能用不同版本分隔风格（claude-opus-4-8 vs
+  // claude-opus-4.8）：按规范化 id 对齐同一条模型，命中时保留存量 id
+  // （请求网关用的就是它）只刷元数据，避免同一模型出现重复条目。
+  const byId = new Map(existingModels.map((model) => [normalizeBuiltinModelId(String(model.id ?? '')), model]));
   const template = existingModels[0] ?? {};
+  const matched = new Set<JsonRecord>();
   const merged = detected.map((model) => {
-    const current = byId.get(model.id);
+    const current = byId.get(normalizeBuiltinModelId(model.id));
     if (current) {
-      if (!positiveNumber(current.contextWindow)) {
-        return {
-          ...current,
-          contextWindow: model.contextWindow
-            ?? positiveNumber(template.contextWindow)
-            ?? DEFAULT_CONTEXT_WINDOW,
-        };
-      }
-      return current;
+      matched.add(current);
+      return refreshStaleModel(current, model, template, catalog);
     }
+    const builtin = findBuiltinModel(catalog, model.id);
     return {
       id: model.id,
       name: model.name ?? model.id,
       // 第三方目录普遍不上报推理能力：缺省按支持处理，让思考深度可用；
       // 供应商拒绝思考参数时用户可在 Models 页逐模型关闭（写入后不被发现流程覆盖）。
-      reasoning: model.reasoning ?? (typeof template.reasoning === 'boolean' ? template.reasoning : true),
-      input: model.input ?? (Array.isArray(template.input) ? template.input : ['text']),
-      cost: record(template.cost) ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      reasoning: model.reasoning ?? builtin?.reasoning ?? (typeof template.reasoning === 'boolean' ? template.reasoning : true),
+      ...(model.thinkingLevelMap ? { thinkingLevelMap: model.thinkingLevelMap } : {}),
+      // input 优先级：pi 内置官方目录 > 网关 /models 目录上报 > 供应商模板继承 > 纯文本。
+      // 知名模型的官方规格比网关目录更可靠；网关目录仅用于补充官方未收录模型。
+      input: builtin?.input
+        ?? model.input
+        ?? (Array.isArray(template.input) ? template.input : ['text']),
+      // 官方目录价格透传：覆盖「价格未知显示占位」的 agentrouter 场景
+      ...(builtin?.cost ? { cost: builtin.cost } : record(template.cost) ? { cost: record(template.cost) } : {}),
       contextWindow: model.contextWindow
+        ?? builtin?.contextWindow
         ?? positiveNumber(template.contextWindow)
         ?? DEFAULT_CONTEXT_WINDOW,
       ...(model.maxTokens
         ? { maxTokens: model.maxTokens }
+        : builtin?.maxTokens ? { maxTokens: builtin.maxTokens }
         : positiveNumber(template.maxTokens) ? { maxTokens: positiveNumber(template.maxTokens) } : {}),
     };
   });
-  const detectedIds = new Set(detected.map((model) => model.id));
-  merged.push(...existingModels.filter((model) => !detectedIds.has(String(model.id ?? ''))));
+  const detectedIds = new Set(detected.map((model) => normalizeBuiltinModelId(model.id)));
+  // 目录未列出的旧模型（手动 modelIds 添加）也走内置目录刷新：官方规格识别
+  // 不应因目录不收录而失效。
+  merged.push(...existingModels
+    .filter((model) => !matched.has(model) && !detectedIds.has(normalizeBuiltinModelId(String(model.id ?? ''))))
+    .map((model) => refreshStaleModel(model, null, template, catalog)));
   return merged;
 }
 
@@ -162,6 +296,7 @@ export async function syncConfiguredProviderModels(options: {
   api: string;
   auth: ProviderDirectoryAuth;
   fetchImpl?: typeof fetch;
+  catalog?: BuiltinModelCatalog;
 }): Promise<ProviderModelSyncResult | null> {
   const modelsPath = path.join(options.agentDir, 'models.json');
   if (!existsSync(modelsPath)) return null;
@@ -171,30 +306,39 @@ export async function syncConfiguredProviderModels(options: {
   if (!provider || typeof provider.baseUrl !== 'string') return null;
   const baseUrl = options.auth.baseUrl ?? provider.baseUrl;
   let lastError: Error | undefined;
-  let response: Response | null = null;
+  let directory: unknown = null;
   for (const url of directoryUrlCandidates(baseUrl, options.api)) {
     try {
       const candidate = await (options.fetchImpl ?? fetch)(url, {
         headers: directoryHeaders(options.api, options.auth),
         signal: AbortSignal.timeout(12_000),
       });
-      if (candidate.ok) {
-        response = candidate;
-        break;
+      if (!candidate.ok) {
+        lastError = new Error(`model directory returned HTTP ${candidate.status} (${url})`);
+        continue;
       }
-      lastError = new Error(`model directory returned HTTP ${candidate.status} (${url})`);
+      // 200 但 body 非 JSON（代理/网关错误页、被劫持的 HTML）视为该候选失败，
+      // 继续试下一个候选路径；全部失败走下方官方目录降级，不抛解析错误
+      const json = await candidate.json().catch(() => null);
+      if (json === null) {
+        lastError = new Error(`model directory returned non-JSON response (${url})`);
+        continue;
+      }
+      directory = json;
+      break;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
   }
-  if (!response) throw lastError ?? new Error('model directory unreachable');
-  const detected = parseProviderModelDirectory(await response.json(), options.api);
-  if (detected.length === 0) {
-    return { providerId: options.providerId, discovered: 0, added: 0, changed: false };
-  }
+  // 目录不可达（网关不开放 /models、客户端被白名单拒绝或返回错误页）不阻断
+  // 刷新：已有模型仍走内置官方目录纠正历史错值，失败原因经 warning 上报调用方。
+  const warning = directory === null
+    ? (lastError?.message ?? 'model directory unreachable')
+    : undefined;
+  const detected = directory !== null ? parseProviderModelDirectory(directory, options.api) : [];
   const existing = Array.isArray(provider.models) ? provider.models : [];
-  const existingIds = new Set(existing.map((model) => String(record(model)?.id ?? '')));
-  const models = mergeDiscoveredProviderModels(existing, detected);
+  const existingIds = new Set(existing.map((model) => normalizeBuiltinModelId(String(record(model)?.id ?? ''))));
+  const models = mergeDiscoveredProviderModels(existing, detected, options.catalog ?? new Map());
   const changed = JSON.stringify(models) !== JSON.stringify(existing);
   if (changed) {
     provider.models = models;
@@ -203,7 +347,8 @@ export async function syncConfiguredProviderModels(options: {
   return {
     providerId: options.providerId,
     discovered: detected.length,
-    added: detected.filter((model) => !existingIds.has(model.id)).length,
+    added: detected.filter((model) => !existingIds.has(normalizeBuiltinModelId(model.id))).length,
     changed,
+    ...(warning ? { warning } : {}),
   };
 }

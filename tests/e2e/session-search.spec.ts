@@ -140,27 +140,20 @@ test('top controls stay stable and global search opens active or archived chats'
 
   const isMac = process.platform === 'darwin';
   const controls = page.getByTestId('app-window-controls');
-  // macOS：悬浮控件层常驻（红绿灯右侧）；Windows：折叠/搜索与「新会话」同一行
-  // （侧边栏顶部），收起后改由 is-native-frame 悬浮层提供
+  // mac：折叠/搜索常驻红绿灯右侧（顶部带内）；Windows：与「新会话」同一行
+  // （sidebar-head），展开态无悬浮层。收起后均由悬浮层提供展开/搜索入口。
   if (isMac) {
     await expect(controls).toBeVisible();
     await expect(controls).not.toContainText('Pi');
+  } else {
+    await expect(controls).toHaveCount(0);
   }
   await expect(page.getByTestId('session-search-trigger')).toBeVisible();
-  const expandedBox = isMac ? await controls.boundingBox() : null;
-  if (isMac) expect(expandedBox).not.toBeNull();
 
   await page.getByTestId('sidebar-toggle').click();
   await expect(page.getByTestId('sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
-  if (isMac) {
-    const collapsedBox = await controls.boundingBox();
-    expect(collapsedBox).not.toBeNull();
-    expect(collapsedBox!.x).toBe(expandedBox!.x);
-    expect(collapsedBox!.y).toBe(expandedBox!.y);
-  } else {
-    // Windows：收起后 is-native-frame 悬浮层出现（含折叠/搜索按钮）
-    await expect(controls).toBeVisible();
-  }
+  // 收起后悬浮层可见（mac 常驻层仍在；win 出现 is-native-frame 层）
+  await expect(controls).toBeVisible();
 
   await page.getByTestId('session-search-trigger').click();
   const input = page.getByTestId('session-search-input');

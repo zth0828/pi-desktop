@@ -1,5 +1,6 @@
 import type { WebContents } from 'electron';
 import type { HostApiContract } from '@shared/host-api/contract';
+import type { HostErrorCode } from '@shared/host-api/errors';
 
 export type HostRequest = {
   id: string;
@@ -10,7 +11,7 @@ export type HostRequest = {
   sessionPath?: string;
 };
 
-export type HostErrorCode = 'VALIDATION' | 'UNSUPPORTED' | 'INTERNAL';
+export type { HostErrorCode };
 
 export type HostResponse<T = unknown> =
   | { id?: string; ok: true; data: T }

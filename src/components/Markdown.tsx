@@ -52,7 +52,7 @@ function taskProgress(children: ReactNode, node?: MarkdownNode): { completed: nu
 
 export function Markdown({ text, streaming }: { text: string; streaming?: boolean }) {
   const { t } = useTranslation();
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
   const components = {
     a: ({ href, children, ...props }: ComponentProps<'a'>) => (
       <a
@@ -67,7 +67,11 @@ export function Markdown({ text, streaming }: { text: string; streaming?: boolea
       </a>
     ),
     img: ({ src, alt, ...props }: ComponentProps<'img'>) => src ? (
-      <button className="markdown-image-button" type="button" onClick={() => setPreviewImage(src)}>
+      <button
+        className="markdown-image-button"
+        type="button"
+        onClick={() => setPreviewImage({ url: src, name: typeof alt === 'string' ? alt : undefined })}
+      >
         <img {...props} src={src} alt={alt ?? ''} />
       </button>
     ) : null,
@@ -101,7 +105,7 @@ export function Markdown({ text, streaming }: { text: string; streaming?: boolea
       >
         {text}
       </Streamdown>
-      {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
+      {previewImage && <ImageLightbox src={previewImage.url} name={previewImage.name} onClose={() => setPreviewImage(null)} />}
     </>
   );
 }

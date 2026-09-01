@@ -2,18 +2,25 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useTranslation } from 'react-i18next';
 import { ArrowDown, Check, ChevronRight, PanelRight, X } from 'lucide-react';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
+import { parseProviderError, PROVIDER_ERROR_HINT_KEYS } from '@shared/provider-error';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { cacheHitRate, summarizeUsage } from '../../lib/usage-stats';
 import { hostApi } from '../../lib/host-api';
+import { matchHostInvokeTimeout } from '../../lib/host-api-client';
+import { onHostEvent } from '../../lib/host-events';
+import { SESSION_REPLACEMENT_TIMEOUT } from '../../lib/session-binding';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
+import { workspaceErrorMessage } from '../../lib/workspace-error';
+import { formatErrorMessage } from '../../lib/error-formatter';
 import { timingMark } from '../../lib/timing';
 import { groupLogicalTurns, groupTurnStages, turnDurationMs, turnFinalResponseIndex } from '../../lib/turn-changes';
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
 import { PaneLayout } from '../../components/PaneLayout';
 import { ExtensionUiDialog } from '../../components/ExtensionUiDialog';
+import { ChatGreeting } from './ChatGreeting';
 import { ChatInput } from './ChatInput';
 import { MessageItem } from './MessageItem';
-import { MessageNavRail, type RailAnchor } from './MessageNavRail';
+import { MessageNavRail, truncateRailText, type RailAnchor } from './MessageNavRail';
 import { StatusBar } from './StatusBar';
 import { ReviewPanel } from './ReviewPanel';
 import { TreeDialog } from './TreeDialog';
@@ -38,17 +45,35 @@ function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
   const [name, setName] = useState('');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const isStreaming = usePaneChatStore((s) => s.isStreaming);
+  const wasStreaming = useRef(false);
   useEffect(() => {
     if (!started) return;
     const refresh = () => {
       void paneApi.piRuntime.getSessionInfo().then((info) => setName(info?.name ?? ''));
     };
     refresh();
-    // 每面板一条 1s 轮询（getSessionInfo 是 main 侧本地内存读取，
-    // 多面板下 N 条轮询开销可忽略，保留以跟随扩展/外部改名；非活跃面板降频暂不做）
-    const timer = window.setInterval(refresh, 1000);
-    return () => window.clearInterval(timer);
+    // 侧栏/其他窗口改名走 sessionsChanged(rename) 即时刷新；payload 无会话标识，
+    // rename 是低频操作直接刷新不过滤。onHostEvent 是窗口级订阅，多面板各自成对订阅。
+    const offRename = onHostEvent('piRuntime', 'sessionsChanged', ({ reason }) => {
+      if (reason === 'rename') refresh();
+    });
+    // 低频兜底：pi 侧自动命名等无事件通道的改名路径只能靠轮询发现。
+    // 原 1s 常驻轮询降为 30s——N 面板 N 条 1s 定时器是纯空转，30s 开销可忽略。
+    const timer = window.setInterval(refresh, 30_000);
+    return () => {
+      offRename();
+      window.clearInterval(timer);
+    };
   }, [started, sessionId, paneApi]);
+  useEffect(() => {
+    // 流式中改名（/name、自动命名）pi 不推事件（流中推全量会丢 partial），
+    // 流结束时状态已含新名：isStreaming true→false 翻转时刷新一次覆盖该盲区。
+    if (wasStreaming.current && !isStreaming) {
+      void paneApi.piRuntime.getSessionInfo().then((info) => setName(info?.name ?? ''));
+    }
+    wasStreaming.current = isStreaming;
+  }, [isStreaming, paneApi]);
   const displayName = name || (firstUserMessage
     ? sessionTitleFromQuestion(firstUserQuestion, t('chat.imageSessionTitle'))
     : '');
@@ -61,7 +86,10 @@ function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
     setEditing(false);
   };
   return (
-    <div className="session-titlebar" data-testid="session-titlebar">
+    // 单面板（onClosePane 为空）时加 session-titlebar-top：macOS 上该标题条
+    // 固定到窗口顶部（平台样式在 CSS 里按 .is-macos 限定，Windows 不受影响）；
+    // 多面板时留在内容区顶部，避免多个标题条叠加。
+    <div className={`session-titlebar${onClosePane ? '' : ' session-titlebar-top'}`} data-testid="session-titlebar">
       <div className="session-title">
         {editing ? (
           <>
@@ -144,9 +172,17 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const { t } = useTranslation();
   const chatStore = usePaneChatStoreApi();
   const [cwd, setCwd] = useState<string | undefined>();
+  const [workspaceError, setWorkspaceError] = useState<string>();
+  // 模型不可用 banner 的「选择模型」入口信号（nonce 递增：重复点击每次都触发打开）
+  const [modelMenuNonce, setModelMenuNonce] = useState(0);
   const started = usePaneChatStore((s) => s.started);
   const starting = usePaneChatStore((s) => s.starting);
   const startError = usePaneChatStore((s) => s.startError);
+  const startErrorCode = usePaneChatStore((s) => s.startErrorCode);
+  const runtimeError = usePaneChatStore((s) => s.runtimeError);
+  const lastFailedSwitch = usePaneChatStore((s) => s.lastFailedSwitch);
+  const dismissRuntimeError = usePaneChatStore((s) => s.dismissRuntimeError);
+  const dismissStartError = usePaneChatStore((s) => s.dismissStartError);
   const messages = usePaneChatStore((s) => s.messages);
   const historyMessages = usePaneChatStore((s) => s.historyMessages);
   const bashDraft = usePaneChatStore((s) => s.bashDraft);
@@ -226,14 +262,16 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
         id: `chat-msg-${i}`,
         n: (n += 1),
         // 附件信封（<attachments>…）不属于问题文字，rail 悬浮预览里同样不展示
-        question: stripAttachmentEnvelope(
-          m.content
-            .filter((block) => block.type === 'text')
-            .map((block) => block.text ?? '')
-            .join(' '),
-        )
-          .replace(/\s+/g, ' ')
-          .trim(),
+        question: truncateRailText(
+          stripAttachmentEnvelope(
+            m.content
+              .filter((block) => block.type === 'text')
+              .map((block) => block.text ?? '')
+              .join(' '),
+          )
+            .replace(/\s+/g, ' ')
+            .trim(),
+        ),
       }] : [],
     );
   }, [displayMessages]);
@@ -249,7 +287,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim();
-      return [{ id: `chat-msg-${index}`, n: (n += 1), summary }];
+      return [{ id: `chat-msg-${index}`, n: (n += 1), summary: truncateRailText(summary) }];
     });
   }, [displayMessages]);
 
@@ -397,7 +435,13 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     const result = await hostApi.dialog.openDirectory(t('chat.workspace.choose'));
     if (result.canceled || !result.filePaths[0]) return;
     const dir = result.filePaths[0];
-    await hostApi.settings.set('workspaceCwd', dir);
+    // 工作区安全：主目录/盘符根被 main 侧拒绝，这里中止并提示（不再启动）
+    const saved = await hostApi.settings.set('workspaceCwd', dir);
+    if (!saved.success) {
+      setWorkspaceError(workspaceErrorMessage(saved.error, t));
+      return;
+    }
+    setWorkspaceError(undefined);
     setCwd(dir);
     void start(dir);
   };
@@ -420,19 +464,18 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     const finalIndex = turnFinalResponseIndex(displayMessages, turn);
     const completed = !turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running')
       && (turnIndex < logicalTurns.length - 1 || !isStreaming);
-    // 异常/中断轮可能没有最终答复，这时全量展示，避免隐藏唯一的错误信息。
     // 压缩摘要是会话历史的重要内容，不能随着它恰好落入某一轮而被折叠隐藏。
     const hasCompactionSummary = displayMessages
       .slice(turn.startIndex, turn.endIndex + 1)
       .some((message) => message.role === 'compactionSummary');
-    const canFold = completed && finalIndex !== undefined && !hasCompactionSummary;
+    const canFold = completed && !hasCompactionSummary;
     const expanded = expandedTurns[turn.startIndex] ?? false;
     const hasEdits = completed && turn.toolCallIds.some((id) => {
       const name = toolExecutions[id]?.toolName;
       return name === 'edit' || name === 'write';
     });
 
-    if (!canFold || finalIndex === undefined) {
+    if (!canFold) {
       return (
         <Fragment key={turn.startIndex}>
           {Array.from({ length: turn.endIndex - turn.startIndex + 1 }, (_, offset) => turn.startIndex + offset).map((i) => (
@@ -444,9 +487,91 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               cacheMiss={cacheMisses.get(i)}
               turnStats={i === latestFinalResponseIndex ? turnStats : null}
               sessionCacheHitRate={i === latestFinalResponseIndex ? sessionCacheHitRate : null}
-              expandThinking
             />
           ))}
+          {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
+        </Fragment>
+      );
+    }
+
+    if (finalIndex === undefined) {
+      const processIndices = Array.from(
+        { length: turn.endIndex - turn.startIndex },
+        (_, offset) => turn.startIndex + 1 + offset,
+      );
+      const stages = groupTurnStages(displayMessages, processIndices, String(turn.startIndex));
+      const hasProcess = stages.length > 0;
+      const duration = formatTurnDuration(turnDurationMs(
+        displayMessages,
+        turn,
+        toolExecutions,
+      ));
+
+      return (
+        <Fragment key={turn.startIndex}>
+          <MessageItem
+            message={displayMessages[turn.startIndex]}
+            anchorId={`chat-msg-${turn.startIndex}`}
+            highlighted={searchHighlightIndex === turn.startIndex}
+          />
+          {hasProcess && (
+            <section className={`turn-fold${expanded ? ' expanded' : ''}`} data-testid="turn-fold">
+              <button
+                className="turn-fold-toggle"
+                data-testid="turn-fold-toggle"
+                aria-expanded={expanded}
+                onClick={() => setExpandedTurns((current) => ({
+                  ...current,
+                  [turn.startIndex]: !expanded,
+                }))}
+              >
+                <span className="turn-fold-label">
+                  <span className="turn-fold-status" data-testid="turn-fold-status">{t('chat.turnFold.interrupted')}</span>
+                  {duration && <span className="turn-fold-duration" data-testid="turn-fold-duration">{duration}</span>}
+                  <span className="turn-fold-action">
+                    {expanded ? t('chat.turnFold.collapse') : t('chat.turnFold.expand')}
+                  </span>
+                </span>
+                <ChevronRight size={14} aria-hidden="true" />
+              </button>
+              {expanded && (
+                <div className="turn-fold-content" data-testid="turn-fold-content">
+                  {stages.map((stage, stageIndex) => {
+                    const stageExpanded = expandedStages[stage.key] ?? false;
+                    return (
+                      <section className={`process-stage${stageExpanded ? ' expanded' : ''}`} data-testid="process-stage" key={stage.key}>
+                        <button
+                          className="process-stage-toggle"
+                          data-testid="process-stage-toggle"
+                          aria-expanded={stageExpanded}
+                          onClick={() => setExpandedStages((current) => ({ ...current, [stage.key]: !stageExpanded }))}
+                        >
+                          <ChevronRight size={13} aria-hidden="true" />
+                          <span>{t('chat.turnFold.stage', { index: stageIndex + 1, count: stage.indices.length })}</span>
+                        </button>
+                        {stageExpanded && (
+                          <div className="process-stage-content">
+                            {stage.indices.map((i) => (
+                              <MessageItem
+                                key={i}
+                                message={displayMessages[i]}
+                                anchorId={`chat-msg-${i}`}
+                                highlighted={searchHighlightIndex === i}
+                                cacheMiss={cacheMisses.get(i)}
+                                expandThinking
+                                expandTools
+                                groupedThinking
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
           {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
         </Fragment>
       );
@@ -565,7 +690,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               <X size={16} />
             </button>
           )}
-          <p data-testid="chat-attaching">{startError ?? t('chat.starting')}</p>
+          <p data-testid="chat-attaching">{formatErrorMessage(startError, t) ?? t('chat.starting')}</p>
           {startError && attachRetry && (
             <button className="primary" data-testid="attach-retry" onClick={attachRetry}>
               {t('chat.startRetry')}
@@ -581,25 +706,72 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
         <button className="primary" data-testid="choose-workspace" onClick={() => void chooseWorkspace()}>
           {t('chat.workspace.choose')}
         </button>
+        {workspaceError && (
+          <p className="error-text" data-testid="workspace-error">{workspaceError}</p>
+        )}
         <ExtensionUiDialog />
       </div>
     );
   }
 
+  // banner 重试语义：上次失败的是会话切换时重发切换（start 会因 started 守卫早退且语义不符），
+  // 否则按原语义在工作区重启会话
+  const retryStart = lastFailedSwitch
+    ? () => void switchSession(lastFailedSwitch.path, lastFailedSwitch.cwd)
+    : () => void start(effectiveCwd);
+
+  // 模型不可用（MODEL_UNAVAILABLE）：provider/model 从错误文本解析供文案插值；
+  // 解析不出（如网关 503 文案不含 provider/id）时退回原始错误展示
+  const unavailableModel = startErrorCode === 'MODEL_UNAVAILABLE' && startError
+    ? parseProviderError(startError)
+    : undefined;
+  const unavailableProvider = unavailableModel?.providerId;
+  const unavailableModelId = unavailableModel?.modelId;
+  const modelUnavailable = unavailableProvider !== undefined && unavailableModelId !== undefined;
+
   return (
     <div className={`chat-page${workspaceVisible ? ' workspace-visible' : ''}`}>
-      {startError && (
-        <div className="error-banner">
-          <span>{startError === 'start-timeout' ? t('chat.startTimeout') : startError}</span>
-          {effectiveCwd && (
-            <button data-testid="start-retry" onClick={() => void start(effectiveCwd)}>
-              {t('chat.startRetry')}
-            </button>
-          )}
-        </div>
-      )}
-
       <div className="chat-column">
+        {startError && (
+          <div className="error-banner">
+            <div className="error-banner-text">
+              <span>
+                {modelUnavailable
+                  ? t('chat.error.modelUnavailable', { provider: unavailableProvider, model: unavailableModelId })
+                  : formatErrorMessage(startError, t)}
+              </span>
+              {lastFailedSwitch && started && (
+                <span className="error-banner-note" data-testid="switch-failed-note">
+                  {t('chat.switchFailedNote')}
+                </span>
+              )}
+            </div>
+            {effectiveCwd && (
+              <>
+                {modelUnavailable && (
+                  <button
+                    data-testid="model-unavailable-choose"
+                    onClick={() => setModelMenuNonce((nonce) => nonce + 1)}
+                  >
+                    {t('chat.error.chooseModel')}
+                  </button>
+                )}
+                <button data-testid="start-retry" onClick={retryStart}>
+                  {modelUnavailable ? t('chat.error.retrySwitch') : t('chat.startRetry')}
+                </button>
+              </>
+            )}
+            <button
+              className="error-banner-dismiss"
+              data-testid="start-error-dismiss"
+              onClick={dismissStartError}
+              aria-label={t('chat.runtimeErrorDismiss')}
+              title={t('chat.runtimeErrorDismiss')}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
         {onClosePane && !started && (
           <button className="icon-button pane-close-floating" data-testid="pane-close" title={t('chat.closePane')} aria-label={t('chat.closePane')} onClick={onClosePane}>
             <X size={16} />
@@ -612,9 +784,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               <div className="chat-starting" data-testid="chat-starting">{t('chat.starting')}</div>
             )}
             {started && displayMessages.length === 0 && (
-              <div className="chat-greeting" data-testid="chat-greeting">
-                <h1>{t('chat.greeting')}</h1>
-              </div>
+              <ChatGreeting cwd={effectiveCwd} />
             )}
             {displayMessages.slice(0, logicalTurns[0]?.startIndex ?? displayMessages.length).map((message, i) => (
               <MessageItem
@@ -626,6 +796,19 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               />
             ))}
             {logicalTurns.map(renderTurn)}
+            {/* 回合外的独立消息（bash 执行等，groupLogicalTurns 跳过不并入回合） */}
+            {displayMessages.slice((logicalTurns[logicalTurns.length - 1]?.endIndex ?? -1) + 1).map((message, i) => {
+              const index = (logicalTurns[logicalTurns.length - 1]?.endIndex ?? -1) + 1 + i;
+              return (
+                <MessageItem
+                  key={index}
+                  message={message}
+                  anchorId={`chat-msg-${index}`}
+                  highlighted={searchHighlightIndex === index}
+                  cacheMiss={cacheMisses.get(index)}
+                />
+              );
+            })}
             {bashDraft && (
               <MessageItem
                 message={{
@@ -658,11 +841,37 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
           )}
         </div>
 
+        {runtimeError && (() => {
+          // store 保持 node-safe 不能引 i18n：替换超时与后端错误以哨兵/错误码入 state，这里统一翻译。
+          // 通道超时同理按 message 形态识别；供应商类错误附归属 hint（与消息流内一致）。
+          const timeoutAction = matchHostInvokeTimeout(runtimeError);
+          const parsed = parseProviderError(runtimeError);
+          const formatted = formatErrorMessage(runtimeError, t);
+          return (
+            <div className="runtime-error-notice" data-testid="runtime-error-notice" role="alert">
+              <span className="runtime-error-text">
+                <span className="runtime-error-title">{t('chat.runtimeErrorTitle')}</span>
+                {formatted}
+                {/* 哨兵/通道/已映射错误已有专属文案（且非供应商错误），不再叠供应商归属提示 */}
+                {parsed.category !== 'unknown' && !timeoutAction && runtimeError !== SESSION_REPLACEMENT_TIMEOUT && (
+                  <div className="error-hint" data-testid={`runtime-error-hint-${parsed.category}`}>
+                    {t(`chat.errors.${PROVIDER_ERROR_HINT_KEYS[parsed.category]}`)}
+                  </div>
+                )}
+              </span>
+              <button type="button" data-testid="runtime-error-dismiss" onClick={dismissRuntimeError}>
+                {t('chat.runtimeErrorDismiss')}
+              </button>
+            </div>
+          );
+        })()}
+
         <ExtensionWidgets placement="aboveEditor" />
         <StatusBar />
         <ChatInput
           cwd={effectiveCwd}
           onChooseWorkspace={chooseWorkspace}
+          openModelMenuNonce={modelMenuNonce}
         />
         <ExtensionWidgets placement="belowEditor" />
       </div>

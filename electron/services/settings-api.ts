@@ -3,6 +3,8 @@ import type {
   SettingsSnapshot,
 } from '@shared/host-api/contract';
 import { getElectronStore } from '../utils/electron-store';
+import { riskyWorkspaceReason } from '../utils/workspace-safety';
+import { rebuildNativeMacMenu } from '../main/menu';
 
 export const settingsApi = {
   getAll: async (): Promise<SettingsSnapshot> => {
@@ -28,8 +30,13 @@ export const settingsApi = {
       appVersionCheckLatest: store.get('appVersionCheckLatest') as string | undefined,
       appVersionCheckError: store.get('appVersionCheckError') as string | undefined,
       appVersionCheckReleaseUrl: store.get('appVersionCheckReleaseUrl') as string | undefined,
+      appVersionCheckReleaseNotes: store.get('appVersionCheckReleaseNotes') as string | undefined,
       appVersionCheckAssetName: store.get('appVersionCheckAssetName') as string | undefined,
       appVersionCheckDownloadedPath: store.get('appVersionCheckDownloadedPath') as string | undefined,
+      appVersionCheckNoticedLatest: store.get('appVersionCheckNoticedLatest') as string | undefined,
+      appVersionCheckNoticedAt: store.get('appVersionCheckNoticedAt') as number | undefined,
+      piVersionCheckNoticedLatest: store.get('piVersionCheckNoticedLatest') as string | undefined,
+      piVersionCheckNoticedAt: store.get('piVersionCheckNoticedAt') as number | undefined,
     };
   },
   get: async <K extends keyof SettingsSnapshot>(
@@ -40,8 +47,21 @@ export const settingsApi = {
   },
   set: async (payload: SettingsSetPayload) => {
     const store = await getElectronStore();
+    // 工作区安全：主目录 / 盘符根不能作为持久化工作区（agent 会扫描个人全部文件）。
+    // 这里拒绝写入，两个 UI 入口（Chat 空态选择 / 设置页）都会拿到失败并提示。
+    if (payload.key === 'workspaceCwd' && typeof payload.value === 'string') {
+      const risky = riskyWorkspaceReason(payload.value);
+      if (risky) return { success: false, error: `risky-workspace-${risky}` };
+    }
     if (payload.value === undefined) store.delete(payload.key);
     else store.set(payload.key, payload.value);
+    // macOS 原生菜单文案跟随应用语言设置（与 Windows 自绘菜单 react-i18next
+    // 即时切换对齐）；重建是幂等的，非 darwin 下菜单函数内部直接忽略。
+    if (payload.key === 'language' && process.platform === 'darwin') {
+      void rebuildNativeMacMenu().catch((error) => {
+        console.error('[menu] failed to rebuild native menu on language change', error);
+      });
+    }
     return { success: true };
   },
 };

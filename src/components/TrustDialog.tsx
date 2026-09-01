@@ -45,6 +45,21 @@ export function TrustDialog() {
   }, []);
 
   const req = requests[0];
+
+  useEffect(() => {
+    if (!req) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setRequests((current) => current.filter((r) => r.requestId !== req.requestId));
+        void hostApi.piTrust.respond(req.requestId);
+      }
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [req]);
+
   if (!req) return null;
   const choose = (label?: string) => {
     setRequests((current) => current.filter((r) => r.requestId !== req.requestId));

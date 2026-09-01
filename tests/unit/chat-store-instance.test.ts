@@ -124,7 +124,8 @@ describe('chat store 实例隔离（多面板 P2）', () => {
 
     bus.emit('piRuntime.uiRequest', uiRequest('s2', 1, 'r2'));
     expect(reporters.uiRequest).toHaveBeenCalledTimes(1);
-    expect(reporters.uiRequest).toHaveBeenCalledWith('req-r2');
+    // 未绑定会话文件（in-memory）时第二参为 undefined
+    expect(reporters.uiRequest).toHaveBeenCalledWith('req-r2', undefined);
   });
 
   it('绑定会话文件后 prompt 走 scoped client（信封带 sessionPath）', async () => {

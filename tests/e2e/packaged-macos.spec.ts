@@ -7,13 +7,16 @@ import { _electron as electron, expect, test } from '@playwright/test';
 import { piTestEnv } from '../helpers/pi-prefix';
 
 const require = createRequire(__filename);
-const asarCli = path.join(path.dirname(require.resolve('@electron/asar')), '..', 'bin', 'asar.js');
 const packagedApp = process.env.PI_DESKTOP_PACKAGED_APP;
 const shouldRun = process.platform === 'darwin' && Boolean(packagedApp);
 
 test.skip(!shouldRun, 'Set PI_DESKTOP_PACKAGED_APP to run the packaged macOS smoke test.');
 
 test('packaged app.asar starts and sends through pi with the local mock provider', async () => {
+  // @electron/asar 是 electron-builder 的传递依赖，pnpm 隔离安装下不在顶层
+  // node_modules；模块顶层 resolve 会让未设此环境变量的普通 E2E 运行直接崩，
+  // 因此只在测试真正执行时解析。
+  const asarCli = path.join(path.dirname(require.resolve('@electron/asar')), '..', 'bin', 'asar.js');
   const pi = piTestEnv();
   const appBundle = packagedApp!;
   const appExecutable = path.join(appBundle, 'Contents', 'MacOS', 'Pi Desktop');
@@ -72,6 +75,9 @@ test('packaged app.asar starts and sends through pi with the local mock provider
         PI_CODING_AGENT_DIR: agentDir,
         PI_DESKTOP_USER_DATA_DIR: userData,
         PI_DESKTOP_USER_PATH: `${pi.piBinDir}${path.delimiter}${path.dirname(process.execPath)}:/usr/bin:/bin`,
+        // 打包产物默认忽略 PI_DESKTOP_NPM_ROOT 测试钩子（防生产环境污染变量
+        // 污染安装类型判定）；显式标记 E2E 才放行。
+        PI_DESKTOP_E2E: '1',
         PI_DESKTOP_NPM_ROOT: pi.npmRoot,
       },
       timeout: 60_000,

@@ -42,6 +42,8 @@ test.beforeAll(async () => {
     setTimeout(() => reject(new Error('mock timeout')), 10_000);
   });
   workspace = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-workspace-'));
+  // grep 工具 E2E 的目标文件（mock 的 USE_TOOL_GREP path 指向它）
+  await writeFile(path.join(workspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
 });
 
 test.afterAll(async () => {
@@ -167,6 +169,121 @@ test('Settings：默认思考深度与自动重试写回 pi settings.json', asyn
   await rmAgentDir(agentDir);
 });
 
+test('Settings：默认工具列表写回 pi settings.json（新会话生效）', async ({ launchElectronApp }) => {
+  const agentDir = await makeAgentDir();
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-settings').click();
+  const section = page.getByTestId('settings-agent-defaults');
+  await expect(section).toBeVisible();
+
+  // 未配置 defaultTools 时回退 pi 内置默认：核心四工具开启且锁定，grep/find/ls 关闭
+  for (const tool of ['read', 'bash', 'edit', 'write']) {
+    await expect(section.getByTestId(`tool-toggle-${tool}`)).toHaveClass(/active/);
+    await expect(section.getByTestId(`tool-toggle-${tool}`)).toBeDisabled();
+  }
+  for (const tool of ['grep', 'find', 'ls']) {
+    await expect(section.getByTestId(`tool-toggle-${tool}`)).not.toHaveClass(/active/);
+    await expect(section.getByTestId(`tool-toggle-${tool}`)).toBeEnabled();
+  }
+
+  // 核心工具锁定：点击无效（disabled），不触发写回
+  await section.getByTestId('tool-toggle-read').click({ force: true });
+  await expect(section.getByTestId('tool-toggle-read')).toHaveClass(/active/);
+  await expect(async () => {
+    const settings = JSON.parse(
+      await readFile(path.join(agentDir, 'settings.json'), 'utf8'),
+    ) as { defaultTools?: string[] };
+    expect(settings.defaultTools).toBeUndefined();
+  }).toPass({ timeout: 10_000 });
+
+  // 启用 grep → settings.json.defaultTools 含 grep 且核心工具始终在
+  await section.getByTestId('tool-toggle-grep').click();
+  await expect(section.getByTestId('tool-toggle-grep')).toHaveClass(/active/);
+  await expect(async () => {
+    const settings = JSON.parse(
+      await readFile(path.join(agentDir, 'settings.json'), 'utf8'),
+    ) as { defaultTools?: string[] };
+    expect(settings.defaultTools).toContain('grep');
+    expect(settings.defaultTools).toContain('read');
+    expect(settings.defaultTools).toContain('bash');
+  }).toPass({ timeout: 10_000 });
+
+  // 关闭 grep → 列表移除 grep（整表覆盖语义），核心工具保持
+  await section.getByTestId('tool-toggle-grep').click();
+  await expect(section.getByTestId('tool-toggle-grep')).not.toHaveClass(/active/);
+  await expect(async () => {
+    const settings = JSON.parse(
+      await readFile(path.join(agentDir, 'settings.json'), 'utf8'),
+    ) as { defaultTools?: string[] };
+    expect(settings.defaultTools).not.toContain('grep');
+    expect(settings.defaultTools).toContain('read');
+  }).toPass({ timeout: 10_000 });
+
+  await rmAgentDir(agentDir);
+});
+
+test('Settings：默认工具开启后重启新会话生效（grep 可用且有预览入口）', async ({ launchElectronApp }) => {
+  const agentDir = await makeAgentDir();
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page = await app.firstWindow();
+  await expect(
+    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  // 设置页开启 grep（默认配置下 grep 不在新会话工具列表）
+  await page.getByTestId('nav-settings').click();
+  const section = page.getByTestId('settings-agent-defaults');
+  await expect(section).toBeVisible();
+  await section.getByTestId('tool-toggle-grep').click();
+  await expect(async () => {
+    const settings = JSON.parse(
+      await readFile(path.join(agentDir, 'settings.json'), 'utf8'),
+    ) as { defaultTools?: string[] };
+    expect(settings.defaultTools).toContain('grep');
+  }).toPass({ timeout: 10_000 });
+  await app.close();
+
+  // 重启后同一 agentDir：settings.json 保留，新会话创建时读取 defaultTools
+  const restarted = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page2 = await restarted.firstWindow();
+  await expect(
+    page2.getByTestId('model-select').or(page2.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  await page2.getByTestId('chat-input').fill('USE_TOOL_GREP now');
+  await page2.getByTestId('chat-send').click();
+  const summary = page2.getByTestId('turn-fold-toggle').last();
+  await expect(summary).toBeVisible({ timeout: 30_000 });
+  await summary.click();
+  await page2.getByTestId('process-stage-toggle').last().click();
+  const card = page2.getByTestId('tool-card').last();
+  await expect(card).toBeVisible();
+  // grep 已激活：执行成功（非 Tool grep not found），且出预览入口
+  await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
+  await expect(card.getByTestId('tool-preview-file')).toBeVisible();
+  await card.getByTestId('tool-preview-file').click();
+  await expect(
+    page2.getByTestId('workspace-file-tab').filter({ hasText: 'e2e-edit-target.txt' }),
+  ).toBeVisible();
+
+  await restarted.close();
+  await rmAgentDir(agentDir);
+});
+
 test('图片输入：附件入列 → 随消息发送 → 用户消息渲染图片', async ({ launchElectronApp }) => {
   const agentDir = await makeAgentDir();
   const app = await launchElectronApp({
@@ -187,6 +304,19 @@ test('图片输入：附件入列 → 随消息发送 → 用户消息渲染图�
   await expect(page.getByTestId('staged-attachments').locator('img')).toHaveCount(1);
   await page.getByTestId('staged-image-preview').click();
   await expect(page.getByTestId('image-lightbox')).toBeVisible();
+  await expect(page.getByTestId('image-lightbox-zoom-in')).toBeVisible();
+  await expect(page.getByTestId('image-lightbox-zoom-out')).toBeVisible();
+  await expect(page.getByTestId('image-lightbox-zoom-fit')).toHaveText('100%');
+  await expect(page.getByTestId('image-lightbox-copy')).toBeVisible();
+  await expect(page.getByTestId('image-lightbox-save')).toBeVisible();
+  await expect(page.getByTestId('image-lightbox-close')).toBeVisible();
+
+  await page.getByTestId('image-lightbox-zoom-in').click();
+  await expect(page.getByTestId('image-lightbox-zoom-fit')).toHaveText('125%');
+  await page.getByTestId('image-lightbox-zoom-fit').click();
+  await expect(page.getByTestId('image-lightbox-zoom-fit')).toHaveText('100%');
+  await page.getByTestId('image-lightbox-copy').click();
+
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('image-lightbox')).toHaveCount(0);
 
