@@ -156,6 +156,8 @@ function createHostApi(sessionPath?: string) {
       invoke('piSessions', 'archive', { path, archived }),
     archiveProject: (cwd: string, archived: boolean) =>
       invoke('piSessions', 'archiveProject', { cwd, archived }),
+    pin: (path: string, pinned: boolean) =>
+      invoke('piSessions', 'pin', { path, pinned }),
     remove: (path: string) => invoke('piSessions', 'remove', { path }),
     exportHtml: (path: string, options?: { cwd?: string; title?: string; id?: string }) =>
       invoke('piSessions', 'exportHtml', { path, ...options }),

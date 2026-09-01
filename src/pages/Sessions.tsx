@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, ExternalLink, FileCheck, Folder, FolderOpen, X } from 'lucide-react';
+import { AlertCircle, ExternalLink, FileCheck, Folder, FolderOpen, Pin, X } from 'lucide-react';
 import type { PiSessionExportInfo, PiSessionExportRecord, PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
@@ -18,6 +18,7 @@ type RowProps = {
   onOpenChat: () => void;
   onDelete: (path: string) => Promise<void>;
   onArchive: (path: string, archived: boolean) => Promise<void>;
+  onPin: (path: string, pinned: boolean) => Promise<void>;
 };
 
 function SessionRow({
@@ -30,6 +31,7 @@ function SessionRow({
   onOpenChat,
   onDelete,
   onArchive,
+  onPin,
 }: RowProps) {
   const { t, i18n } = useTranslation();
   const [renaming, setRenaming] = useState(false);
@@ -75,6 +77,7 @@ function SessionRow({
   // 已在某面板打开 → 聚焦该面板；否则替换活跃面板会话
   const switchTo = () => run(() => panesStore.getState().openOrFocusSession(session.path, session.cwd) ?? Promise.resolve({ success: true }), true);
   const fork = () => run(() => hostApi.piSessions.fork(session.path), true);
+  const pin = () => onPin(session.path, !session.pinned);
   const archive = () => onArchive(session.path, !session.archived);
   const remove = () => onDelete(session.path);
   const exportHtml = async () => {
@@ -111,6 +114,12 @@ function SessionRow({
           {sessionDisplayTitle(session) || t('sessions.untitled')}
         </span>
         <span className="session-meta hint">
+          {session.pinned && (
+            <span className="session-pinned-badge" data-testid="session-pinned" title={t('sessions.pinned')}>
+              <Pin size={11} />
+              {t('sessions.pinned')}
+            </span>
+          )}
           {session.isCurrent && (
             <span className="session-current-badge" data-testid="session-current">
               {t('sessions.current')}
@@ -164,6 +173,9 @@ function SessionRow({
             }}
           >
             {t('sessions.rename')}
+          </button>
+          <button data-testid="session-pin" disabled={busy || session.isRunning} onClick={() => void pin()}>
+            {session.pinned ? t('sessions.unpin') : t('sessions.pin')}
           </button>
           <button data-testid="session-fork" disabled={busy || session.isRunning} onClick={() => void fork()}>
             {t('sessions.fork')}
@@ -361,6 +373,23 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
     }
   };
 
+  const handlePin = async (sessionPath: string, pinned: boolean) => {
+    const previous = sessions;
+    setSessions((prev) =>
+      prev.map((s) => (s.path === sessionPath ? { ...s, pinned } : s)),
+    );
+    try {
+      const result = await hostApi.piSessions.pin(sessionPath, pinned);
+      if (!result.success) {
+        setSessions(previous);
+        showNotice(result.error ?? t('sessions.actionFailedPlain'));
+      }
+    } catch (err) {
+      setSessions(previous);
+      showNotice(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const groups = useMemo(() => groupByProject(sessions), [sessions]);
 
   return (
@@ -520,6 +549,7 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
                   onOpenChat={onOpenChat}
                   onDelete={handleDelete}
                   onArchive={handleArchive}
+                  onPin={handlePin}
                 />
               ))}
             </div>

@@ -15,6 +15,7 @@ import type {
   PiSessionForkResult,
   PiSessionListResult,
   PiSessionPathPayload,
+  PiSessionPinPayload,
   PiSessionArchivePayload,
   PiSessionProjectArchivePayload,
   PiSessionRenamePayload,
@@ -23,6 +24,7 @@ import type {
   PiSessionSearchResult,
   PiSessionSearchRow,
 } from '@shared/host-api/contract';
+
 import {
   afterSessionReplaced,
   activateSessionRuntime,
@@ -62,7 +64,11 @@ import { getElectronStore } from '../utils/electron-store';
 import { searchSessions } from './session-search';
 import { serializeSessionOp } from './session-mutex';
 import { timingMark } from '../utils/timing';
-import { readSessionArchivedFlag } from '../utils/session-tail';
+import {
+  ARCHIVE_CUSTOM_TYPE,
+  PIN_CUSTOM_TYPE,
+  readSessionMetadataFlags,
+} from '../utils/session-tail';
 
 function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -100,12 +106,11 @@ function currentSessionFile(): string | undefined {
   return getActiveRuntime()?.adapterRuntime.session.view.sessionFile;
 }
 
-const ARCHIVE_CUSTOM_TYPE = 'pi-desktop.archive';
-
 type SessionMetadataCacheEntry = {
   mtimeMs: number;
   size: number;
   archived: boolean;
+  pinned: boolean;
 };
 
 export const sessionMetadataCache = new Map<string, SessionMetadataCacheEntry>();
@@ -136,35 +141,57 @@ function isArchivedForActive(
   return false;
 }
 
-async function resolveIsArchived(
+function isPinnedForActive(
+  active: NonNullable<ReturnType<typeof getActiveRuntime>>,
+  sessions: PiSessionCatalogPort,
+): boolean {
+  const entries = sessions.getEntries(active.adapterRuntime.session.view.sessionManager);
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i] as { type?: string; customType?: string; data?: { pinned?: unknown } };
+    if (entry.type === 'custom' && entry.customType === PIN_CUSTOM_TYPE) {
+      return entry.data?.pinned === true;
+    }
+  }
+  return false;
+}
+
+async function resolveMetadataFlags(
   sessionPath: string,
   sessions: PiSessionCatalogPort,
-): Promise<boolean> {
+): Promise<{ archived: boolean; pinned: boolean }> {
   const active = getActiveRuntime();
   if (active && samePath(sessionPath, active.adapterRuntime.session.view.sessionFile)) {
-    return isArchivedForActive(active, sessions);
+    return {
+      archived: isArchivedForActive(active, sessions),
+      pinned: isPinnedForActive(active, sessions),
+    };
   }
 
   try {
     const fileStat = await stat(sessionPath);
     const cached = sessionMetadataCache.get(sessionPath);
     if (cached && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size) {
-      return cached.archived;
+      return { archived: cached.archived, pinned: cached.pinned };
     }
-    const archived = await readSessionArchivedFlag(sessionPath);
+    const flags = await readSessionMetadataFlags(sessionPath);
     sessionMetadataCache.set(sessionPath, {
       mtimeMs: fileStat.mtimeMs,
       size: fileStat.size,
-      archived,
+      archived: flags.archived,
+      pinned: flags.pinned,
     });
-    return archived;
+    return flags;
   } catch {
-    return false;
+    return { archived: false, pinned: false };
   }
 }
 
 function setArchived(path: string, archived: boolean, sessions: PiSessionCatalogPort): void {
   sessions.appendCustomEntry(sessionManagerFor(path, sessions), ARCHIVE_CUSTOM_TYPE, { archived });
+}
+
+function setPinned(path: string, pinned: boolean, sessions: PiSessionCatalogPort): void {
+  sessions.appendCustomEntry(sessionManagerFor(path, sessions), PIN_CUSTOM_TYPE, { pinned });
 }
 
 function searchableMessageText(message: unknown): string {
@@ -245,7 +272,7 @@ function toRow(s: {
   messageCount: number;
   created: Date;
   modified: Date;
-}, current: string | undefined, archived: boolean): PiSessionRow {
+}, current: string | undefined, archived: boolean, pinned: boolean): PiSessionRow {
   // 附件 XML 信封不属于标题文字：name/firstMessage 都可能带（pi 按首条消息自动命名时），
   // 列表出口统一剥离，历史脏标题在展示层一并清净
   const cleanName = s.name ? stripAttachmentEnvelope(s.name) : '';
@@ -261,6 +288,7 @@ function toRow(s: {
     isCurrent: samePath(s.path, current),
     isRunning: isSessionRunning(s.path),
     archived,
+    pinned,
   };
 }
 
@@ -285,8 +313,8 @@ async function toRowSafely(
   action: string,
 ): Promise<PiSessionRow | null> {
   try {
-    const archived = await resolveIsArchived(session.path, sessions);
-    return toRow(session, current, archived);
+    const flags = await resolveMetadataFlags(session.path, sessions);
+    return toRow(session, current, flags.archived, flags.pinned);
   } catch (err) {
     writePiDiagnostic({
       level: 'warning',
@@ -556,6 +584,19 @@ export const sessionsApi = {
       setArchived(payload.path, payload.archived, adapter.sessions);
       sessionMetadataCache.delete(payload.path);
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'archive' });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: toError(err) };
+    }
+  },
+
+  pin: async (payload: PiSessionPinPayload): Promise<HostSuccess> => {
+    if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
+    try {
+      const adapter = await loadPiAdapter();
+      setPinned(payload.path, payload.pinned, adapter.sessions);
+      sessionMetadataCache.delete(payload.path);
+      sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'pin' });
       return { success: true };
     } catch (err) {
       return { success: false, error: toError(err) };

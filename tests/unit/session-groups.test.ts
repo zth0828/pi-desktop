@@ -14,6 +14,7 @@ function mockSession(overrides: Partial<PiSessionRow>): PiSessionRow {
     isCurrent: false,
     isRunning: false,
     archived: false,
+    pinned: false,
     ...overrides,
   };
 }
@@ -31,6 +32,19 @@ describe('groupByProject', () => {
     expect(groups[0].sessions).toHaveLength(2);
     expect(groups[1].name).toBe('project-b');
     expect(groups[1].sessions).toHaveLength(1);
+  });
+
+  it('置顶会话（pinned: true）在项目组内优先排在前面', () => {
+    const sessions: PiSessionRow[] = [
+      mockSession({ id: 's1', cwd: '/workspace/project-a', messageCount: 2, modified: '2026-08-26T12:00:00.000Z', pinned: false }),
+      mockSession({ id: 's2', cwd: '/workspace/project-a', messageCount: 1, modified: '2026-08-26T10:00:00.000Z', pinned: true }),
+      mockSession({ id: 's3', cwd: '/workspace/project-a', messageCount: 3, modified: '2026-08-26T11:00:00.000Z', pinned: true }),
+    ];
+    const groups = groupByProject(sessions);
+    expect(groups).toHaveLength(1);
+    const resultIds = groups[0].sessions.map((s) => s.id);
+    // s3 和 s2 都置顶，s3 较新排第一，s2 置顶排第二，s1 未置顶排第三
+    expect(resultIds).toEqual(['s3', 's2', 's1']);
   });
 
   it('自动过滤 messageCount <= 0 的未发送空会话', () => {

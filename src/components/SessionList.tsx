@@ -14,9 +14,11 @@ import {
   GitFork,
   MoreHorizontal,
   Pencil,
+  Pin,
   Trash2,
   X,
 } from 'lucide-react';
+
 import type { PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { pushGlobalError } from '../stores/global-errors';
@@ -214,6 +216,13 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   }, []);
 
   const groups = useMemo(() => groupByProject(sessions), [sessions]);
+  const pinnedSessions = useMemo(
+    () =>
+      sessions
+        .filter((s) => !s.archived && s.messageCount > 0 && Boolean(s.pinned))
+        .sort((a, b) => b.modified.localeCompare(a.modified)),
+    [sessions],
+  );
   const activeGroups = groups.filter((group) => group.sessions.some((session) => !session.archived));
   const archivedGroups = groups.filter((group) => group.sessions.some((session) => session.archived));
 
@@ -309,6 +318,29 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     }
   };
 
+  const pinSession = async (sessionPath: string, pinned: boolean) => {
+    const previous = sessions;
+    setSessions((prev) =>
+      prev.map((s) => (s.path === sessionPath ? { ...s, pinned } : s)),
+    );
+    setOpenMenu(undefined);
+    setBusy(true);
+    try {
+      const result = await hostApi.piSessions.pin(sessionPath, pinned);
+      if (!result.success) {
+        pushGlobalError(formatErrorMessage(result.error, t) ?? t('sessions.actionFailedPlain'));
+        setSessions(previous);
+        refresh();
+      }
+    } catch {
+      pushGlobalError(t('sessions.actionFailedPlain'));
+      setSessions(previous);
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const archiveProject = async (cwd: string, archived: boolean) => {
     const previous = sessions;
     setSessions((prev) =>
@@ -332,11 +364,268 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     }
   };
 
+  const renderSessionRow = (session: PiSessionRow) => {
+    const sessionKey = `session:${session.path}`;
+    const sessionMenuOpen = openMenu === sessionKey;
+    const deleting = confirmDelete === session.path;
+    const renaming = renamePath === session.path;
+    return (
+      <div
+        key={session.id}
+        className={
+          draggingPath === session.path ? 'sidebar-session-row dragging' : 'sidebar-session-row'
+        }
+        draggable
+        onDragStart={(event) => {
+          // 拖出会话行；松手在 app 窗口外 → 独立窗口（落点判定在 main 侧）
+          resetSessionDroppedInWindow();
+          resetSessionDragCancelled();
+          dragPayload.current = { sessionPath: session.path, cwd: session.cwd };
+          // dragover 阶段落区读不到 dataTransfer 数据，经模块单例桥接
+          setSessionDragPayload(dragPayload.current);
+          event.dataTransfer.setData(
+            'application/x-pi-session',
+            JSON.stringify(dragPayload.current),
+          );
+          event.dataTransfer.effectAllowed = 'move';
+          // Esc 取消：mac 上取消时 dragend 坐标是取消点而非 (0,0)，靠 keydown 标记识别
+          const onEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') markSessionDragCancelled();
+          };
+          document.addEventListener('keydown', onEsc);
+          dragEscCleanup.current = () => document.removeEventListener('keydown', onEsc);
+          setOpenMenu(undefined);
+          setDraggingPath(session.path);
+          // 兜底：行组件若在拖拽中途因列表刷新卸载，React 合成 onDragEnd 可能不派发，
+          // 全局提示会卡住；document 原生监听与本行 onDragEnd 幂等，先触发先生效
+          const clearDragging = () => setDraggingPath(undefined);
+          document.addEventListener('drop', clearDragging, { once: true, capture: true });
+          document.addEventListener('dragend', clearDragging, { once: true, capture: true });
+        }}
+        onDragEnd={(event) => {
+          setDraggingPath(undefined);
+          dragEscCleanup.current?.();
+          dragEscCleanup.current = undefined;
+          clearSessionDragPayload();
+          const payload = dragPayload.current;
+          dragPayload.current = undefined;
+          // 分栏落区已消化本次拖拽（分栏/替换/同会话激活），不再上报 OS 开窗
+          if (consumeSessionDroppedInWindow()) return;
+          // Esc 取消拖拽：不上报 OS 开窗（坐标启发式在 mac 接不住，见 session-drag.ts）
+          if (consumeSessionDragCancelled()) return;
+          // 部分平台 Esc 取消拖拽时 dragend 坐标为 (0,0)，视为取消不上报
+          if (!payload || (event.screenX === 0 && event.screenY === 0)) return;
+          // 窗口内松手也会走到这里；main 侧按窗口 bounds 判定兜住（窗口内 = 不开窗）
+          void hostApi.windows.openDetachedAt({
+            sessionPath: payload.sessionPath,
+            cwd: payload.cwd,
+            screenX: event.screenX,
+            screenY: event.screenY,
+          });
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openMenuAt(sessionKey, event.clientX, event.clientY, SESSION_MENU_HEIGHT);
+        }}
+      >
+        <button
+          data-testid={`sidebar-session-${session.id}`}
+          className={session.isCurrent ? 'sidebar-session current' : 'sidebar-session'}
+          title={session.path}
+          onClick={() => {
+            setOpenMenu(undefined);
+            onOpenChat();
+            // 先在当前窗口查面板，再查其他窗口；只有全局都未打开时
+            // 才替换当前活跃面板，避免同一会话同时出现在多个窗口。
+            if (focusOpenSession(session.path, session.cwd)) return;
+            void hostApi.windows.focusIfOpen(session.path).then((focused) => {
+              if (!focused) panesStore.getState().openOrFocusSession(session.path, session.cwd);
+            });
+          }}
+        >
+          {session.isRunning && (
+            <span
+              className="sidebar-session-running"
+              data-testid={`sidebar-session-running-${session.id}`}
+              title={t('sessions.running')}
+              aria-label={t('sessions.running')}
+            />
+          )}
+          {openSessionPaths.has(session.path) && (
+            <span
+              className="sidebar-session-open"
+              data-testid={`sidebar-session-open-${session.id}`}
+              title={t('sessions.openInPane')}
+              aria-label={t('sessions.openInPane')}
+            />
+          )}
+          <span className="sidebar-session-title">
+            {sessionDisplayTitle(session) || t('sessions.untitled')}
+          </span>
+        </button>
+        <button
+          className={
+            session.pinned
+              ? 'session-menu-trigger sidebar-session-pin-trigger pinned'
+              : 'session-menu-trigger sidebar-session-pin-trigger'
+          }
+          data-testid={`sidebar-session-pin-${session.id}`}
+          title={session.pinned ? t('sessions.unpin') : t('sessions.pin')}
+          aria-label={session.pinned ? t('sessions.unpin') : t('sessions.pin')}
+          disabled={busy || session.isRunning}
+          onClick={(event) => {
+            event.stopPropagation();
+            void pinSession(session.path, !session.pinned);
+          }}
+        >
+          <Pin size={13} />
+        </button>
+        <button
+          className="session-menu-trigger sidebar-session-menu-trigger"
+          data-testid={`sidebar-session-menu-${session.id}`}
+          aria-label={t('sessions.sessionMenu')}
+          onClick={(event) => openMenuFromTrigger(event, sessionKey, SESSION_MENU_HEIGHT)}
+        >
+          <MoreHorizontal size={14} />
+        </button>
+        {sessionMenuOpen && menuPosition && createPortal(
+          <div
+            className="session-context-menu session-item-context-menu"
+            data-session-menu
+            data-testid={`session-context-menu-${session.id}`}
+            role="menu"
+            style={menuPosition}
+          >
+            {renaming ? (
+              <div className="sidebar-session-rename-form">
+                <input
+                  data-testid={`sidebar-session-rename-input-${session.id}`}
+                  value={renameValue}
+                  placeholder={t('sessions.renamePlaceholder')}
+                  autoFocus
+                  onChange={(event) => setRenameValue(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && renameValue.trim()) {
+                      void run(() => hostApi.piSessions.rename(session.path, renameValue));
+                    }
+                    if (event.key === 'Escape') setRenamePath(undefined);
+                  }}
+                />
+                <div className="sidebar-session-rename-actions">
+                  <button
+                    aria-label={t('sessions.save')}
+                    disabled={busy || !renameValue.trim()}
+                    onClick={() => void run(() => hostApi.piSessions.rename(session.path, renameValue))}
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button aria-label={t('sessions.cancel')} onClick={() => setRenamePath(undefined)}>
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <button
+                  data-testid={`sidebar-session-pin-action-${session.id}`}
+                  onClick={() => void pinSession(session.path, !session.pinned)}
+                  disabled={busy || session.isRunning}
+                >
+                  <Pin size={14} />
+                  {session.pinned ? t('sessions.unpin') : t('sessions.pin')}
+                </button>
+                <button
+                  data-testid={`sidebar-session-rename-${session.id}`}
+                  onClick={() => {
+                    setRenameValue(session.name || sessionDisplayTitle(session));
+                    setRenamePath(session.path);
+                  }}
+                  disabled={busy || session.isRunning}
+                >
+                  <Pencil size={14} />
+                  {t('sessions.rename')}
+                </button>
+
+                <button
+                  data-testid={`sidebar-session-copy-id-${session.id}`}
+                  onClick={() => {
+                    void hostApi.app.writeClipboard(session.id);
+                    setOpenMenu(undefined);
+                  }}
+                >
+                  <Copy size={14} />
+                  {t('sessions.copyId')}
+                </button>
+                <button
+                  data-testid={`sidebar-session-open-detached-${session.id}`}
+                  onClick={() => {
+                    // 同一会话已经在当前窗口的任一面板时，只聚焦已有面板；
+                    // 不再从活跃面板重复创建独立窗口。
+                    if (openSessionPaths.has(session.path)) {
+                      focusOpenSession(session.path, session.cwd);
+                    } else {
+                      void hostApi.windows.openDetached({ sessionPath: session.path, cwd: session.cwd });
+                    }
+                    setOpenMenu(undefined);
+                  }}
+                >
+                  <AppWindow size={14} />
+                  {t('sessions.openDetached')}
+                </button>
+                <button
+                  data-testid={`sidebar-session-fork-${session.id}`}
+                  onClick={() => void run(() => hostApi.piSessions.fork(session.path), true)}
+                  disabled={busy || session.isRunning}
+                >
+                  <GitFork size={14} />
+                  {t('sessions.continueNewChat')}
+                </button>
+                <div className="session-context-separator" />
+                <button
+                  onClick={() => void archiveSession(session.path, !session.archived)}
+                  disabled={busy || session.isRunning}
+                >
+                  {session.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+                  {session.archived ? t('sessions.unarchive') : t('sessions.archive')}
+                </button>
+                {deleting ? (
+                  <button
+                    className="session-context-danger"
+                    onClick={() => void deleteSession(session.path)}
+                    disabled={busy || session.isRunning}
+                  >
+                    <Trash2 size={14} />
+                    {t('sessions.confirmDelete')}
+                  </button>
+                ) : (
+                  <button
+                    className="session-context-danger"
+                    onClick={() => setConfirmDelete(session.path)}
+                    disabled={busy || session.isRunning}
+                  >
+                    <Trash2 size={14} />
+                    {t('sessions.delete')}
+                  </button>
+                )}
+              </>
+            )}
+          </div>,
+          document.body,
+        )}
+      </div>
+    );
+  };
+
   const renderGroup = (group: ProjectGroup, archivedOnly: boolean) => {
     // 只有真正发送过内容（有消息）的会话才出现在列表里：
     // 未发送任何内容的新会话不占位，也不显示「未命名会话」。
+    // 活跃会话列表中已置顶的会话提升到顶部独立专区展示，不在原项目重复出现。
     const visibleSessions = group.sessions.filter(
-      (session) => session.archived === archivedOnly && session.messageCount > 0,
+      (session) =>
+        session.archived === archivedOnly &&
+        session.messageCount > 0 &&
+        (archivedOnly ? true : !session.pinned),
     );
     if (visibleSessions.length === 0) return null;
     const groupKey = `${archivedOnly ? 'archived' : 'active'}:${group.cwd}`;
@@ -401,232 +690,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
             document.body,
           )}
         </div>
-        {!isCollapsed && displayedSessions.map((session) => {
-          const sessionKey = `session:${session.path}`;
-          const sessionMenuOpen = openMenu === sessionKey;
-          const deleting = confirmDelete === session.path;
-          const renaming = renamePath === session.path;
-          return (
-            <div
-              key={session.id}
-              className={
-                draggingPath === session.path ? 'sidebar-session-row dragging' : 'sidebar-session-row'
-              }
-              draggable
-              onDragStart={(event) => {
-                // 拖出会话行；松手在 app 窗口外 → 独立窗口（落点判定在 main 侧）
-                resetSessionDroppedInWindow();
-                resetSessionDragCancelled();
-                dragPayload.current = { sessionPath: session.path, cwd: session.cwd };
-                // dragover 阶段落区读不到 dataTransfer 数据，经模块单例桥接
-                setSessionDragPayload(dragPayload.current);
-                event.dataTransfer.setData(
-                  'application/x-pi-session',
-                  JSON.stringify(dragPayload.current),
-                );
-                event.dataTransfer.effectAllowed = 'move';
-                // Esc 取消：mac 上取消时 dragend 坐标是取消点而非 (0,0)，靠 keydown 标记识别
-                const onEsc = (e: KeyboardEvent) => {
-                  if (e.key === 'Escape') markSessionDragCancelled();
-                };
-                document.addEventListener('keydown', onEsc);
-                dragEscCleanup.current = () => document.removeEventListener('keydown', onEsc);
-                setOpenMenu(undefined);
-                setDraggingPath(session.path);
-                // 兜底：行组件若在拖拽中途因列表刷新卸载，React 合成 onDragEnd 可能不派发，
-                // 全局提示会卡住；document 原生监听与本行 onDragEnd 幂等，先触发先生效
-                const clearDragging = () => setDraggingPath(undefined);
-                document.addEventListener('drop', clearDragging, { once: true, capture: true });
-                document.addEventListener('dragend', clearDragging, { once: true, capture: true });
-              }}
-              onDragEnd={(event) => {
-                setDraggingPath(undefined);
-                dragEscCleanup.current?.();
-                dragEscCleanup.current = undefined;
-                clearSessionDragPayload();
-                const payload = dragPayload.current;
-                dragPayload.current = undefined;
-                // 分栏落区已消化本次拖拽（分栏/替换/同会话激活），不再上报 OS 开窗
-                if (consumeSessionDroppedInWindow()) return;
-                // Esc 取消拖拽：不上报 OS 开窗（坐标启发式在 mac 接不住，见 session-drag.ts）
-                if (consumeSessionDragCancelled()) return;
-                // 部分平台 Esc 取消拖拽时 dragend 坐标为 (0,0)，视为取消不上报
-                if (!payload || (event.screenX === 0 && event.screenY === 0)) return;
-                // 窗口内松手也会走到这里；main 侧按窗口 bounds 判定兜住（窗口内 = 不开窗）
-                void hostApi.windows.openDetachedAt({
-                  sessionPath: payload.sessionPath,
-                  cwd: payload.cwd,
-                  screenX: event.screenX,
-                  screenY: event.screenY,
-                });
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                openMenuAt(sessionKey, event.clientX, event.clientY, SESSION_MENU_HEIGHT);
-              }}
-            >
-              <button
-                data-testid={`sidebar-session-${session.id}`}
-                className={session.isCurrent ? 'sidebar-session current' : 'sidebar-session'}
-                title={session.path}
-                onClick={() => {
-                  setOpenMenu(undefined);
-                  onOpenChat();
-                  // 先在当前窗口查面板，再查其他窗口；只有全局都未打开时
-                  // 才替换当前活跃面板，避免同一会话同时出现在多个窗口。
-                  if (focusOpenSession(session.path, session.cwd)) return;
-                  void hostApi.windows.focusIfOpen(session.path).then((focused) => {
-                    if (!focused) panesStore.getState().openOrFocusSession(session.path, session.cwd);
-                  });
-                }}
-              >
-                {session.isRunning && (
-                  <span
-                    className="sidebar-session-running"
-                    data-testid={`sidebar-session-running-${session.id}`}
-                    title={t('sessions.running')}
-                    aria-label={t('sessions.running')}
-                  />
-                )}
-                {openSessionPaths.has(session.path) && (
-                  <span
-                    className="sidebar-session-open"
-                    data-testid={`sidebar-session-open-${session.id}`}
-                    title={t('sessions.openInPane')}
-                    aria-label={t('sessions.openInPane')}
-                  />
-                )}
-                <span className="sidebar-session-title">
-                  {sessionDisplayTitle(session) || t('sessions.untitled')}
-                </span>
-              </button>
-              <button
-                className="session-menu-trigger sidebar-session-menu-trigger"
-                data-testid={`sidebar-session-menu-${session.id}`}
-                aria-label={t('sessions.sessionMenu')}
-                onClick={(event) => openMenuFromTrigger(event, sessionKey, SESSION_MENU_HEIGHT)}
-              >
-                <MoreHorizontal size={14} />
-              </button>
-              {sessionMenuOpen && menuPosition && createPortal(
-                <div
-                  className="session-context-menu session-item-context-menu"
-                  data-session-menu
-                  data-testid={`session-context-menu-${session.id}`}
-                  role="menu"
-                  style={menuPosition}
-                >
-                  {renaming ? (
-                    <div className="sidebar-session-rename-form">
-                      <input
-                        data-testid={`sidebar-session-rename-input-${session.id}`}
-                        value={renameValue}
-                        placeholder={t('sessions.renamePlaceholder')}
-                        autoFocus
-                        onChange={(event) => setRenameValue(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' && renameValue.trim()) {
-                            void run(() => hostApi.piSessions.rename(session.path, renameValue));
-                          }
-                          if (event.key === 'Escape') setRenamePath(undefined);
-                        }}
-                      />
-                      <div className="sidebar-session-rename-actions">
-                        <button
-                          aria-label={t('sessions.save')}
-                          disabled={busy || !renameValue.trim()}
-                          onClick={() => void run(() => hostApi.piSessions.rename(session.path, renameValue))}
-                        >
-                          <Check size={14} />
-                        </button>
-                        <button aria-label={t('sessions.cancel')} onClick={() => setRenamePath(undefined)}>
-                          <X size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        data-testid={`sidebar-session-rename-${session.id}`}
-                        onClick={() => {
-                          setRenameValue(session.name || sessionDisplayTitle(session));
-                          setRenamePath(session.path);
-                        }}
-                        disabled={busy || session.isRunning}
-                      >
-                        <Pencil size={14} />
-                        {t('sessions.rename')}
-                      </button>
-                      <button
-                        data-testid={`sidebar-session-copy-id-${session.id}`}
-                        onClick={() => {
-                          void hostApi.app.writeClipboard(session.id);
-                          setOpenMenu(undefined);
-                        }}
-                      >
-                        <Copy size={14} />
-                        {t('sessions.copyId')}
-                      </button>
-                      <button
-                        data-testid={`sidebar-session-open-detached-${session.id}`}
-                        onClick={() => {
-                          // 同一会话已经在当前窗口的任一面板时，只聚焦已有面板；
-                          // 不再从活跃面板重复创建独立窗口。
-                          if (openSessionPaths.has(session.path)) {
-                            focusOpenSession(session.path, session.cwd);
-                          } else {
-                            void hostApi.windows.openDetached({ sessionPath: session.path, cwd: session.cwd });
-                          }
-                          setOpenMenu(undefined);
-                        }}
-                      >
-                        <AppWindow size={14} />
-                        {t('sessions.openDetached')}
-                      </button>
-                      <button
-                        data-testid={`sidebar-session-fork-${session.id}`}
-                        onClick={() => void run(() => hostApi.piSessions.fork(session.path), true)}
-                        disabled={busy || session.isRunning}
-                      >
-                        <GitFork size={14} />
-                        {t('sessions.continueNewChat')}
-                      </button>
-                      <div className="session-context-separator" />
-                      <button
-                        onClick={() => void archiveSession(session.path, !session.archived)}
-                        disabled={busy || session.isRunning}
-                      >
-                        {session.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-                        {session.archived ? t('sessions.unarchive') : t('sessions.archive')}
-                      </button>
-                      {deleting ? (
-                        <button
-                          className="session-context-danger"
-                          onClick={() => void deleteSession(session.path)}
-                          disabled={busy || session.isRunning}
-                        >
-                          <Trash2 size={14} />
-                          {t('sessions.confirmDelete')}
-                        </button>
-                      ) : (
-                        <button
-                          className="session-context-danger"
-                          onClick={() => setConfirmDelete(session.path)}
-                          disabled={busy || session.isRunning}
-                        >
-                          <Trash2 size={14} />
-                          {t('sessions.delete')}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>,
-                document.body,
-              )}
-            </div>
-          );
-        })}
+        {!isCollapsed && displayedSessions.map((session) => renderSessionRow(session))}
         {!isCollapsed && remainingCount > 0 && (
           <button
             className="session-show-more"
@@ -652,6 +716,34 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     );
   };
 
+  const renderPinnedSection = () => {
+    if (pinnedSessions.length === 0) return null;
+    const groupKey = 'pinned';
+    const isCollapsed = collapsed[groupKey] ?? false;
+    return (
+      <div
+        key={groupKey}
+        className="session-group pinned-session-group"
+        data-testid="pinned-session-group"
+      >
+        <div className="session-group-heading">
+          <button
+            className="session-group-header pinned-group-header"
+            data-testid="pinned-session-group-header"
+            aria-expanded={!isCollapsed}
+            onClick={() => setCollapsed((prev) => ({ ...prev, [groupKey]: !isCollapsed }))}
+          >
+            {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+            <Pin size={13} className="pinned-header-icon" />
+            <span className="session-group-name">{t('sessions.pinned')}</span>
+            <span className="session-group-count">{pinnedSessions.length}</span>
+          </button>
+        </div>
+        {!isCollapsed && pinnedSessions.map((session) => renderSessionRow(session))}
+      </div>
+    );
+  };
+
   return (
     <div
       ref={listRef}
@@ -661,6 +753,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
       onDrop={onSidebarDrop}
     >
       {draggingPath && <SessionDragHint />}
+      {started && renderPinnedSection()}
       {started && activeGroups.map((group) => renderGroup(group, false))}
       {started && archivedGroups.length > 0 && (
         <div className="archived-sessions" data-testid="archived-sessions">

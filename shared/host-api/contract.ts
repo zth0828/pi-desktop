@@ -802,6 +802,7 @@ export type PiSessionRow = {
   /** 该会话仍有保活的 pi runtime 正在执行。 */
   isRunning: boolean;
   archived: boolean;
+  pinned: boolean;
 };
 export type PiSessionListResult = { sessions: PiSessionRow[] };
 export type PiSessionSearchMatch = 'name' | 'firstMessage' | 'message';
@@ -814,7 +815,9 @@ export type PiSessionSearchRow = PiSessionRow & {
 export type PiSessionSearchPayload = { query: string; limit?: number };
 export type PiSessionSearchResult = { sessions: PiSessionSearchRow[] };
 export type PiSessionPathPayload = { path: string; cwd?: string; title?: string; id?: string };
+export type PiSessionPinPayload = PiSessionPathPayload & { pinned: boolean };
 export type PiSessionArchivePayload = PiSessionPathPayload & { archived: boolean };
+
 export type PiSessionProjectArchivePayload = { cwd: string; archived: boolean };
 export type PiSessionRenamePayload = { path: string; name: string };
 export type PiSessionForkResult = HostSuccess & { path?: string };
@@ -1207,6 +1210,7 @@ export type HostApiContract = {
     fork: (payload: PiSessionPathPayload) => PiSessionForkResult;
     archive: (payload: PiSessionArchivePayload) => HostSuccess;
     archiveProject: (payload: PiSessionProjectArchivePayload) => HostSuccess;
+    pin: (payload: PiSessionPinPayload) => HostSuccess;
     /** pi 无删除 SDK API：删当前会话前先 newSession，随后移入系统废纸篓。 */
     remove: (payload: PiSessionPathPayload) => HostSuccess;
     /** 只导当前会话（exportToHtml 在 AgentSession 上），非当前先 switch。 */

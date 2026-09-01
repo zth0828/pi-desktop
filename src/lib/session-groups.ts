@@ -18,7 +18,12 @@ export function groupByProject(sessions: PiSessionRow[]): ProjectGroup[] {
   }
   return [...map.entries()]
     .map(([cwd, rows]) => {
-      const sortedRows = [...rows].sort((a, b) => b.modified.localeCompare(a.modified));
+      const sortedRows = [...rows].sort((a, b) => {
+        if (Boolean(b.pinned) !== Boolean(a.pinned)) {
+          return b.pinned ? 1 : -1;
+        }
+        return b.modified.localeCompare(a.modified);
+      });
       return {
         cwd,
         // Windows 路径用 `\` 分隔，两种分隔符都要切

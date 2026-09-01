@@ -44,8 +44,9 @@ export type HostEventContract = {
     sessionReplaced: (payload: PiRuntimeStateResult) => void;
     /** 任一保活 runtime 的运行状态变化；会话列表据此刷新后台任务指示（sessionId 供窗口过滤）。 */
     runtimeStateChanged: (payload: { sessionId: string; sessionPath?: string; running: boolean }) => void;
-    /** 会话元数据变更（删除/归档/重命名/分叉）；侧栏与会话页据此即时刷新。 */
-    sessionsChanged: (payload: { reason: 'remove' | 'archive' | 'rename' | 'fork' }) => void;
+    /** 会话元数据变更（删除/归档/重命名/分叉/置顶）；侧栏与会话页据此即时刷新。 */
+    sessionsChanged: (payload: { reason: 'remove' | 'archive' | 'rename' | 'fork' | 'pin' }) => void;
+
     /** 扩展 UI 请求（ctx.ui.confirm/select/input）：渲染层弹对话框，经 piRuntime.uiResponse 回传 */
     uiRequest: (payload: PiUiRequestPayload) => void;
     /** 扩展 UI 请求被取消（超时/signal abort/会话替换），渲染层移除对应对话框 */

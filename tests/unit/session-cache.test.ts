@@ -19,8 +19,9 @@ describe('sessionsApi metadata cache', () => {
 
   it('缓存初始为空，在 sessionMetadataCache 中可以手动操作与清理', () => {
     expect(sessionMetadataCache.size).toBe(0);
-    sessionMetadataCache.set('/fake/path', { mtimeMs: 1000, size: 200, archived: true });
+    sessionMetadataCache.set('/fake/path', { mtimeMs: 1000, size: 200, archived: true, pinned: false });
     expect(sessionMetadataCache.get('/fake/path')?.archived).toBe(true);
+    expect(sessionMetadataCache.get('/fake/path')?.pinned).toBe(false);
     clearSessionMetadataCache();
     expect(sessionMetadataCache.size).toBe(0);
   });
@@ -29,7 +30,7 @@ describe('sessionsApi metadata cache', () => {
     const sessionFile = path.join(tempDir, 'dummy.jsonl');
     await writeFile(sessionFile, JSON.stringify({ type: 'session', id: 's1' }) + '\n');
 
-    sessionMetadataCache.set(sessionFile, { mtimeMs: 12345, size: 50, archived: false });
+    sessionMetadataCache.set(sessionFile, { mtimeMs: 12345, size: 50, archived: false, pinned: true });
     expect(sessionMetadataCache.has(sessionFile)).toBe(true);
 
     await sessionsApi.remove({ path: sessionFile });

@@ -788,3 +788,48 @@ test('流式输出中点击新建会话：新会话立即处于空闲态且不�
   await expect(page.getByTestId('runtime-error-notice')).toHaveCount(0);
 });
 
+test('会话置顶与取消置顶：置顶会话跳出项目文件夹提升至顶部独立置顶区，取消后回归原项目', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 创建会话 1
+  await sendAndWaitReply(page, 'PING FIRST SESSION');
+  const firstRow = page.locator('.sidebar-session-row').filter({ hasText: 'PING FIRST SESSION' });
+  await expect(firstRow).toBeVisible();
+
+  // 新建会话 2
+  await page.getByTestId('new-chat').click();
+  await sendAndWaitReply(page, 'PING SECOND SESSION');
+
+  // 此时没有置顶会话，不显示置顶专区
+  await expect(page.getByTestId('pinned-session-group')).toHaveCount(0);
+
+  // 侧栏应该有 2 个会话行，都在项目文件夹内
+  const sessionRows = page.locator('.sidebar-session-row');
+  await expect(sessionRows).toHaveCount(2);
+
+  // 默认第二会话（最新）排在第 1 行，第一会话排在第 2 行
+  await expect(sessionRows.first()).toContainText('PING SECOND SESSION');
+  await expect(sessionRows.nth(1)).toContainText('PING FIRST SESSION');
+
+  // 点击第 2 行（第一会话）的置顶按钮
+  const firstSessionPinBtn = sessionRows.nth(1).locator('[data-testid^="sidebar-session-pin-"]');
+  await firstSessionPinBtn.click();
+
+  // 置顶后：顶部出现置顶专区
+  const pinnedGroup = page.getByTestId('pinned-session-group');
+  await expect(pinnedGroup).toBeVisible();
+  // 置顶专区内包含第一会话
+  await expect(pinnedGroup.locator('.sidebar-session-row')).toContainText('PING FIRST SESSION');
+
+  // 取消置顶
+  await pinnedGroup.locator('.sidebar-session-pin-trigger.pinned').click();
+
+  // 取消置顶后，置顶专区消失，第一会话回归项目文件夹
+  await expect(page.getByTestId('pinned-session-group')).toHaveCount(0);
+  await expect(page.locator('.sidebar-session-row')).toHaveCount(2);
+  await expect(page.locator('.sidebar-session-row').first()).toContainText('PING SECOND SESSION');
+});

@@ -4880,9 +4880,16 @@ button.danger-outline {
   color: var(--text-secondary);
 }
 
+.session-pinned-badge,
 .session-current-badge {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.session-pinned-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .session-running-badge {
@@ -6021,6 +6028,16 @@ button.danger-outline {
   flex-direction: column;
 }
 
+.pinned-session-group {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+.pinned-header-icon {
+  color: var(--accent);
+}
+
 .session-group-heading {
   position: relative;
   display: flex;
@@ -6082,14 +6099,22 @@ button.danger-outline {
   gap: 7px;
 }
 
-.sidebar-session-menu-trigger {
+.sidebar-session-menu-trigger,
+.sidebar-session-pin-trigger {
   opacity: 0;
   margin-right: 2px;
 }
 
 .sidebar-session-row:hover .sidebar-session-menu-trigger,
-.sidebar-session-menu-trigger:focus-visible {
+.sidebar-session-menu-trigger:focus-visible,
+.sidebar-session-row:hover .sidebar-session-pin-trigger,
+.sidebar-session-pin-trigger:focus-visible {
   opacity: 1;
+}
+
+.sidebar-session-pin-trigger.pinned {
+  opacity: 1;
+  color: var(--accent);
 }
 
 .session-context-menu {

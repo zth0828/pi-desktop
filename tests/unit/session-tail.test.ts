@@ -2,7 +2,11 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readSessionArchivedFlag } from '../../electron/utils/session-tail';
+import {
+  readSessionArchivedFlag,
+  readSessionMetadataFlags,
+  readSessionPinnedFlag,
+} from '../../electron/utils/session-tail';
 
 describe('readSessionArchivedFlag', () => {
   let tempDir: string;
@@ -97,5 +101,39 @@ describe('readSessionArchivedFlag', () => {
     lines.push(JSON.stringify({ type: 'custom', customType: 'pi-desktop.archive', data: { archived: true } }));
     await writeFile(file, lines.join('\n') + '\n');
     expect(await readSessionArchivedFlag(file)).toBe(true);
+  });
+});
+
+describe('readSessionPinnedFlag & readSessionMetadataFlags', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), 'pi-session-pin-test-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('单条 pinned: true 返回 true', async () => {
+    const file = path.join(tempDir, 'pinned.jsonl');
+    const lines = [
+      JSON.stringify({ type: 'session', id: 's1', version: 3 }),
+      JSON.stringify({ type: 'custom', customType: 'pi-desktop.pin', data: { pinned: true } }),
+    ];
+    await writeFile(file, lines.join('\n') + '\n');
+    expect(await readSessionPinnedFlag(file)).toBe(true);
+    expect(await readSessionMetadataFlags(file)).toEqual({ archived: false, pinned: true });
+  });
+
+  it('同时存在 archive 和 pin 标记时能正确合并提取', async () => {
+    const file = path.join(tempDir, 'meta.jsonl');
+    const lines = [
+      JSON.stringify({ type: 'session', id: 's1', version: 3 }),
+      JSON.stringify({ type: 'custom', customType: 'pi-desktop.archive', data: { archived: true } }),
+      JSON.stringify({ type: 'custom', customType: 'pi-desktop.pin', data: { pinned: true } }),
+    ];
+    await writeFile(file, lines.join('\n') + '\n');
+    expect(await readSessionMetadataFlags(file)).toEqual({ archived: true, pinned: true });
   });
 });
