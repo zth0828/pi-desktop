@@ -68,10 +68,18 @@ export const piSystemApi = {
     if (installInFlight) return installInFlight;
     installInFlight = new Promise<PiInstallResult>((resolvePromise) => {
       // 命令固定，参数固定——不接受任何外部输入拼接；无版本号明确安装 npm latest。
-      const child = spawn('npm', ['i', '-g', PI_PACKAGE_NAME], {
-        env: envWithUserPath(),
-        shell: process.platform === 'win32',
-      });
+      // Windows 下 npm 是 npm.cmd，spawn 需要 shell 才能解析；为避免 args + shell
+      // 组合触发 Node DEP0190 警告，Windows 下把命令与参数拼成单字符串传入
+      // （均为固定常量，无注入面）。macOS/Linux 保持数组参数直接 spawn。
+      const child =
+        process.platform === 'win32'
+          ? spawn(`npm i -g ${PI_PACKAGE_NAME}`, {
+              env: envWithUserPath(),
+              shell: true,
+            })
+          : spawn('npm', ['i', '-g', PI_PACKAGE_NAME], {
+              env: envWithUserPath(),
+            });
       let stderrTail = '';
       child.stdout.on('data', (chunk: Buffer) => {
         sendHostEvent('piSystem', 'installProgress', { stream: 'stdout', text: chunk.toString() });
