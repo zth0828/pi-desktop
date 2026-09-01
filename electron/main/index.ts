@@ -17,10 +17,15 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 // 需在 userData 派生之前设置（dev 下 userData 也随之与打包产物对齐）。
 app.setName('Pi Desktop');
 
-// Windows 通知/任务栏/托盘归属：与 electron-builder 的 appId 一致，
-// dev 模式（electron.exe）下也按应用身份分组，通知不再挂到 Electron 名下。
+// Windows 通知/任务栏/托盘归属：与 electron-builder 的 appId 一致。
+// dev 模式（electron.exe）附加 .dev 后缀使用独立身份：若与安装版共用同一
+// AUMI，任务栏会沿用首次 dev 运行时缓存的 electron.exe 图标（死缓存，仅能
+// 通过清 iconcache 或换 AUMI 解决）；独立 AUMI 无缓存可命中，任务栏回退
+// 实时读取窗口图标（即 logo），同时避免与安装版混在同分组。通知归属同理。
 if (process.platform === 'win32') {
-  app.setAppUserModelId('io.github.zth0828.pidesktop');
+  app.setAppUserModelId(
+    app.isPackaged ? 'io.github.zth0828.pidesktop' : 'io.github.zth0828.pidesktop.dev',
+  );
 }
 
 let fatalMainFailure = false;
