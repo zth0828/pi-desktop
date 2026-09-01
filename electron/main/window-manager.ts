@@ -2,7 +2,7 @@
 // renderer 的 hostInvoke 不带 sessionId；main 经 event.sender（webContentsId）
 // 反查窗口绑定的会话，路由到对应 runtime（见 services/pi-runtime-api.ts 的
 // resolveRuntimeForContext）。窗口关闭只解绑，runtime 仍保活在 runtimes Set 里。
-import { app, BrowserWindow, screen } from 'electron';
+import { app, BrowserWindow, nativeImage, screen } from 'electron';
 import path from 'node:path';
 import { resolveAppPageId } from '@shared/app-page';
 import { resolveAppIconPath, windowIconFormat } from '../utils/app-icon';
@@ -244,11 +244,12 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
   timingMark('window:create:start');
   const { width, height } = resolveWindowSize();
   const minSize = resolveMinSizeFor({ width, height });
-  const icon = resolveAppIconPath(windowIconFormat(), {
+  const iconPath = resolveAppIconPath(windowIconFormat(), {
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
     mainDir: __dirname,
   });
+  const appIcon = nativeImage.createFromPath(iconPath);
   const win = new BrowserWindow({
     width,
     height,
@@ -257,7 +258,7 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
     minWidth: minSize.width,
     minHeight: minSize.height,
     title: 'Pi Desktop',
-    icon,
+    icon: !appIcon.isEmpty() ? appIcon : undefined,
     // 让 macOS 原生红黄绿按钮叠在应用内容上，避免额外占一整行标题栏。
     // Windows/Linux 改为 frameless：标题栏（菜单 + 窗口控件）由 renderer 自绘，
     // Row 1 行带 -webkit-app-region:drag 负责拖动与双击语义。
@@ -271,6 +272,10 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
       sandbox: false,
     },
   });
+
+  if (process.platform !== 'darwin' && !appIcon.isEmpty()) {
+    win.setIcon(appIcon);
+  }
 
   const query: Record<string, string> = {};
   // 耗时插桩随窗口传给渲染层（渲染层按 ?timing=1 开启同格式打点）

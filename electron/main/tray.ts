@@ -18,9 +18,13 @@ export function createTray(): void {
       resourcesPath: process.resourcesPath,
       mainDir: __dirname,
     });
-    const image = nativeImage.createFromPath(iconPath);
+    let image = nativeImage.createFromPath(iconPath);
     if (image.isEmpty()) return;
+    if (process.platform === 'linux') {
+      image = image.resize({ width: 24, height: 24 });
+    }
     tray = new Tray(image);
+
     tray.setToolTip('Pi Desktop');
     tray.on('click', () => focusOrCreateMainWindow());
     tray.setContextMenu(

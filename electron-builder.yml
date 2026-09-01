@@ -81,6 +81,8 @@ linux:
   icon: resources/icon.png
   category: Development
   maintainer: zth0828
+  desktop:
+    StartupWMClass: pi-desktop
   target:
     - target: AppImage
       arch:
