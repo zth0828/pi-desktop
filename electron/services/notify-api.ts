@@ -4,10 +4,11 @@
 import { appendFileSync } from 'node:fs';
 import { BrowserWindow, Notification } from 'electron';
 import type { HostSuccess, NotifyDispatchPayload } from '@shared/host-api/contract';
-import { getMainWindow, findWindowBySession } from '../main/window-manager';
+import { getMainWindow, findWindowBySession, resolveWindowSession } from '../main/window-manager';
 import { sendHostEventToWindow } from '../main/ipc/host-events';
 import { resolveNotifyFocused, shouldNotify, type NotifyMode } from './notify-policy';
 import { settingsApi } from './settings-api';
+import { samePath } from '../utils/same-path';
 
 export const notifyApi = {
   dispatch: async (payload: NotifyDispatchPayload): Promise<HostSuccess> => {
@@ -17,12 +18,17 @@ export const notifyApi = {
       ? ((await settingsApi.get({ key: 'notifyUiRequest' })) as boolean | undefined)
       : undefined;
     const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
-    // 会话已落盘时按「会话所在窗口是否聚焦」判定，避免其他窗口聚焦吞掉本会话的通知；
-    // 会话窗口已关（找不到）视为失焦不吞通知；sessionPath 缺省（in-memory）保持任一窗口口径。
+    // 用户是否正在查看该会话：所在窗口聚焦 且 该会话是窗口当前活动会话。
+    // 同窗口多会话：切到其他会话后，后台会话完成不再被「窗口聚焦」吞掉；
+    // 会话窗口已关（找不到）视为没在看，通知不吞；sessionPath 缺省（in-memory）
+    // 保持任一窗口口径。
     const sessionWindow = payload.sessionPath ? findWindowBySession(payload.sessionPath) : null;
+    const viewing = payload.sessionPath && sessionWindow
+      ? sessionWindow.isFocused() && samePath(resolveWindowSession(sessionWindow.webContents.id) ?? undefined, payload.sessionPath)
+      : null;
     const focused = resolveNotifyFocused(
       payload.sessionPath,
-      sessionWindow ? sessionWindow.isFocused() : null,
+      viewing,
       windows.some((w) => w.isFocused()),
     );
     if (!shouldNotify(mode, focused, payload.kind, uiRequestEnabled)) {

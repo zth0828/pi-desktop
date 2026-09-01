@@ -44,12 +44,12 @@ describe('notifyUiRequest 分类开关', () => {
 });
 
 describe('resolveNotifyFocused 会话寻址焦点判定', () => {
-  it('会话窗口聚焦：视为聚焦', () => {
+  it('会话正被查看（窗口聚焦且为窗口活动会话）：视为聚焦，不弹', () => {
     expect(resolveNotifyFocused('/s/a.jsonl', true, false)).toBe(true);
     expect(resolveNotifyFocused('/s/a.jsonl', true, true)).toBe(true);
   });
 
-  it('会话窗口存在但未聚焦（其他窗口聚焦）：视为失焦，通知不吞', () => {
+  it('同窗口切到其他会话（窗口聚焦但活动会话不是它）：视为失焦，弹通知', () => {
     expect(resolveNotifyFocused('/s/a.jsonl', false, true)).toBe(false);
   });
 

@@ -331,3 +331,55 @@ test('多窗口：焦点按会话窗口判定（B 窗口完成弹、A 窗口完�
     delete process.env.PI_DESKTOP_E2E_NOTIFY_LOG;
   }
 });
+
+test('同窗口切到其他会话：后台 run 完成仍弹通知（单面板改绑场景）', async ({
+  launchElectronApp,
+  homeDir,
+}) => {
+  const logPath = path.join(homeDir, 'notify.log');
+  process.env.PI_DESKTOP_E2E_NOTIFY_LOG = logPath;
+  try {
+    const app = await launchElectronApp(launchOptions('unfocused'));
+    const page = await app.firstWindow();
+    await waitSessionReady(page);
+
+    // 主窗口建 ALPHA 与 BETA 两个会话（同窗口单面板）
+    await sendAndWaitReply(page, 'Say PONG bg ALPHA');
+    await page.getByTestId('new-chat').click();
+    await sendAndWaitReply(page, 'Say PONG bg BETA');
+    const alphaPath = await sessionPathOf(page, 'bg ALPHA');
+    const betaPath = await sessionPathOf(page, 'bg BETA');
+
+    // 回到 ALPHA 发慢速 run，立即切到 BETA：run 完成时窗口聚焦但活动会话是 BETA。
+    // 此时 ALPHA 已被面板改绑丢（单面板 replacePane），通知必须走后台 run 跟踪上报。
+    const alphaButton = page
+      .locator('.sidebar-session-row')
+      .filter({ hasText: 'bg ALPHA' })
+      .locator('[data-testid^="sidebar-session-"]')
+      .first();
+    await alphaButton.click();
+    await expect(page.getByTestId('chat-input')).toBeEnabled({ timeout: 10_000 });
+    const entriesBefore = (await readEntries(logPath)).length;
+    await page.getByTestId('chat-input').fill('Say SLOW_END bg-run');
+    await page.getByTestId('chat-send').click();
+    const betaButton = page
+      .locator('.sidebar-session-row')
+      .filter({ hasText: 'bg BETA' })
+      .locator('[data-testid^="sidebar-session-"]')
+      .first();
+    await betaButton.click();
+    await expect(page.getByTestId('chat-input')).toBeEnabled({ timeout: 10_000 });
+
+    // ALPHA 的慢速 run 完成（30 chunk × 100ms ≈ 3s+）：应弹通知且带 alphaPath
+    await expect
+      .poll(async () => (await readEntries(logPath)).slice(entriesBefore).some((entry) => entry.sessionPath === alphaPath), {
+        timeout: 15_000,
+      })
+      .toBe(true);
+    const entry = (await readEntries(logPath)).slice(entriesBefore).find((entry) => entry.sessionPath === alphaPath);
+    expect(entry?.kind).toBe('runCompleted');
+    expect(entry?.body).toContain('chunk');
+  } finally {
+    delete process.env.PI_DESKTOP_E2E_NOTIFY_LOG;
+  }
+});

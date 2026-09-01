@@ -219,6 +219,17 @@ function appendOrReplaceMessage(messages: ChatMessage[], message: ChatMessage): 
   return next;
 }
 
+/** 取 assistant 消息文本摘要（通知正文口径：text 块拼接、压空白、截 120 字符）。 */
+function summarizeText(content: ContentBlock[] | undefined): string {
+  return (content ?? [])
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text ?? '')
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
 /**
  * 每实例事件订阅（替代原模块级 bindChatEvents 单例）：五个 host 事件的 handler 只操作
  * 本实例的 getState/setState，过滤用 session-binding 纯函数；返回退订函数。
@@ -318,6 +329,14 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       return path ? scopedHostApi(path) : hostApi;
     };
 
+    // 后台 run 跟踪：切走时仍在运行的会话，等 run.ended 到来自行上报完成通知
+    // （本面板已改绑，其事件不会再走主链路）。键为会话 id，值为会话文件路径
+    // + 已流式到达的 assistant 摘要。多窗口/多面板天然不重复：只有切走会话的
+    // 那个 store 在跟踪它。
+    const backgroundRuns = new Map<string, { sessionPath?: string; summary: string }>();
+    // prompt 提交后等待 run.started 的窗口期标记（防「发送后立即切换」漏跟踪）
+    let awaitingRun = false;
+
     // 撤销替换等待（事件已应用 / 动作失败 / 新绑定建立）：清定时器与标志
     const endReplacementWait = () => {
       clearReplacementTimer();
@@ -403,6 +422,24 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       switchSession: async (path, cwd) => {
+        // 切走时当前会话仍在运行（或刚提交/排队中）：登记后台 run，其 run.ended
+        // 到来自行上报完成通知（本面板改绑后事件不会再走主链路）。
+        // 目标是当前会话（早退路径）时不登记，避免把仍绑定中的会话误判为后台。
+        const leaving = get();
+        if (
+          leaving.boundSessionId &&
+          leaving.boundSessionPath &&
+          leaving.boundSessionPath !== path &&
+          (leaving.running || leaving.isStreaming || awaitingRun ||
+            leaving.queue.steering.length > 0 || leaving.queue.followUp.length > 0)
+        ) {
+          const lastAssistant = [...leaving.messages].reverse().find((m) => m.role === 'assistant' && !m.streaming)
+            ?? [...leaving.messages].reverse().find((m) => m.role === 'assistant');
+          backgroundRuns.set(leaving.boundSessionId, {
+            sessionPath: leaving.boundSessionPath,
+            summary: summarizeText(lastAssistant?.content) || leaving.cwd || '',
+          });
+        }
         set({ starting: true, startError: undefined, startErrorCode: undefined, pendingEditEntryId: null });
         try {
           // 用切换前的绑定寻址本面板 runtime（main 侧据此决定复用/新建/改绑）；
@@ -450,6 +487,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         }
         const result = await api().piRuntime.prompt(text, images, behavior);
         if (!result.success) set({ runtimeError: result.error });
+        else awaitingRun = true; // run.started 到达后清除（applyEnvelope）
       },
 
       abort: async () => {
@@ -611,6 +649,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       applyState: (state) => {
+        awaitingRun = false; // 绑定会话已替换：旧的待启动 run 不再属于本面板
         const messages = state.messages.map((m, i) => ({
           ...asMessage(m),
           entryId: state.messageEntryIds?.[i] ?? undefined,
@@ -711,12 +750,26 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
 
       applyEnvelope: (envelope) => {
         const s = get();
-        // 非本面板绑定会话的事件丢弃（bound 为 null 的初始态保持原行为）
-        if (!matchesBoundSession(s.boundSessionId, envelope.sessionId)) return;
+        // 非本面板绑定会话的事件：只处理切走时登记的后台 run
+        // （补流式摘要；run.ended 到来自行上报完成通知）
+        if (!matchesBoundSession(s.boundSessionId, envelope.sessionId)) {
+          const bg = backgroundRuns.get(envelope.sessionId);
+          if (bg) {
+            const { event } = envelope;
+            if (event.type === 'assistant.partial' || event.type === 'message.ended') {
+              bg.summary = summarizeText(asMessage(event.message).content) || bg.summary;
+            } else if (event.type === 'run.ended' && !event.willRetry) {
+              backgroundRuns.delete(envelope.sessionId);
+              deps.reporters?.runCompleted(bg.summary || s.cwd || '', bg.sessionPath);
+            }
+          }
+          return;
+        }
         if (envelope.generation !== s.generation) return; // 过期会话的事件丢弃
         const { event } = envelope;
         switch (event.type) {
           case 'run.started':
+            awaitingRun = false;
             set({ isStreaming: true, running: true, runStartedAt: Date.now(), turnStats: null, retry: null, queue: { steering: [], followUp: [] } });
             break;
           case 'run.ended': {
@@ -757,13 +810,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             const lastAssistant = [...get().messages]
               .reverse()
               .find((m) => m.role === 'assistant' && !m.streaming);
-            const summary = (lastAssistant?.content ?? [])
-              .filter((b) => b.type === 'text')
-              .map((b) => b.text ?? '')
-              .join(' ')
-              .replace(/\s+/g, ' ')
-              .trim()
-              .slice(0, 120);
+            const summary = summarizeText(lastAssistant?.content);
             deps.reporters?.runCompleted(summary || get().cwd || '', get().boundSessionPath ?? undefined);
             break;
           }

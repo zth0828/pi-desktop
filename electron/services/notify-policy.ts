@@ -4,17 +4,19 @@ import type { NotifyKind, SettingsSnapshot } from '@shared/host-api/contract';
 export type NotifyMode = NonNullable<SettingsSnapshot['notifyMode']>;
 
 /**
- * 计算通知判定用「目标是否聚焦」：
- * 会话已落盘（有 sessionPath）时只看其所在窗口——窗口已关（找不到）视为失焦，
- * 避免完成通知被吞；未指定会话（in-memory）回退旧口径「任一窗口聚焦」。
+ * 计算通知判定用「用户是否正在查看该会话」：
+ * 会话已落盘（有 sessionPath）时，窗口聚焦 且 该会话是窗口活动会话才算
+ * 「正在查看」；窗口失焦、窗口已关、或同窗口切到其他会话（活动会话不是它）
+ * 都视为没在看，完成通知不被吞。未指定会话（in-memory）回退旧口径
+ * 「任一窗口聚焦」。
  */
 export function resolveNotifyFocused(
   sessionPath: string | undefined,
-  sessionWindowFocused: boolean | null,
+  viewing: boolean | null,
   anyWindowFocused: boolean,
 ): boolean {
   if (!sessionPath) return anyWindowFocused;
-  return sessionWindowFocused ?? false;
+  return viewing ?? false;
 }
 
 /**
