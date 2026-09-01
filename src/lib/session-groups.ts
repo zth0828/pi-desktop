@@ -1,6 +1,12 @@
 // 会话按项目（cwd）分组：侧栏 SessionList 与会话页 Sessions 共用。
 import type { PiSessionRow } from '@shared/host-api/contract';
 
+export function getProjectName(cwd?: string): string {
+  if (!cwd) return '';
+  // Windows 路径用 `\` 分隔，两种分隔符都要切
+  return cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd;
+}
+
 export type ProjectGroup = {
   cwd: string;
   name: string;
@@ -26,8 +32,7 @@ export function groupByProject(sessions: PiSessionRow[]): ProjectGroup[] {
       });
       return {
         cwd,
-        // Windows 路径用 `\` 分隔，两种分隔符都要切
-        name: cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd,
+        name: getProjectName(cwd),
         sessions: sortedRows,
         latest: sortedRows[0]?.modified ?? '',
       };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PiSessionRow } from '@shared/host-api/contract';
-import { groupByProject } from '../../src/lib/session-groups';
+import { getProjectName, groupByProject } from '../../src/lib/session-groups';
 
 function mockSession(overrides: Partial<PiSessionRow>): PiSessionRow {
   return {
@@ -18,6 +18,23 @@ function mockSession(overrides: Partial<PiSessionRow>): PiSessionRow {
     ...overrides,
   };
 }
+
+describe('getProjectName', () => {
+  it('正确提取 Unix / macOS 路径的末级项目名', () => {
+    expect(getProjectName('/Users/test/work/project-alpha')).toBe('project-alpha');
+    expect(getProjectName('/Users/test/work/project-alpha/')).toBe('project-alpha');
+  });
+
+  it('正确提取 Windows 路径的末级项目名', () => {
+    expect(getProjectName('C:\\Users\\test\\work\\project-beta')).toBe('project-beta');
+    expect(getProjectName('C:\\Users\\test\\work\\project-beta\\')).toBe('project-beta');
+  });
+
+  it('空路径或兜底情况安全处理', () => {
+    expect(getProjectName('')).toBe('');
+    expect(getProjectName(undefined)).toBe('');
+  });
+});
 
 describe('groupByProject', () => {
   it('按项目分组并按组内最新修改时间倒序排列', () => {
