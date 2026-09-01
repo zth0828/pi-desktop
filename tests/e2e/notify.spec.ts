@@ -212,6 +212,10 @@ test('run 完成 → always 档弹出系统通知（含摘要）', async ({ laun
     const entry = JSON.parse((await readLog(logPath)).trim().split('\n')[0]);
     expect(entry.title).toBeTruthy();
     expect(entry.body).toContain('PONG');
+    // 会话身份必须随通知链路传到 main：点击跳转依赖它定位会话窗口。
+    // 若此处失败 = 会话尚未落盘（in-memory，boundSessionPath 为空）或链路断点。
+    expect(entry.sessionPath).toBeTruthy();
+    expect(typeof entry.sessionPath).toBe('string');
     // 会话已落盘：通知 payload 带会话文件路径，供 main 按会话定位窗口
     expect(entry.sessionPath).toBeTruthy();
   } finally {

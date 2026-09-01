@@ -3,11 +3,21 @@
 // 启动 vite（electron 包的路径解析会优先使用该环境变量）。
 // Windows/Linux 直接启动 vite，行为与原来一致。
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { ensureDevMacBundle } from './make-dev-mac-bundle.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(import.meta.url);
+// 直接 spawn node + vite 的 JS 入口，而非 spawn 'vite'：Windows 上
+// node_modules/.bin 里的 vite.cmd 是 cmd 脚本，spawn 不经过 shell 无法
+// 解析（报 spawn vite ENOENT）；node 入口三平台一致，也不依赖 PATH。
+// vite 的 exports 未导出 ./bin/vite.js，改从 package.json 的 bin 字段解析。
+const vitePkgPath = require.resolve('vite/package.json');
+const vitePkg = JSON.parse(readFileSync(vitePkgPath, 'utf8'));
+const viteBin = path.join(path.dirname(vitePkgPath), vitePkg.bin.vite);
 
 if (process.platform === 'darwin') {
   const bundle = await ensureDevMacBundle();
@@ -16,7 +26,7 @@ if (process.platform === 'darwin') {
   }
 }
 
-const child = spawn('vite', process.argv.slice(2), {
+const child = spawn(process.execPath, [viteBin, ...process.argv.slice(2)], {
   cwd: root,
   stdio: 'inherit',
   env: process.env,
