@@ -82,7 +82,8 @@ linux:
   category: Development
   maintainer: zth0828
   desktop:
-    StartupWMClass: pi-desktop
+    entry:
+      StartupWMClass: pi-desktop
   target:
     - target: AppImage
       arch:
