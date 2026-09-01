@@ -42,6 +42,7 @@ class FakeBrowserWindow {
   focus(): void {
     this.focused = true;
   }
+  setIcon(): void {}
   close(): void {
     this.destroyed = true;
     for (const cb of this.listeners.get('closed') ?? []) cb();
@@ -50,6 +51,9 @@ class FakeBrowserWindow {
 
 vi.mock('electron', () => ({
   BrowserWindow: FakeBrowserWindow,
+  nativeImage: {
+    createFromPath: () => ({ isEmpty: () => false, resize: () => ({ isEmpty: () => false }) }),
+  },
   screen: {
     getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }),
     getDisplayNearestPoint: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 875 } }),

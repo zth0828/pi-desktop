@@ -12,6 +12,11 @@ import { scheduleVersionChecks } from '../services/version-check-api';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
+// dev 下 app.name 默认是 Electron，打包产物是 productName（Pi Desktop）；
+// 统一全平台应用名，确保 macOS 系统菜单栏与 Linux X11/Wayland 的 WM_CLASS 一致。
+// 需在 userData 派生之前设置（dev 下 userData 也随之与打包产物对齐）。
+app.setName('Pi Desktop');
+
 // Windows 通知/任务栏/托盘归属：与 electron-builder 的 appId 一致，
 // dev 模式（electron.exe）下也按应用身份分组，通知不再挂到 Electron 名下。
 if (process.platform === 'win32') {
