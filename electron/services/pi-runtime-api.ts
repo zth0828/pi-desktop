@@ -56,6 +56,8 @@ import {
   isMainWindow,
   rebindWindowSession,
   rebindWindowSessionForWindow,
+  unbindWindowSession,
+  unbindWindowSessionForWindow,
 } from '../main/window-manager';
 import { expandFileReferences } from '../utils/file-expand';
 import { samePath } from '../utils/same-path';
@@ -199,7 +201,7 @@ export async function resolveRuntimeForContextReady(
  */
 function bindSenderToRuntime(ctx: HostActionContext | undefined, runtime: ActiveRuntime): void {
   const sessionFile = runtime.adapterRuntime.session.view.sessionFile;
-  if (ctx && sessionFile) bindWindowSession(ctx.sender.id, sessionFile);
+  if (ctx) bindWindowSession(ctx.sender.id, sessionFile ?? null);
 }
 
 export function isSessionRunning(sessionPath: string): boolean {
@@ -998,12 +1000,15 @@ export async function afterSessionReplaced(
   } finally {
     oldUnsubscribe();
   }
-  // fork/newSession 会换新会话文件，绑定旧文件的窗口改绑到新文件，
-  // 否则后续 hostInvoke 按旧路径寻址 runtime 会失败（必须在推事件前完成）
+  // fork/newSession 会换新会话文件，绑定旧文件的窗口改绑到新文件；
+  // 切换到无文件（in-memory 新会话）时解绑旧文件，避免后续调用误路由到已废弃的旧路径
   const previousFile = runtime.sessionFile;
   const nextFile = runtime.adapterRuntime.session.sessionFile;
   runtime.sessionFile = nextFile;
-  if (previousFile && nextFile && !samePath(previousFile, nextFile)) {
+  if (previousFile && !nextFile) {
+    if (target) unbindWindowSessionForWindow(target.sender.id, previousFile);
+    else unbindWindowSession(previousFile);
+  } else if (previousFile && nextFile && !samePath(previousFile, nextFile)) {
     if (target) rebindWindowSessionForWindow(target.sender.id, previousFile, nextFile);
     else rebindWindowSession(previousFile, nextFile);
   }
@@ -1031,14 +1036,9 @@ async function createReplacementRuntime(
   ctx?: HostActionContext,
   actionId?: string,
 ): Promise<ActiveRuntime> {
-  const wasRunning = current.running || current.adapterRuntime.session.isStreaming;
   const replacement = await createRuntime(current.cwd);
   if (ctx) {
     await afterSessionReplaced(replacement, ctx, actionId !== undefined ? { actionId } : undefined);
-    if (wasRunning) {
-      replacement.running = true;
-      sendHostEventToWebContents(ctx.sender, 'piRuntime', 'sessionReplaced', snapshotState(replacement));
-    }
   } else activateSessionRuntime(replacement);
   if (ctx) bindSenderToRuntime(ctx, replacement);
   return replacement;

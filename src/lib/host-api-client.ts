@@ -27,10 +27,12 @@ const DEFAULT_HOST_INVOKE_TIMEOUT_MS = 30_000;
 // 完整的子进程或网络下载结束才返回（进度经 progress 事件流式推送），
 // 正常耗时即可超过默认值，按各自的最坏合理耗时单独放宽。
 const SLOW_HOST_ACTIONS_TIMEOUT_MS = new Map<string, number>([
-  // 会话冷启动：pi SDK 动态加载 + 环境检测（spawn 子进程），慢环境下可达
+  // 会话冷启动与切换：pi SDK 动态加载 + 环境检测（spawn 子进程），慢环境下可达
   // 数十秒；调用方（chat-core start）自带 75s 业务级超时，这里放宽到 90s，
   // 保证业务超时先于通道超时触发，用户看到的是业务侧错误信息。
   ['piRuntime.start', 90_000],
+  ['piSessions.switch', 90_000],
+  ['piRuntime.newSession', 90_000],
   // 全局安装 pi / 安装扩展包 / 更新扩展包（update 可一次更新全部包）/
   // 下载应用更新安装包：慢网络下分钟级，通道超时只作最后防线。
   ['piSystem.install', 300_000],

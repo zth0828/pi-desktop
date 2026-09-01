@@ -53,11 +53,11 @@ export function registerWindow(
   });
 }
 
-export function bindWindowSession(webContentsId: number, sessionPath: string): void {
+export function bindWindowSession(webContentsId: number, sessionPath: string | null): void {
   const record = windows.get(webContentsId);
   if (!record) return;
   record.sessionPath = sessionPath;
-  record.sessionPaths.add(sessionPath);
+  if (sessionPath) record.sessionPaths.add(sessionPath);
 }
 
 /** 替换窗口内所有面板的会话占用清单，并同步窗口级默认路由。 */
@@ -120,6 +120,19 @@ export function rebindWindowSessionForWindow(
   ));
 }
 
+/** 只解绑发起替换操作的窗口中的旧会话（如切换到内存态新会话）。 */
+export function unbindWindowSessionForWindow(
+  webContentsId: number,
+  oldPath: string,
+): void {
+  const record = windows.get(webContentsId);
+  if (!record) return;
+  if (record.sessionPath && samePath(record.sessionPath, oldPath)) record.sessionPath = null;
+  record.sessionPaths = new Set([...record.sessionPaths].filter((sessionPath) =>
+    !samePath(sessionPath, oldPath),
+  ));
+}
+
 export function getMainWindow(): BrowserWindow | null {
   for (const record of windows.values()) {
     if (record.isMain && !record.win.isDestroyed()) return record.win;
@@ -174,6 +187,16 @@ export function rebindWindowSession(oldPath: string, newPath: string): void {
       samePath(sessionPath, oldPath) ? newPath : sessionPath,
     );
     record.sessionPaths = new Set(replacement);
+  }
+}
+
+/** 会话被删除或替换为内存态无文件会话后，清理所有窗口对旧文件的绑定。 */
+export function unbindWindowSession(oldPath: string): void {
+  for (const record of windows.values()) {
+    if (record.sessionPath && samePath(record.sessionPath, oldPath)) record.sessionPath = null;
+    record.sessionPaths = new Set([...record.sessionPaths].filter((sessionPath) =>
+      !samePath(sessionPath, oldPath),
+    ));
   }
 }
 

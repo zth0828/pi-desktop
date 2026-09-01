@@ -732,3 +732,59 @@ test('侧栏会话列表：长列表展开与收起（含当前会话保底与�
     await rm(archivedWorkspace, { recursive: true, force: true });
   }
 });
+
+test('新建会话后发消息正常响应（不报 session not started）', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 第一会话发送并落盘
+  await sendAndWaitReply(page, 'PING 1');
+  await expect(page.getByTestId('message-assistant')).toHaveCount(1);
+
+  // 点击新建会话
+  await page.getByTestId('new-chat').click();
+  // 消息列表清空（新会话）
+  await expect(page.getByTestId('message-assistant')).toHaveCount(0);
+  await expect(page.getByTestId('runtime-error-notice')).toHaveCount(0);
+
+  // 在新会话发送消息，验证正常返回且不报 session not started
+  await page.getByTestId('chat-input').fill('PING 2');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').first()).toContainText('PONG', {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId('runtime-error-notice')).toHaveCount(0);
+});
+
+test('流式输出中点击新建会话：新会话立即处于空闲态且不报替换超时', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 发送消息使 agent 开始生成
+  await page.getByTestId('chat-input').fill('PING STREAMING');
+  await page.getByTestId('chat-send').click();
+
+  // 在生成开始后立即点击新建会话
+  await page.getByTestId('new-chat').click();
+
+  // 新会话消息列表清空，不应卡在「工作中...」，不应显示红色停止按钮
+  await expect(page.getByTestId('message-assistant')).toHaveCount(0);
+  await expect(page.getByTestId('status-working')).toHaveCount(0);
+  await expect(page.getByTestId('chat-stop')).toHaveCount(0);
+  await expect(page.getByTestId('runtime-error-notice')).toHaveCount(0);
+
+  // 新会话能够正常发送下一条消息
+  await page.getByTestId('chat-input').fill('PING AFTER NEW');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').first()).toContainText('PONG', {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId('runtime-error-notice')).toHaveCount(0);
+});
+

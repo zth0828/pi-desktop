@@ -193,7 +193,7 @@ describe('expectingReplacement 超时兜底', () => {
     await store.getState().newSession();
     expect(store.getState().expectingReplacement).toBe(true);
 
-    vi.advanceTimersByTime(5_000);
+    vi.advanceTimersByTime(30_000);
     const s = store.getState();
     expect(s.expectingReplacement).toBe(false);
     expect(s.expectedReplacementActionId).toBeNull();
@@ -218,7 +218,7 @@ describe('expectingReplacement 超时兜底', () => {
     bus.emit('piRuntime.sessionReplaced', stateSnapshot('s-new', '/tmp/new.jsonl', actionId));
     expect(store.getState().boundSessionId).toBe('s-new');
 
-    vi.advanceTimersByTime(5_000);
+    vi.advanceTimersByTime(30_000);
     expect(store.getState().runtimeError).toBeUndefined();
     expect(store.getState().expectingReplacement).toBe(false);
     store.dispose();
@@ -233,7 +233,7 @@ describe('expectingReplacement 超时兜底', () => {
     await store.getState().newSession();
     store.dispose();
 
-    vi.advanceTimersByTime(5_000);
+    vi.advanceTimersByTime(30_000);
     expect(store.getState().runtimeError).toBeUndefined();
     expect(store.getState().expectingReplacement).toBe(true);
   });
@@ -252,8 +252,8 @@ describe('expectingReplacement 超时兜底', () => {
     expect(secondActionId).toBeTruthy();
     expect(secondActionId).not.toBe(firstActionId);
 
-    // 只有当前等待的定时器存活：5s 后超时收敛的是第二次等待
-    vi.advanceTimersByTime(5_000);
+    // 只有当前等待的定时器存活：30s 后超时收敛的是第二次等待
+    vi.advanceTimersByTime(30_000);
     expect(store.getState().runtimeError).toBe(SESSION_REPLACEMENT_TIMEOUT);
     expect(store.getState().expectedReplacementActionId).toBeNull();
     store.dispose();

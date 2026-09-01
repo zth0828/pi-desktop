@@ -67,7 +67,7 @@ export type ChatStoreDeps = {
 };
 
 /** 发起替换（newSession/fork）后等待 sessionReplaced 的兜底时限 */
-const REPLACEMENT_WAIT_TIMEOUT_MS = 5_000;
+const REPLACEMENT_WAIT_TIMEOUT_MS = 30_000;
 
 export type ChatState = {
   started: boolean;
