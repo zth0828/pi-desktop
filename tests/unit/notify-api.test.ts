@@ -118,7 +118,7 @@ describe('notifyApi.dispatch 点击跳转', () => {
     });
   });
 
-  it('有 sessionPath 但会话窗口已关闭（找不到）：回退主窗口且不发 focusSession', async () => {
+  it('有 sessionPath 但会话窗口已关闭/同窗口切走（找不到）：回退主窗口并让主窗口打开该会话', async () => {
     const mainWindow = makeWindow();
     findWindowBySessionMock.mockReturnValue(null);
     getMainWindowMock.mockReturnValue(mainWindow);
@@ -131,8 +131,14 @@ describe('notifyApi.dispatch 点击跳转', () => {
     clickLastNotification();
 
     expect(findWindowBySessionMock).toHaveBeenCalledWith(SESSION_PATH);
-    expect(sendHostEventToWindowMock).not.toHaveBeenCalled(); // 没有目标面板可激活
-    expect(mainWindow.focus).toHaveBeenCalled(); // 只聚焦主窗口兜底
+    expect(mainWindow.focus).toHaveBeenCalled();
+    // 关键：会话没有窗口持有 → 回退主窗口也要发 focusSession，让渲染层打开该会话
+    expect(sendHostEventToWindowMock).toHaveBeenCalledWith(
+      mainWindow,
+      'windows',
+      'focusSession',
+      { sessionPath: SESSION_PATH },
+    );
   });
 
   it('无 sessionPath（in-memory 会话）：回退主窗口，不查找会话窗口', async () => {

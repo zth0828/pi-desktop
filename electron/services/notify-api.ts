@@ -49,10 +49,12 @@ export const notifyApi = {
       const notification = new Notification({ title: payload.title, body: payload.body ?? '' });
       notification.on('click', () => {
         // 点击优先聚焦产生通知的会话所在窗口并激活对应面板（与 windows-api 的 focus 路径一致）；
-        // 会话未落盘/窗口已关时回退主窗口。
+        // 会话有身份但没有窗口持有它（同窗口切走 / 会话窗口已关）时回退主窗口，
+        // 并同样发 focusSession 让目标窗口打开该会话——否则点击只聚焦不跳转。
         let target: BrowserWindow | null = null;
+        let sessionWindow: BrowserWindow | null = null;
         if (payload.sessionPath) {
-          const sessionWindow = findWindowBySession(payload.sessionPath);
+          sessionWindow = findWindowBySession(payload.sessionPath);
           if (sessionWindow) {
             if (sessionWindow.isMinimized()) sessionWindow.restore();
             sessionWindow.focus();
@@ -67,6 +69,12 @@ export const notifyApi = {
           if (target.isMinimized()) target.restore();
           if (!target.isVisible()) target.show();
           target.focus();
+          // 会话身份存在但没有任何窗口持有它：通知目标窗口打开该会话
+          if (payload.sessionPath && !sessionWindow) {
+            sendHostEventToWindow(target, 'windows', 'focusSession', {
+              sessionPath: payload.sessionPath,
+            });
+          }
         }
       });
       notification.show();
