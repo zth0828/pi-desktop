@@ -7,10 +7,9 @@ import {
   Archive,
   ArchiveRestore,
   Check,
-  ChevronDown,
-  ChevronRight,
   Copy,
   Folder,
+  FolderOpen,
   GitFork,
   MoreHorizontal,
   Pencil,
@@ -24,7 +23,7 @@ import { hostApi } from '../lib/host-api';
 import { pushGlobalError } from '../stores/global-errors';
 import { formatErrorMessage } from '../lib/error-formatter';
 import { onHostEvent } from '../lib/host-events';
-import { groupByProject, type ProjectGroup } from '../lib/session-groups';
+import { getProjectName, groupByProject, type ProjectGroup } from '../lib/session-groups';
 import { sessionDisplayTitle } from '../lib/session-format';
 import {
   clearSessionDragPayload,
@@ -364,16 +363,23 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     }
   };
 
-  const renderSessionRow = (session: PiSessionRow) => {
+  const renderSessionRow = (session: PiSessionRow, isPinned = false) => {
     const sessionKey = `session:${session.path}`;
     const sessionMenuOpen = openMenu === sessionKey;
     const deleting = confirmDelete === session.path;
     const renaming = renamePath === session.path;
+    const projectName = getProjectName(session.cwd);
     return (
       <div
         key={session.id}
         className={
-          draggingPath === session.path ? 'sidebar-session-row dragging' : 'sidebar-session-row'
+          draggingPath === session.path
+            ? isPinned
+              ? 'sidebar-session-row sidebar-session-pinned-row dragging'
+              : 'sidebar-session-row dragging'
+            : isPinned
+              ? 'sidebar-session-row sidebar-session-pinned-row'
+              : 'sidebar-session-row'
         }
         draggable
         onDragStart={(event) => {
@@ -431,7 +437,15 @@ export function SessionList({ onOpenChat }: SessionListProps) {
       >
         <button
           data-testid={`sidebar-session-${session.id}`}
-          className={session.isCurrent ? 'sidebar-session current' : 'sidebar-session'}
+          className={
+            session.isCurrent
+              ? isPinned
+                ? 'sidebar-session sidebar-session-pinned current'
+                : 'sidebar-session current'
+              : isPinned
+                ? 'sidebar-session sidebar-session-pinned'
+                : 'sidebar-session'
+          }
           title={session.path}
           onClick={() => {
             setOpenMenu(undefined);
@@ -444,25 +458,35 @@ export function SessionList({ onOpenChat }: SessionListProps) {
             });
           }}
         >
-          {session.isRunning && (
-            <span
-              className="sidebar-session-running"
-              data-testid={`sidebar-session-running-${session.id}`}
-              title={t('sessions.running')}
-              aria-label={t('sessions.running')}
-            />
-          )}
-          {openSessionPaths.has(session.path) && (
-            <span
-              className="sidebar-session-open"
-              data-testid={`sidebar-session-open-${session.id}`}
-              title={t('sessions.openInPane')}
-              aria-label={t('sessions.openInPane')}
-            />
-          )}
-          <span className="sidebar-session-title">
-            {sessionDisplayTitle(session) || t('sessions.untitled')}
+          <span className="sidebar-session-indicator-slot">
+            {session.isRunning && (
+              <span
+                className="sidebar-session-running"
+                data-testid={`sidebar-session-running-${session.id}`}
+                title={t('sessions.running')}
+                aria-label={t('sessions.running')}
+              />
+            )}
+            {!session.isRunning && openSessionPaths.has(session.path) && (
+              <span
+                className="sidebar-session-open"
+                data-testid={`sidebar-session-open-${session.id}`}
+                title={t('sessions.openInPane')}
+                aria-label={t('sessions.openInPane')}
+              />
+            )}
           </span>
+          <div className="sidebar-session-content">
+            <span className="sidebar-session-title">
+              {sessionDisplayTitle(session) || t('sessions.untitled')}
+            </span>
+            {isPinned && projectName && (
+              <div className="sidebar-session-project" title={session.cwd}>
+                <Folder size={11} className="sidebar-session-project-icon" />
+                <span className="sidebar-session-project-name">{projectName}</span>
+              </div>
+            )}
+          </div>
         </button>
         <button
           className={
@@ -658,8 +682,13 @@ export function SessionList({ onOpenChat }: SessionListProps) {
             aria-expanded={!isCollapsed}
             onClick={() => setCollapsed((prev) => ({ ...prev, [groupKey]: !isCollapsed }))}
           >
-            {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-            {archivedOnly ? <Archive size={13} /> : <Folder size={13} />}
+            {archivedOnly ? (
+              <Archive size={14} className="session-group-icon" />
+            ) : isCollapsed ? (
+              <Folder size={14} className="session-group-icon" />
+            ) : (
+              <FolderOpen size={14} className="session-group-icon open" />
+            )}
             <span className="session-group-name">{group.name}</span>
             <span className="session-group-count">{visibleSessions.length}</span>
           </button>
@@ -690,7 +719,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
             document.body,
           )}
         </div>
-        {!isCollapsed && displayedSessions.map((session) => renderSessionRow(session))}
+        {!isCollapsed && displayedSessions.map((session) => renderSessionRow(session, false))}
         {!isCollapsed && remainingCount > 0 && (
           <button
             className="session-show-more"
@@ -733,13 +762,12 @@ export function SessionList({ onOpenChat }: SessionListProps) {
             aria-expanded={!isCollapsed}
             onClick={() => setCollapsed((prev) => ({ ...prev, [groupKey]: !isCollapsed }))}
           >
-            {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
             <Pin size={13} className="pinned-header-icon" />
             <span className="session-group-name">{t('sessions.pinned')}</span>
             <span className="session-group-count">{pinnedSessions.length}</span>
           </button>
         </div>
-        {!isCollapsed && pinnedSessions.map((session) => renderSessionRow(session))}
+        {!isCollapsed && pinnedSessions.map((session) => renderSessionRow(session, true))}
       </div>
     );
   };
