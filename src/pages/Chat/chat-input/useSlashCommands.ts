@@ -273,13 +273,13 @@ export function useSlashCommands({
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHasNavigated(true);
-      setSelected((i) => Math.min(i + 1, matches.length - 1));
+      setSelected((i) => (matches.length > 0 ? (i + 1) % matches.length : 0));
       return true;
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHasNavigated(true);
-      setSelected((i) => Math.max(i - 1, 0));
+      setSelected((i) => (matches.length > 0 ? (i - 1 + matches.length) % matches.length : 0));
       return true;
     }
     if (e.key === 'Tab' || e.key === ' ') {

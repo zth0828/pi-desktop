@@ -182,13 +182,13 @@ export function useFileMentions({
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setHasNavigated(true);
-        setTreeSelected((i) => Math.min(i + 1, Math.max(0, visibleTreeItems.length - 1)));
+        setTreeSelected((i) => (visibleTreeItems.length > 0 ? (i + 1) % visibleTreeItems.length : 0));
         return true;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
         setHasNavigated(true);
-        setTreeSelected((i) => Math.max(i - 1, 0));
+        setTreeSelected((i) => (visibleTreeItems.length > 0 ? (i - 1 + visibleTreeItems.length) % visibleTreeItems.length : 0));
         return true;
       }
       if (e.key === 'ArrowRight') {
@@ -278,13 +278,13 @@ export function useFileMentions({
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHasNavigated(true);
-      setFileSelected((i) => Math.min(i + 1, Math.max(0, fileMatches.length - 1)));
+      setFileSelected((i) => (fileMatches.length > 0 ? (i + 1) % fileMatches.length : 0));
       return true;
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHasNavigated(true);
-      setFileSelected((i) => Math.max(i - 1, 0));
+      setFileSelected((i) => (fileMatches.length > 0 ? (i - 1 + fileMatches.length) % fileMatches.length : 0));
       return true;
     }
     if (e.key === 'Tab' || e.key === ' ') {
