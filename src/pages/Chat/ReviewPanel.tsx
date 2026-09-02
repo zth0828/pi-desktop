@@ -413,6 +413,11 @@ function CommandList() {
   );
 }
 
+const DEFAULT_REVIEW_LIST_WIDTH = 240;
+const MIN_REVIEW_LIST_WIDTH = 200;
+const MAX_REVIEW_LIST_WIDTH = 450;
+const REVIEW_LIST_WIDTH_STORAGE_KEY = 'pi-desktop.review-tree-width';
+
 function ReviewWorkspace() {
   const { t } = useTranslation();
   const paneApi = usePaneHostApi();
@@ -429,6 +434,51 @@ function ReviewWorkspace() {
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
   const [pendingRevert, setPendingRevert] = useState<PendingRevert | null>(null);
   const [revertError, setRevertError] = useState<string | null>(null);
+  const [reviewListWidth, setReviewListWidth] = useState<number>(() => {
+    const saved = Number(window.localStorage.getItem(REVIEW_LIST_WIDTH_STORAGE_KEY));
+    return Number.isFinite(saved) && saved >= MIN_REVIEW_LIST_WIDTH && saved <= MAX_REVIEW_LIST_WIDTH
+      ? saved
+      : DEFAULT_REVIEW_LIST_WIDTH;
+  });
+  const [reviewListResizing, setReviewListResizing] = useState(false);
+
+  useEffect(() => {
+    window.localStorage.setItem(REVIEW_LIST_WIDTH_STORAGE_KEY, String(Math.round(reviewListWidth)));
+  }, [reviewListWidth]);
+
+  const onReviewListResizeStart = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const resizer = e.currentTarget;
+    resizer.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startWidth = reviewListWidth;
+    let isDragging = false;
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      if (!isDragging && Math.abs(deltaX) >= 2) {
+        isDragging = true;
+        setReviewListResizing(true);
+      }
+      if (isDragging) {
+        const clamped = Math.max(MIN_REVIEW_LIST_WIDTH, Math.min(MAX_REVIEW_LIST_WIDTH, startWidth + deltaX));
+        setReviewListWidth(clamped);
+      }
+    };
+
+    const onPointerUp = (upEvent: PointerEvent) => {
+      if (resizer.hasPointerCapture(upEvent.pointerId)) {
+        resizer.releasePointerCapture(upEvent.pointerId);
+      }
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      setReviewListResizing(false);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp, { once: true });
+  };
 
   const sessionFiles = useMemo(() => sessionChangeFiles(toolExecutions, cwd), [toolExecutions, cwd]);
   const toolFiles = useMemo(() => collectFallbackFiles(toolExecutions), [toolExecutions]);
@@ -585,92 +635,114 @@ function ReviewWorkspace() {
         <button className={`icon-button${showFiles ? ' active' : ''}`} data-testid="review-toggle-files" title={showFiles ? t('review.hideFiles') : t('review.showFiles')} onClick={() => setShowFiles((current) => !current)}><Files size={15} /></button>
       </div>
       {revertError && <div className="review-error" data-testid="review-error">{t('review.revertFailed', { error: revertError })}</div>}
-      <div className="review-body">
+      <div
+        className={`review-body${reviewListResizing ? ' list-resizing' : ''}`}
+        style={{ '--review-tree-width': `${reviewListWidth}px` } as CSSProperties}
+      >
         {showFiles && (
-          <div className="review-file-list" data-testid="review-file-list">
-            {sessionFiles.length === 0 && workspaceFiles.length === 0 && (
-              <div className="review-empty">{t('review.empty')}</div>
-            )}
-            {sessionFiles.length > 0 && (
-              <div className="review-group" data-testid="review-group-session">
-                <button
-                  className="review-group-header"
-                  data-testid="review-group-session-toggle"
-                  onClick={() => setSessionOpen((v) => !v)}
-                >
-                  {sessionOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                  <span className="review-group-title">{t('review.sessionChanges')}</span>
-                  <span className="review-group-count">{sessionFiles.length}</span>
-                </button>
-                {sessionOpen && sessionFiles.map((file) => (
-                  <div
-                    className={`review-file${selected?.group === 'session' && selected.path === file.path ? ' selected' : ''}`}
-                    data-testid="review-file"
-                    key={`session:${file.path}`}
+          <>
+            <div className="review-file-list" data-testid="review-file-list">
+              {sessionFiles.length === 0 && workspaceFiles.length === 0 && (
+                <div className="review-empty">{t('review.empty')}</div>
+              )}
+              {sessionFiles.length > 0 && (
+                <div className="review-group" data-testid="review-group-session">
+                  <button
+                    className="review-group-header"
+                    data-testid="review-group-session-toggle"
+                    onClick={() => setSessionOpen((v) => !v)}
                   >
-                    <button
-                      className="review-file-main"
-                      onClick={() => setSelected({ group: 'session', path: file.path })}
-                    >
-                      <FileIcon name={file.path} size={14} />
-                      <span className="review-file-name" title={file.path}>{file.path}</span>
-                      <span className="review-file-status" data-testid="review-file-scope">{t('review.sessionScope')}</span>
-                      <span className="review-file-stats">
-                        <span className="review-stat-add">+{file.added}</span>
-                        <span className="review-stat-del">-{file.deleted}</span>
-                      </span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {workspaceFiles.length > 0 && (
-              <div className="review-group" data-testid="review-group-workspace">
-                <button
-                  className="review-group-header"
-                  data-testid="review-group-workspace-toggle"
-                  onClick={() => setWorkspaceOpen((v) => !v)}
-                >
-                  {workspaceOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                  <span className="review-group-title">{t('review.workspaceChanges')}</span>
-                  <span className="review-group-count">{workspaceFiles.length}</span>
-                </button>
-                {workspaceOpen && workspaceFiles.map((file) => {
-                  const baselineFile = isBaselineFile(file.path);
-                  return (
+                    {sessionOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    <span className="review-group-title">{t('review.sessionChanges')}</span>
+                    <span className="review-group-count">{sessionFiles.length}</span>
+                  </button>
+                  {sessionOpen && sessionFiles.map((file) => (
                     <div
-                      className={`review-file${selected?.group === 'workspace' && selected.path === file.path ? ' selected' : ''}`}
+                      className={`review-file${selected?.group === 'session' && selected.path === file.path ? ' selected' : ''}`}
                       data-testid="review-file"
-                      key={`workspace:${file.path}`}
+                      key={`session:${file.path}`}
                     >
                       <button
                         className="review-file-main"
-                        onClick={() => setSelected({ group: 'workspace', path: file.path })}
+                        onClick={() => setSelected({ group: 'session', path: file.path })}
                       >
                         <FileIcon name={file.path} size={14} />
                         <span className="review-file-name" title={file.path}>{file.path}</span>
-                        {!baselineFile && <span className="review-file-status" data-testid="review-file-status">{t('review.readOnly')}</span>}
-                        {file.status === 'conflicted' && <span className="review-file-status status-conflicted" data-testid="review-file-status">{t('review.status.conflicted')}</span>}
+                        <span className="review-file-status" data-testid="review-file-scope">{t('review.sessionScope')}</span>
                         <span className="review-file-stats">
                           <span className="review-stat-add">+{file.added}</span>
                           <span className="review-stat-del">-{file.deleted}</span>
                         </span>
                       </button>
-                      {baselineFile && file.status !== 'conflicted' && (
-                        <button
-                          className="review-revert-btn"
-                          data-testid="revert-file"
-                          onClick={() => setPendingRevert({ kind: 'file', path: file.path })}
-                        >
-                          {t('review.revertFile')}
-                        </button>
-                      )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+              {workspaceFiles.length > 0 && (
+                <div className="review-group" data-testid="review-group-workspace">
+                  <button
+                    className="review-group-header"
+                    data-testid="review-group-workspace-toggle"
+                    onClick={() => setWorkspaceOpen((v) => !v)}
+                  >
+                    {workspaceOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    <span className="review-group-title">{t('review.workspaceChanges')}</span>
+                    <span className="review-group-count">{workspaceFiles.length}</span>
+                  </button>
+                  {workspaceOpen && workspaceFiles.map((file) => {
+                    const baselineFile = isBaselineFile(file.path);
+                    return (
+                      <div
+                        className={`review-file${selected?.group === 'workspace' && selected.path === file.path ? ' selected' : ''}`}
+                        data-testid="review-file"
+                        key={`workspace:${file.path}`}
+                      >
+                        <button
+                          className="review-file-main"
+                          onClick={() => setSelected({ group: 'workspace', path: file.path })}
+                        >
+                          <FileIcon name={file.path} size={14} />
+                          <span className="review-file-name" title={file.path}>{file.path}</span>
+                          {!baselineFile && <span className="review-file-status" data-testid="review-file-status">{t('review.readOnly')}</span>}
+                          {file.status === 'conflicted' && <span className="review-file-status status-conflicted" data-testid="review-file-status">{t('review.status.conflicted')}</span>}
+                          <span className="review-file-stats">
+                            <span className="review-stat-add">+{file.added}</span>
+                            <span className="review-stat-del">-{file.deleted}</span>
+                          </span>
+                        </button>
+                        {baselineFile && file.status !== 'conflicted' && (
+                          <button
+                            className="review-revert-btn"
+                            data-testid="revert-file"
+                            onClick={() => setPendingRevert({ kind: 'file', path: file.path })}
+                          >
+                            {t('review.revertFile')}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div
+              className="review-tree-resizer"
+              data-testid="review-tree-resizer"
+              role="separator"
+              aria-label={t('review.resizeList')}
+              aria-orientation="vertical"
+              tabIndex={0}
+              onPointerDown={onReviewListResizeStart}
+              onDoubleClick={() => setReviewListWidth(DEFAULT_REVIEW_LIST_WIDTH)}
+              onKeyDown={(e) => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                e.preventDefault();
+                e.stopPropagation();
+                const delta = e.key === 'ArrowLeft' ? -16 : 16;
+                setReviewListWidth((w) => Math.max(MIN_REVIEW_LIST_WIDTH, Math.min(MAX_REVIEW_LIST_WIDTH, w + delta)));
+              }}
+            />
+          </>
         )}
         <div className="review-diff-pane">
           {selected && diff && (
@@ -724,6 +796,11 @@ function ReviewWorkspace() {
   );
 }
 
+const DEFAULT_WORKSPACE_TREE_WIDTH = 240;
+const MIN_WORKSPACE_TREE_WIDTH = 200;
+const MAX_WORKSPACE_TREE_WIDTH = 450;
+const WORKSPACE_TREE_WIDTH_STORAGE_KEY = 'pi-desktop.workspace-tree-width';
+
 export function ReviewPanel() {
   const { t } = useTranslation();
   const reviewOpen = usePaneChatStore((s) => s.reviewOpen);
@@ -739,6 +816,13 @@ export function ReviewPanel() {
   const [fileTreeOpen, setFileTreeOpen] = useState(true);
   const [userToggledInNarrow, setUserToggledInNarrow] = useState<boolean | null>(null);
   const [rootItemCount, setRootItemCount] = useState(0);
+  const [workspaceTreeWidth, setWorkspaceTreeWidth] = useState<number>(() => {
+    const saved = Number(window.localStorage.getItem(WORKSPACE_TREE_WIDTH_STORAGE_KEY));
+    return Number.isFinite(saved) && saved >= MIN_WORKSPACE_TREE_WIDTH && saved <= MAX_WORKSPACE_TREE_WIDTH
+      ? saved
+      : DEFAULT_WORKSPACE_TREE_WIDTH;
+  });
+  const [workspaceTreeResizing, setWorkspaceTreeResizing] = useState(false);
   const [panelWidth, setPanelWidth] = useState<number | undefined>(() => {
     const saved = Number(window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY));
     return Number.isFinite(saved) && saved > 0 ? saved : undefined;
@@ -819,6 +903,45 @@ export function ReviewPanel() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [open]);
+
+  useEffect(() => {
+    window.localStorage.setItem(WORKSPACE_TREE_WIDTH_STORAGE_KEY, String(Math.round(workspaceTreeWidth)));
+  }, [workspaceTreeWidth]);
+
+  const onWorkspaceTreeResizeStart = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const resizer = e.currentTarget;
+    resizer.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startWidth = workspaceTreeWidth;
+    let isDragging = false;
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      if (!isDragging && Math.abs(deltaX) >= 2) {
+        isDragging = true;
+        setWorkspaceTreeResizing(true);
+      }
+      if (isDragging) {
+        const maxAllowed = Math.min(MAX_WORKSPACE_TREE_WIDTH, Math.floor((panelClientWidth || 600) * 0.6));
+        const clamped = Math.max(MIN_WORKSPACE_TREE_WIDTH, Math.min(maxAllowed, startWidth + deltaX));
+        setWorkspaceTreeWidth(clamped);
+      }
+    };
+
+    const onPointerUp = (upEvent: PointerEvent) => {
+      if (resizer.hasPointerCapture(upEvent.pointerId)) {
+        resizer.releasePointerCapture(upEvent.pointerId);
+      }
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      setWorkspaceTreeResizing(false);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp, { once: true });
+  };
 
   const effectiveContainerWidth = containerWidth || availablePanelSpace(panelRef.current);
   const effectiveMode = resolveEffectiveMode(modePreference, effectiveContainerWidth);
@@ -988,8 +1111,10 @@ export function ReviewPanel() {
         data-testid="review-panel"
         data-mode={effectiveMode}
         data-mode-preference={modePreference}
-        // 宽度始终由 TS 统一公式下发；CSS 不再含百分比默认，只保留聊天列下限兜底
-        style={{ '--workspace-panel-width': `${Math.round(expectedPanelWidth)}px` } as CSSProperties}
+        style={{
+          '--workspace-panel-width': `${Math.round(expectedPanelWidth)}px`,
+          '--workspace-tree-width': `${workspaceTreeWidth}px`,
+        } as CSSProperties}
       >
         <div
           className="workspace-resize-handle"
@@ -1055,9 +1180,29 @@ export function ReviewPanel() {
           </div>
         </div>
         {tab === 'review' ? <ReviewWorkspace /> : tab === 'commands' ? <CommandList /> : (
-          <div className={`workspace-browser${effectiveTreeOpen ? ' tree-open' : ''}`}>
+          <div className={`workspace-browser${effectiveTreeOpen ? ' tree-open' : ''}${workspaceTreeResizing ? ' tree-resizing' : ''}`}>
             <button className="workspace-tree-backdrop" aria-label={t('workspace.hideFiles')} tabIndex={effectiveTreeOpen ? 0 : -1} onClick={closeFileTree} />
             <FileExplorer selected={activeFile} onSelect={chooseFile} onRootCount={setRootItemCount} />
+            {effectiveTreeOpen && (
+              <div
+                className="workspace-tree-resizer"
+                data-testid="workspace-tree-resizer"
+                role="separator"
+                aria-label={t('workspace.resizeTree')}
+                aria-orientation="vertical"
+                tabIndex={0}
+                onPointerDown={onWorkspaceTreeResizeStart}
+                onDoubleClick={() => setWorkspaceTreeWidth(DEFAULT_WORKSPACE_TREE_WIDTH)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const delta = e.key === 'ArrowLeft' ? -16 : 16;
+                  const maxAllowed = Math.min(MAX_WORKSPACE_TREE_WIDTH, Math.floor((panelClientWidth || 600) * 0.6));
+                  setWorkspaceTreeWidth((w) => Math.max(MIN_WORKSPACE_TREE_WIDTH, Math.min(maxAllowed, w + delta)));
+                }}
+              />
+            )}
             <main className="workspace-preview" data-testid="workspace-preview">
               {activeFile ? <FilePreview path={activeFile} /> : <div className="workspace-empty">{t('workspace.selectFile')}</div>}
             </main>
