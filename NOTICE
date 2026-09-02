@@ -11,8 +11,8 @@ Limited Electron infrastructure in this software (the typed host-api IPC
 boundary and registry, preload allowlist patterns, Vite Electron bootstrap,
 and Streamdown Markdown configuration) is adapted from ClawX,
 Copyright (c) 2026 ValueCell Team, licensed under the MIT License. Other desktop
-layout and testing patterns were used as design references. Source comments
-and individual commit messages identify ported or inspired file paths where
+layout and testing patterns were used as design references. Commit messages
+and project documentation identify ported or inspired patterns where
 applicable.
 
 MIT License

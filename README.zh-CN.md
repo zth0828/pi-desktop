@@ -280,5 +280,5 @@ Pi Desktop **允许个人、教育、研究及其他非商业用途免费使用*
 
 - [pi](https://github.com/badlogic/pi-mono) 提供 coding agent 运行时。
 - 少量 Electron 基础设施文件基于 MIT 许可证从 ClawX 调整而来。这属于实现层面的
-  代码复用，不代表产品依赖或共享 agent 运行时。准确范围记录在 [NOTICE](NOTICE)、
-  源码注释和对应提交中。
+  代码复用，不代表产品依赖或共享 agent 运行时。准确范围记录在 [NOTICE](NOTICE) 与
+  对应提交记录中。

@@ -339,5 +339,5 @@ Third-party components retain their original licenses; see [NOTICE](NOTICE).
 - [pi](https://github.com/badlogic/pi-mono) provides the coding-agent runtime.
 - A small number of Electron infrastructure files were adapted from ClawX under
   the MIT License. This is implementation-level reuse, not a product dependency
-  or shared agent runtime. Exact attribution is recorded in [NOTICE](NOTICE),
-  source comments, and the relevant commits.
+  or shared agent runtime. Attribution is recorded in [NOTICE](NOTICE) and the
+  relevant commits.
