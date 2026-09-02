@@ -20,6 +20,14 @@ export function resultDetails(result: unknown): Record<string, unknown> | undefi
   return details && typeof details === 'object' ? (details as Record<string, unknown>) : undefined;
 }
 
+/** 清理命令中的冗余工作区 cd 前缀与换行，供 header 紧凑展示 */
+export function cleanBashCommand(command: string): string {
+  const trimmed = command.trim();
+  const cdStripped = trimmed.replace(/^cd\s+(?:"[^"]+"|\'[^\']+\'|\S+)\s*(?:&&|;)\s*/i, '');
+  const firstLine = cdStripped.split('\n')[0].trim();
+  return firstLine || cdStripped || trimmed;
+}
+
 /** 按工具名从 args 提取 header 摘要；不适用时返回 null（调用方只显示工具名） */
 export function toolSummary(toolName: string, args: unknown): string | null {
   if (!args || typeof args !== 'object') return null;
@@ -28,7 +36,8 @@ export function toolSummary(toolName: string, args: unknown): string | null {
   switch (toolName) {
     case 'bash': {
       const command = str(a.command);
-      return command ? `$ ${command}` : null;
+      if (!command) return null;
+      return `$ ${cleanBashCommand(command)}`;
     }
     case 'edit':
     case 'write':
@@ -106,6 +115,18 @@ export function parseDiffLines(diffText: string): DiffLine[] {
     if (lineNum.trim()) return { kind: 'context', lineNum: lineNum.trim(), content };
     return { kind: 'skip', lineNum: '', content };
   });
+}
+
+/** 从 diff 文本统计新增与删除行数 */
+export function calculateDiffStats(diffText?: string): { added: number; deleted: number } {
+  if (!diffText) return { added: 0, deleted: 0 };
+  let added = 0;
+  let deleted = 0;
+  for (const line of parseDiffLines(diffText)) {
+    if (line.kind === 'add') added += 1;
+    else if (line.kind === 'del') deleted += 1;
+  }
+  return { added, deleted };
 }
 
 /** 耗时展示（TUI "Took X.Xs" 口径）；时间戳缺失或异常时返回 null 表示不展示 */

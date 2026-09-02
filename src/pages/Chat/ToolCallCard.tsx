@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Eye, Sparkles } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Copy, Eye, Sparkles, Terminal } from 'lucide-react';
 import {
+  calculateDiffStats,
   collectToolWarnings,
   editPreviewDiff,
   extractResultText,
@@ -14,6 +15,7 @@ import {
   type ToolWarning,
 } from '../../lib/tool-display';
 import type { ToolExecution } from '../../stores/chat';
+import { FileIcon } from '../../components/FileIcon';
 import { usePaneChatStore } from './chat-store-context';
 
 function getSkillNameFromPath(filePath?: string): string | null {
@@ -77,22 +79,53 @@ export function ToolCallCard({
 }) {
   const { t } = useTranslation();
   const openWorkspaceFile = usePaneChatStore((s) => s.openWorkspaceFile);
-  // null = 跟随阶段默认值；单独点击后为本地覆盖
+  const openReviewFile = usePaneChatStore((s) => s.openReviewFile);
+  const cwd = usePaneChatStore((s) => s.cwd);
+
+  const [copiedCommand, setCopiedCommand] = useState(false);
+  const [copiedOutput, setCopiedOutput] = useState(false);
+
+  const isRunning = execution.status === 'running';
+  const isMutation = execution.toolName === 'edit' || execution.toolName === 'write';
+  const isBash = execution.toolName === 'bash';
+
+  // 流式中正在执行的项默认展开；完成后默认紧凑收起（跟随 expandByDefault）；单独点击后为本地覆盖
+  const defaultExpanded = isRunning ? true : expandByDefault;
   const [localExpanded, setLocalExpanded] = useState<boolean | null>(null);
-  const expanded = localExpanded ?? expandByDefault;
+  const expanded = localExpanded ?? defaultExpanded;
+
+  const rawCommand =
+    execution.toolName === 'bash' && typeof execution.args === 'object' && execution.args !== null
+      ? ((execution.args as { command?: string }).command ?? '')
+      : undefined;
+
+  const handleCopyCommand = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (rawCommand && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(rawCommand);
+      setCopiedCommand(true);
+      setTimeout(() => setCopiedCommand(false), 2000);
+    }
+  };
+
+  const handleCopyOutput = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (outputText && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(outputText);
+      setCopiedOutput(true);
+      setTimeout(() => setCopiedOutput(false), 2000);
+    }
+  };
 
   const summary = toolSummary(execution.toolName, execution.args);
   const details = resultDetails(execution.result);
   const realDiff = typeof details?.diff === 'string' ? details.diff : undefined;
-  // edit 缺真实 diff 时按「整段替换」从 args 构造预览：执行中是流式预览，
-  // 完成/恢复会话没有 details.diff 时同样兜底，而不是什么都不显示
   const previewDiff =
     !realDiff && execution.toolName === 'edit'
       ? editPreviewDiff(execution.args)
       : undefined;
   const diff = realDiff ?? previewDiff;
-  // write 的内容在 args.content：预览/展开直接展示写入内容（带行号），
-  // 比结果文本（"Wrote N bytes" 之类）有信息量
+
   const writeRaw = execution.toolName === 'write'
     ? (execution.args as { content?: unknown } | undefined)?.content
     : undefined;
@@ -103,8 +136,6 @@ export function ToolCallCard({
     ? t('chat.tool.interrupted')
     : t(`chat.tool.${execution.status}`);
 
-  // 动词化一行文案（Codex 范式）：进行/完成/中止三态成对，如
-  // "Running command…" / "Ran $ ls in 1.2s" / "Stopped"；error 复用 done 模板（pill 标红）。
   const lineState = execution.interrupted ? 'stopped' : execution.status === 'running' ? 'running' : 'done';
   const verbTool = ['bash', 'edit', 'write', 'read', 'grep', 'find', 'ls'].includes(execution.toolName)
     ? execution.toolName
@@ -115,7 +146,6 @@ export function ToolCallCard({
     durationPart: duration && lineState === 'done' ? t('chat.tool.line.inDuration', { duration }) : '',
   });
 
-  // 执行中显示流式 partialResult，完成后显示 result 文本
   const outputText =
     execution.status === 'running' && execution.partialResult !== undefined
       ? extractResultText(execution.partialResult)
@@ -124,7 +154,7 @@ export function ToolCallCard({
     ? tailLines(writeContent.trimEnd(), PREVIEW_LINES)
     : null;
   const writeTotalLines = writeTail ? writeTail.lines.length + writeTail.hidden : 0;
-  const preview = !expanded && !diff && writeContent === null && outputText ? tailLines(outputText, PREVIEW_LINES) : null;
+  const preview = !expanded && !diff && !isBash && writeContent === null && outputText ? tailLines(outputText, PREVIEW_LINES) : null;
   const previewPath = previewPathFor(execution.toolName, execution.args);
   const readPath =
     execution.toolName === 'read' && typeof execution.args === 'object' && execution.args !== null
@@ -133,6 +163,103 @@ export function ToolCallCard({
       : undefined;
   const skillName = getSkillNameFromPath(readPath);
 
+  const normalizedCwd = cwd?.replace(/\\/g, '/').replace(/\/$/, '');
+  const displayFilePath = previewPath
+    ? normalizedCwd && previewPath.replace(/\\/g, '/').startsWith(`${normalizedCwd}/`)
+      ? previewPath.replace(/\\/g, '/').slice(normalizedCwd.length + 1)
+      : previewPath
+    : summary ?? execution.toolName;
+
+  const diffStats = calculateDiffStats(diff);
+  const writeStats = writeContent !== null ? { added: writeContent.split('\n').length, deleted: 0 } : { added: 0, deleted: 0 };
+  const stats = execution.toolName === 'write' ? writeStats : diffStats;
+  const hasStats = isMutation && (stats.added > 0 || stats.deleted > 0);
+
+  // 文件修改类工具：采用复合式文件条目头（支持点击文件名、点击数字、点击整行）
+  if (isMutation && previewPath) {
+    return (
+      <div className={`tool-card tool-mutation tool-${execution.status}`} data-testid="tool-card">
+        <div
+          className="tool-card-file-row"
+          data-testid="tool-file-row"
+          onClick={() => setLocalExpanded(!expanded)}
+        >
+          <div className="tool-file-info">
+            <FileIcon name={previewPath} size={14} />
+            <button
+              type="button"
+              className="tool-file-name"
+              data-testid="tool-open-file"
+              title={t('chat.tool.previewFile')}
+              onClick={(e) => {
+                e.stopPropagation();
+                openWorkspaceFile(previewPath);
+              }}
+            >
+              {displayFilePath}
+            </button>
+          </div>
+          <div className="tool-file-actions">
+            {hasStats && (
+              <button
+                type="button"
+                className="tool-stat-btn"
+                data-testid="tool-stat-btn"
+                title={t('chat.turnChanges.viewChanges')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openReviewFile(previewPath);
+                }}
+              >
+                <span className="turn-stat-add">+{stats.added}</span>
+                <span className="turn-stat-del">-{stats.deleted}</span>
+              </button>
+            )}
+            <span className={`tool-status tool-status-${execution.status}`}>{statusLabel}</span>
+            <span className="tool-chevron" data-testid="tool-chevron">
+              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </span>
+          </div>
+        </div>
+
+        {expanded && (
+          <div className="tool-card-body" data-testid="tool-card-body">
+            <div className="tool-card-body-meta">
+              <span className="tool-line">{line}</span>
+              <button
+                type="button"
+                className="tool-file-preview"
+                data-testid="tool-preview-file"
+                title={t('chat.tool.previewFile')}
+                aria-label={t('chat.tool.previewFile')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openWorkspaceFile(previewPath);
+                }}
+              >
+                <Eye size={13} />
+              </button>
+            </div>
+            {(realDiff || writeContent !== null || outputText) && (
+              <>
+                <div className="tool-section-title">{t('chat.tool.result')}</div>
+                {realDiff ? (
+                  <DiffView diff={realDiff} />
+                ) : writeContent !== null ? (
+                  <DiffView diff={contentToPseudoDiff(writeContent.trimEnd())} />
+                ) : (
+                  <pre>{outputText}</pre>
+                )}
+              </>
+            )}
+            <ToolWarnings warnings={warnings} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 通用/终端/查看类工具
   return (
     <div className={`tool-card tool-${execution.status}`} data-testid="tool-card">
       <div className="tool-card-header-row">
@@ -148,6 +275,9 @@ export function ToolCallCard({
             )}
           </span>
           <span className={`tool-status tool-status-${execution.status}`}>{statusLabel}</span>
+          <span className="tool-chevron" data-testid="tool-chevron">
+            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </span>
         </button>
         {previewPath && (
           <button
@@ -188,19 +318,72 @@ export function ToolCallCard({
       )}
 
       {expanded && (
-        <div className="tool-card-body" data-testid="tool-card-body">
-          {/* 对齐 Codex：参数 JSON 不展示（header 摘要已含命令/路径等关键信息），
-              展开只看结果（输出/diff/写入内容） */}
-          {(realDiff || writeContent !== null || outputText) && (
+        <div className={`tool-card-body${isBash ? ' tool-terminal-body' : ''}`} data-testid="tool-card-body">
+          {isBash && (
+            <div className="tool-terminal-header">
+              <div className="tool-terminal-status">
+                <span className={`tool-terminal-dot tool-terminal-dot-${execution.status}`} />
+                <span className="tool-terminal-code">
+                  {execution.status === 'running'
+                    ? t('chat.tool.running')
+                    : execution.status === 'error'
+                      ? t('chat.tool.failed')
+                      : t('chat.tool.success')}
+                </span>
+                {duration && <span className="tool-terminal-duration">({duration})</span>}
+              </div>
+            </div>
+          )}
+
+          {isBash && rawCommand && (
+            <div className="tool-terminal-section">
+              <div className="tool-terminal-section-bar">
+                <span className="tool-terminal-section-title">$ {t('chat.tool.command')}</span>
+                <button
+                  type="button"
+                  className="tool-terminal-copy-btn"
+                  onClick={handleCopyCommand}
+                  title={t('chat.tool.copyCommand')}
+                >
+                  {copiedCommand ? <Check size={12} /> : <Copy size={12} />}
+                  <span>{copiedCommand ? t('chat.tool.copied') : t('chat.tool.copyCommand')}</span>
+                </button>
+              </div>
+              <pre className="tool-terminal-command custom-scroll">{rawCommand}</pre>
+            </div>
+          )}
+
+          {isBash && outputText && (
+            <div className="tool-terminal-section">
+              <div className="tool-terminal-section-bar">
+                <span className="tool-terminal-section-title">{t('chat.tool.output')}</span>
+                <button
+                  type="button"
+                  className="tool-terminal-copy-btn"
+                  onClick={handleCopyOutput}
+                  title={t('chat.tool.copyOutput')}
+                >
+                  {copiedOutput ? <Check size={12} /> : <Copy size={12} />}
+                  <span>{copiedOutput ? t('chat.tool.copied') : t('chat.tool.copyOutput')}</span>
+                </button>
+              </div>
+              <pre className="tool-terminal-output custom-scroll">{outputText}</pre>
+            </div>
+          )}
+
+          {!isBash && (realDiff || writeContent !== null || outputText) && (
             <>
               <div className="tool-section-title">{t('chat.tool.result')}</div>
-              {realDiff
-                ? <DiffView diff={realDiff} />
-                : writeContent !== null
-                  ? <DiffView diff={contentToPseudoDiff(writeContent.trimEnd())} />
-                  : <pre>{outputText}</pre>}
+              {realDiff ? (
+                <DiffView diff={realDiff} />
+              ) : writeContent !== null ? (
+                <DiffView diff={contentToPseudoDiff(writeContent.trimEnd())} />
+              ) : (
+                <pre>{outputText}</pre>
+              )}
             </>
           )}
+
           <ToolWarnings warnings={warnings} />
         </div>
       )}

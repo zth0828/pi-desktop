@@ -18,32 +18,6 @@ export type LogicalTurn = {
   endIndex: number;
 };
 
-export type TurnStage = {
-  key: string;
-  indices: number[];
-};
-
-/**
- * 将一轮里的过程消息按“重要阶段”聚合：带 toolCall 的 assistant 消息开启新阶段，
- * 后续 toolResult 与连续思考归入该阶段。这样模型多次增量思考不会制造大量折叠行。
- */
-export function groupTurnStages(messages: ChatMessage[], indices: number[], keyPrefix: string): TurnStage[] {
-  const stages: TurnStage[] = [];
-  let current: TurnStage | undefined;
-  for (const index of indices) {
-    const message = messages[index];
-    const startsToolStage = message.role === 'assistant'
-      && message.content.some((block) => block.type === 'toolCall');
-    if (!current || (startsToolStage && current.indices.some((entry) => messages[entry].role === 'assistant'
-      && messages[entry].content.some((block) => block.type === 'toolCall')))) {
-      current = { key: `${keyPrefix}:${stages.length}`, indices: [] };
-      stages.push(current);
-    }
-    current.indices.push(index);
-  }
-  return stages;
-}
-
 /** 按 user 消息边界把消息列表切成逻辑轮；首条 user 之前的消息不属于任何轮 */
 export function groupLogicalTurns(messages: ChatMessage[]): LogicalTurn[] {
   const turns: LogicalTurn[] = [];
@@ -138,6 +112,7 @@ export type TurnFileChange = {
   path: string;
   added: number;
   deleted: number;
+  toolCallId?: string;
 };
 
 export type TurnChanges = {
@@ -166,10 +141,11 @@ export function collectTurnChanges(
   toolCallIds: string[],
 ): TurnChanges {
   const byPath = new Map<string, TurnFileChange>();
-  const bump = (path: string, added: number, deleted: number) => {
-    const entry = byPath.get(path) ?? { path, added: 0, deleted: 0 };
+  const bump = (path: string, added: number, deleted: number, toolCallId?: string) => {
+    const entry = byPath.get(path) ?? { path, added: 0, deleted: 0, toolCallId };
     entry.added += added;
     entry.deleted += deleted;
+    if (toolCallId) entry.toolCallId = toolCallId;
     byPath.set(path, entry);
   };
   for (const id of toolCallIds) {
@@ -187,10 +163,10 @@ export function collectTurnChanges(
         if (line.kind === 'add') added += 1;
         else if (line.kind === 'del') deleted += 1;
       }
-      bump(path, added, deleted);
+      bump(path, added, deleted, id);
     } else if (ex.toolName === 'write') {
       const content = (ex.args as Record<string, unknown>).content;
-      bump(path, typeof content === 'string' ? contentLines(content) : 0, 0);
+      bump(path, typeof content === 'string' ? contentLines(content) : 0, 0, id);
     }
   }
   const files = [...byPath.values()];

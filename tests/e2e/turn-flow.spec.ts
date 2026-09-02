@@ -106,14 +106,11 @@ async function sendPrompt(page: import('@playwright/test').Page, prompt: string)
   await page.getByTestId('chat-send').click();
 }
 
-/** 等当前轮所有工具卡完成 */
 async function waitToolsDone(page: import('@playwright/test').Page, count: number) {
   const summary = page.getByTestId('turn-fold-toggle').last();
   await expect(summary).toBeVisible({ timeout: 30_000 });
   await expect(summary).toHaveAttribute('aria-expanded', 'false');
   await summary.click();
-  const stages = page.getByTestId('process-stage-toggle');
-  for (const stage of await stages.all()) await stage.click();
   await expect(page.getByTestId('tool-card')).toHaveCount(count, { timeout: 30_000 });
   for (const card of await page.getByTestId('tool-card').all()) {
     await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
@@ -261,10 +258,8 @@ test('完成回合整体折叠过程内容，展开恢复阶段文本与工具�
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(0);
   await page.screenshot({ path: 'output/playwright/turn-fold-collapsed.png', fullPage: false });
 
-  // 点击回合只展示阶段；展开阶段后才还原思考与工具，其他轮仍收起。
+  // 点击回合直接展示思考与工具，其他轮仍收起（单层一键直达，无 stage 阻碍）。
   await rows.first().click();
-  await expect(page.getByTestId('tool-card')).toHaveCount(0);
-  await page.getByTestId('process-stage-toggle').first().click();
   await expect(page.getByTestId('tool-card')).toHaveCount(1);
   await expect(page.getByTestId('turn-fold-toggle')).toHaveCount(2);
   const expandedRow = page.locator('[data-testid="turn-fold-toggle"][aria-expanded="true"]');
@@ -294,10 +289,7 @@ test('thinking 与最终文本在同一消息时，折叠只保留最终答复',
   await expect(page.locator('.thinking-block')).toHaveCount(0);
 
   await toggle.click();
-  await expect(page.locator('.thinking-block')).toHaveCount(0);
-  await page.getByTestId('process-stage-toggle').click();
   await expect(page.locator('.thinking-block pre')).toContainText('THOUGHT: inspect the request');
-  await expect(page.locator('.thinking-block')).toHaveClass(/grouped/);
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'FINAL: reasoning complete' })).toBeVisible();
 
   // 完全退出并重启后，pi session 历史里的 thinking 仍应进入同一回合折叠，
@@ -311,7 +303,6 @@ test('thinking 与最终文本在同一消息时，折叠只保留最终答复',
   const restoredToggle = restoredPage.getByTestId('turn-fold-toggle').last();
   await expect(restoredToggle).toBeVisible();
   await restoredToggle.click();
-  await restoredPage.getByTestId('process-stage-toggle').last().click();
   await expect(restoredPage.locator('.thinking-block pre')).toContainText('THOUGHT: inspect the request');
 });
 
@@ -341,9 +332,8 @@ test('流式中思考块随进度自动折叠：思考流式时展开，正文�
   await expect(page.getByTestId('turn-fold-toggle')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('.thinking-block')).toHaveCount(0);
 
-  // 展开回合与阶段后思考内容仍可查看（折叠不丢内容）
+  // 展开回合后思考内容仍可查看（折叠不丢内容）
   await page.getByTestId('turn-fold-toggle').click();
-  await page.getByTestId('process-stage-toggle').click();
   await expect(page.locator('.thinking-block pre')).toContainText('THOUGHT: slow streaming reasoning');
 });
 
@@ -358,19 +348,18 @@ test('展开本轮过程会显示完整工具输出，工具卡仍可单独收�
   const toggle = page.getByTestId('turn-fold-toggle').last();
   await expect(toggle).toHaveAttribute('aria-expanded', 'false', { timeout: 30_000 });
   await toggle.click();
-  await page.getByTestId('process-stage-toggle').last().click();
 
+  // 回合展开后工具卡默认紧凑收起；点击工具卡展开查看完整输出
+  await page.getByTestId('turn-fold-content').locator('.tool-card-header').click();
   const body = page.getByTestId('turn-fold-content').getByTestId('tool-card-body');
   await expect(body).toBeVisible();
   await expect(body).toContainText('line-01');
   await expect(body).toContainText('line-12');
-  await page.screenshot({ path: 'output/playwright/turn-fold-long-output.png', fullPage: false });
 
+  // 再次点击工具卡收起
   await page.getByTestId('turn-fold-content').locator('.tool-card-header').click();
   await expect(body).toHaveCount(0);
-  const preview = page.getByTestId('turn-fold-content').locator('.tool-card-preview pre');
-  await expect(preview).toContainText('line-12');
-  await expect(preview).not.toContainText('line-01');
+  await expect(page.getByTestId('turn-fold-content').locator('.tool-card-header')).toBeVisible();
 });
 
 test('grep 工具卡：args.path 出「在工作台预览」入口并直达文件预览', async ({ launchElectronApp }) => {

@@ -61,7 +61,7 @@ const BASH_PREVIEW_LINES = 5;
  * 结束后 "Thought for 3.2s"。计时时戳用 ref 记录（流式 partial 替换消息对象
  * 但组件实例随列表位置保持），历史消息没有计时时回退到通用完成文案。
  */
-function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: string; active: boolean; expanded?: boolean; grouped?: boolean }) {
+function ThinkingBlock({ thinking, active, expanded }: { thinking: string; active: boolean; expanded?: boolean }) {
   const { t } = useTranslation();
   const hiddenThinkingLabel = usePaneChatStore((s) => s.extensionUi?.hiddenThinkingLabel);
   const [userToggled, setUserToggled] = useState<boolean | null>(null);
@@ -73,7 +73,6 @@ function ThinkingBlock({ thinking, active, expanded, grouped }: { thinking: stri
     startedRef.current !== null && endedRef.current !== null
       ? formatDuration(startedRef.current, endedRef.current)
       : null;
-  if (grouped) return <div className="thinking-block grouped"><pre>{thinking}</pre></div>;
   const isOpen = userToggled ?? Boolean(expanded || active);
   return (
     <details
@@ -140,20 +139,18 @@ function AssistantBlock({
   active,
   expandThinking,
   expandTools,
-  groupedThinking,
 }: {
   block: ContentBlock;
   streaming?: boolean;
   active?: boolean;
   expandThinking?: boolean;
   expandTools?: boolean;
-  groupedThinking?: boolean;
 }) {
   if (block.type === 'text') {
     return <Markdown text={block.text ?? ''} streaming={streaming} />;
   }
   if (block.type === 'thinking') {
-    return <ThinkingBlock thinking={block.thinking ?? ''} active={active ?? false} expanded={expandThinking} grouped={groupedThinking} />;
+    return <ThinkingBlock thinking={block.thinking ?? ''} active={active ?? false} expanded={expandThinking} />;
   }
   if (block.type === 'toolCall' && block.id) {
     return <ToolCallBlock block={block} expandTools={expandTools} />;
@@ -178,8 +175,6 @@ type MessageItemProps = {
   expandThinking?: boolean;
   /** 回合展开后工具结果也同步展开，避免嵌套折叠只显示尾部预览。 */
   expandTools?: boolean;
-  /** 阶段容器已提供折叠控制时，thinking 直接内联，避免每段思考再套一层折叠。 */
-  groupedThinking?: boolean;
   /** 最终 assistant 消息被拆成「过程 block」与「答复文本」时，尾部元数据只渲染一次。 */
   suppressTail?: boolean;
 };
@@ -213,7 +208,6 @@ function messageItemPropsEqual(prev: MessageItemProps, next: MessageItemProps): 
     && contentBlocksEqual(prev.contentOverride, next.contentOverride)
     && prev.expandThinking === next.expandThinking
     && prev.expandTools === next.expandTools
-    && prev.groupedThinking === next.groupedThinking
     && prev.suppressTail === next.suppressTail;
 }
 
@@ -227,7 +221,6 @@ function MessageItemView({
   contentOverride,
   expandThinking,
   expandTools,
-  groupedThinking,
   suppressTail,
 }: MessageItemProps) {
   const { t } = useTranslation();
@@ -467,7 +460,6 @@ function MessageItemView({
             key={i}
             block={block}
             expandThinking={expandThinking}
-            groupedThinking={false}
           />
         ))}
         <ErrorNotice message={errorMessage} responseId={raw?.responseId} />
@@ -502,7 +494,6 @@ function MessageItemView({
           active={Boolean(message.streaming) && i === content.length - 1}
           expandThinking={expandThinking}
           expandTools={expandTools}
-          groupedThinking={groupedThinking}
         />
       ))}
       {message.streaming && <span className="cursor-blink">▍</span>}

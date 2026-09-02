@@ -2,25 +2,74 @@ import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { collectTurnChanges } from '../../lib/turn-changes';
+import {
+  collectToolWarnings,
+  editPreviewDiff,
+  parseDiffLines,
+  resultDetails,
+  type ToolWarning,
+} from '../../lib/tool-display';
 import { FileIcon } from '../../components/FileIcon';
 import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
+
+function DiffView({ diff }: { diff: string }) {
+  return (
+    <pre className="diff-view" data-testid="diff-view">
+      {parseDiffLines(diff).map((line, i) => (
+        <div key={i} className={`diff-line diff-${line.kind}`}>
+          <span className="diff-linenum">{line.lineNum}</span>
+          <span className="diff-sign">
+            {line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' '}
+          </span>
+          <span className="diff-content">{line.content}</span>
+        </div>
+      ))}
+    </pre>
+  );
+}
+
+function contentToPseudoDiff(content: string, startLine = 1): string {
+  const lines = content.split('\n');
+  if (lines[lines.length - 1] === '') lines.pop();
+  return lines.map((line, i) => ` ${startLine + i} ${line}`).join('\n');
+}
+
+function ToolWarnings({ warnings }: { warnings: ToolWarning[] }) {
+  const { t } = useTranslation();
+  if (warnings.length === 0) return null;
+  return (
+    <div className="tool-warnings">
+      {warnings.map((w, i) => (
+        <div key={i} className="tool-warning">
+          {w.kind === 'fullOutput' && t('chat.tool.fullOutput', { path: w.path })}
+          {w.kind === 'truncatedLines' &&
+            t('chat.tool.truncatedLines', { outputLines: w.outputLines, totalLines: w.totalLines })}
+          {w.kind === 'truncatedBytes' && t('chat.tool.truncatedBytes', { outputLines: w.outputLines })}
+          {w.kind === 'matchLimit' && t('chat.tool.matchLimit', { limit: w.limit })}
+          {w.kind === 'linesTruncated' && t('chat.tool.linesTruncated')}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /**
  * 聚合编辑卡（Codex「已编辑 N 个文件 +x -y」范式）：一轮对话结束后在该轮尾部展示
  * 成功的 edit/write 汇总。「撤销」通过 review baseline 回滚该工具改动；
- * 「审核」打开完整 Review 面板。
+ * 「审核」打开完整 Review 面板。支持点击单行内嵌展开行级 Diff。
  */
 export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) {
   const { t } = useTranslation();
   const paneApi = usePaneHostApi();
   const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
-  const setReviewOpen = usePaneChatStore((s) => s.setReviewOpen);
+  const openReviewFile = usePaneChatStore((s) => s.openReviewFile);
   const openWorkspaceFile = usePaneChatStore((s) => s.openWorkspaceFile);
   const cwd = usePaneChatStore((s) => s.cwd);
   const [gitAvailable, setGitAvailable] = useState(false);
   const [revertState, setRevertState] = useState<'idle' | 'reverting' | 'done' | 'error'>('idle');
   const [revertError, setRevertError] = useState('');
   const [showAllFiles, setShowAllFiles] = useState(false);
+  const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
 
   const changes = collectTurnChanges(toolExecutions, toolCallIds);
   const visibleFiles = showAllFiles ? changes.files : changes.files.slice(0, 5);
@@ -55,6 +104,10 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
 
   if (changes.files.length === 0) return null;
 
+  const toggleFile = (path: string) => {
+    setExpandedFiles((prev) => ({ ...prev, [path]: !prev[path] }));
+  };
+
   const revertAll = async () => {
     setRevertState('reverting');
     for (const file of changes.files) {
@@ -75,11 +128,24 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
           <span className="turn-changes-title" data-testid="turn-changes-title">
             {t('chat.turnChanges.title', { count: changes.files.length })}
           </span>
-          <button className="turn-changes-view" data-testid="turn-changes-view" onClick={() => setReviewOpen(true)}>
+          <button
+            className="turn-changes-view"
+            data-testid="turn-changes-view"
+            onClick={() => openReviewFile(changes.files[0]?.path)}
+          >
             {t('chat.turnChanges.viewChanges')}
           </button>
         </div>
-        <span className="turn-changes-stats"><span className="turn-stat-add">+{changes.added}</span><span className="turn-stat-del">-{changes.deleted}</span></span>
+        <button
+          type="button"
+          className="turn-changes-stats-btn"
+          data-testid="turn-changes-stats-btn"
+          title={t('chat.turnChanges.viewChanges')}
+          onClick={() => openReviewFile(changes.files[0]?.path)}
+        >
+          <span className="turn-stat-add">+{changes.added}</span>
+          <span className="turn-stat-del">-{changes.deleted}</span>
+        </button>
         <span className="turn-changes-actions">
           {gitAvailable && allFilesInWorkspace && revertState !== 'done' && (
             <button
@@ -99,7 +165,7 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
           <button
             className="turn-changes-btn"
             data-testid="turn-changes-review"
-            onClick={() => setReviewOpen(true)}
+            onClick={() => openReviewFile(changes.files[0]?.path)}
           >
             {t('chat.turnChanges.review')}
           </button>
@@ -111,22 +177,73 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
         </div>
       )}
       <div className="turn-changes-files">
-        {visibleFiles.map((file) => (
-          <div className="turn-changes-file" data-testid="turn-changes-file" key={file.path}>
-            <FileIcon name={file.path} size={14} />
-            <button
-              className="turn-changes-path"
-              data-testid="turn-changes-open-file"
-              title={t('chat.turnChanges.openFile')}
-              aria-label={t('chat.turnChanges.openFile')}
-              onClick={() => openWorkspaceFile(file.path)}
-            >
-              {displayPath(file.path)}
-            </button>
-            <span className="turn-stat-add">+{file.added}</span>
-            <span className="turn-stat-del">-{file.deleted}</span>
-          </div>
-        ))}
+        {visibleFiles.map((file) => {
+          const execution = file.toolCallId ? toolExecutions[file.toolCallId] : undefined;
+          const details = execution ? resultDetails(execution.result) : undefined;
+          const realDiff = typeof details?.diff === 'string' ? details.diff : undefined;
+          const previewDiff = !realDiff && execution?.toolName === 'edit'
+            ? editPreviewDiff(execution.args)
+            : undefined;
+          const diff = realDiff ?? previewDiff;
+          const writeRaw = execution?.toolName === 'write'
+            ? (execution.args as { content?: unknown } | undefined)?.content
+            : undefined;
+          const writeContent = typeof writeRaw === 'string' && writeRaw.trim().length > 0 ? writeRaw : null;
+          const warnings = collectToolWarnings(details);
+          const isExpanded = Boolean(expandedFiles[file.path]);
+
+          return (
+            <div className="turn-changes-file-item" key={file.path}>
+              <div
+                className="turn-changes-file"
+                data-testid="turn-changes-file"
+                onClick={() => toggleFile(file.path)}
+              >
+                <FileIcon name={file.path} size={14} />
+                <button
+                  type="button"
+                  className="turn-changes-path"
+                  data-testid="turn-changes-open-file"
+                  title={t('chat.turnChanges.openFile')}
+                  aria-label={t('chat.turnChanges.openFile')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openWorkspaceFile(file.path);
+                  }}
+                >
+                  {displayPath(file.path)}
+                </button>
+                <button
+                  type="button"
+                  className="turn-changes-stat-btn"
+                  data-testid="turn-changes-stat-btn"
+                  title={t('chat.turnChanges.viewChanges')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openReviewFile(file.path);
+                  }}
+                >
+                  <span className="turn-stat-add">+{file.added}</span>
+                  <span className="turn-stat-del">-{file.deleted}</span>
+                </button>
+                <span className="turn-changes-chevron">
+                  {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </span>
+              </div>
+
+              {isExpanded && (diff || writeContent !== null) && (
+                <div className="turn-changes-inline-diff" data-testid="turn-changes-inline-diff">
+                  {diff ? (
+                    <DiffView diff={diff} />
+                  ) : writeContent !== null ? (
+                    <DiffView diff={contentToPseudoDiff(writeContent.trimEnd())} />
+                  ) : null}
+                  <ToolWarnings warnings={warnings} />
+                </div>
+              )}
+            </div>
+          );
+        })}
         {hiddenCount > 0 && (
           <button className="turn-changes-more" data-testid="turn-changes-more" onClick={() => setShowAllFiles(true)}>
             {t('chat.turnChanges.showMore', { count: hiddenCount })}<ChevronDown size={14} />

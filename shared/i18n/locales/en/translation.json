@@ -164,6 +164,13 @@
       "success": "done",
       "error": "error",
       "result": "Result",
+      "command": "Command",
+      "output": "Output",
+      "copyCommand": "Copy command",
+      "copyOutput": "Copy output",
+      "copied": "Copied",
+      "collapse": "Collapse",
+      "expand": "Expand",
       "previewFile": "Preview file",
       "interrupted": "interrupted",
       "line": {

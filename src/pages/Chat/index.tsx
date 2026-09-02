@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDown, Check, ChevronRight, PanelRight, X } from 'lucide-react';
+import { ArrowDown, Check, ChevronRight, ChevronUp, PanelRight, X } from 'lucide-react';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { parseProviderError, PROVIDER_ERROR_HINT_KEYS } from '@shared/provider-error';
 import { collectCacheMisses } from '../../lib/cache-stats';
@@ -13,7 +13,7 @@ import { sessionTitleFromQuestion } from '../../lib/session-title';
 import { workspaceErrorMessage } from '../../lib/workspace-error';
 import { formatErrorMessage } from '../../lib/error-formatter';
 import { timingMark } from '../../lib/timing';
-import { groupLogicalTurns, groupTurnStages, turnDurationMs, turnFinalResponseIndex } from '../../lib/turn-changes';
+import { groupLogicalTurns, turnDurationMs, turnFinalResponseIndex } from '../../lib/turn-changes';
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
 import { PaneLayout } from '../../components/PaneLayout';
 import { ExtensionUiDialog } from '../../components/ExtensionUiDialog';
@@ -204,7 +204,6 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const listRef = useRef<HTMLDivElement>(null);
   // 一个 user 问题对应一个完整回合；完成后默认收起 thinking/阶段文本/工具调用。
   const [expandedTurns, setExpandedTurns] = useState<Record<number, boolean>>({});
-  const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({});
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [searchHighlightIndex, setSearchHighlightIndex] = useState<number>();
   const stickToBottomRef = useRef(true);
@@ -212,7 +211,6 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const scrollResetRef = useRef(false);
   useEffect(() => {
     setExpandedTurns({});
-    setExpandedStages({});
     setShowScrollToBottom(false);
     stickToBottomRef.current = true;
     // 搜索定位跳转由 searchTarget 对齐逻辑接管，不强制回底部
@@ -311,14 +309,6 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     const targetTurn = logicalTurns.find((turn) => targetIndex >= turn.startIndex && targetIndex <= turn.endIndex);
     if (targetTurn) {
       setExpandedTurns((current) => ({ ...current, [targetTurn.startIndex]: true }));
-      const finalIndex = turnFinalResponseIndex(displayMessages, targetTurn);
-      const stageIndices = Array.from(
-        { length: targetTurn.endIndex - targetTurn.startIndex },
-        (_, offset) => targetTurn.startIndex + 1 + offset,
-      ).filter((index) => index !== finalIndex);
-      const stages = groupTurnStages(displayMessages, stageIndices, String(targetTurn.startIndex));
-      const targetStage = stages.find((stage) => stage.indices.includes(targetIndex));
-      if (targetStage) setExpandedStages((current) => ({ ...current, [targetStage.key]: true }));
     }
     stickToBottomRef.current = false;
     setSearchHighlightIndex(targetIndex);
@@ -499,8 +489,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
         { length: turn.endIndex - turn.startIndex },
         (_, offset) => turn.startIndex + 1 + offset,
       );
-      const stages = groupTurnStages(displayMessages, processIndices, String(turn.startIndex));
-      const hasProcess = stages.length > 0;
+      const hasProcess = processIndices.length > 0;
       const duration = formatTurnDuration(turnDurationMs(
         displayMessages,
         turn,
@@ -536,38 +525,30 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               </button>
               {expanded && (
                 <div className="turn-fold-content" data-testid="turn-fold-content">
-                  {stages.map((stage, stageIndex) => {
-                    const stageExpanded = expandedStages[stage.key] ?? false;
-                    return (
-                      <section className={`process-stage${stageExpanded ? ' expanded' : ''}`} data-testid="process-stage" key={stage.key}>
-                        <button
-                          className="process-stage-toggle"
-                          data-testid="process-stage-toggle"
-                          aria-expanded={stageExpanded}
-                          onClick={() => setExpandedStages((current) => ({ ...current, [stage.key]: !stageExpanded }))}
-                        >
-                          <ChevronRight size={13} aria-hidden="true" />
-                          <span>{t('chat.turnFold.stage', { index: stageIndex + 1, count: stage.indices.length })}</span>
-                        </button>
-                        {stageExpanded && (
-                          <div className="process-stage-content">
-                            {stage.indices.map((i) => (
-                              <MessageItem
-                                key={i}
-                                message={displayMessages[i]}
-                                anchorId={`chat-msg-${i}`}
-                                highlighted={searchHighlightIndex === i}
-                                cacheMiss={cacheMisses.get(i)}
-                                expandThinking
-                                expandTools
-                                groupedThinking
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </section>
-                    );
-                  })}
+                  {processIndices.map((i) => (
+                    <MessageItem
+                      key={i}
+                      message={displayMessages[i]}
+                      anchorId={`chat-msg-${i}`}
+                      highlighted={searchHighlightIndex === i}
+                      cacheMiss={cacheMisses.get(i)}
+                      expandThinking={false}
+                    />
+                  ))}
+                  <div className="turn-fold-footer">
+                    <button
+                      type="button"
+                      className="turn-fold-collapse-btn"
+                      data-testid="turn-fold-collapse-bottom"
+                      onClick={() => setExpandedTurns((current) => ({
+                        ...current,
+                        [turn.startIndex]: false,
+                      }))}
+                    >
+                      <ChevronUp size={13} />
+                      <span>{t('chat.turnFold.collapse')}</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </section>
@@ -584,9 +565,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
       { length: turn.endIndex - turn.startIndex },
       (_, offset) => turn.startIndex + 1 + offset,
     ).filter((i) => i !== finalIndex);
-    const stageIndices = [...processIndices, ...(finalProcess.length > 0 ? [finalIndex] : [])];
-    const stages = groupTurnStages(displayMessages, stageIndices, String(turn.startIndex));
-    const hasProcess = stages.length > 0;
+    const hasProcess = processIndices.length > 0 || finalProcess.length > 0;
     const duration = formatTurnDuration(turnDurationMs(
       displayMessages,
       turn,
@@ -622,40 +601,40 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
             </button>
             {expanded && (
               <div className="turn-fold-content" data-testid="turn-fold-content">
-                {stages.map((stage, stageIndex) => {
-                  const stageExpanded = expandedStages[stage.key] ?? false;
-                  return (
-                    <section className={`process-stage${stageExpanded ? ' expanded' : ''}`} data-testid="process-stage" key={stage.key}>
-                      <button
-                        className="process-stage-toggle"
-                        data-testid="process-stage-toggle"
-                        aria-expanded={stageExpanded}
-                        onClick={() => setExpandedStages((current) => ({ ...current, [stage.key]: !stageExpanded }))}
-                      >
-                        <ChevronRight size={13} aria-hidden="true" />
-                        <span>{t('chat.turnFold.stage', { index: stageIndex + 1, count: stage.indices.length })}</span>
-                      </button>
-                      {stageExpanded && (
-                        <div className="process-stage-content">
-                          {stage.indices.map((i) => (
-                            <MessageItem
-                              key={i}
-                              message={displayMessages[i]}
-                              anchorId={i === finalIndex ? undefined : `chat-msg-${i}`}
-                              highlighted={searchHighlightIndex === i}
-                              contentOverride={i === finalIndex ? finalProcess : undefined}
-                              cacheMiss={cacheMisses.get(i)}
-                              expandThinking
-                              expandTools
-                              groupedThinking
-                              suppressTail={i === finalIndex}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </section>
-                  );
-                })}
+                {processIndices.map((i) => (
+                  <MessageItem
+                    key={i}
+                    message={displayMessages[i]}
+                    anchorId={`chat-msg-${i}`}
+                    highlighted={searchHighlightIndex === i}
+                    cacheMiss={cacheMisses.get(i)}
+                    expandThinking={false}
+                  />
+                ))}
+                {finalProcess.length > 0 && (
+                  <MessageItem
+                    key={finalIndex}
+                    message={finalMessage}
+                    contentOverride={finalProcess}
+                    cacheMiss={cacheMisses.get(finalIndex)}
+                    expandThinking={false}
+                    suppressTail
+                  />
+                )}
+                <div className="turn-fold-footer">
+                  <button
+                    type="button"
+                    className="turn-fold-collapse-btn"
+                    data-testid="turn-fold-collapse-bottom"
+                    onClick={() => setExpandedTurns((current) => ({
+                      ...current,
+                      [turn.startIndex]: false,
+                    }))}
+                  >
+                    <ChevronUp size={13} />
+                    <span>{t('chat.turnFold.collapse')}</span>
+                  </button>
+                </div>
               </div>
             )}
           </section>

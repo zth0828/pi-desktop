@@ -164,6 +164,13 @@
       "success": "完成",
       "error": "出错",
       "result": "结果",
+      "command": "命令",
+      "output": "输出",
+      "copyCommand": "复制命令",
+      "copyOutput": "复制输出",
+      "copied": "已复制",
+      "collapse": "收起",
+      "expand": "展开",
       "previewFile": "预览文件",
       "interrupted": "已中断",
       "line": {

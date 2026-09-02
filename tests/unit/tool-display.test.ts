@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cleanBashCommand,
   collectToolWarnings,
   editPreviewDiff,
   extractResultText,
@@ -40,9 +41,23 @@ describe('resultDetails', () => {
   });
 });
 
+describe('cleanBashCommand', () => {
+  it('智能剥离 cd <cwd> && 前缀并保留核心命令', () => {
+    expect(cleanBashCommand('cd /Users/bingking/Desktop/FlowGate && python3 -c "import sys"')).toBe('python3 -c "import sys"');
+    expect(cleanBashCommand('cd "/Users/test/dir" && pnpm test')).toBe('pnpm test');
+    expect(cleanBashCommand('cd \'/tmp/dir\' ; ls -la')).toBe('ls -la');
+    expect(cleanBashCommand('pnpm build')).toBe('pnpm build');
+  });
+
+  it('多行命令提取第一行供摘要', () => {
+    expect(cleanBashCommand("cd /app && python3 - <<'EOF'\nimport os\nEOF")).toBe("python3 - <<'EOF'");
+  });
+});
+
 describe('toolSummary', () => {
-  it('bash 显示 $ command', () => {
+  it('bash 显示 $ command（剥离 cd 前缀）', () => {
     expect(toolSummary('bash', { command: 'ls -la' })).toBe('$ ls -la');
+    expect(toolSummary('bash', { command: 'cd /workspace && pnpm test' })).toBe('$ pnpm test');
   });
 
   it('edit/write/read 显示 path（兼容 file_path）', () => {

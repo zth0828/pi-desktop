@@ -258,19 +258,17 @@ test('工具调用 → 完成后收入回合过程，展开可查看工具结果
   await expect(summary).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('tool-card')).toHaveCount(0);
   await summary.click();
-  await expect(page.getByTestId('tool-card')).toHaveCount(0);
-  await page.getByTestId('process-stage-toggle').last().click();
   const card = page.getByTestId('tool-card').last();
   // 动词化一行文案（Codex 范式）：完成态 "Ran $ ls in X.Xs"
   await expect(card.getByTestId('tool-line')).toContainText('Ran $ ls in', { timeout: 30_000 });
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
 
-  // 阶段展开会同步展开工具结果；工具卡仍可单独收起再展开。
-  await expect(card.locator('.tool-card-body pre').last()).toBeVisible();
-  await card.locator('.tool-card-header').click();
+  // 回合展开后工具卡默认紧凑收起；工具卡可单独点击展开查看结果并折叠。
   await expect(card.locator('.tool-card-body')).toHaveCount(0);
   await card.locator('.tool-card-header').click();
   await expect(card.locator('.tool-card-body pre').last()).toBeVisible();
+  await card.locator('.tool-card-header').click();
+  await expect(card.locator('.tool-card-body')).toHaveCount(0);
 
   // 再点回合过程可折回。
   await summary.click();
@@ -288,19 +286,18 @@ test('edit 工具 → 行级 diff 展示', async ({ launchElectronApp }) => {
 
   await expect(page.getByTestId('turn-fold-toggle').last()).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('turn-fold-toggle').last().click();
-  await page.getByTestId('process-stage-toggle').last().click();
   const card = page.getByTestId('tool-card').last();
-  await expect(card.getByTestId('tool-line')).toContainText('Edited e2e-edit-target.txt', { timeout: 30_000 });
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
 
-  // 折叠态即渲染 diff：删除红 / 新增绿
+  // 点击展开文件工具卡后渲染 diff：删除红 / 新增绿
+  await card.locator('.tool-card-file-row').click();
   const diff = card.getByTestId('diff-view');
   await expect(diff).toBeVisible();
   await expect(diff.locator('.diff-del')).toContainText('alpha');
   await expect(diff.locator('.diff-add')).toContainText('beta');
 });
 
-test('阶段内工具卡可单独展开和折叠', async ({ launchElectronApp }) => {
+test('回合内工具卡可单独展开和折叠', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
@@ -310,16 +307,15 @@ test('阶段内工具卡可单独展开和折叠', async ({ launchElectronApp })
 
   await expect(page.getByTestId('turn-fold-toggle').last()).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('turn-fold-toggle').last().click();
-  await page.getByTestId('process-stage-toggle').last().click();
   const card = page.getByTestId('tool-card').last();
   await expect(card.locator('.tool-status')).toHaveText('done', { timeout: 30_000 });
-  await expect(card.locator('.tool-card-body')).toBeVisible();
+  await expect(card.locator('.tool-card-body')).toHaveCount(0);
 
-  // 阶段打开后，工具卡仍可单独收起再打开。
+  // 回合打开后，工具卡可单独展开再收起。
+  await card.locator('.tool-card-header').click();
+  await expect(card.locator('.tool-card-body')).toBeVisible();
   await card.locator('.tool-card-header').click();
   await expect(card.locator('.tool-card-body')).toHaveCount(0);
-  await card.locator('.tool-card-header').click();
-  await expect(card.locator('.tool-card-body')).toBeVisible();
 });
 
 test('生成中停止 → 流式中断、按钮复位', async ({ launchElectronApp }) => {
