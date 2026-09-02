@@ -146,7 +146,6 @@ test('confirm/select/input 全流程：对话框出现，用户操作回传扩�
   await expect(dialog).toContainText('E2E Editor Title');
   const editor = page.getByTestId('extui-editor');
   await expect(editor).toHaveValue('first line\nsecond line');
-  await page.screenshot({ path: 'output/playwright/extension-ui-editor.png', fullPage: false });
   await editor.fill('edited line 1\nedited line 2');
   await page.getByTestId('extui-submit').click();
 

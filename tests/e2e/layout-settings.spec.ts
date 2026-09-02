@@ -383,13 +383,11 @@ test('混合附件：按上传顺序独立渲染，并向模型声明图片序�
   await expect(page.locator('.session-title')).not.toContainText('<attachments>');
 
   await page.setViewportSize({ width: 1180, height: 820 });
-  await page.screenshot({ path: 'output/playwright/ordered-attachments-desktop.png', fullPage: false });
   await page.setViewportSize({ width: 760, height: 820 });
   const messageBox = await message.boundingBox();
   const viewport = page.viewportSize();
   expect(messageBox).not.toBeNull();
   expect(viewport).not.toBeNull();
   expect(messageBox!.x + messageBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
-  await page.screenshot({ path: 'output/playwright/ordered-attachments-narrow.png', fullPage: false });
   await rmAgentDir(agentDir);
 });

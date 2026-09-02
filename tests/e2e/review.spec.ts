@@ -227,7 +227,6 @@ test('git 仓库：启动前 staged/unstaged/untracked/conflict 全部进入 Rev
   await conflict.locator('.review-file-main').click();
   await expect(panel.getByTestId('review-diff')).toContainText('<<<<<<<');
   await expect(panel.getByTestId('revert-hunk')).toHaveCount(0);
-  await page.screenshot({ path: 'output/playwright/review-complete-git-state.png', fullPage: false });
 });
 
 test('右侧工作台：按需展开目录并预览文本和图片', async ({ launchElectronApp }) => {
@@ -246,7 +245,6 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await expect(treeToggle.locator('span')).toHaveText(/\d+/);
   // 默认 docked：聊天列与面板并排
   await expect(panel).toHaveAttribute('data-mode', 'docked');
-  await page.screenshot({ path: 'output/playwright/workspace-tree-overlay.png', fullPage: false });
 
   // Long tool output must scroll inside the chat column and never push the panel beyond the viewport.
   await page.getByTestId('chat-input').fill('USE_TOOL_LONG now');
@@ -287,11 +285,9 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await expect(textPreview.locator('.workspace-code-token')).not.toHaveCount(0);
   await expect(panel.getByTestId('workspace-toggle-wrap')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => textPreview.locator('.workspace-code-line code').first().evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).whiteSpace)).toBe('pre-wrap');
-  await page.screenshot({ path: 'output/playwright/workspace-code-preview-wrapped.png', fullPage: false });
   await panel.getByTestId('workspace-toggle-wrap').click();
   await expect(panel.getByTestId('workspace-toggle-wrap')).toHaveAttribute('aria-pressed', 'false');
   await expect.poll(async () => textPreview.locator('.workspace-code-line code').first().evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).whiteSpace)).toBe('pre');
-  await page.screenshot({ path: 'output/playwright/workspace-code-preview.png', fullPage: false });
   await expect(panel.getByTestId('workspace-open-with')).toBeVisible();
   await panel.getByTestId('workspace-open-with').click();
   await expect(panel.getByTestId('workspace-open-menu')).toBeVisible();
@@ -301,7 +297,6 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   for (let index = 0; index < applicationCount; index += 1) {
     await expect(applicationButtons.nth(index).locator('img, svg')).toHaveCount(1);
   }
-  await page.screenshot({ path: 'output/playwright/workspace-preview-open-menu.png', fullPage: false });
   await panel.getByTestId('workspace-open-with').click();
   const previewColors = await panel.evaluate((node) => {
     const preview = node.querySelector('.workspace-text-preview');
@@ -353,7 +348,6 @@ test('右侧工作台：Markdown、PDF、Word、Excel 和 CSV 使用专用预览
       node.ownerDocument.defaultView!.getComputedStyle(node).whiteSpace
     )
   ).toBe('pre');
-  await page.screenshot({ path: 'output/playwright/workspace-markdown-preview.png', fullPage: false });
   await markdown.getByRole('button', { name: 'Source' }).click();
   await expect(markdown.getByTestId('workspace-text-preview')).toContainText('# Preview Guide');
 
@@ -376,7 +370,6 @@ test('右侧工作台：Markdown、PDF、Word、Excel 和 CSV 使用专用预览
     return count;
   });
   expect(nonWhitePixels).toBeGreaterThan(10);
-  await page.screenshot({ path: 'output/playwright/workspace-pdf-preview.png', fullPage: false });
   await pdf.getByTitle('Next page').click();
   await expect(pdf).toContainText('Page 2 of 2');
 
@@ -386,7 +379,6 @@ test('右侧工作台：Markdown、PDF、Word、Excel 和 CSV 使用专用预览
   await expect(document).toContainText('Project Brief', { timeout: 30_000 });
   await expect(document).toContainText('Status');
   await expect(document).toContainText('Ready');
-  await page.screenshot({ path: 'output/playwright/workspace-docx-preview.png', fullPage: false });
 
   await panel.getByTestId('workspace-files-tab').click();
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.xlsx' }).click();
@@ -396,7 +388,6 @@ test('右侧工作台：Markdown、PDF、Word、Excel 和 CSV 使用专用预览
   await spreadsheet.getByRole('tab', { name: 'Details' }).click();
   await expect(spreadsheet).toContainText('DOCX');
   await expect(spreadsheet).toContainText('Ready');
-  await page.screenshot({ path: 'output/playwright/workspace-xlsx-preview.png', fullPage: false });
 
   await panel.getByTestId('workspace-files-tab').click();
   await panel.getByTestId('workspace-file').filter({ hasText: 'preview.csv' }).click();
@@ -417,7 +408,6 @@ test('右侧工作台：Markdown、PDF、Word、Excel 和 CSV 使用专用预览
   expect(zoomBox).not.toBeNull();
   expect(pagerBox!.x + pagerBox!.width).toBeLessThanOrEqual(zoomBox!.x);
   expect(zoomBox!.x + zoomBox!.width).toBeLessThanOrEqual(toolbarBox!.x + toolbarBox!.width + 1);
-  await page.screenshot({ path: 'output/playwright/workspace-pdf-preview-narrow.png', fullPage: false });
 });
 
 test('read 图片工具卡：预览按钮直达右侧图片查看器', async ({ launchElectronApp }) => {
@@ -454,7 +444,6 @@ test('历史会话恢复后仍可预览工作区外的工具文件', async ({ la
   const restoredCard = restoredPage.getByTestId('tool-card').last();
   await restoredCard.getByTestId('tool-preview-file').click();
   await expect(restoredPage.getByTestId('workspace-preview')).toContainText('external history preview');
-  await restoredPage.screenshot({ path: 'output/playwright/external-history-preview.png', fullPage: false });
   await restoredApp.close();
 });
 

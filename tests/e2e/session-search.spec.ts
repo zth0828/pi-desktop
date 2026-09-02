@@ -163,7 +163,6 @@ test('top controls stay stable and global search opens active or archived chats'
   await expect(contentResult).toBeVisible({ timeout: 15_000 });
   await expect(contentResult).toContainText('The hidden nebula phrase');
   await expect(contentResult).toContainText('Message');
-  await page.screenshot({ path: 'output/playwright/session-search-open.png', fullPage: false });
 
   await contentResult.click();
   await expect(page.getByTestId('session-search-dialog')).toHaveCount(0);
@@ -175,7 +174,6 @@ test('top controls stay stable and global search opens active or archived chats'
     return mutations.join(' | ');
   }, { timeout: 15_000 }).toContain('search-target');
   await expect.poll(() => page.getByTestId('message-list').evaluate((element) => element.scrollTop)).toBeGreaterThan(100);
-  await page.screenshot({ path: 'output/playwright/session-search-target.png', fullPage: false });
 
   await page.getByTestId('session-search-trigger').click();
   await page.getByTestId('session-search-input').fill('telescope phrase');
@@ -187,6 +185,5 @@ test('top controls stay stable and global search opens active or archived chats'
   await expect(page.getByTestId('session-search-dialog')).toHaveCount(0);
   await expect(page.getByTestId('session-title-button')).toContainText('Old launch notes', { timeout: 15_000 });
   await expect(page.getByTestId('message-user-text').first()).toContainText('Archived telescope phrase');
-  await page.screenshot({ path: 'output/playwright/session-search-selected.png', fullPage: false });
   await app.close();
 });

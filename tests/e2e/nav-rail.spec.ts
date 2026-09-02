@@ -94,7 +94,6 @@ test('rail 圆点 = user 消息数；悬浮显示原问题，点击跳转并高�
   await thirdDot.hover();
   await expect(thirdDot.getByTestId('msg-rail-tooltip')).toBeVisible();
   await expect(thirdDot.getByTestId('msg-rail-tooltip')).toHaveText('Say PONG 3');
-  await page.screenshot({ path: 'output/playwright/nav-rail-tooltip.png', fullPage: false });
 
   // 新消息自动滚到底 → 列表已溢出、末位圆点高亮
   const list = page.getByTestId('message-list');
@@ -123,7 +122,6 @@ test('rail 圆点 = user 消息数；悬浮显示原问题，点击跳转并高�
 
   // 上滑后显示回到底部入口；点击后恢复自动跟随底部。
   await expect(page.getByTestId('scroll-to-bottom')).toBeVisible();
-  await page.screenshot({ path: 'output/playwright/scroll-to-bottom.png', fullPage: false });
   await page.getByTestId('scroll-to-bottom').click();
   await expect(page.getByTestId('scroll-to-bottom')).toBeHidden();
   await expect.poll(() => list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(24);

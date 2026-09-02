@@ -371,7 +371,6 @@ test('Models 页：协议探测拒绝 200 HTML，发现 /v1 并选择真实 Open
   await expect(form.getByTestId('probe-models')).toBeVisible();
   await expect(form.getByTestId('probe-model-mock-2')).toContainText('mock-2');
   await expect(form.getByTestId('probe-model-mock-discovered')).toContainText('mock-discovered');
-  await page.screenshot({ path: 'output/playwright/models-context-unresolved.png', fullPage: false });
 });
 
 test('Models 页：探测全失败时说明不代表供应商不可用并展示错误', async ({ launchElectronApp }) => {
@@ -914,7 +913,6 @@ test('Models 页标识扩展供应商并展示 pi 模型协议与费率', async 
   await expect(page.getByTestId('provider-model-meta-extension-models-extension-1')).toContainText('cache read $0.1');
   await expect(page.getByTestId('refresh-models')).toBeVisible();
   await page.getByTestId('provider-model-extension-models-extension-1').scrollIntoViewIfNeeded();
-  await page.screenshot({ path: 'output/playwright/models-extension-provider.png', fullPage: false });
 });
 
 test('聊天页模型菜单：供应商模型超过 5 个时组内显示搜索并可过滤选择', async ({ launchElectronApp }) => {

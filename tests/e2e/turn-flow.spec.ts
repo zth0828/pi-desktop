@@ -199,7 +199,6 @@ test('六个改动初始显示五个，展开后显示完整清单与收起按�
   const more = card.getByTestId('turn-changes-more');
   await expect(more).toContainText(/Show 1 more file|再显示 1 个文件/);
   await expect(card.getByTestId('turn-changes-less')).toHaveCount(0);
-  await page.screenshot({ path: 'output/playwright/turn-changes-five-file-limit.png', fullPage: false });
 
   await more.click();
   await expect(card.getByTestId('turn-changes-file')).toHaveCount(6);
@@ -256,7 +255,6 @@ test('完成回合整体折叠过程内容，展开恢复阶段文本与工具�
   ).toHaveAttribute('id', /^chat-msg-\d+$/);
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'FINAL:' })).toHaveCount(2);
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(0);
-  await page.screenshot({ path: 'output/playwright/turn-fold-collapsed.png', fullPage: false });
 
   // 点击回合直接展示思考与工具，其他轮仍收起（单层一键直达，无 stage 阻碍）。
   await rows.first().click();
@@ -265,7 +263,6 @@ test('完成回合整体折叠过程内容，展开恢复阶段文本与工具�
   const expandedRow = page.locator('[data-testid="turn-fold-toggle"][aria-expanded="true"]');
   await expect(expandedRow).toHaveCount(1);
   await expect(page.getByTestId('message-assistant').filter({ hasText: 'PROCESS:' })).toHaveCount(1);
-  await page.screenshot({ path: 'output/playwright/turn-fold-expanded.png', fullPage: false });
 
   // 再点同一行收起：回到全聚合状态
   await expandedRow.click();

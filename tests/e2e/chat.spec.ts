@@ -197,7 +197,6 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   expect(chatColumnBox).not.toBeNull();
   expect(composerBox!.width).toBeGreaterThan(chatColumnBox!.width - 80);
   expect(composerBox!.height).toBeGreaterThanOrEqual(110);
-  await page.screenshot({ path: 'output/playwright/chat-chrome-refined.png', fullPage: false });
 
   const expandedWidth = (await sidebar.boundingBox())!.width;
   const titlebarBox = isMac ? null : await page.getByTestId('titlebar').boundingBox();
@@ -235,7 +234,6 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
     expect(collapsedTitlebarBox!.width).toBe(titlebarBox!.width);
     expect(collapsedTitlebarBox!.height).toBe(titlebarBox!.height);
   }
-  await page.screenshot({ path: 'output/playwright/sidebar-collapsed-refined.png', fullPage: false });
   await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(expandedWidth - 100);
 
   const expandStartedAt = Date.now();
@@ -433,14 +431,12 @@ test('富文本答复渲染任务卡、表格、代码块和外链', async ({ la
   await expect(renderedCode).toHaveCSS('white-space', /pre/);
   await expect(page.locator('.markdown blockquote')).toBeVisible();
   await expect(page.locator('.markdown a[href="https://example.com/docs"]')).toBeVisible();
-  await page.screenshot({ path: 'output/playwright/rich-text-light.png', fullPage: false });
   await page.evaluate(() => {
     const root = (globalThis as unknown as {
       document: { documentElement: { setAttribute(name: string, value: string): void } };
     }).document.documentElement;
     root.setAttribute('data-theme', 'dark');
   });
-  await page.screenshot({ path: 'output/playwright/rich-text-dark.png', fullPage: false });
 });
 
 test('429 → 状态条重试倒计时，重试成功后拿到回复', async ({ launchElectronApp }) => {
@@ -837,7 +833,6 @@ test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当
     return box && viewport ? Math.abs(box.x + box.width - viewport.width) : Number.POSITIVE_INFINITY;
   }).toBeLessThan(2);
   expect(await page.locator('.chat-input-card').evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
-  await page.screenshot({ path: 'output/playwright/narrow-composer-workspace.png', fullPage: false });
 
   // Enter = 排队（followUp）：queue_update → followUp chip
   await page.getByTestId('chat-input').fill('queue me');
@@ -873,7 +868,6 @@ test('长文本输入自然增长，达到上限后使用短暂滚动条', async
     element.dispatchEvent(new Event('scroll'));
   });
   await expect(input).toHaveClass(/scrollbar-active/);
-  await page.screenshot({ path: 'output/playwright/long-composer.png', fullPage: false });
   await expect.poll(async () => (await input.getAttribute('class'))?.includes('scrollbar-active')).toBe(false);
 
   await input.fill('short prompt');

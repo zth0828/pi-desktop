@@ -293,8 +293,6 @@ test('导出 HTML → 按项目分类目录并在会话列表中标记已导出�
   await expect(row.getByTestId('session-open-exported')).toBeVisible();
   await expect(row.getByTestId('session-show-exported')).toBeVisible();
 
-  await page.screenshot({ path: 'output/playwright/session-export-actions.png', fullPage: false });
-
   await page.getByTestId('nav-settings').click();
   const directory = (await page.getByTestId('settings-export-directory').textContent())?.trim();
   expect(directory).toBeTruthy();
