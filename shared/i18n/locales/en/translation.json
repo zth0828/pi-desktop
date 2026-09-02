@@ -797,7 +797,8 @@
   "sidebar": {
     "newChat": "New chat",
     "collapse": "Collapse sidebar",
-    "expand": "Expand sidebar"
+    "expand": "Expand sidebar",
+    "resize": "Resize sidebar"
   },
   "sessionSearch": {
     "title": "Search chats",
@@ -1042,6 +1043,7 @@
   },
   "review": {
     "title": "Review",
+    "resizeList": "Resize review list",
     "refresh": "Refresh",
     "empty": "No changes yet",
     "emptySession": "No changes in this session",
@@ -1072,7 +1074,8 @@
     }
   },
   "workspace": {
-    "resize": "Resize workspace panel",
+    "resize": "Resize workbench",
+    "resizeTree": "Resize file tree",
     "toggle": "Toggle workspace panel",
     "close": "Close workspace panel",
     "closeAll": "Close all file previews",

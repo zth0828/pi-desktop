@@ -797,7 +797,8 @@
   "sidebar": {
     "newChat": "新建会话",
     "collapse": "收起侧边栏",
-    "expand": "展开侧边栏"
+    "expand": "展开侧边栏",
+    "resize": "调整侧边栏宽度"
   },
   "sessionSearch": {
     "title": "搜索会话",
@@ -1042,6 +1043,7 @@
   },
   "review": {
     "title": "评审",
+    "resizeList": "调整审查列表宽度",
     "refresh": "刷新",
     "empty": "还没有改动",
     "emptySession": "本会话暂无文件改动",
@@ -1073,6 +1075,7 @@
   },
   "workspace": {
     "resize": "调整工作台宽度",
+    "resizeTree": "调整文件列表宽度",
     "toggle": "切换文件工作台",
     "close": "关闭文件工作台",
     "closeAll": "关闭全部文件预览",
