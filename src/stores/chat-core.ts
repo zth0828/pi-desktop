@@ -485,9 +485,12 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         for (let i = 0; i < 100 && get().starting; i += 1) {
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
+        awaitingRun = true;
         const result = await api().piRuntime.prompt(text, images, behavior);
-        if (!result.success) set({ runtimeError: result.error });
-        else awaitingRun = true; // run.started 到达后清除（applyEnvelope）
+        if (!result.success) {
+          awaitingRun = false;
+          set({ runtimeError: result.error });
+        }
       },
 
       abort: async () => {
