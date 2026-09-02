@@ -372,13 +372,18 @@ button.danger-outline {
 .app-window-controls.is-traffic {
   position: fixed;
   top: calc((var(--mac-topbar, var(--chrome-row1)) - 30px) / 2);
-  left: 162px;
+  left: calc(var(--sidebar-width, 224px) - 62px);
   z-index: 132;
   display: flex;
   height: 30px;
   align-items: center;
   gap: 2px;
   -webkit-app-region: no-drag;
+  transition: left 160ms ease;
+}
+
+.app-layout.sidebar-collapsed.is-macos .app-window-controls.is-traffic {
+  left: 80px;
 }
 
 /* Windows/Linux：侧栏收起时悬浮层出现在内容区左上角（顶部留白之下），
@@ -402,11 +407,16 @@ button.danger-outline {
 .app-layout.is-macos .session-titlebar.session-titlebar-top {
   position: fixed;
   top: 0;
-  left: 224px;
+  left: var(--sidebar-width, 224px);
   right: 0;
   min-height: var(--mac-topbar);
   padding: 4px 18px;
   z-index: 131;
+  transition: left 160ms ease;
+}
+
+.app-layout.sidebar-collapsed.is-macos .session-titlebar.session-titlebar-top {
+  left: 152px;
 }
 
 /* Electron 的拖拽层覆盖整个标题高度；交互控件必须明确声明可点击。 */
@@ -416,15 +426,44 @@ button.danger-outline {
 }
 
 .sidebar {
-  width: 224px;
+  width: var(--sidebar-width, 224px);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
-/* 顶部留白（标题栏/红绿灯带）之下 10px，全平台统一 */
+  /* 顶部留白（标题栏/红绿灯带）之下 10px，全平台统一 */
   padding: 10px 10px 10px;
   background: var(--bg);
+  position: relative;
   transition: width 160ms ease, padding 160ms ease;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 120;
+  -webkit-app-region: no-drag;
+  transition: background-color 150ms ease;
+}
+
+.sidebar-resizer:hover,
+.app-layout.sidebar-resizing .sidebar-resizer {
+  background-color: var(--accent);
+}
+
+.app-layout.sidebar-resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+
+.app-layout.sidebar-resizing .sidebar,
+.app-layout.sidebar-resizing .app-window-controls,
+.app-layout.sidebar-resizing .session-titlebar {
+  transition: none !important;
 }
 
 .sidebar-title {
@@ -7220,14 +7259,40 @@ button.danger-outline {
   flex: 1;
   display: flex;
   min-height: 0;
+  position: relative;
 }
 
 .review-file-list {
-  width: 260px;
+  width: var(--review-tree-width, 260px);
   flex-shrink: 0;
   overflow-y: auto;
   border-right: 1px solid var(--border);
   padding: 6px;
+  transition: width 160ms ease;
+}
+
+.review-body.list-resizing {
+  user-select: none;
+}
+
+.review-body.list-resizing .review-file-list {
+  transition: none !important;
+}
+
+.review-tree-resizer {
+  position: relative;
+  width: 6px;
+  margin-left: -3px;
+  margin-right: -3px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background-color 150ms ease;
+}
+
+.review-tree-resizer:hover,
+.review-body.list-resizing .review-tree-resizer {
+  background-color: var(--accent);
 }
 
 .review-group {
@@ -7618,7 +7683,7 @@ button.danger-outline {
   min-width: 0;
   display: flex;
 }
-.workspace-browser { position: relative; overflow: hidden; }
+.workspace-browser { position: relative; overflow: hidden; display: flex; height: 100%; }
 .workspace-tree {
   position: relative;
   width: 0;
@@ -7633,10 +7698,30 @@ button.danger-outline {
   transition: width 160ms ease, border-color 160ms ease, visibility 0s linear 160ms;
 }
 .workspace-browser.tree-open .workspace-tree {
-  width: clamp(180px, 22%, 240px);
+  width: var(--workspace-tree-width, 220px);
   border-right-width: 1px;
   visibility: visible;
   transition: width 160ms ease, border-color 160ms ease, visibility 0s linear 0s;
+}
+.workspace-browser.tree-resizing {
+  user-select: none;
+}
+.workspace-browser.tree-resizing .workspace-tree {
+  transition: none !important;
+}
+.workspace-tree-resizer {
+  position: relative;
+  width: 6px;
+  margin-left: -3px;
+  margin-right: -3px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  z-index: 10;
+  transition: background-color 150ms ease;
+}
+.workspace-tree-resizer:hover,
+.workspace-browser.tree-resizing .workspace-tree-resizer {
+  background-color: var(--accent);
 }
 .workspace-tree-backdrop { display: none; }
 .workspace-filter {
@@ -7831,7 +7916,7 @@ button.danger-outline {
 }
 .bash-badge.running { color: var(--accent); }
 .review-body { flex: 1; min-height: 0; display: flex; }
-.review-file-list { width: clamp(160px, 32%, 238px); background: var(--bg); overflow-y: auto; flex-shrink: 0; border-right: 1px solid var(--border); }
+.review-file-list { width: var(--review-tree-width, 240px); background: var(--bg); overflow-y: auto; flex-shrink: 0; border-right: 1px solid var(--border); }
 .review-file { border-radius: 5px; }
 .review-file-heading { min-height: 34px; display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-bottom: 1px solid var(--border); color: var(--text-secondary); font-family: var(--font-mono); font-size: 11px; flex-shrink: 0; background: var(--bg-raised); }
 .review-file-heading span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -7905,6 +7990,9 @@ button.danger-outline {
     opacity: 1;
     visibility: visible;
     transition-delay: 0s;
+  }
+  .workspace-tree-resizer {
+    display: none;
   }
 }
 

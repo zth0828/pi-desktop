@@ -62,6 +62,10 @@ type MenuGroup = (typeof MENU_GROUPS)[number];
 
 type ChatSearchTarget = { sessionId: string; messageIndex: number; nonce: number };
 
+const DEFAULT_SIDEBAR_WIDTH = 224;
+const MIN_SIDEBAR_WIDTH = 224;
+const MAX_SIDEBAR_WIDTH = 480;
+
 export default function App() {
   const { t } = useTranslation();
   const [page, setPage] = useState<AppPageId>(() => initialAppPage(window.location.search));
@@ -69,6 +73,13 @@ export default function App() {
   // preload 同步暴露平台：首帧即渲染正确的标题栏形态，避免 mac 闪现 Windows chrome。
   const [platform, setPlatform] = useState(() => window.pidesktop?.platform ?? '');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('pi-desktop.sidebar-collapsed') === 'true');
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = Number(window.localStorage.getItem('pi-desktop.sidebar-width'));
+    return Number.isFinite(saved) && saved >= MIN_SIDEBAR_WIDTH && saved <= MAX_SIDEBAR_WIDTH
+      ? saved
+      : DEFAULT_SIDEBAR_WIDTH;
+  });
+  const [sidebarResizing, setSidebarResizing] = useState(false);
   const [sessionSearchOpen, setSessionSearchOpen] = useState(false);
   const [chatSearchTarget, setChatSearchTarget] = useState<ChatSearchTarget>();
   const [openMenu, setOpenMenu] = useState<MenuGroup | null>(null);
@@ -166,6 +177,45 @@ export default function App() {
       window.localStorage.setItem('pi-desktop.sidebar-collapsed', String(next));
       return next;
     });
+  };
+
+  useEffect(() => {
+    window.localStorage.setItem('pi-desktop.sidebar-width', String(Math.round(sidebarWidth)));
+  }, [sidebarWidth]);
+
+  const onSidebarResizeStart = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const resizer = e.currentTarget;
+    resizer.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    let isDragging = false;
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      if (!isDragging && Math.abs(deltaX) >= 2) {
+        isDragging = true;
+        setSidebarResizing(true);
+      }
+      if (isDragging) {
+        const maxAllowed = Math.min(MAX_SIDEBAR_WIDTH, Math.floor(window.innerWidth * 0.5));
+        const clamped = Math.max(MIN_SIDEBAR_WIDTH, Math.min(maxAllowed, startWidth + deltaX));
+        setSidebarWidth(clamped);
+      }
+    };
+
+    const onPointerUp = (upEvent: PointerEvent) => {
+      if (resizer.hasPointerCapture(upEvent.pointerId)) {
+        resizer.releasePointerCapture(upEvent.pointerId);
+      }
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      setSidebarResizing(false);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp, { once: true });
   };
 
   const toggleMaximize = () => {
@@ -323,7 +373,13 @@ export default function App() {
   }
 
   return (
-    <div className={`${isMac ? 'app-layout is-macos' : 'app-layout'}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+    <div
+      className={`${isMac ? 'app-layout is-macos' : 'app-layout'}${sidebarCollapsed ? ' sidebar-collapsed' : ''}${sidebarResizing ? ' sidebar-resizing' : ''}`}
+      style={{
+        '--sidebar-width': `${sidebarCollapsed ? 0 : sidebarWidth}px`,
+        '--sidebar-raw-width': `${sidebarWidth}px`,
+      } as React.CSSProperties}
+    >
       {!isMac && chrome}
       {dragStrip}
       {/* 折叠/搜索悬浮层：macOS 常驻于红绿灯右侧（顶部带内）；Windows/Linux 仅侧栏收起时
@@ -342,12 +398,12 @@ export default function App() {
         {!sidebarCollapsed && (
           <div className="sidebar-head">
             <button className="new-chat" data-testid="new-chat" onClick={newChat}>
-              <MessageSquarePlus size={16} />
-              <span>{t('sidebar.newChat')}</span>
-            </button>
-            {!isMac && sidebarActions}
-          </div>
-        )}
+               <MessageSquarePlus size={16} />
+               <span>{t('sidebar.newChat')}</span>
+             </button>
+             {!isMac && sidebarActions}
+           </div>
+         )}
         <SessionList onOpenChat={() => navigate('chat')} />
         <div className="sidebar-nav">
           {PAGES.map(({ id, icon: Icon }) => (
@@ -363,6 +419,26 @@ export default function App() {
             </button>
           ))}
         </div>
+        {!sidebarCollapsed && (
+          <div
+            className="sidebar-resizer"
+            data-testid="sidebar-resizer"
+            role="separator"
+            aria-label={t('sidebar.resize')}
+            aria-orientation="vertical"
+            tabIndex={0}
+            onPointerDown={onSidebarResizeStart}
+            onDoubleClick={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
+            onKeyDown={(e) => {
+              if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+              e.preventDefault();
+              e.stopPropagation();
+              const delta = e.key === 'ArrowLeft' ? -16 : 16;
+              const maxAllowed = Math.min(MAX_SIDEBAR_WIDTH, Math.floor(window.innerWidth * 0.5));
+              setSidebarWidth((w) => Math.max(MIN_SIDEBAR_WIDTH, Math.min(maxAllowed, w + delta)));
+            }}
+          />
+        )}
       </nav>
       <main className="content">
         {/* 主内容区顶部的全局错误条：侧栏等跨区域操作的失败提示，任何页面可见 */}
