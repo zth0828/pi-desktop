@@ -7,7 +7,7 @@ import {
 } from '../../electron/utils/custom-provider-config';
 
 describe('custom provider 写库决策', () => {
-  it('LM Studio：reasoning_effort 分级 + off 档映射 none（实测 enable_thinking 无效）', () => {
+  it('LM Studio：reasoning_effort 分级 + off 档映射 none（enable_thinking 无效）', () => {
     expect(compatForOpenAi('lm-studio')).toEqual({
       supportsDeveloperRole: false,
       supportsReasoningEffort: true,

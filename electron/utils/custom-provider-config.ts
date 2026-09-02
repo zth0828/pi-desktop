@@ -2,7 +2,7 @@
 // 的 compat / 思考档位映射 / 占位 apiKey。addCustom 与 sync 逻辑都从这里取。
 // 思考控制的服务器差异（对 OpenAI 兼容 chat/completions）：
 // - LM Studio（llama.cpp server）：只认 reasoning_effort（native API
-//   capabilities.reasoning.allowed_options 实测 enable_thinking / chat_template_kwargs
+//   capabilities.reasoning.allowed_options 中 enable_thinking / chat_template_kwargs
 //   被忽略、off 档会按默认档位继续思考）。声明 supportsReasoningEffort=true +
 //   模型级 thinkingLevelMap.off="none"，pi 在 off 档发 reasoning_effort:none 真正
 //   关闭思考，其余档位分级直传（LM Studio 接受 none/minimal/low/medium/high/xhigh）。

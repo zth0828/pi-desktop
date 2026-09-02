@@ -1,4 +1,4 @@
-// Ported from ClawX: src/lib/host-api-client.ts（bridge 名 clawx → pidesktop）
+// 渲染层与主进程通信客户端：封装 window.pidesktop.hostInvoke。
 import type {
   HostApiAction,
   HostApiModule,

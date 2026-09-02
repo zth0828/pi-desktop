@@ -1,5 +1,4 @@
 // 聊天状态：pi 事件（经 shared/pi-event-map 映射 + generation 信封）→ 渲染状态。
-// Inspired by ClawX: src/stores/chat.ts 的 reducer 思路（按 pi 事件模型重写）。
 // createChatStore() 工厂，每面板一实例。本模块保持 node-safe（不引 react / host-events / notify，同 chat-types.ts
 // 分层约定）：事件订阅入口 onEvent 与通知上报 reporters 由调用方注入，node 侧单测可直接引用。
 import { createStore, type StoreApi } from 'zustand/vanilla';
