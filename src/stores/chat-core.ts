@@ -136,6 +136,8 @@ export type ChatState = {
   workspaceOpen: boolean;
   /** 工具卡请求打开工作区文件（nonce 保证重复点击同一路径也能激活）。 */
   workspaceFileRequest: { path: string; nonce: number } | null;
+  /** 评审面板请求打开/选中特定文件的 Diff（nonce 保证重复点击同一路径也能激活）。 */
+  reviewFileRequest: { path?: string; nonce: number } | null;
   /** fork/跳分支后回填输入框的文本与附件（nonce 保证同文本也触发） */
   inputDraft: { text: string; attachments?: ComposerAttachment[]; nonce: number } | null;
   /** 流式中点击编辑历史消息时挂起的目标 entryId，等 run.ended 后触发 fork */
@@ -166,6 +168,7 @@ export type ChatState = {
   compact: () => Promise<void>;
   setTreeOpen: (open: boolean) => void;
   setReviewOpen: (open: boolean) => void;
+  openReviewFile: (path?: string) => void;
   setWorkspaceOpen: (open: boolean) => void;
   openWorkspaceFile: (path: string) => void;
   setComposerText: (text: string) => void;
@@ -388,6 +391,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       reviewOpen: false,
       workspaceOpen: false,
       workspaceFileRequest: null,
+      reviewFileRequest: null,
       inputDraft: null,
       pendingEditEntryId: null,
       uiRequests: [],
@@ -589,6 +593,22 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           workspaceOpen: true,
           reviewOpen: false,
           workspaceFileRequest: { path, nonce: (get().workspaceFileRequest?.nonce ?? 0) + 1 },
+        });
+      },
+
+      openReviewFile: (rawPath) => {
+        let path: string | undefined;
+        if (rawPath) {
+          const cwd = get().cwd?.replace(/\/$/, '');
+          const normalized = rawPath.replace(/\\/g, '/');
+          path = cwd && normalized.startsWith(`${cwd}/`)
+            ? normalized.slice(cwd.length + 1)
+            : normalized;
+        }
+        set({
+          reviewOpen: true,
+          workspaceOpen: false,
+          reviewFileRequest: { path, nonce: (get().reviewFileRequest?.nonce ?? 0) + 1 },
         });
       },
 

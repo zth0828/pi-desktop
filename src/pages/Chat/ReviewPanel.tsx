@@ -418,6 +418,7 @@ function ReviewWorkspace() {
   const paneApi = usePaneHostApi();
   const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
   const cwd = usePaneChatStore((s) => s.cwd);
+  const reviewFileRequest = usePaneChatStore((s) => s.reviewFileRequest);
   const [summary, setSummary] = useState<ReviewSummaryResult | null>(null);
   const [selected, setSelected] = useState<SelectedReviewItem | null>(null);
   const [diff, setDiff] = useState<ParsedFileDiff | null>(null);
@@ -463,6 +464,19 @@ function ReviewWorkspace() {
   const loadDiff = useCallback(async (item: SelectedReviewItem) => {
     if (item.group === 'session') {
       const sessionFile = sessionFiles.find((f) => f.path === item.path);
+      if (sessionFile?.diff) {
+        setDiff(null);
+        setToolDiff(sessionFile.diff);
+        return;
+      }
+      if (summary?.available && summary.files.some((file) => file.path === item.path)) {
+        const result = await paneApi.review.getFileDiff(item.path).catch(() => null);
+        if (result?.available && result.diff) {
+          setDiff(parseUnifiedDiff(result.diff));
+          setToolDiff(null);
+          return;
+        }
+      }
       setDiff(null);
       setToolDiff(sessionFile?.diff ?? null);
       return;
@@ -503,6 +517,30 @@ function ReviewWorkspace() {
       return null;
     });
   }, [sessionFiles, workspaceFiles]);
+
+  useEffect(() => {
+    if (!reviewFileRequest?.path) return;
+    const target = reviewFileRequest.path;
+    const sessionMatch = sessionFiles.find((f) => f.path === target);
+    if (sessionMatch) {
+      setSelected({ group: 'session', path: target });
+      setSessionOpen(true);
+      return;
+    }
+    const workspaceMatch = workspaceFiles.find((f) => f.path === target);
+    if (workspaceMatch) {
+      setSelected({ group: 'workspace', path: target });
+      setWorkspaceOpen(true);
+      return;
+    }
+    if (sessionFiles.length > 0) {
+      setSelected({ group: 'session', path: target });
+      setSessionOpen(true);
+    } else {
+      setSelected({ group: 'workspace', path: target });
+      setWorkspaceOpen(true);
+    }
+  }, [reviewFileRequest, sessionFiles, workspaceFiles]);
 
   useEffect(() => {
     if (selected) {
@@ -693,6 +731,7 @@ export function ReviewPanel() {
   const setReviewOpen = usePaneChatStore((s) => s.setReviewOpen);
   const setWorkspaceOpen = usePaneChatStore((s) => s.setWorkspaceOpen);
   const workspaceFileRequest = usePaneChatStore((s) => s.workspaceFileRequest);
+  const reviewFileRequest = usePaneChatStore((s) => s.reviewFileRequest);
   const cwd = usePaneChatStore((s) => s.cwd);
   const [tab, setTab] = useState<WorkbenchTab>('files');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -732,6 +771,12 @@ export function ReviewPanel() {
     if (reviewOpen) setTab('review');
     else if (workspaceOpen && tab === 'review') setTab('files');
   }, [reviewOpen, workspaceOpen, tab]);
+
+  useEffect(() => {
+    if (!reviewFileRequest) return;
+    setTab('review');
+    setUserToggledInNarrow(false);
+  }, [reviewFileRequest]);
 
   useEffect(() => {
     if (!workspaceFileRequest) return;
