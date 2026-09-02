@@ -53,7 +53,6 @@ async function revealCurrentTools(page: import('@playwright/test').Page) {
   const fold = page.getByTestId('turn-fold-toggle').last();
   await expect(fold).toBeVisible({ timeout: 30_000 });
   await fold.click();
-  await page.getByTestId('process-stage-toggle').last().click();
 }
 
 test('越界 write 会被 pi Desktop 工作区扩展拦截', async ({ launchElectronApp }) => {

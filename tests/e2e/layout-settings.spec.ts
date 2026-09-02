@@ -269,7 +269,6 @@ test('Settings：默认工具开启后重启新会话生效（grep 可用且有�
   const summary = page2.getByTestId('turn-fold-toggle').last();
   await expect(summary).toBeVisible({ timeout: 30_000 });
   await summary.click();
-  await page2.getByTestId('process-stage-toggle').last().click();
   const card = page2.getByTestId('tool-card').last();
   await expect(card).toBeVisible();
   // grep 已激活：执行成功（非 Tool grep not found），且出预览入口

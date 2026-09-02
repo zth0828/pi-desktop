@@ -147,7 +147,6 @@ async function runTool(page: import('@playwright/test').Page, prompt: string) {
   const summary = page.getByTestId('turn-fold-toggle').last();
   await expect(summary).toBeVisible({ timeout: 30_000 });
   await summary.click();
-  await page.getByTestId('process-stage-toggle').last().click();
   await expect(page.getByTestId('tool-card').last().locator('.tool-status')).toHaveText('done');
 }
 
@@ -254,7 +253,6 @@ test('右侧工作台：按需展开目录并预览文本和图片', async ({ la
   await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('turn-fold-toggle')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('turn-fold-toggle').click();
-  await page.getByTestId('process-stage-toggle').click();
   const viewport = page.viewportSize();
   const panelBox = await panel.boundingBox();
   expect(panelBox).not.toBeNull();
@@ -453,7 +451,6 @@ test('历史会话恢复后仍可预览工作区外的工具文件', async ({ la
   const turn = restoredPage.getByTestId('turn-fold-toggle').last();
   await expect(turn).toBeVisible({ timeout: 30_000 });
   await turn.click();
-  await restoredPage.getByTestId('process-stage-toggle').last().click();
   const restoredCard = restoredPage.getByTestId('tool-card').last();
   await restoredCard.getByTestId('tool-preview-file').click();
   await expect(restoredPage.getByTestId('workspace-preview')).toContainText('external history preview');
