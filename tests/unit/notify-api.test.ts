@@ -30,6 +30,11 @@ vi.mock('electron', () => ({
 vi.mock('@electron/main/window-manager', () => ({
   getMainWindow: (...args: unknown[]) => getMainWindowMock(...args),
   findWindowBySession: (...args: unknown[]) => findWindowBySessionMock(...args),
+  activateAndFocusWindow: (win: { isMinimized?: () => boolean; isVisible?: () => boolean; restore?: () => void; show?: () => void; focus?: () => void }) => {
+    if (win.isMinimized?.()) win.restore?.();
+    if (win.isVisible && !win.isVisible()) win.show?.();
+    win.focus?.();
+  },
 }));
 
 vi.mock('@electron/main/ipc/host-events', () => ({
@@ -100,8 +105,11 @@ describe('notifyApi.dispatch 点击跳转', () => {
     expect(getMainWindowMock).not.toHaveBeenCalled(); // 命中了会话窗口，不回退
   });
 
-  it('会话窗口最小化：点击先 restore 再 focus', async () => {
-    const sessionWindow = makeWindow({ isMinimized: vi.fn().mockReturnValue(true) });
+  it('会话窗口隐藏在托盘且最小化：点击先 restore、show 再 focus', async () => {
+    const sessionWindow = makeWindow({
+      isMinimized: vi.fn().mockReturnValue(true),
+      isVisible: vi.fn().mockReturnValue(false),
+    });
     findWindowBySessionMock.mockReturnValue(sessionWindow);
 
     await notifyApi.dispatch({
@@ -112,6 +120,7 @@ describe('notifyApi.dispatch 点击跳转', () => {
     clickLastNotification();
 
     expect(sessionWindow.restore).toHaveBeenCalled();
+    expect(sessionWindow.show).toHaveBeenCalled();
     expect(sessionWindow.focus).toHaveBeenCalled();
     expect(sendHostEventToWindowMock).toHaveBeenCalledWith(sessionWindow, 'windows', 'focusSession', {
       sessionPath: SESSION_PATH,

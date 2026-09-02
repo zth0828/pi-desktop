@@ -379,6 +379,39 @@ test('同窗口切到其他会话：后台 run 完成仍弹通知（单面板改
     const entry = (await readEntries(logPath)).slice(entriesBefore).find((entry) => entry.sessionPath === alphaPath);
     expect(entry?.kind).toBe('runCompleted');
     expect(entry?.body).toContain('chunk');
+
+    // 验证同窗口点击通知跳转：模拟通知点击（notify-api 的 click 行为：向目标窗口发 focusSession）
+    // 1. 窗口当前处于 BETA 会话，点击通知后应自动在主窗口内切换回 ALPHA 会话并展示其内容
+    await app.evaluate(({ BrowserWindow }, path) => {
+      const target = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+      if (target) {
+        if (target.isMinimized()) target.restore();
+        if (!target.isVisible()) target.show();
+        target.focus();
+        target.webContents.send('windows:focus-session', { sessionPath: path });
+      }
+    }, alphaPath);
+
+    await expect(page.getByTestId('message-assistant').last()).toContainText('chunk29', {
+      timeout: 10_000,
+    });
+
+    // 2. 模拟用户切到「设置」页面时收到通知并点击：应自动导航回 chat 视图并呈现目标会话
+    await page.getByTestId('nav-settings').click();
+    await expect(page.getByTestId('nav-settings')).toHaveClass(/active/);
+
+    await app.evaluate(({ BrowserWindow }, path) => {
+      const target = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+      if (target) {
+        if (target.isMinimized()) target.restore();
+        if (!target.isVisible()) target.show();
+        target.focus();
+        target.webContents.send('windows:focus-session', { sessionPath: path });
+      }
+    }, alphaPath);
+
+    await expect(page.getByTestId('nav-chat')).toHaveClass(/active/, { timeout: 10_000 });
+    await expect(page.getByTestId('message-assistant').last()).toContainText('chunk29');
   } finally {
     delete process.env.PI_DESKTOP_E2E_NOTIFY_LOG;
   }

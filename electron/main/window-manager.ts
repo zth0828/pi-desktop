@@ -141,15 +141,45 @@ export function getMainWindow(): BrowserWindow | null {
 }
 
 /**
+ * 跨平台前台唤醒窗口：
+ * - 最小化时 restore
+ * - 不可见（如隐藏到托盘）时 show
+ * - macOS / 通用：app.focus({ steal: true }) 激活应用层级
+ * - Windows：短暂 setAlwaysOnTop 穿透 LockSetForegroundWindow 前台锁定
+ * - win.focus() 聚焦具体窗口
+ */
+export function activateAndFocusWindow(win: BrowserWindow): void {
+  if (!win || (typeof win.isDestroyed === 'function' && win.isDestroyed())) return;
+  if (typeof win.isMinimized === 'function' && win.isMinimized()) {
+    win.restore();
+  }
+  if (typeof win.isVisible === 'function' && !win.isVisible()) {
+    win.show();
+  }
+  if (typeof app.focus === 'function') {
+    app.focus({ steal: true });
+  }
+  if (process.platform === 'win32') {
+    if (typeof win.setAlwaysOnTop === 'function') {
+      win.setAlwaysOnTop(true);
+      win.focus();
+      win.setAlwaysOnTop(false);
+    } else {
+      win.focus();
+    }
+  } else {
+    win.focus();
+  }
+}
+
+/**
  * 恢复/聚焦主窗口：隐藏到托盘后窗口还在（isMain 的 close 被拦截为 hide），
  * 直接 show+focus；窗口已销毁（退出流程外异常）则重建。托盘、通知、对话框统一走这里。
  */
 export function focusOrCreateMainWindow(): BrowserWindow {
   const existing = getMainWindow();
   if (existing) {
-    if (existing.isMinimized()) existing.restore();
-    if (!existing.isVisible()) existing.show();
-    existing.focus();
+    activateAndFocusWindow(existing);
     return existing;
   }
   return createMainWindow();
@@ -159,10 +189,7 @@ export function focusOrCreateMainWindow(): BrowserWindow {
 export function focusWindowForSession(sessionPath: string): boolean {
   const win = findWindowBySession(sessionPath);
   if (!win) return false;
-  if (typeof win.isMinimized === 'function' && win.isMinimized()) win.restore();
-  if (typeof win.isVisible === 'function' && !win.isVisible()) win.show();
-  if (typeof app.focus === 'function') app.focus({ steal: true });
-  win.focus();
+  activateAndFocusWindow(win);
   return true;
 }
 

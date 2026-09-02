@@ -17,6 +17,7 @@ import {
   findWindowBySession,
   claimWindowSession,
   focusWindowForSession,
+  activateAndFocusWindow,
   getWindowBounds,
   listWindows,
   resolveWindowSize,
@@ -58,8 +59,7 @@ export const windowsApi = {
     // 会话已经在主窗口或其他独立窗口时，不创建第二份；同时通知持有窗口激活对应面板。
     const existing = findWindowBySession(payload.sessionPath);
     if (existing) {
-      if (existing.isMinimized()) existing.restore();
-      existing.focus();
+      activateAndFocusWindow(existing);
       sendHostEventToWindow(existing, 'windows', 'focusSession', { sessionPath: payload.sessionPath });
       return;
     }
@@ -74,8 +74,7 @@ export const windowsApi = {
       // 持有窗口不是拖拽源窗口：复用持有窗口（聚焦 + 激活对应面板），
       // 不建新窗，保证同一会话全局只归一个窗口。
       if (sourceWin?.webContents.id !== existing.webContents.id) {
-        if (existing.isMinimized()) existing.restore();
-        existing.focus();
+        activateAndFocusWindow(existing);
         sendHostEventToWindow(existing, 'windows', 'focusSession', { sessionPath: payload.sessionPath });
         return;
       }
@@ -119,8 +118,7 @@ export const windowsApi = {
   focusIfOpen: (payload: WindowsFocusPayload, ctx?: HostActionContext): boolean => {
     const win = findWindowBySession(payload.sessionPath);
     if (win) {
-      if (win.isMinimized()) win.restore();
-      win.focus();
+      activateAndFocusWindow(win);
       sendHostEventToWindow(win, 'windows', 'focusSession', { sessionPath: payload.sessionPath });
       return true;
     }

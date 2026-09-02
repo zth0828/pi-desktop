@@ -4,11 +4,14 @@
 import { appendFileSync } from 'node:fs';
 import { BrowserWindow, Notification } from 'electron';
 import type { HostSuccess, NotifyDispatchPayload } from '@shared/host-api/contract';
-import { getMainWindow, findWindowBySession, resolveWindowSession } from '../main/window-manager';
+import { getMainWindow, findWindowBySession, resolveWindowSession, activateAndFocusWindow } from '../main/window-manager';
 import { sendHostEventToWindow } from '../main/ipc/host-events';
 import { resolveNotifyFocused, shouldNotify, type NotifyMode } from './notify-policy';
 import { settingsApi } from './settings-api';
 import { samePath } from '../utils/same-path';
+
+// 活跃通知实例集合：防止被 V8 垃圾回收导致 click 回调在用户点击前失效
+const activeNotifications = new Set<Notification>();
 
 export const notifyApi = {
   dispatch: async (payload: NotifyDispatchPayload): Promise<HostSuccess> => {
@@ -47,7 +50,17 @@ export const notifyApi = {
 
     try {
       const notification = new Notification({ title: payload.title, body: payload.body ?? '' });
+      activeNotifications.add(notification);
+
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        activeNotifications.delete(notification);
+      };
+
       notification.on('click', () => {
+        cleanup();
         // 点击优先聚焦产生通知的会话所在窗口并激活对应面板（与 windows-api 的 focus 路径一致）；
         // 会话有身份但没有窗口持有它（同窗口切走 / 会话窗口已关）时回退主窗口，
         // 并同样发 focusSession 让目标窗口打开该会话——否则点击只聚焦不跳转。
@@ -56,8 +69,7 @@ export const notifyApi = {
         if (payload.sessionPath) {
           sessionWindow = findWindowBySession(payload.sessionPath);
           if (sessionWindow) {
-            if (sessionWindow.isMinimized()) sessionWindow.restore();
-            sessionWindow.focus();
+            activateAndFocusWindow(sessionWindow);
             sendHostEventToWindow(sessionWindow, 'windows', 'focusSession', {
               sessionPath: payload.sessionPath,
             });
@@ -66,9 +78,7 @@ export const notifyApi = {
         }
         target ??= getMainWindow() ?? (windows.find((w) => !w.isDestroyed()) ?? null);
         if (target) {
-          if (target.isMinimized()) target.restore();
-          if (!target.isVisible()) target.show();
-          target.focus();
+          activateAndFocusWindow(target);
           // 会话身份存在但没有任何窗口持有它：通知目标窗口打开该会话
           if (payload.sessionPath && !sessionWindow) {
             sendHostEventToWindow(target, 'windows', 'focusSession', {
@@ -77,6 +87,12 @@ export const notifyApi = {
           }
         }
       });
+      notification.on('close', cleanup);
+      notification.on('failed', cleanup);
+
+      // 120 秒超时兜底，避免系统通知中心常驻过期通知长期占用 Set
+      setTimeout(cleanup, 120_000);
+
       notification.show();
     } catch {
       // 未签名/无通知权限环境下系统通知可能不可用，静默降级

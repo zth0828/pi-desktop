@@ -137,6 +137,13 @@ export default function App() {
     return () => document.removeEventListener('keydown', openSearch);
   }, []);
 
+  // 收到会话定位/聚焦请求（如点击系统通知）时，确保视图切换到 chat 页面
+  useEffect(() => {
+    return onHostEvent('windows', 'focusSession', () => {
+      navigate('chat');
+    });
+  }, []);
+
   // macOS 原生系统菜单栏业务项：与自绘菜单（Windows/Linux）走同一组 action。
   useEffect(() => {
     return onHostEvent('menu', 'action', ({ action }) => {

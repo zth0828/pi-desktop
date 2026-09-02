@@ -49,6 +49,7 @@ class FakeBrowserWindow {
   focus(): void {
     this.focused = true;
   }
+  setAlwaysOnTop(): void {}
   setIcon(): void {}
   close(): void {
     this.destroyed = true;
@@ -276,6 +277,18 @@ describe('createSessionWindowAtPoint（M3 拖出开窗）', () => {
       y: 1000,
     }) as unknown as FakeBrowserWindow;
     expect(win).toBe(existing);
+    expect(win.focused).toBe(true);
+  });
+});
+
+describe('activateAndFocusWindow 跨平台窗口唤醒', () => {
+  it('最小化与不可见窗口被恢复并展示', () => {
+    const win = fakeWindow();
+    win.minimized = true;
+    win.visible = false;
+    wm.activateAndFocusWindow(win as never);
+    expect(win.minimized).toBe(false);
+    expect(win.visible).toBe(true);
     expect(win.focused).toBe(true);
   });
 });

@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   findWindowBySession: vi.fn(),
   claimWindowSession: vi.fn(),
   focusWindowForSession: vi.fn(),
+  activateAndFocusWindow: vi.fn((win: { focus?: () => void }) => {
+    win?.focus?.();
+  }),
   setWindowSessions: vi.fn(),
   listWindows: vi.fn(),
   getWindowBounds: vi.fn(),
@@ -25,6 +28,7 @@ vi.mock('@electron/main/window-manager', () => ({
   focusWindowForSession: mocks.focusWindowForSession,
   setWindowSessions: mocks.setWindowSessions,
   listWindows: mocks.listWindows,
+  activateAndFocusWindow: mocks.activateAndFocusWindow,
   getWindowBounds: mocks.getWindowBounds,
   resolveWindowSize: mocks.resolveWindowSize,
 }));
