@@ -196,63 +196,69 @@ describe('windowsApi', () => {
   });
 
   describe('expandRight / restoreExpandRight', () => {
-    const fakeWindow = (id: number, width: number, x = 100) => ({
+    const fakeWindow = (id: number, width: number, x = 680) => ({
       id,
       bounds: { x, y: 40, width, height: 800 },
       isDestroyed: vi.fn(() => false),
       isMaximized: vi.fn(() => false),
       isFullScreen: vi.fn(() => false),
       getBounds() { return { ...this.bounds }; },
-      setBounds: vi.fn(function (this: { bounds: { width: number } }, next: { width: number }) {
+      setBounds: vi.fn(function (this: { bounds: { x: number; width: number } }, next: { x?: number; width: number }) {
+        if (typeof next.x === 'number') this.bounds.x = next.x;
         this.bounds.width = next.width;
       }),
       once: vi.fn(),
     });
     const ctxFor = (win: unknown) => ({ sender: { id: 1, win } }) as never;
 
-    it('右缘空间充足：按请求加宽并记录原宽', () => {
-      const win = fakeWindow(11, 1200);
-      const result = windowsApi.expandRight({ extraWidth: 656 }, ctxFor(win));
-      expect(result).toEqual({ applied: 656 });
-      expect(win.bounds.width).toBe(1856);
+    it('空间充足：按请求对称加宽并保持居中，记录原位置和尺寸', () => {
+      const win = fakeWindow(11, 1200, 680);
+      const result = windowsApi.expandRight({ extraWidth: 600 }, ctxFor(win));
+      expect(result).toEqual({ applied: 600 });
+      expect(win.bounds.width).toBe(1800);
+      expect(win.bounds.x).toBe(380); // 680 - 300 = 380
     });
 
-    it('右缘空间不足：clamp 到可用空间', () => {
-      const win = fakeWindow(12, 1200, 1200); // 右缘剩 2560-2400=160
-      const result = windowsApi.expandRight({ extraWidth: 656 }, ctxFor(win));
-      expect(result).toEqual({ applied: 160 });
-      expect(win.bounds.width).toBe(1360);
+    it('右缘空间不足：向左扩展并 clamp 到屏幕范围内', () => {
+      const win = fakeWindow(12, 1200, 1800); // 居右窗口
+      const result = windowsApi.expandRight({ extraWidth: 600 }, ctxFor(win));
+      expect(result).toEqual({ applied: 600 });
+      expect(win.bounds.width).toBe(1800);
+      expect(win.bounds.x).toBe(760); // 2560 - 1800 = 760
     });
 
     it('已加宽的窗口重复调用不再加宽（多面板各开工作台）', () => {
-      const win = fakeWindow(13, 1200);
-      expect(windowsApi.expandRight({ extraWidth: 656 }, ctxFor(win))).toEqual({ applied: 656 });
-      expect(windowsApi.expandRight({ extraWidth: 656 }, ctxFor(win))).toEqual({ applied: 0 });
-      expect(win.bounds.width).toBe(1856);
+      const win = fakeWindow(13, 1200, 680);
+      expect(windowsApi.expandRight({ extraWidth: 600 }, ctxFor(win))).toEqual({ applied: 600 });
+      expect(windowsApi.expandRight({ extraWidth: 600 }, ctxFor(win))).toEqual({ applied: 0 });
+      expect(win.bounds.width).toBe(1800);
+      expect(win.bounds.x).toBe(380);
       // count 语义：两次展开需两次 restore 才缩回
       windowsApi.restoreExpandRight(undefined, ctxFor(win));
-      expect(win.bounds.width).toBe(1856);
+      expect(win.bounds.width).toBe(1800);
+      expect(win.bounds.x).toBe(380);
       windowsApi.restoreExpandRight(undefined, ctxFor(win));
       expect(win.bounds.width).toBe(1200);
+      expect(win.bounds.x).toBe(680);
     });
 
     it('展开期间用户手动改过宽度：restore 放弃缩回', () => {
-      const win = fakeWindow(14, 1200);
-      windowsApi.expandRight({ extraWidth: 656 }, ctxFor(win));
+      const win = fakeWindow(14, 1200, 680);
+      windowsApi.expandRight({ extraWidth: 600 }, ctxFor(win));
       win.bounds.width = 2000; // 用户拖宽
       windowsApi.restoreExpandRight(undefined, ctxFor(win));
       expect(win.bounds.width).toBe(2000);
     });
 
     it('最大化窗口不加宽', () => {
-      const win = fakeWindow(15, 1200);
+      const win = fakeWindow(15, 1200, 680);
       win.isMaximized.mockReturnValue(true);
-      expect(windowsApi.expandRight({ extraWidth: 656 }, ctxFor(win))).toEqual({ applied: 0 });
+      expect(windowsApi.expandRight({ extraWidth: 600 }, ctxFor(win))).toEqual({ applied: 0 });
       expect(win.setBounds).not.toHaveBeenCalled();
     });
 
     it('无 ctx / 无窗口时不动作', () => {
-      expect(windowsApi.expandRight({ extraWidth: 656 })).toEqual({ applied: 0 });
+      expect(windowsApi.expandRight({ extraWidth: 600 })).toEqual({ applied: 0 });
       expect(() => windowsApi.restoreExpandRight()).not.toThrow();
     });
   });

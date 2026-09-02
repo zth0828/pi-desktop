@@ -1,7 +1,13 @@
 // 窗口尺寸计算单测：小屏（800x600 远程桌面/虚拟机等 Windows 场景）贴屏不超界，
 // 常规/大屏保持原有 1440x900 上限与 -64 边距行为不变。
 import { describe, expect, it } from 'vitest';
-import { computeRightExpansion, resolveMinSizeFor, resolveWindowSizeFor, shouldRestoreExpansion } from '../../electron/utils/window-bounds';
+import {
+  computeCenteredExpansion,
+  computeRightExpansion,
+  resolveMinSizeFor,
+  resolveWindowSizeFor,
+  shouldRestoreExpansion,
+} from '../../electron/utils/window-bounds';
 
 describe('resolveWindowSizeFor', () => {
   it('大屏（2560x1440）维持 1440x900 上限', () => {
@@ -40,6 +46,59 @@ describe('resolveMinSizeFor', () => {
 
   it('小屏窗口随实际尺寸收紧，不把窗口撑出屏幕', () => {
     expect(resolveMinSizeFor({ width: 784, height: 536 })).toEqual({ width: 784, height: 536 });
+  });
+});
+
+describe('computeCenteredExpansion', () => {
+  const workArea = { x: 0, y: 0, width: 2560, height: 1440 };
+
+  it('居中窗口两侧对称展开保持屏幕居中', () => {
+    // 初始窗口 1200 宽，位于 x=680（中心 1280）
+    const bounds = { x: 680, y: 40, width: 1200, height: 800 };
+    const result = computeCenteredExpansion(bounds, workArea, 600);
+    expect(result).toEqual({
+      applied: 600,
+      nextWidth: 1800,
+      nextX: 380, // 680 - 300 = 380, 中心保持 380 + 900 = 1280
+    });
+  });
+
+  it('窗口偏右时展开向左移动并 clamp 在屏幕内', () => {
+    const bounds = { x: 1800, y: 40, width: 600, height: 800 };
+    const result = computeCenteredExpansion(bounds, workArea, 600);
+    // targetWidth = 1200, idealX = 1800 - 300 = 1500, max allowed X = 2560 - 1200 = 1360
+    expect(result).toEqual({
+      applied: 600,
+      nextWidth: 1200,
+      nextX: 1360,
+    });
+  });
+
+  it('窗口偏左时展开向右 clamp 在屏幕左缘', () => {
+    const bounds = { x: 50, y: 40, width: 600, height: 800 };
+    const result = computeCenteredExpansion(bounds, workArea, 600);
+    // targetWidth = 1200, idealX = 50 - 300 = -250, clamped min X = 0
+    expect(result).toEqual({
+      applied: 600,
+      nextWidth: 1200,
+      nextX: 0,
+    });
+  });
+
+  it('extraWidth ≤ 0 时不加宽', () => {
+    const bounds = { x: 680, y: 40, width: 1200, height: 800 };
+    expect(computeCenteredExpansion(bounds, workArea, 0)).toEqual({ applied: 0, nextX: 680, nextWidth: 1200 });
+    expect(computeCenteredExpansion(bounds, workArea, -100)).toEqual({ applied: 0, nextX: 680, nextWidth: 1200 });
+  });
+
+  it('超过屏幕总宽度时 clamp 到屏幕最大宽度与起始 0 坐标', () => {
+    const bounds = { x: 680, y: 40, width: 1200, height: 800 };
+    const result = computeCenteredExpansion(bounds, workArea, 2000);
+    expect(result).toEqual({
+      applied: 1360,
+      nextWidth: 2560,
+      nextX: 0,
+    });
   });
 });
 

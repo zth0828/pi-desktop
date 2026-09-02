@@ -29,10 +29,16 @@ import { prewarmSessionRuntime } from './pi-runtime-api';
 import { timingMark } from '../utils/timing';
 import { centerBoundsAtPoint, isPointInsideRects } from '../utils/detach-drop';
 import { hashSessionPath, writePiDiagnostic } from '../utils/pi-diagnostic-log';
-import { computeRightExpansion, shouldRestoreExpansion } from '../utils/window-bounds';
+import { computeCenteredExpansion, shouldRestoreExpansion } from '../utils/window-bounds';
 
-/** 每窗口的向右加宽状态：count 支持同窗口多面板各自展开工作台（只加宽一次，归零才缩回）。 */
-type ExpandRightState = { originalWidth: number; applied: number; count: number };
+/** 每窗口的居中对称展开状态：count 支持同窗口多面板各自展开工作台（只加宽一次，归零才缩回）。 */
+type ExpandRightState = {
+  originalX: number;
+  originalWidth: number;
+  applied: number;
+  nextX: number;
+  count: number;
+};
 const expandRightStates = new Map<number, ExpandRightState>();
 
 export const windowsApi = {
@@ -141,12 +147,16 @@ export const windowsApi = {
     }
     if (win.isMaximized() || win.isFullScreen()) return { applied: 0 };
     const bounds = win.getBounds();
-    const applied = computeRightExpansion(bounds, screen.getDisplayMatching(bounds).workArea, payload.extraWidth);
+    const { applied, nextX, nextWidth } = computeCenteredExpansion(
+      bounds,
+      screen.getDisplayMatching(bounds).workArea,
+      payload.extraWidth,
+    );
     if (applied <= 0) return { applied: 0 };
-    expandRightStates.set(win.id, { originalWidth: bounds.width, applied, count: 1 });
+    expandRightStates.set(win.id, { originalX: bounds.x, originalWidth: bounds.width, applied, nextX, count: 1 });
     win.once('closed', () => expandRightStates.delete(win.id));
     // macOS 第二参开启动画；Windows 忽略该参数
-    win.setBounds({ x: bounds.x, y: bounds.y, width: bounds.width + applied, height: bounds.height }, true);
+    win.setBounds({ x: nextX, y: bounds.y, width: nextWidth, height: bounds.height }, true);
     return { applied };
   },
 
@@ -161,6 +171,9 @@ export const windowsApi = {
     if (win.isMaximized() || win.isFullScreen()) return;
     const bounds = win.getBounds();
     if (!shouldRestoreExpansion(bounds.width, state.originalWidth, state.applied)) return;
-    win.setBounds({ x: bounds.x, y: bounds.y, width: state.originalWidth, height: bounds.height }, true);
+    const restoreX = bounds.x === state.nextX
+      ? state.originalX
+      : Math.round(bounds.x + (bounds.width - state.originalWidth) / 2);
+    win.setBounds({ x: restoreX, y: bounds.y, width: state.originalWidth, height: bounds.height }, true);
   },
 };

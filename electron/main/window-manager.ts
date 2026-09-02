@@ -269,8 +269,14 @@ export function resolveWindowSize(): { width: number; height: number } {
 /** 统一的窗口创建入口：主窗口与独立会话窗口共用配置，创建即注册。 */
 export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindow {
   timingMark('window:create:start');
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const workArea = primaryDisplay.workArea ?? { x: 0, y: 0, ...primaryDisplay.workAreaSize };
   const { width, height } = resolveWindowSize();
   const minSize = resolveMinSizeFor({ width, height });
+  const position = options.position ?? {
+    x: workArea.x + Math.max(0, Math.round((workArea.width - width) / 2)),
+    y: workArea.y + Math.max(0, Math.round((workArea.height - height) / 2)),
+  };
   const iconPath = resolveAppIconPath(windowIconFormat(), {
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
@@ -280,7 +286,9 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
   const win = new BrowserWindow({
     width,
     height,
-    ...(options.position ? { x: options.position.x, y: options.position.y } : {}),
+    x: position.x,
+    y: position.y,
+    center: !options.position,
     // 侧栏 + 聊天列(420) + 右侧面板的最小可用宽度；窄于此面板自动转覆盖层（CSS 媒体查询）
     minWidth: minSize.width,
     minHeight: minSize.height,

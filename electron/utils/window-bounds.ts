@@ -32,6 +32,40 @@ export function resolveMinSizeFor(size: WindowSize): WindowSize {
   };
 }
 
+/** 窗口居中对称展开计算结果。 */
+export type CenteredExpansionResult = {
+  applied: number;
+  nextX: number;
+  nextWidth: number;
+};
+
+/**
+ * 窗口居中对称展开计算：
+ * 基于当前窗口中心点向左右两侧对称加宽，避免单向向右加宽导致窗口失去居中平衡。
+ * targetWidth 限制在所在显示器的 workArea 宽度以内，nextX 限制在 [workArea.x, workArea.x + workArea.width - targetWidth]。
+ */
+export function computeCenteredExpansion(
+  bounds: WindowBounds,
+  workArea: WorkArea,
+  extraWidth: number,
+): CenteredExpansionResult {
+  const reqExtra = Math.max(0, Math.round(extraWidth));
+  if (reqExtra <= 0) {
+    return { applied: 0, nextX: bounds.x, nextWidth: bounds.width };
+  }
+  const maxAllowedWidth = workArea.width;
+  const targetWidth = Math.min(maxAllowedWidth, bounds.width + reqExtra);
+  const applied = targetWidth - bounds.width;
+  if (applied <= 0) {
+    return { applied: 0, nextX: bounds.x, nextWidth: bounds.width };
+  }
+  const idealX = Math.round(bounds.x - applied / 2);
+  const minX = workArea.x;
+  const maxX = workArea.x + workArea.width - targetWidth;
+  const nextX = Math.max(minX, Math.min(maxX, idealX));
+  return { applied, nextX, nextWidth: targetWidth };
+}
+
 /** 窗口向右加宽的可用量：不超过所在显示器 workArea 右缘；extraWidth ≤ 0 或右缘无空间时为 0。 */
 export function computeRightExpansion(bounds: WindowBounds, workArea: WorkArea, extraWidth: number): number {
   const available = Math.max(0, workArea.x + workArea.width - (bounds.x + bounds.width));
