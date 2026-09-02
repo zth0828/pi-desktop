@@ -450,9 +450,10 @@ function MessageItemView({
   const errorMessage = raw?.errorMessage;
   const showTail = !message.streaming && !suppressTail;
   const plainText = content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n').trim();
-  // 失败回合（stopReason=error）：只保留思考折叠块、过滤普通文本，末尾用
-  // ErrorNotice 展示最终错误；content 为空时退化为仅 ErrorNotice。
-  if (showTail && errorMessage) {
+  // 失败回合（stopReason=error 或含 errorMessage）：只保留思考折叠块、过滤普通文本，末尾用
+  // ErrorNotice 展示最终错误；content 为空时退化为仅 ErrorNotice。只要有错误立即展示，
+  // 防止流式标志悬挂时因 content 为空被下方 return null 吞没。
+  if (errorMessage && !suppressTail) {
     const thinkingBlocks = content.filter((block) => block.type === 'thinking');
     return (
       <div

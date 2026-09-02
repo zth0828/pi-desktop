@@ -373,4 +373,52 @@ describe('运行期错误分流（runtimeError 与 startError）', () => {
     store.getState().applyState(stateSnapshot('next', '/tmp/next.jsonl'));
     expect(store.getState().runtimeError).toBeUndefined();
   });
+
+  it('prompt 失败或抛错时显式复位 isStreaming 与 running，并记录 runtimeError', async () => {
+    uninstallBridge = installBridge((request) => {
+      if (request.action === 'prompt') return { success: false, error: 'model unavailable' };
+      return { success: true };
+    });
+    const store = createChatStore();
+    bindOldSession(store);
+    store.setState({ isStreaming: true, running: true });
+
+    await store.getState().prompt('hello');
+
+    expect(store.getState().isStreaming).toBe(false);
+    expect(store.getState().running).toBe(false);
+    expect(store.getState().runtimeError).toBe('model unavailable');
+  });
+
+  it('prompt 抛出未捕获异常时同样复位 isStreaming 与 running', async () => {
+    uninstallBridge = installBridge((request) => {
+      if (request.action === 'prompt') throw new Error('network down');
+      return { success: true };
+    });
+    const store = createChatStore();
+    bindOldSession(store);
+    store.setState({ isStreaming: true, running: true });
+
+    await store.getState().prompt('hello');
+
+    expect(store.getState().isStreaming).toBe(false);
+    expect(store.getState().running).toBe(false);
+    expect(store.getState().runtimeError).toBe('network down');
+  });
+
+  it('runtimeStateChanged 报告 running: false 时同步复位 isStreaming', () => {
+    const bus = createFakeBus();
+    const store = createChatStore({ onEvent: bus.onEvent });
+    bindOldSession(store);
+    store.setState({ isStreaming: true, running: true });
+
+    bus.emit('piRuntime.runtimeStateChanged', {
+      sessionId: 'old',
+      sessionPath: '/tmp/old.jsonl',
+      running: false,
+    });
+
+    expect(store.getState().running).toBe(false);
+    expect(store.getState().isStreaming).toBe(false);
+  });
 });

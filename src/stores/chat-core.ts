@@ -283,7 +283,10 @@ function bindInstanceEvents(
     onEvent('piRuntime', 'runtimeStateChanged', (event) => {
       const current = store.getState();
       if (!matchesBoundSession(current.boundSessionId, event.sessionId)) return;
-      store.setState({ running: event.running });
+      store.setState({
+        running: event.running,
+        ...(event.running === false ? { isStreaming: false } : {}),
+      });
     }),
     onEvent('piRuntime', 'uiRequest', (req) => {
       const s = store.getState();
@@ -486,10 +489,19 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
         awaitingRun = true;
-        const result = await api().piRuntime.prompt(text, images, behavior);
-        if (!result.success) {
+        try {
+          const result = await api().piRuntime.prompt(text, images, behavior);
+          if (!result.success) {
+            awaitingRun = false;
+            set({ isStreaming: false, running: false, runtimeError: result.error });
+          }
+        } catch (err) {
           awaitingRun = false;
-          set({ runtimeError: result.error });
+          set({
+            isStreaming: false,
+            running: false,
+            runtimeError: err instanceof Error ? err.message : String(err),
+          });
         }
       },
 
