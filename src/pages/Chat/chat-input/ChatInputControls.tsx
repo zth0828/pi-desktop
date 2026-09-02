@@ -661,17 +661,17 @@ export function ChatInputControls({
               <span>{t('chat.outputTokens')}</span>
               <strong>{formatTokens(usageTotals.output)}</strong>
             </div>
-            {(usageTotals.cacheRead > 0 || usageTotals.cacheWrite > 0) && (
-              <>
-                <div className="usage-row">
-                  <span>{t('chat.cacheRead')}</span>
-                  <strong>{formatTokens(usageTotals.cacheRead)}</strong>
-                </div>
-                <div className="usage-row">
-                  <span>{t('chat.cacheWrite')}</span>
-                  <strong>{formatTokens(usageTotals.cacheWrite)}</strong>
-                </div>
-              </>
+            {usageTotals.cacheRead > 0 && (
+              <div className="usage-row" data-testid="usage-session-cache-read">
+                <span>{t('chat.cacheRead')}</span>
+                <strong>{formatTokens(usageTotals.cacheRead)}</strong>
+              </div>
+            )}
+            {usageTotals.cacheWrite > 0 && (
+              <div className="usage-row" data-testid="usage-session-cache-write">
+                <span>{t('chat.cacheWrite')}</span>
+                <strong>{formatTokens(usageTotals.cacheWrite)}</strong>
+              </div>
             )}
             {cacheStatsAvailable && totalHitRate != null && (
               <div className="usage-row" data-testid="usage-session-cache-hit-rate">
