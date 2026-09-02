@@ -3,6 +3,16 @@
 //
 // 与 tool-display.ts 的 parseDiffLines 不同：那边解析的是 pi edit 工具 details.diff 的
 // 私有格式（"+12 content"），这里解析的是 `git diff` 的标准 unified diff。
+import { editPreviewDiff } from './tool-display';
+
+function writeContentDiff(content: unknown): string | undefined {
+  if (typeof content !== 'string' || !content.trim()) return undefined;
+  const trimmed = content.endsWith('\n') ? content.slice(0, -1) : content;
+  return trimmed
+    .split('\n')
+    .map((line, idx) => `+${idx + 1} ${line}`)
+    .join('\n');
+}
 
 export type ReviewHunk = {
   /** @@ -oldStart,oldLines +newStart,newLines @@ 整行原文 */
@@ -181,10 +191,13 @@ export function sessionChangeFiles(
       ex.result && typeof ex.result === 'object'
         ? (ex.result as { details?: unknown }).details
         : undefined;
-    const diff =
+    const realDiff =
       details && typeof details === 'object' && typeof (details as { diff?: unknown }).diff === 'string'
         ? (details as { diff: string }).diff
         : undefined;
+    const previewDiff = !realDiff && ex.toolName === 'edit' ? editPreviewDiff(ex.args) : undefined;
+    const writeDiff = !realDiff && ex.toolName === 'write' ? writeContentDiff(args?.content) : undefined;
+    const diff = realDiff ?? previewDiff ?? writeDiff;
 
     let added = 0;
     let deleted = 0;
@@ -268,10 +281,13 @@ export function collectFallbackFiles(
       ex.result && typeof ex.result === 'object'
         ? (ex.result as { details?: unknown }).details
         : undefined;
-    const diff =
+    const realDiff =
       details && typeof details === 'object' && typeof (details as { diff?: unknown }).diff === 'string'
         ? ((details as { diff: string }).diff)
         : undefined;
+    const previewDiff = !realDiff && ex.toolName === 'edit' ? editPreviewDiff(ex.args) : undefined;
+    const writeDiff = !realDiff && ex.toolName === 'write' ? writeContentDiff(args?.content) : undefined;
+    const diff = realDiff ?? previewDiff ?? writeDiff;
     let added = 0;
     let deleted = 0;
     if (diff) {

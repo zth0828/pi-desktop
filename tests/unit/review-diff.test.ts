@@ -200,7 +200,7 @@ describe('collectFallbackFiles', () => {
     expect(files.map((f) => f.path)).toEqual(['x.txt', 'z.txt']);
     expect(files[0].diff).toBe('-new\n+newer');
     expect(files[0]).toMatchObject({ added: 1, deleted: 1 });
-    expect(files[1].diff).toBeUndefined();
+    expect(files[1].diff).toBe('+1 hi');
     expect(files[1]).toMatchObject({ added: 1, deleted: 0 });
   });
 
@@ -280,7 +280,7 @@ describe('sessionChangeFiles', () => {
 
     expect(files[2]).toEqual({
       path: 'src/new.ts',
-      diff: undefined,
+      diff: '+1 const a = 1;\n+2 const b = 2;',
       added: 2,
       deleted: 0,
       editCount: 1,
