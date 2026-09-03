@@ -388,7 +388,7 @@ function MessageItemView({
       : rawBash!.output;
     const bashExpandedAttr = message.streaming ? 'streaming' : bashCollapsed ? 'false' : 'true';
     return (
-      <div className="message message-bash" data-testid="message-bash">
+      <div className="message message-bash" data-testid="message-bash" id={anchorId}>
         <div className="bash-header">
           <span className="bash-command" data-testid="bash-command">$ {rawBash?.command}</span>
           {rawBash?.excludeFromContext && (

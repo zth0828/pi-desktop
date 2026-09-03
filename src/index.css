@@ -7965,7 +7965,109 @@ button.danger-outline {
 .review-workspace { flex-direction: column; position: relative; height: 100%; }
 .review-toolbar { min-height: 40px; display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 
-/* 右侧「命令」面板：bash 执行列表 */
+/* 右侧「命令」面板：全量 bash 执行与流水线列表 */
+.command-panel-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.command-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  flex-shrink: 0;
+}
+.command-filter-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.command-filter-btn {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  padding: 2px 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+.command-filter-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+.command-filter-btn.active {
+  background: var(--bg-active);
+  color: var(--text);
+  border-color: var(--border);
+  font-weight: 500;
+}
+.command-filter-btn.has-failed .failed-count-dot {
+  background: var(--danger);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 9px;
+  padding: 0 4px;
+  min-width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+.command-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.command-search-icon {
+  position: absolute;
+  left: 7px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+.command-search-input {
+  width: 100%;
+  padding: 4px 22px 4px 24px;
+  font-size: 11px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  outline: none;
+}
+.command-search-input:focus {
+  border-color: var(--accent);
+}
+.command-search-clear {
+  position: absolute;
+  right: 5px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+}
+.command-search-clear:hover {
+  color: var(--text);
+}
+.command-list-empty-filtered {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
 .command-list {
   flex: 1;
   min-height: 0;
@@ -7996,8 +8098,65 @@ button.danger-outline {
   cursor: pointer;
 }
 .command-run.running .command-run-header { cursor: default; }
-.command-run-stop {
+.command-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.command-source-badge.agent {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+.command-source-badge.user {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+.command-run-chevron {
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.command-run-tags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-left: auto;
+  flex-shrink: 0;
+}
+.command-run-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.command-item-action-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: 4px;
+  padding: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.command-item-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.command-run-duration {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+.command-run-stop {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -8030,7 +8189,43 @@ button.danger-outline {
   max-height: 320px;
   overflow: auto;
 }
+.command-run-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  background: var(--bg-sunken);
+  border-top: 1px solid var(--border);
+}
+.command-copy-output-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+.command-copy-output-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
 .bash-badge.running { color: var(--accent); }
+.bash-badge.success { color: var(--success, #22c55e); }
+.bash-badge.interrupted { color: var(--warning, #f59e0b); }
+.tool-card-highlight {
+  animation: tool-card-pulse 1.5s ease-out;
+}
+@keyframes tool-card-pulse {
+  0% {
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
 .review-body { flex: 1; min-height: 0; display: flex; }
 .review-file-list { width: var(--review-tree-width, 240px); background: var(--bg); overflow-y: auto; flex-shrink: 0; border-right: 1px solid var(--border); }
 .review-file { border-radius: 5px; }

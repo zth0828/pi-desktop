@@ -261,7 +261,11 @@ export function ToolCallCard({
 
   // 通用/终端/查看类工具
   return (
-    <div className={`tool-card tool-${execution.status}`} data-testid="tool-card">
+    <div
+      id={`tool-call-${execution.toolCallId}`}
+      className={`tool-card tool-${execution.status}`}
+      data-testid="tool-card"
+    >
       <div className="tool-card-header-row">
         <button className="tool-card-header" onClick={() => setLocalExpanded(!expanded)}>
           <span className="tool-line" data-testid="tool-line">
