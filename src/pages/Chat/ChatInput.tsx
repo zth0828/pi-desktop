@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Check, Copy, FolderOpen, Info, Sparkles, Terminal, X } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW } from '@shared/host-api/contract';
@@ -8,6 +8,7 @@ import type {
   PiRuntimeUsageResult,
 } from '@shared/host-api/contract';
 import { formatOrderedAttachmentPrompt, stripAttachmentEnvelope } from '@shared/message-attachments';
+import { restoreToComposer } from '../../lib/message-restore';
 import { hostApi } from '../../lib/host-api';
 import { cacheHitRate, formatCost } from '../../lib/usage-stats';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
@@ -31,6 +32,8 @@ import {
 import { useFileMentions } from './chat-input/useFileMentions';
 import { useSlashCommands } from './chat-input/useSlashCommands';
 import { useComposerAttachments } from './chat-input/useComposerAttachments';
+import { useInputHistory } from './chat-input/useInputHistory';
+import { ContextWarningBar } from './chat-input/ContextWarningBar';
 import { ChatInputAttachments } from './chat-input/ChatInputAttachments';
 import { ChatInputMentionsPopup } from './chat-input/ChatInputMentionsPopup';
 import { ChatInputSlashPopup } from './chat-input/ChatInputSlashPopup';
@@ -62,6 +65,8 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const inputDraft = usePaneChatStore((s) => s.inputDraft);
   const value = usePaneChatStore((s) => s.composerText);
   const attachments = usePaneChatStore((s) => s.composerAttachments);
+  const messages = usePaneChatStore((s) => s.messages);
+  const historyMessages = usePaneChatStore((s) => s.historyMessages);
   const sessionId = usePaneChatStore((s) => s.sessionId);
   const generation = usePaneChatStore((s) => s.generation);
   const setComposerText = usePaneChatStore((s) => s.setComposerText);
@@ -396,11 +401,60 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     setPreviewImage,
     stageFiles,
     onPaste,
+    handleComposerDrop,
     removeAttachment,
   } = useComposerAttachments({
     attachments,
     setAttachments,
+    cwd,
+    value,
+    setValue,
+    textareaRef,
   });
+
+  const activeHistory = useMemo(() => {
+    const sourceMessages = historyMessages.length > 0 ? historyMessages : messages;
+    const list: string[] = [];
+    if (commandMode) {
+      for (const msg of sourceMessages) {
+        if (msg.role === 'bashExecution') {
+          const raw = msg.raw as { command?: string } | undefined;
+          const cmd = raw?.command?.trim();
+          if (cmd && (list.length === 0 || list[list.length - 1] !== cmd)) {
+            list.push(cmd);
+          }
+        }
+      }
+    } else {
+      for (const msg of sourceMessages) {
+        if (msg.role === 'user') {
+          const restored = restoreToComposer(msg);
+          const text = restored.text.trim();
+          if (text && (list.length === 0 || list[list.length - 1] !== text)) {
+            list.push(text);
+          }
+        }
+      }
+    }
+    return list;
+  }, [commandMode, historyMessages, messages]);
+
+  const {
+    historyIndex,
+    resetHistory,
+    handleKeyDown: handleHistoryKeyDown,
+  } = useInputHistory({
+    value,
+    setValue,
+    history: activeHistory,
+    textareaRef,
+    slashOpen: panelOpen,
+    mentionOpen: filePanelOpen,
+  });
+
+  useEffect(() => {
+    resetHistory();
+  }, [commandMode, resetHistory]);
 
   useEffect(() => {
     if (!composerMenuOpen && !usageOpen && !modelMenuOpen && !branchMenuOpen && !filePanelOpen) return;
@@ -519,6 +573,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   };
 
   const send = (behavior?: 'steer' | 'followUp') => {
+    resetHistory();
     const text = value.trim();
     if (!text && attachments.length === 0) return;
     if (text === '/' || text === '／' || text === '@') return;
@@ -760,6 +815,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (handleCommandKeyDown(e)) return;
     if (handleFileKeyDown(e)) return;
+    if (handleHistoryKeyDown(e)) return;
     if (e.key === 'Escape') {
       if (cancelLastStagedItem()) {
         e.preventDefault();
@@ -1136,7 +1192,19 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
           textareaRef.current?.focus();
         }}
       />
-      <div className="chat-input-card">
+      <ContextWarningBar
+        contextPercent={contextPercent}
+        compacting={compacting}
+        onCompact={() => void paneApi.piRuntime.compact()}
+      />
+      <div
+        className="chat-input-card chat-input-composer"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        }}
+        onDrop={handleComposerDrop}
+      >
         <ChatInputAttachments
           attachments={attachments}
           onRemove={removeAttachment}
@@ -1202,7 +1270,15 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
                 ? t('chat.placeholderCmdEnter')
                 : t('chat.placeholder')
           }
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+          }}
+          onDrop={handleComposerDrop}
           onChange={(e) => {
+            if (historyIndex !== -1) {
+              resetHistory();
+            }
             setValue(e.target.value);
             setSelected(0);
             setFileSelected(0);
