@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { getActiveSubprocessProxyEnv } from '../proxy-api';
+import { getCachedSubprocessProxyEnv } from '../proxy-api';
 import type { PiCompatibilityReport } from '@shared/host-api/contract';
 import type {
   PiAdapterNotReadyError,
@@ -251,7 +251,35 @@ export function createGenericPiAdapter(input: AdapterInput): PiRuntimeAdapter {
     port.getFollowUpMessages = () => [...raw.getFollowUpMessages()];
     port.clearQueue = () => raw.clearQueue();
     port.clearAgentQueues = () => raw.agent.clearAllQueues();
-    port.executeBash = (command, options) => raw.executeBash(command, undefined, options);
+    port.executeBash = (command, options) => {
+      const proxyEnv = getCachedSubprocessProxyEnv();
+      const hasProxy = Object.keys(proxyEnv).length > 0;
+      let operations = (options as any)?.operations as { exec: (...args: any[]) => any } | undefined;
+      if (hasProxy) {
+        const baseOperations = operations ?? (
+          typeof sdk.createLocalBashOperations === 'function'
+            ? sdk.createLocalBashOperations({ shellPath: (raw.settingsManager as any)?.getShellPath?.() })
+            : undefined
+        );
+        if (baseOperations) {
+          operations = {
+            ...baseOperations,
+            exec: (cmd: string, cwd: string, execOpts: any) =>
+              baseOperations.exec(cmd, cwd, {
+                ...execOpts,
+                env: {
+                  ...proxyEnv,
+                  ...execOpts?.env,
+                },
+              }),
+          };
+        }
+      }
+      return raw.executeBash(command, undefined, {
+        ...options,
+        ...(operations ? { operations } : {}),
+      });
+    };
     port.recordBashResult = (command, result, options) => raw.recordBashResult(command, result, options);
     return port;
   };
@@ -601,17 +629,15 @@ export function createGenericPiAdapter(input: AdapterInput): PiRuntimeAdapter {
             },
           } : undefined,
         });
-        const proxyEnv = await getActiveSubprocessProxyEnv().catch(() => ({}));
-        const hasProxy = Object.keys(proxyEnv).length > 0;
         const customTools: any[] = [];
-        if (hasProxy && typeof sdk.createBashTool === 'function') {
+        if (typeof sdk.createBashTool === 'function') {
           const customBash = sdk.createBashTool(cwd, {
             spawnHook: (ctx: { command: string; cwd: string; env?: Record<string, string | undefined> }) => ({
               command: ctx.command,
               cwd: ctx.cwd,
               env: {
                 ...ctx.env,
-                ...proxyEnv,
+                ...getCachedSubprocessProxyEnv(),
               },
             }),
           });

@@ -68,6 +68,7 @@ import {
 import { syncLmStudioModels } from '../utils/lmstudio-models';
 import { projectFolderName, sessionExportPath } from '../utils/session-export';
 import { getElectronStore } from '../utils/electron-store';
+import { getCachedSubprocessProxyEnv } from './proxy-api';
 import {
   cancelPendingUiForContext,
   createExtensionUIContext,
@@ -1485,9 +1486,11 @@ export const piRuntimeApi = {
         // 扩展直接给出执行结果：只记录不执行
         session.recordBashResult(payload.command, eventResult.result, { excludeFromContext });
       } else {
+        const proxyEnv = getCachedSubprocessProxyEnv();
         await session.executeBash(payload.command, {
           excludeFromContext,
           operations: eventResult?.operations,
+          ...(Object.keys(proxyEnv).length > 0 ? { env: proxyEnv } : {}),
         });
       }
       // bash 完成：消息可能已落盘或刚进 pending（recordBashResult 时回合仍在跑）。

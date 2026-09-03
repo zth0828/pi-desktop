@@ -47,6 +47,21 @@ export function ensureLoopbackProxyBypass(): void {
 }
 
 /** 按 Pi Desktop 设置解析当前应生效的代理 URL。 */
+let latestCachedProxyEnv: NodeJS.ProcessEnv = {};
+
+function updateCachedProxyEnv(resolved: ResolvedProxy): void {
+  if (resolved.source === 'off' || !resolved.url) {
+    latestCachedProxyEnv = {};
+  } else {
+    latestCachedProxyEnv = buildProxyEnv(resolved.url);
+  }
+}
+
+/** 同步获取内存中最新缓存的子进程代理环境变量集合。 */
+export function getCachedSubprocessProxyEnv(): NodeJS.ProcessEnv {
+  return { ...latestCachedProxyEnv };
+}
+
 export async function resolveProxy(): Promise<ResolvedProxy> {
   let mode: ProxyMode = 'auto';
   let configuredUrl: string | undefined;
@@ -57,12 +72,19 @@ export async function resolveProxy(): Promise<ResolvedProxy> {
   } catch {
     // 启动早期壳设置不可用时仍使用默认代理地址。
   }
-  if (mode === 'off') return { source: 'off' };
-  return {
-    url: configuredUrl?.trim() || DEFAULT_DESKTOP_PROXY_URL,
-    source: 'app',
-  };
+  const resolved: ResolvedProxy =
+    mode === 'off'
+      ? { source: 'off' }
+      : {
+          url: configuredUrl?.trim() || DEFAULT_DESKTOP_PROXY_URL,
+          source: 'app',
+        };
+  updateCachedProxyEnv(resolved);
+  return resolved;
 }
+
+// 模块加载时异步预热代理环境变量缓存
+void resolveProxy().catch(() => {});
 
 /** 当前代理模式 + Pi Desktop 中生效的 URL 快照（供设置页展示）。 */
 export async function detectProxy(): Promise<ProxyDetection> {

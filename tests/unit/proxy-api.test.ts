@@ -93,5 +93,18 @@ describe('subprocess proxy env injection', () => {
     expect(env.HTTP_PROXY).toBe('http://127.0.0.1:8888');
     expect(env.NO_PROXY).toBe('127.0.0.1,localhost,::1');
   });
+
+  it('getCachedSubprocessProxyEnv returns updated cached env synchronously', async () => {
+    const { getCachedSubprocessProxyEnv } = await import('../../electron/services/proxy-api');
+    settingsApiMock.getAll.mockResolvedValue({ httpProxyMode: 'auto', httpProxyUrl: 'http://127.0.0.1:9999' });
+    await resolveProxy();
+    const env = getCachedSubprocessProxyEnv();
+    expect(env.HTTP_PROXY).toBe('http://127.0.0.1:9999');
+    expect(env.NO_PROXY).toBe('127.0.0.1,localhost,::1');
+
+    settingsApiMock.getAll.mockResolvedValue({ httpProxyMode: 'off' });
+    await resolveProxy();
+    expect(getCachedSubprocessProxyEnv()).toEqual({});
+  });
 });
 
