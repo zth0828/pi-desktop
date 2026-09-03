@@ -504,6 +504,13 @@ export const DEFAULT_DESKTOP_PROXY_URL = 'http://127.0.0.1:7897';
 /** 默认公共 GitHub 下载加速镜像前缀。 */
 export const DEFAULT_DOWNLOAD_MIRROR = 'https://ghproxy.net/';
 
+/** 规范化构造带镜像前缀的下载 URL（自动去除前缀末尾多余斜杠并安全拼接）。 */
+export function buildMirrorUrl(prefix: string, targetUrl: string): string {
+  const cleanPrefix = prefix.trim().replace(/\/+$/, '');
+  const cleanTarget = targetUrl.trim();
+  return `${cleanPrefix}/${cleanTarget}`;
+}
+
 /** 网络代理模式：auto=启用 Pi Desktop 中配置的代理地址（默认），off=直连。 */
 export type ProxyMode = 'auto' | 'off';
 

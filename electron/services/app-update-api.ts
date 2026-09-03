@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_DOWNLOAD_MIRROR, type AppUpdateDownloadResult, type HostSuccess } from '@shared/host-api/contract';
+import { buildMirrorUrl, DEFAULT_DOWNLOAD_MIRROR, type AppUpdateDownloadResult, type HostSuccess } from '@shared/host-api/contract';
 import { settingsApi } from './settings-api';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { hostFetch } from '../utils/host-fetch';
@@ -71,7 +71,7 @@ async function downloadToFile(
   onProgress: (downloaded: number, total: number, speed: number) => void,
 ): Promise<void> {
   const customMirror = mirrorPrefix?.trim();
-  const mirrorUrl = (prefix: string) => (prefix.endsWith('/') ? `${prefix}${primaryUrl}` : `${prefix}/${primaryUrl}`);
+  const mirrorUrl = (prefix: string) => buildMirrorUrl(prefix, primaryUrl);
   const channels = customMirror
     ? [mirrorUrl(customMirror), primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)]
     : [primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)];
@@ -120,22 +120,23 @@ async function downloadToFile(
             writer.write(Buffer.from(chunk));
             downloaded += chunk.byteLength;
             const now = Date.now();
-            if (now - lastSpeedSampleAt >= 400) {
-              const elapsedSec = (now - lastSpeedSampleAt) / 1000;
-              currentSpeed = elapsedSec > 0 ? Math.round((downloaded - lastSpeedSampleBytes) / elapsedSec) : currentSpeed;
+            const elapsed = now - lastSpeedSampleAt;
+            if (elapsed >= 500) {
+              currentSpeed = Math.round(((downloaded - lastSpeedSampleBytes) / elapsed) * 1000);
               lastSpeedSampleAt = now;
               lastSpeedSampleBytes = downloaded;
             }
-            if (now - lastProgressEmitAt >= 80 || downloaded === total) {
+            if (now - lastProgressEmitAt >= 250 || downloaded === total) {
               lastProgressEmitAt = now;
               onProgress(downloaded, total, currentSpeed);
             }
           }
           await new Promise<void>((resolve, reject) => {
-            writer.end(() => resolve());
-            writer.on('error', reject);
+            writer.end((err?: Error | null) => {
+              if (err) reject(err);
+              else resolve();
+            });
           });
-          onProgress(downloaded, total, 0);
           return;
         } catch (streamError) {
           writer.destroy();
@@ -156,7 +157,7 @@ async function fetchChecksumText(
   mirrorPrefix: string | undefined,
 ): Promise<string> {
   const customMirror = mirrorPrefix?.trim();
-  const mirrorUrl = (prefix: string) => (prefix.endsWith('/') ? `${prefix}${primaryUrl}` : `${prefix}/${primaryUrl}`);
+  const mirrorUrl = (prefix: string) => buildMirrorUrl(prefix, primaryUrl);
   const channels = customMirror
     ? [mirrorUrl(customMirror), primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)]
     : [primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)];
@@ -182,7 +183,7 @@ export const appUpdateApi = {
         const mirrorPrefix = (await settingsApi.get({ key: 'downloadMirror' })) as string | undefined;
         const isCustomUrl = Boolean(process.env.PI_DESKTOP_GITHUB_API_URL);
         const customMirror = mirrorPrefix?.trim();
-        const releaseUrl = (prefix: string) => (prefix.endsWith('/') ? `${prefix}${githubUrl()}` : `${prefix}/${githubUrl()}`);
+        const releaseUrl = (prefix: string) => buildMirrorUrl(prefix, githubUrl());
         const releaseChannels = customMirror
           ? [releaseUrl(customMirror), githubUrl(), ...(isCustomUrl ? [] : [releaseUrl(DEFAULT_DOWNLOAD_MIRROR)])]
           : (isCustomUrl ? [githubUrl()] : [githubUrl(), releaseUrl(DEFAULT_DOWNLOAD_MIRROR)]);

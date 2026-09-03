@@ -153,4 +153,58 @@ describe('app-update-api mirror fallback', () => {
     expect(result.success).toBe(true);
     expect(result.assetName).toBe(assetName);
   });
+
+  it('works seamlessly when downloadMirror has no trailing slash', async () => {
+    const arch = platformAssetArch()[0];
+    const plat = process.platform;
+    const assetName = plat === 'darwin'
+      ? `Pi.Desktop-0.5.0-${arch}.dmg`
+      : plat === 'win32'
+        ? `Pi.Desktop-Setup-0.5.0-${arch}.exe`
+        : `Pi.Desktop-0.5.0-${arch}.AppImage`;
+
+    const dummyFileContent = Buffer.from('test-content-no-trailing-slash');
+    const sha256 = createHash('sha256').update(dummyFileContent).digest('hex');
+    const sumsName = `SHA256SUMS-${platformName()}.txt`;
+
+    // 没有末尾斜杠
+    settingsApiMock.get.mockImplementation(async ({ key }: { key: string }) => {
+      if (key === 'downloadMirror') return 'https://mirror.example.com';
+      return undefined;
+    });
+
+    const releaseMeta = {
+      assets: [
+        { name: assetName, browser_download_url: `https://github.com/release/${assetName}` },
+        { name: sumsName, browser_download_url: `https://github.com/release/${sumsName}` },
+      ],
+    };
+
+    hostFetchMock.hostFetch.mockImplementation(async (url: string) => {
+      if (url.includes('api.github.com')) {
+        return new Response(JSON.stringify(releaseMeta));
+      }
+      if (url === `https://github.com/release/${assetName}`) {
+        return new Response('Failed', { status: 500 });
+      }
+      // 验证无斜杠的前缀也能正确拼接出规范 URL
+      if (url === `https://mirror.example.com/https://github.com/release/${assetName}`) {
+        return new Response(dummyFileContent, {
+          status: 200,
+          headers: { 'content-length': String(dummyFileContent.length) },
+        });
+      }
+      if (url === `https://github.com/release/${sumsName}`) {
+        return new Response('Not found', { status: 404 });
+      }
+      if (url === `https://mirror.example.com/https://github.com/release/${sumsName}`) {
+        return new Response(`${sha256}  ${assetName}\n`, { status: 200 });
+      }
+      throw new Error(`Unhandled URL: ${url}`);
+    });
+
+    const result = await appUpdateApi.download();
+    expect(result.success).toBe(true);
+    expect(result.assetName).toBe(assetName);
+  });
 });

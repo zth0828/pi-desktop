@@ -1,4 +1,4 @@
-import { DEFAULT_DOWNLOAD_MIRROR, type VersionCheckSnapshot, type VersionCheckStatus } from '@shared/host-api/contract';
+import { buildMirrorUrl, DEFAULT_DOWNLOAD_MIRROR, type VersionCheckSnapshot, type VersionCheckStatus } from '@shared/host-api/contract';
 import { settingsApi } from './settings-api';
 import { piSystemApi } from './pi-system-api';
 import { appApi } from './app-api';
@@ -102,7 +102,7 @@ async function fetchReleaseMetadata(url: string, mirrorPrefix?: string) {
   };
 
   const customMirror = mirrorPrefix?.trim();
-  const mirrorUrl = (prefix: string, base: string) => (prefix.endsWith('/') ? `${prefix}${base}` : `${prefix}/${base}`);
+  const mirrorUrl = (prefix: string, base: string) => buildMirrorUrl(prefix, base);
   const apiChannels = customMirror
     ? [mirrorUrl(customMirror, url), url, ...(isCustomUrl ? [] : [mirrorUrl(DEFAULT_DOWNLOAD_MIRROR, url)])]
     : (isCustomUrl ? [url] : [url, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR, url)]);
