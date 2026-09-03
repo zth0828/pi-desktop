@@ -115,6 +115,12 @@
     "stopTip": "停止当前生成",
     "newSession": "新会话",
     "compact": "压缩上下文",
+    "contextWarning": {
+      "warning": "上下文已占用 {{percent}}%，建议压缩会话以保持响应速度",
+      "danger": "上下文已占用 {{percent}}%，即将超出模型窗口限制",
+      "compactButton": "一键压缩会话",
+      "dismiss": "临时关闭"
+    },
     "status": {
       "working": "工作中…",
       "serverRunning": "开发服务正在前台运行；可停止当前任务，或让 pi 在后台启动服务。",

@@ -115,6 +115,12 @@
     "stopTip": "Stop the current run",
     "newSession": "New session",
     "compact": "Compact",
+    "contextWarning": {
+      "warning": "Context is {{percent}}% full. Compacting is recommended to maintain responsiveness.",
+      "danger": "Context is {{percent}}% full and will soon exceed model window limit.",
+      "compactButton": "Compact Session",
+      "dismiss": "Dismiss"
+    },
     "status": {
       "working": "Working…",
       "serverRunning": "A development server is running in the foreground. Stop it, or ask pi to start it in the background.",
