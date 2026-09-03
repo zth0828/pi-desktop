@@ -1,6 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, ExternalLink, FileCheck, Folder, FolderOpen, Pin, X } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowDown,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  FileCheck,
+  Folder,
+  FolderOpen,
+  Pin,
+  X,
+} from 'lucide-react';
 import type { PiSessionExportInfo, PiSessionExportRecord, PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
@@ -259,6 +270,13 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
   const [notice, setNotice] = useState<string>();
   const [loadError, setLoadError] = useState<string>();
   const [exportInfo, setExportInfo] = useState<PiSessionExportInfo>();
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [exportCardCollapsed, setExportCardCollapsed] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const hasRecentExportsRef = useRef(false);
+  hasRecentExportsRef.current = Boolean(exportInfo?.recentRecords && exportInfo.recentRecords.length > 0);
 
   const showNotice = useCallback((msg: string) => {
     setNotice(msg);
@@ -280,65 +298,86 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
     return t('sessions.actionFailed', { error: err });
   };
 
-  const loadExportInfo = useCallback(() => {
-    hostApi.piSessions
-      .getExportInfo()
-      .then(setExportInfo)
-      .catch((err) => showNotice(err instanceof Error ? err.message : String(err)));
+  const loadExportInfo = useCallback(async () => {
+    try {
+      const info = await hostApi.piSessions.getExportInfo();
+      setExportInfo(info);
+      hasRecentExportsRef.current = Boolean(info?.recentRecords && info.recentRecords.length > 0);
+    } catch (err) {
+      showNotice(err instanceof Error ? err.message : String(err));
+    }
   }, [showNotice]);
 
-  const refresh = useCallback(() => {
-    setLoading(true);
+  const initialLoadedRef = useRef(false);
+
+  const refreshSessions = useCallback((silent = false) => {
+    if (!silent && !initialLoadedRef.current) {
+      setLoading(true);
+    }
     hostApi.piSessions
       .listAll()
       .then((r) => {
         setSessions(r.sessions);
         setLoadError(undefined);
+        initialLoadedRef.current = true;
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
-    loadExportInfo();
+  }, []);
+
+  // 仅在组件初次挂载时查询一次导出信息
+  useEffect(() => {
+    void loadExportInfo();
   }, [loadExportInfo]);
 
-  // 当会话页面打开/激活时自动重新检测会话和导出文件状态
+  // 当会话页面激活时静默同步最新会话；仅在已有最近导出时才复查导出磁盘文件
   useEffect(() => {
     if (active) {
-      refresh();
+      refreshSessions(true);
+      if (hasRecentExportsRef.current) {
+        void loadExportInfo();
+      }
     }
-  }, [active, refresh]);
+  }, [active, refreshSessions, loadExportInfo]);
 
-  // 当窗口获得焦点时（例如在 Finder 中删除了文件后切回应用），自动检测更新
+  // 当窗口获得焦点时静默刷新会话列表；仅在已有最近导出时才复查导出磁盘文件
   useEffect(() => {
     const handleFocus = () => {
       if (active) {
-        refresh();
+        refreshSessions(true);
+        if (hasRecentExportsRef.current) {
+          void loadExportInfo();
+        }
       }
     };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [active, refresh]);
+  }, [active, refreshSessions, loadExportInfo]);
 
   useEffect(() => {
-    const unbindReplaced = onHostEvent('piRuntime', 'sessionReplaced', refresh);
-    const unbindState = onHostEvent('piRuntime', 'runtimeStateChanged', refresh);
-    const unbindChanged = onHostEvent('piRuntime', 'sessionsChanged', refresh);
+    const onSessionUpdate = () => refreshSessions(true);
+    const unbindReplaced = onHostEvent('piRuntime', 'sessionReplaced', onSessionUpdate);
+    const unbindState = onHostEvent('piRuntime', 'runtimeStateChanged', onSessionUpdate);
+    const unbindChanged = onHostEvent('piRuntime', 'sessionsChanged', onSessionUpdate);
     return () => {
       unbindReplaced();
       unbindState();
       unbindChanged();
     };
-  }, [refresh]);
+  }, [refreshSessions]);
 
   const runShellAction = async (action: () => Promise<{ success: boolean; error?: string }>) => {
     const result = await action();
     if (!result.success) {
-      loadExportInfo();
+      if (hasRecentExportsRef.current) {
+        void loadExportInfo();
+      }
       showNotice(formatShellError(result.error));
     }
   };
 
   const onExported = (_lastPath: string) => {
-    loadExportInfo();
+    void loadExportInfo();
   };
 
   const handleDelete = async (sessionPath: string) => {
@@ -392,169 +431,285 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
 
   const groups = useMemo(() => groupByProject(sessions), [sessions]);
 
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  const updateScrollAffordance = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setIsScrolled(el.scrollTop > 8);
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const hasOverflow = el.scrollHeight > el.clientHeight + 40;
+    setShowScrollToBottom(hasOverflow && distanceFromBottom > 100);
+  }, []);
+
+  const scrollToBottom = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onScroll = () => updateScrollAffordance();
+    updateScrollAffordance();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [updateScrollAffordance]);
+
+  useEffect(() => {
+    updateScrollAffordance();
+  }, [sessions, exportInfo, collapsedGroups, exportCardCollapsed, updateScrollAffordance]);
+
+  const allCollapsed = useMemo(() => {
+    if (groups.length === 0) return false;
+    return groups.every((g) => collapsedGroups[g.cwd]);
+  }, [groups, collapsedGroups]);
+
+  const toggleAllGroups = () => {
+    if (allCollapsed) {
+      setCollapsedGroups({});
+    } else {
+      const next: Record<string, boolean> = {};
+      for (const g of groups) {
+        next[g.cwd] = true;
+      }
+      setCollapsedGroups(next);
+    }
+  };
+
+  const toggleGroup = (cwd: string) => {
+    setCollapsedGroups((prev) => ({
+      ...prev,
+      [cwd]: !prev[cwd],
+    }));
+  };
+
   return (
-    <div className="sessions-page">
-      <h2>{t('sessions.title')}</h2>
-      {loading && (
-        <p className="hint" data-testid="sessions-loading">
-          {t('states.loading')}
-        </p>
-      )}
-      {notice && (
-        <div className="sessions-notice-banner" data-testid="sessions-error">
-          <AlertCircle size={15} />
-          <span className="sessions-notice-text">{notice}</span>
-          <button
-            className="sessions-notice-close"
-            data-testid="sessions-error-dismiss"
-            onClick={() => setNotice(undefined)}
-            title={t('sessions.actionErrorDismiss')}
-          >
-            <X size={13} />
-          </button>
+    <div className="sessions-page-wrapper">
+      <div className={`sessions-header-bar${isScrolled ? ' is-scrolled' : ''}`}>
+        <div className="sessions-header">
+          <h2>{t('sessions.title')}</h2>
+          {groups.length > 0 && (
+            <button
+              className="pill session-collapse-all-btn"
+              data-testid="sessions-collapse-all"
+              onClick={toggleAllGroups}
+              title={allCollapsed ? t('sessions.expandAll') : t('sessions.collapseAll')}
+            >
+              {allCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+              <span>{allCollapsed ? t('sessions.expandAll') : t('sessions.collapseAll')}</span>
+            </button>
+          )}
         </div>
-      )}
-      {loadError && (
-        <div className="sessions-notice-banner fatal" data-testid="sessions-load-error">
-          <AlertCircle size={15} />
-          <span className="sessions-notice-text">{loadError}</span>
-          <button data-testid="sessions-retry" className="pill" onClick={refresh}>
-            {t('states.retry')}
-          </button>
-        </div>
-      )}
-      {exportInfo && (
-        <div className="session-export-card" data-testid="sessions-export-info">
-          <div className="session-export-card-header">
-            <div className="session-export-card-title">
-              <strong>
-                {exportInfo.recentRecords && exportInfo.recentRecords.length > 0
-                  ? t('sessions.recentExports')
-                  : t('sessions.exportLocation')}
-              </strong>
-              {exportInfo.recentRecords && exportInfo.recentRecords.length > 0 && (
+      </div>
+      <div className="sessions-page" ref={containerRef} onScroll={updateScrollAffordance}>
+        {loading && sessions.length === 0 && (
+          <p className="hint" data-testid="sessions-loading">
+            {t('states.loading')}
+          </p>
+        )}
+        {notice && (
+          <div className="sessions-notice-banner" data-testid="sessions-error">
+            <AlertCircle size={15} />
+            <span className="sessions-notice-text">{notice}</span>
+            <button
+              className="sessions-notice-close"
+              data-testid="sessions-error-dismiss"
+              onClick={() => setNotice(undefined)}
+              title={t('sessions.actionErrorDismiss')}
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+        {loadError && (
+          <div className="sessions-notice-banner fatal" data-testid="sessions-load-error">
+            <AlertCircle size={15} />
+            <span className="sessions-notice-text">{loadError}</span>
+            <button data-testid="sessions-retry" className="pill" onClick={() => refreshSessions(false)}>
+              {t('states.retry')}
+            </button>
+          </div>
+        )}
+        {exportInfo?.recentRecords && exportInfo.recentRecords.length > 0 && (
+          <div className="session-export-card" data-testid="sessions-export-info">
+            <div className="session-export-card-header">
+              <div
+                className="session-export-card-title session-export-collapsible"
+                data-testid="sessions-export-toggle"
+                onClick={() => setExportCardCollapsed((prev) => !prev)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setExportCardCollapsed((prev) => !prev);
+                  }
+                }}
+                aria-expanded={!exportCardCollapsed}
+                title={exportCardCollapsed ? t('sessions.expandExports') : t('sessions.collapseExports')}
+              >
+                <ChevronDown
+                  size={14}
+                  className={`session-chevron${exportCardCollapsed ? ' collapsed' : ''}`}
+                />
+                <strong>{t('sessions.recentExports')}</strong>
                 <span className="session-export-count-badge">
                   {exportInfo.recentRecords.length}
                 </span>
-              )}
-            </div>
-            <button
-              className="pill session-export-folder-btn"
-              data-testid="sessions-show-export"
-              title={t('sessions.openExportFolder')}
-              onClick={() => void runShellAction(() => hostApi.shell.openPath(exportInfo.directory))}
-            >
-              <FolderOpen size={13} />
-              {t('sessions.openExportFolder')}
-            </button>
-          </div>
-
-          {exportInfo.recentRecords && exportInfo.recentRecords.length > 0 ? (
-            <div className="session-recent-exports-list" data-testid="sessions-recent-list">
-              {exportInfo.recentRecords.map((record) => {
-                const fileName = record.path.split(/[\\/]/).pop();
-                return (
-                  <div className="session-recent-export-item" key={record.path} data-testid="session-recent-item">
-                    <div className="session-recent-export-info">
-                      <div className="session-recent-export-main">
-                        {record.projectName && (
-                          <span className="session-export-project-badge" title={record.cwd}>
-                            <Folder size={11} />
-                            {record.projectName}
-                          </span>
-                        )}
-                        <span className="session-recent-export-title" title={record.title}>
-                          {record.title}
-                        </span>
-                      </div>
-                      <div className="session-recent-export-sub hint">
-                        <span className="session-recent-export-filename" title={record.path}>
-                          {fileName}
-                        </span>
-                        {record.exportedAt && (
-                          <>
-                            <span>·</span>
-                            <span>{formatRelativeTime(record.exportedAt, Date.now(), i18n.language)}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div className="session-recent-export-actions">
-                      <button
-                        className="pill"
-                        data-testid="sessions-open-export"
-                        title={t('sessions.openExportedTooltip')}
-                        onClick={() => void runShellAction(() => hostApi.shell.openPath(record.path))}
-                      >
-                        <ExternalLink size={13} />
-                        {t('sessions.openExport')}
-                      </button>
-                      <button
-                        className="pill"
-                        data-testid="sessions-show-export-item"
-                        title={t('sessions.showExportedInFolderTooltip')}
-                        onClick={() => void runShellAction(() => hostApi.shell.showInFolder(record.path))}
-                      >
-                        <FolderOpen size={13} />
-                        {t('sessions.showInFolder')}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="session-export-empty-hint hint" title={exportInfo.directory}>
-              {exportInfo.directory}
-            </div>
-          )}
-        </div>
-      )}
-      {!loading && !loadError && groups.length === 0 ? (
-        <p className="hint" data-testid="sessions-empty">{t('sessions.emptyAll')}</p>
-      ) : (
-        <div className="session-list">
-          {groups.map((group) => (
-            <div className="session-project-group" key={group.cwd}>
-              <div className="session-project-header" data-testid={`session-project-${group.name}`}>
-                <Folder size={14} />
-                <span className="session-project-name" title={group.cwd}>
-                  {group.name}
-                </span>
-                <span className="session-project-path hint" title={group.cwd}>
-                  {group.cwd}
-                </span>
-                <span className="session-project-count">
-                  {t('sessions.projectCount', { count: group.sessions.length })}
-                </span>
-                <button
-                  className="pill session-project-open"
-                  data-testid={`session-project-open-${group.name}`}
-                  title={t('sessions.openProjectFolder')}
-                  onClick={() => void runShellAction(() => hostApi.shell.openPath(group.cwd))}
-                >
-                  <FolderOpen size={13} />
-                  {t('sessions.openProjectFolder')}
-                </button>
               </div>
-              {group.sessions.map((s) => (
-                <SessionRow
-                  key={s.path}
-                  session={s}
-                  exportRecord={exportInfo?.records?.[s.path]}
-                  onChanged={refresh}
-                  onError={showNotice}
-                  onExported={onExported}
-                  onRefreshExportInfo={loadExportInfo}
-                  onOpenChat={onOpenChat}
-                  onDelete={handleDelete}
-                  onArchive={handleArchive}
-                  onPin={handlePin}
-                />
-              ))}
+              <button
+                className="pill session-export-folder-btn"
+                data-testid="sessions-show-export"
+                title={t('sessions.openExportFolder')}
+                onClick={() => void runShellAction(() => hostApi.shell.openPath(exportInfo.directory))}
+              >
+                <FolderOpen size={13} />
+                {t('sessions.openExportFolder')}
+              </button>
             </div>
-          ))}
-        </div>
+
+            {!exportCardCollapsed && (
+              <div className="session-recent-exports-list" data-testid="sessions-recent-list">
+                {exportInfo.recentRecords.map((record) => {
+                  const fileName = record.path.split(/[\\/]/).pop();
+                  return (
+                    <div className="session-recent-export-item" key={record.path} data-testid="session-recent-item">
+                      <div className="session-recent-export-info">
+                        <div className="session-recent-export-main">
+                          {record.projectName && (
+                            <span className="session-export-project-badge" title={record.cwd}>
+                              <Folder size={11} />
+                              {record.projectName}
+                            </span>
+                          )}
+                          <span className="session-recent-export-title" title={record.title}>
+                            {record.title}
+                          </span>
+                        </div>
+                        <div className="session-recent-export-sub hint">
+                          <span className="session-recent-export-filename" title={record.path}>
+                            {fileName}
+                          </span>
+                          {record.exportedAt && (
+                            <>
+                              <span>·</span>
+                              <span>{formatRelativeTime(record.exportedAt, Date.now(), i18n.language)}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="session-recent-export-actions">
+                        <button
+                          className="pill"
+                          data-testid="sessions-open-export"
+                          title={t('sessions.openExportedTooltip')}
+                          onClick={() => void runShellAction(() => hostApi.shell.openPath(record.path))}
+                        >
+                          <ExternalLink size={13} />
+                          {t('sessions.openExport')}
+                        </button>
+                        <button
+                          className="pill"
+                          data-testid="sessions-show-export-item"
+                          title={t('sessions.showExportedInFolderTooltip')}
+                          onClick={() => void runShellAction(() => hostApi.shell.showInFolder(record.path))}
+                        >
+                          <FolderOpen size={13} />
+                          {t('sessions.showInFolder')}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+        {!loading && !loadError && groups.length === 0 ? (
+          <p className="hint" data-testid="sessions-empty">{t('sessions.emptyAll')}</p>
+        ) : (
+          <div className="session-list">
+            {groups.map((group) => {
+              const isCollapsed = Boolean(collapsedGroups[group.cwd]);
+              return (
+                <div className="session-project-group" key={group.cwd}>
+                  <div
+                    className="session-project-header"
+                    data-testid={`session-project-${group.name}`}
+                    onClick={() => toggleGroup(group.cwd)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleGroup(group.cwd);
+                      }
+                    }}
+                    aria-expanded={!isCollapsed}
+                    title={isCollapsed ? t('sessions.expandGroup') : t('sessions.collapseGroup')}
+                  >
+                    <ChevronDown
+                      size={14}
+                      className={`session-chevron${isCollapsed ? ' collapsed' : ''}`}
+                    />
+                    <Folder size={14} />
+                    <span className="session-project-name" title={group.cwd}>
+                      {group.name}
+                    </span>
+                    <span className="session-project-path hint" title={group.cwd}>
+                      {group.cwd}
+                    </span>
+                    <span className="session-project-count">
+                      {t('sessions.projectCount', { count: group.sessions.length })}
+                    </span>
+                    <button
+                      className="pill session-project-open"
+                      data-testid={`session-project-open-${group.name}`}
+                      title={t('sessions.openProjectFolder')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void runShellAction(() => hostApi.shell.openPath(group.cwd));
+                      }}
+                    >
+                      <FolderOpen size={13} />
+                      {t('sessions.openProjectFolder')}
+                    </button>
+                  </div>
+                  {!isCollapsed && group.sessions.map((s) => (
+                    <SessionRow
+                      key={s.path}
+                      session={s}
+                      exportRecord={exportInfo?.records?.[s.path]}
+                      onChanged={refreshSessions}
+                      onError={showNotice}
+                      onExported={onExported}
+                      onRefreshExportInfo={loadExportInfo}
+                      onOpenChat={onOpenChat}
+                      onDelete={handleDelete}
+                      onArchive={handleArchive}
+                      onPin={handlePin}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {showScrollToBottom && (
+        <button
+          className="sessions-scroll-to-bottom"
+          data-testid="sessions-scroll-to-bottom"
+          type="button"
+          onClick={scrollToBottom}
+          title={t('sessions.scrollToBottom')}
+          aria-label={t('sessions.scrollToBottom')}
+        >
+          <ArrowDown size={14} aria-hidden="true" />
+          <span>{t('sessions.scrollToBottom')}</span>
+        </button>
       )}
     </div>
   );

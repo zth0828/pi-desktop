@@ -831,3 +831,39 @@ test('会话置顶与取消置顶：置顶会话跳出项目文件夹提升至�
   await expect(page.locator('.sidebar-session-row')).toHaveCount(2);
   await expect(page.locator('.sidebar-session-row').first()).toContainText('PING SECOND SESSION');
 });
+
+test('Sessions 页：项目折叠与全部收起展开，以及直达底部功能', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'PING FIRST SESSION TEST');
+  await page.getByTestId('new-chat').click();
+  await sendAndWaitReply(page, 'PING SECOND SESSION TEST');
+
+  await page.getByTestId('nav-sessions').click();
+  const rows = sessionRows(page);
+  await expect(rows).toHaveCount(2, { timeout: 15_000 });
+
+  // 1. 全部收起
+  const collapseAllBtn = page.getByTestId('sessions-collapse-all');
+  await expect(collapseAllBtn).toBeVisible();
+  await collapseAllBtn.click();
+  await expect(rows).toHaveCount(0);
+
+  // 2. 全部展开
+  await collapseAllBtn.click();
+  await expect(rows).toHaveCount(2);
+
+  // 3. 单击项目分组头收起该项目
+  const projectHeader = page.locator('.session-project-header').first();
+  await projectHeader.click();
+  await expect(rows).toHaveCount(0);
+
+  // 再次点击恢复展开
+  await projectHeader.click();
+  await expect(rows).toHaveCount(2);
+});
+

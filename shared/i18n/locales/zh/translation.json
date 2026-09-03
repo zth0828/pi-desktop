@@ -671,7 +671,14 @@
     "actionFailed": "操作失败：{{error}}",
     "actionFailedPlain": "操作失败，请重试。",
     "deleteRunning": "会话正在运行，请先停止后再删除",
-    "actionErrorDismiss": "关闭"
+    "actionErrorDismiss": "关闭",
+    "collapseAll": "全部收起",
+    "expandAll": "全部展开",
+    "scrollToBottom": "直达底部",
+    "collapseGroup": "收起项目",
+    "expandGroup": "展开项目",
+    "collapseExports": "收起导出记录",
+    "expandExports": "展开导出记录"
   },
   "extensions": {
     "title": "Packages",

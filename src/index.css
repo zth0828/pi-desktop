@@ -714,6 +714,7 @@ button.danger-outline {
 .page > h2,
 .models-header h2,
 .extensions-header h2,
+.sessions-header h2,
 .skills-page > h2,
 .mcp-page > h2,
 .sessions-page > h2,
@@ -4655,6 +4656,61 @@ button.danger-outline {
   gap: 16px;
 }
 
+.sessions-page-wrapper {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sessions-header-bar {
+  flex-shrink: 0;
+  padding: 24px 40px 14px;
+  padding-inline: max(40px, calc((100% - 820px) / 2));
+  background: var(--bg-base);
+  z-index: 20;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+.sessions-header-bar.is-scrolled {
+  border-bottom-color: var(--border);
+}
+
+.sessions-page-wrapper .sessions-page {
+  padding-top: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+.sessions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 820px;
+  width: 100%;
+}
+
+.session-collapse-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 5px 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 99px;
+  transition: all 0.15s ease;
+}
+
+.session-collapse-all-btn:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
 .models-header {
   display: flex;
   align-items: center;
@@ -4693,12 +4749,31 @@ button.danger-outline {
   margin-top: 12px;
 }
 
+.session-chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.session-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
 .session-project-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 2px;
+  padding: 6px 8px;
+  margin-inline: -8px;
   font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.session-project-header:hover {
+  background: var(--bg-hover);
 }
 
 .session-project-header > svg {
@@ -4727,6 +4802,47 @@ button.danger-outline {
 
 .session-project-open {
   flex-shrink: 0;
+}
+
+.session-export-collapsible {
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin-left: -6px;
+  transition: background 0.15s ease;
+}
+
+.session-export-collapsible:hover {
+  background: var(--bg-hover);
+}
+
+.sessions-scroll-to-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--bg-raised) 92%, transparent);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: var(--shadow-panel);
+  cursor: pointer;
+  z-index: 30;
+  animation: fadeIn 0.15s ease-out;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.sessions-scroll-to-bottom:hover {
+  background: var(--bg-active);
+  transform: translateX(-50%) translateY(-1px);
 }
 
 .sessions-notice-banner {

@@ -671,7 +671,14 @@
     "actionFailed": "Action failed: {{error}}",
     "actionFailedPlain": "Action failed. Please try again.",
     "deleteRunning": "This session is running. Stop it before deleting.",
-    "actionErrorDismiss": "Dismiss"
+    "actionErrorDismiss": "Dismiss",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
+    "scrollToBottom": "Scroll to bottom",
+    "collapseGroup": "Collapse project",
+    "expandGroup": "Expand project",
+    "collapseExports": "Collapse exports",
+    "expandExports": "Expand exports"
   },
   "extensions": {
     "title": "Packages",
