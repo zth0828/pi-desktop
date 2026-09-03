@@ -214,6 +214,17 @@ function FileExplorer({ selected, onSelect, onRootCount }: { selected: string | 
             style={{ paddingLeft: 8 + depth * 14 }}
             data-testid={entry.kind === 'file' ? 'workspace-file' : 'workspace-directory'}
             title={entry.path}
+            draggable={entry.kind === 'file'}
+            onDragStart={
+              entry.kind === 'file'
+                ? (e) => {
+                    e.dataTransfer.setData('application/x-pi-file-mention', entry.path);
+                    const formatted = entry.path.includes(' ') ? `@"${entry.path}" ` : `@${entry.path} `;
+                    e.dataTransfer.setData('text/plain', formatted);
+                    e.dataTransfer.effectAllowed = 'copy';
+                  }
+                : undefined
+            }
             onClick={() => entry.kind === 'directory' ? toggle(entry) : onSelect(entry.path)}
           >
             {entry.kind === 'directory' ? (
@@ -372,6 +383,11 @@ function CommandList() {
   const [filter, setFilter] = useState<CommandFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(50);
+
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [filter, searchQuery]);
 
   const allCommands = useMemo(
     () => collectSessionCommands(toolExecutions, historyMessages, bashDraft),
@@ -409,9 +425,17 @@ function CommandList() {
     if (!item.chatAnchorId) return;
     const el = document.getElementById(item.chatAnchorId);
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('tool-card-highlight');
-      setTimeout(() => el.classList.remove('tool-card-highlight'), 2000);
+      const turnFold = el.closest('.turn-fold');
+      if (turnFold && !turnFold.classList.contains('expanded')) {
+        const toggleBtn = turnFold.querySelector<HTMLButtonElement>('.turn-fold-toggle');
+        toggleBtn?.click();
+      }
+      setTimeout(() => {
+        const target = document.getElementById(item.chatAnchorId!) ?? el;
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.classList.add('tool-card-highlight');
+        setTimeout(() => target.classList.remove('tool-card-highlight'), 2000);
+      }, 60);
     }
   };
 
@@ -494,13 +518,21 @@ function CommandList() {
         </div>
       </div>
 
-      <div className="command-list custom-scroll">
+      <div
+        className="command-list custom-scroll"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
+            setVisibleCount((prev) => Math.min(prev + 50, filteredCommands.length));
+          }
+        }}
+      >
         {filteredCommands.length === 0 ? (
           <div className="command-list-empty-filtered">
             {t('workspace.commandsEmptyFiltered')}
           </div>
         ) : (
-          filteredCommands.map((item) => {
+          filteredCommands.slice(0, visibleCount).map((item) => {
             const isRunning = item.status === 'running';
             const open = isRunning || expandedId === item.id;
             return (

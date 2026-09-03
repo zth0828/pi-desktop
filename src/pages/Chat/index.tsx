@@ -450,7 +450,101 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     return t('chat.turnFold.duration', { duration });
   };
 
+  const LazyMessageItem = ({
+    message,
+    anchorId,
+    highlighted,
+    cacheMiss,
+    expandThinking,
+    suppressTail,
+    turnStats,
+    sessionCacheHitRate,
+    contentOverride,
+    enableViewportCheck,
+  }: {
+    message: (typeof displayMessages)[number];
+    anchorId: string;
+    highlighted?: boolean;
+    cacheMiss?: unknown;
+    expandThinking?: boolean;
+    suppressTail?: boolean;
+    turnStats?: unknown;
+    sessionCacheHitRate?: unknown;
+    contentOverride?: unknown;
+    enableViewportCheck: boolean;
+  }) => {
+    const [isVisible, setIsVisible] = useState(!enableViewportCheck);
+
+    useEffect(() => {
+      if (!enableViewportCheck || highlighted) {
+        setIsVisible(true);
+        return;
+      }
+      if (typeof IntersectionObserver === 'undefined') {
+        setIsVisible(true);
+        return;
+      }
+
+      const el = document.getElementById(anchorId);
+      if (!el) return;
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const [entry] = entries;
+          if (entry) {
+            setIsVisible(entry.isIntersecting);
+          }
+        },
+        {
+          rootMargin: '600px 0px 600px 0px',
+        },
+      );
+
+      observer.observe(el);
+      return () => {
+        observer.disconnect();
+      };
+    }, [anchorId, enableViewportCheck, highlighted, isVisible]);
+
+    if (!isVisible && enableViewportCheck && !highlighted) {
+      const content = ((contentOverride ?? message.content) as Array<{ type: string; id?: string }>) ?? [];
+      const toolCallIds = content
+        .filter((b) => b.type === 'toolCall' && b.id)
+        .map((b) => b.id as string);
+      const estimatedHeight = message.role === 'user' ? 48 : toolCallIds.length > 0 ? 84 : 64;
+
+      return (
+        <div
+          id={anchorId}
+          className="chat-message-placeholder"
+          style={{ minHeight: `${estimatedHeight}px` }}
+          data-testid="chat-message-placeholder"
+        >
+          {toolCallIds.map((id) => (
+            <div key={id} id={`tool-call-${id}`} style={{ height: 0, overflow: 'hidden' }} />
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <MessageItem
+        message={message}
+        anchorId={anchorId}
+        highlighted={highlighted}
+        cacheMiss={cacheMiss as any}
+        expandThinking={expandThinking}
+        suppressTail={suppressTail}
+        turnStats={turnStats as any}
+        sessionCacheHitRate={sessionCacheHitRate as any}
+        contentOverride={contentOverride as any}
+      />
+    );
+  };
+
   const renderTurn = (turn: (typeof logicalTurns)[number], turnIndex: number) => {
+    const isLongSession = displayMessages.length > 40;
+    const isHistoricalTurn = isLongSession && turnIndex < logicalTurns.length - 1;
     const finalIndex = turnFinalResponseIndex(displayMessages, turn);
     const completed = !turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running')
       && (turnIndex < logicalTurns.length - 1 || !isStreaming);
@@ -469,7 +563,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
       return (
         <Fragment key={turn.startIndex}>
           {Array.from({ length: turn.endIndex - turn.startIndex + 1 }, (_, offset) => turn.startIndex + offset).map((i) => (
-            <MessageItem
+            <LazyMessageItem
               key={i}
               message={displayMessages[i]}
               anchorId={`chat-msg-${i}`}
@@ -477,6 +571,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               cacheMiss={cacheMisses.get(i)}
               turnStats={i === latestFinalResponseIndex ? turnStats : null}
               sessionCacheHitRate={i === latestFinalResponseIndex ? sessionCacheHitRate : null}
+              enableViewportCheck={isHistoricalTurn}
             />
           ))}
           {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
@@ -498,10 +593,11 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
 
       return (
         <Fragment key={turn.startIndex}>
-          <MessageItem
+          <LazyMessageItem
             message={displayMessages[turn.startIndex]}
             anchorId={`chat-msg-${turn.startIndex}`}
             highlighted={searchHighlightIndex === turn.startIndex}
+            enableViewportCheck={isHistoricalTurn}
           />
           {hasProcess && (
             <section className={`turn-fold${expanded ? ' expanded' : ''}`} data-testid="turn-fold">
@@ -523,16 +619,32 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
                 </span>
                 <ChevronRight size={14} aria-hidden="true" />
               </button>
+              {!expanded && (
+                <div className="turn-fold-anchors" style={{ height: 0, overflow: 'hidden' }} aria-hidden="true">
+                  {processIndices.map((i) => {
+                    const msg = displayMessages[i];
+                    const tcIds = msg?.content?.filter((b) => b.type === 'toolCall' && b.id).map((b) => b.id!) ?? [];
+                    return (
+                      <div key={i} id={`chat-msg-${i}`}>
+                        {tcIds.map((id) => (
+                          <div key={id} id={`tool-call-${id}`} />
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               {expanded && (
                 <div className="turn-fold-content" data-testid="turn-fold-content">
                   {processIndices.map((i) => (
-                    <MessageItem
+                    <LazyMessageItem
                       key={i}
                       message={displayMessages[i]}
                       anchorId={`chat-msg-${i}`}
                       highlighted={searchHighlightIndex === i}
                       cacheMiss={cacheMisses.get(i)}
                       expandThinking={false}
+                      enableViewportCheck={isLongSession}
                     />
                   ))}
                   <div className="turn-fold-footer">
@@ -575,10 +687,11 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
 
     return (
       <Fragment key={turn.startIndex}>
-        <MessageItem
+        <LazyMessageItem
           message={displayMessages[turn.startIndex]}
           anchorId={`chat-msg-${turn.startIndex}`}
           highlighted={searchHighlightIndex === turn.startIndex}
+          enableViewportCheck={isHistoricalTurn}
         />
         {hasProcess && (
           <section className={`turn-fold${expanded ? ' expanded' : ''}`} data-testid="turn-fold">
@@ -599,26 +712,44 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               </span>
               <ChevronRight size={14} aria-hidden="true" />
             </button>
+            {!expanded && (
+              <div className="turn-fold-anchors" style={{ height: 0, overflow: 'hidden' }} aria-hidden="true">
+                {processIndices.map((i) => {
+                  const msg = displayMessages[i];
+                  const tcIds = msg?.content?.filter((b) => b.type === 'toolCall' && b.id).map((b) => b.id!) ?? [];
+                  return (
+                    <div key={i} id={`chat-msg-${i}`}>
+                      {tcIds.map((id) => (
+                        <div key={id} id={`tool-call-${id}`} />
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {expanded && (
               <div className="turn-fold-content" data-testid="turn-fold-content">
                 {processIndices.map((i) => (
-                  <MessageItem
+                  <LazyMessageItem
                     key={i}
                     message={displayMessages[i]}
                     anchorId={`chat-msg-${i}`}
                     highlighted={searchHighlightIndex === i}
                     cacheMiss={cacheMisses.get(i)}
                     expandThinking={false}
+                    enableViewportCheck={isLongSession}
                   />
                 ))}
                 {finalProcess.length > 0 && (
-                  <MessageItem
+                  <LazyMessageItem
                     key={finalIndex}
                     message={finalMessage}
                     contentOverride={finalProcess}
                     cacheMiss={cacheMisses.get(finalIndex)}
                     expandThinking={false}
                     suppressTail
+                    anchorId={`chat-msg-process-${finalIndex}`}
+                    enableViewportCheck={isLongSession}
                   />
                 )}
                 <div className="turn-fold-footer">
@@ -639,7 +770,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
             )}
           </section>
         )}
-        <MessageItem
+        <LazyMessageItem
           message={finalMessage}
           anchorId={`chat-msg-${finalIndex}`}
           highlighted={searchHighlightIndex === finalIndex}
@@ -647,6 +778,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
           cacheMiss={cacheMisses.get(finalIndex)}
           turnStats={finalIndex === latestFinalResponseIndex ? turnStats : null}
           sessionCacheHitRate={finalIndex === latestFinalResponseIndex ? sessionCacheHitRate : null}
+          enableViewportCheck={isHistoricalTurn}
         />
         {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
       </Fragment>
