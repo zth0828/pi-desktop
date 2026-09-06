@@ -115,6 +115,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
   const [composerScrollable, setComposerScrollable] = useState(false);
   const [composerScrollbarActive, setComposerScrollbarActive] = useState(false);
+  const [composerFileChips, setComposerFileChips] = useState<string[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerMenuRef = useRef<HTMLDivElement>(null);
@@ -140,16 +141,20 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const resizeComposer = () => {
     const textarea = textareaRef.current;
     if (!textarea) return;
+    const hasChips = composerFileChips.length > 0;
+    const minHeight = hasChips ? 26 : 56;
     const maximum = Math.max(112, Math.min(260, Math.round(window.innerHeight * 0.32)));
-    textarea.style.height = 'auto';
-    const nextHeight = Math.min(textarea.scrollHeight, maximum);
+    textarea.style.height = `${minHeight}px`;
+    const nextHeight = Math.max(minHeight, Math.min(textarea.scrollHeight, maximum));
     textarea.style.height = `${nextHeight}px`;
     const scrollable = textarea.scrollHeight > maximum + 1;
     setComposerScrollable(scrollable);
     if (!scrollable) setComposerScrollbarActive(false);
   };
 
-  useLayoutEffect(() => { resizeComposer(); }, [value]);
+  useLayoutEffect(() => {
+    resizeComposer();
+  }, [value, composerFileChips.length]);
 
   useEffect(() => {
     const resize = () => resizeComposer();
@@ -334,7 +339,6 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     });
   };
 
-  const [composerFileChips, setComposerFileChips] = useState<string[]>([]);
 
   const {
     atToken,

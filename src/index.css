@@ -7283,7 +7283,7 @@ button.danger-outline {
 .composer-inline-flow {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   width: 100%;
   gap: 6px;
   padding: 0;
@@ -7298,14 +7298,16 @@ button.danger-outline {
   display: contents;
 }
 
-.composer-inline-flow.has-chips textarea.composer-flow-input {
+.chat-input-card .composer-inline-flow.has-chips textarea.composer-flow-input {
   width: auto;
   min-width: 80px;
   flex: 1 1 140px;
-  min-height: 26px;
+  min-height: 26px !important;
   height: 26px;
   padding: 1px 4px;
   line-height: 24px;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 .composer-inline-chip {
@@ -7313,6 +7315,7 @@ button.danger-outline {
   align-items: center;
   gap: 6px;
   height: 26px;
+  margin: 0;
   padding: 0 8px 0 6px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--bg-sunken) 70%, var(--bg-raised));
