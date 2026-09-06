@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { hostApi } from '../../../lib/host-api';
 import { filterFiles } from '../../../lib/file-search';
-import { isProbablyBinary } from '@shared/file-references';
+import { imageMediaTypeForPath, isProbablyBinary } from '@shared/file-references';
 import type { AtToken, StagedAttachment } from './types';
 
 export type VisibleTreeItem =
@@ -98,45 +98,42 @@ export function useFileMentions({
 
   /** 选中文件：把光标处的 @query 替换为附件（若文件读取暂未就绪则插入 @path） */
   const pickFile = async (relPath: string) => {
-    const result = await hostApi.workspace.readFile(relPath).catch(() => null);
-    if (!result) {
-      if (filePanelManual) setFilePanelManual(false);
-      const inserted = relPath.includes(' ') ? `@"${relPath}" ` : `@${relPath} `;
-      if (atToken) {
-        setValue(value.slice(0, atToken.start) + inserted + value.slice(atToken.end));
-        setAtToken(null);
-      } else {
-        setValue((prev) => (typeof prev === 'string' ? prev + inserted : inserted));
-      }
-      setAtSuppressed(true);
-      textareaRef.current?.focus();
-      return;
-    }
-    if (result.kind === 'image' && result.data) {
-      const mediaType = result.mimeType ?? 'image/png';
-      const data = result.data;
-      setAttachments((current) => [...current, {
-        kind: 'image',
-        name: result.name,
-        data,
-        mediaType,
-        previewUrl: `data:${mediaType};base64,${data}`,
-      }]);
-    } else {
-      const text = result.text;
-      if (text && !isProbablyBinary(text)) {
-        setAttachments((current) => [...current, { kind: 'file', name: relPath, text }]);
-      } else {
+    if (filePanelManual) setFilePanelManual(false);
+
+    // 检查是否为图片文件：图片走附件预览通道，文本与代码文件统一保持在正文 @ 引用流中
+    const isImage = Boolean(imageMediaTypeForPath(relPath));
+    if (isImage) {
+      const result = await hostApi.workspace.readFile(relPath).catch(() => null);
+      if (result && result.kind === 'image' && typeof result.data === 'string') {
+        const mediaType = result.mimeType ?? 'image/png';
+        const data = result.data;
         setAttachments((current) => [
           ...current,
-          { kind: 'file', name: relPath, text: `[binary attachment: ${result.name}, ${result.size} bytes]` },
+          {
+            kind: 'image',
+            name: result.name,
+            data,
+            mediaType,
+            previewUrl: `data:${mediaType};base64,${data}`,
+          },
         ]);
+        if (atToken) {
+          setValue(value.slice(0, atToken.start) + value.slice(atToken.end));
+          setAtToken(null);
+        }
+        setAtSuppressed(true);
+        textareaRef.current?.focus();
+        return;
       }
     }
-    if (filePanelManual) setFilePanelManual(false);
+
+    // 文本/代码文件：在光标处就地插入 @path / @"path with spaces"，不生成顶部独立附件
+    const formatted = relPath.includes(' ') ? `@"${relPath}" ` : `@${relPath} `;
     if (atToken) {
-      setValue(value.slice(0, atToken.start) + value.slice(atToken.end));
+      setValue(value.slice(0, atToken.start) + formatted + value.slice(atToken.end));
       setAtToken(null);
+    } else {
+      setValue((prev) => (typeof prev === 'string' ? prev + formatted : formatted));
     }
     setAtSuppressed(true);
     textareaRef.current?.focus();

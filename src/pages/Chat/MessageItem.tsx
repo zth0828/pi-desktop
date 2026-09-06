@@ -12,6 +12,7 @@ import type { ChatMessage, ContentBlock, TurnStats } from '../../stores/chat';
 import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
+import { renderUserMessageWithChips } from './chat-message/user-mentions';
 
 /**
  * 技能指令折叠块：用户指定技能发送时展开的说明书与规则。
@@ -273,11 +274,13 @@ function MessageItemView({
       fallbackIndex += 1;
       orderedAttachments.push({ kind: 'image', index: fallbackIndex, name: t('chat.imageNumber', { index: index + 1 }), url });
     });
-    parsed.files.forEach((file, index) => {
-      if (usedFiles.has(index)) return;
-      fallbackIndex += 1;
-      orderedAttachments.push({ kind: 'file', index: fallbackIndex, name: file.name });
-    });
+    if (parsed.attachments.length === 0 && parsed.text === '') {
+      parsed.files.forEach((file, index) => {
+        if (usedFiles.has(index)) return;
+        fallbackIndex += 1;
+        orderedAttachments.push({ kind: 'file', index: fallbackIndex, name: file.name });
+      });
+    }
     return (
       <div
         className={`message message-user${highlighted ? ' search-target' : ''}`}
@@ -341,7 +344,11 @@ function MessageItemView({
               ))}
             </div>
           )}
-          {parsed.text && <div className="message-bubble" data-testid="message-user-text">{parsed.text}</div>}
+          {rawText.trim() && (
+            <div className="message-bubble" data-testid="message-user-text">
+              {renderUserMessageWithChips(rawText)}
+            </div>
+          )}
         </div>
         {previewImage && <ImageLightbox src={previewImage.url} name={previewImage.name} onClose={() => setPreviewImage(null)} />}
       </div>
