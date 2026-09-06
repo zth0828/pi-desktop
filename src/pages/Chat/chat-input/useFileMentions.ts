@@ -42,6 +42,7 @@ export interface UseFileMentionsOptions {
   setValue: (next: string | ((current: string) => string)) => void;
   setAttachments: (next: StagedAttachment[] | ((current: StagedAttachment[]) => StagedAttachment[])) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
+  onInsertMention?: (relPath: string) => void;
 }
 
 export function useFileMentions({
@@ -50,6 +51,7 @@ export function useFileMentions({
   setValue,
   setAttachments,
   textareaRef,
+  onInsertMention,
 }: UseFileMentionsOptions) {
   const [atToken, setAtToken] = useState<AtToken | null>(null);
   const [atSuppressed, setAtSuppressed] = useState(false);
@@ -132,13 +134,16 @@ export function useFileMentions({
     } else {
       const text = result.text;
       if (text && !isProbablyBinary(text)) {
-        // 模式 1：标准内联引用（对齐 Cursor / VS Code，在光标处插入 @path）
-        const inserted = relPath.includes(' ') ? `@"${relPath}" ` : `@${relPath} `;
-        if (atToken) {
-          setValue(value.slice(0, atToken.start) + inserted + value.slice(atToken.end));
-          setAtToken(null);
+        if (onInsertMention) {
+          onInsertMention(relPath);
         } else {
-          setValue((prev) => (typeof prev === 'string' ? prev + inserted : inserted));
+          const inserted = relPath.includes(' ') ? `@"${relPath}" ` : `@${relPath} `;
+          if (atToken) {
+            setValue(value.slice(0, atToken.start) + inserted + value.slice(atToken.end));
+            setAtToken(null);
+          } else {
+            setValue((prev) => (typeof prev === 'string' ? prev + inserted : inserted));
+          }
         }
       } else {
         // 二进制文件（如 docx）：转为附件暂存

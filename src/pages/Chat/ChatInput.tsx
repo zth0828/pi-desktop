@@ -39,7 +39,12 @@ import { ChatInputAttachments } from './chat-input/ChatInputAttachments';
 import { ChatInputMentionsPopup } from './chat-input/ChatInputMentionsPopup';
 import { ChatInputSlashPopup } from './chat-input/ChatInputSlashPopup';
 import { ChatInputControls } from './chat-input/ChatInputControls';
-import { ComposerBackdrop } from './chat-input/ComposerBackdrop';
+import {
+  insertChipAtCaret,
+  serializeComposer,
+  populateComposer,
+  getCaretCharacterOffsetWithin,
+} from './chat-input/composer-rich-editor';
 
 export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: ChatInputProps) {
   const { t } = useTranslation();
@@ -116,9 +121,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
   const [composerScrollable, setComposerScrollable] = useState(false);
   const [composerScrollbarActive, setComposerScrollbarActive] = useState(false);
-  const [composerScrollTop, setComposerScrollTop] = useState(0);
-  const [composerScrollLeft, setComposerScrollLeft] = useState(0);
-
+  const editorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerMenuRef = useRef<HTMLDivElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
@@ -141,19 +144,28 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   };
 
   const resizeComposer = () => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+    const editor = editorRef.current;
+    if (!editor) return;
     const maximum = Math.max(112, Math.min(260, Math.round(window.innerHeight * 0.32)));
-    textarea.style.height = 'auto';
-    const nextHeight = Math.min(textarea.scrollHeight, maximum);
-    textarea.style.height = `${nextHeight}px`;
-    const scrollable = textarea.scrollHeight > maximum + 1;
+    editor.style.height = 'auto';
+    const nextHeight = Math.max(56, Math.min(editor.scrollHeight, maximum));
+    editor.style.height = `${nextHeight}px`;
+    const scrollable = editor.scrollHeight > maximum + 1;
     setComposerScrollable(scrollable);
     if (!scrollable) setComposerScrollbarActive(false);
   };
 
   useLayoutEffect(() => {
     resizeComposer();
+  }, [value]);
+
+  useEffect(() => {
+    if (editorRef.current) {
+      const current = serializeComposer(editorRef.current);
+      if (current !== value) {
+        populateComposer(editorRef.current, value);
+      }
+    }
   }, [value]);
 
   useEffect(() => {
@@ -371,6 +383,14 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     setValue,
     setAttachments,
     textareaRef,
+    onInsertMention: (relPath: string) => {
+      if (editorRef.current) {
+        insertChipAtCaret(editorRef.current, relPath, atToken ?? undefined);
+        const serialized = serializeComposer(editorRef.current);
+        setValue(serialized);
+        if (textareaRef.current) textareaRef.current.value = serialized;
+      }
+    },
   });
 
   const {
@@ -420,6 +440,14 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     value,
     setValue,
     textareaRef,
+    onInsertMention: (relPath: string) => {
+      if (editorRef.current) {
+        insertChipAtCaret(editorRef.current, relPath);
+        const serialized = serializeComposer(editorRef.current);
+        setValue(serialized);
+        if (textareaRef.current) textareaRef.current.value = serialized;
+      }
+    },
   });
 
   const activeHistory = useMemo(() => {
@@ -1292,52 +1320,115 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
             </button>
           </div>
         )}
-        <div className="composer-overlay-wrapper">
-          <ComposerBackdrop
-            value={value}
-            scrollTop={composerScrollTop}
-            scrollLeft={composerScrollLeft}
-          />
-          <textarea
-            ref={textareaRef}
-            data-testid="chat-input"
-            className={`${composerScrollable ? 'is-scrollable' : ''}${composerScrollbarActive ? ' scrollbar-active' : ''}`}
-            value={value}
-            placeholder={
+        <div
+          className="composer-rich-wrapper"
+          onClick={(e) => {
+            const removeBtn = (e.target as HTMLElement).closest('.composer-inline-chip-remove');
+            if (removeBtn && editorRef.current) {
+              const chip = removeBtn.closest('.composer-inline-chip');
+              if (chip?.nextSibling && chip.nextSibling.nodeType === Node.TEXT_NODE && /^\s+$/.test(chip.nextSibling.textContent || '')) {
+                chip.nextSibling.remove();
+              }
+              chip?.remove();
+              const next = serializeComposer(editorRef.current);
+              setValue(next);
+              if (textareaRef.current) textareaRef.current.value = next;
+              return;
+            }
+            editorRef.current?.focus();
+          }}
+        >
+          <div
+            ref={editorRef}
+            contentEditable
+            data-testid="chat-input-editor"
+            className={`composer-rich-editor${composerScrollable ? ' is-scrollable' : ''}${composerScrollbarActive ? ' scrollbar-active' : ''}`}
+            data-placeholder={
               commandMode
                 ? t('chat.command.placeholder')
                 : sendWith === 'cmdEnter'
                   ? t('chat.placeholderCmdEnter')
                   : t('chat.placeholder')
             }
-            onChange={(e) => {
+            onInput={() => {
+              if (!editorRef.current) return;
               if (historyIndex !== -1) {
                 resetHistory();
               }
-              setValue(e.target.value);
+              const next = serializeComposer(editorRef.current);
+              setValue(next);
+              if (textareaRef.current) textareaRef.current.value = next;
               setSelected(0);
               setFileSelected(0);
               setAtSuppressed(false);
               setSlashSuppressed(false);
-              const caret = e.target.selectionStart ?? e.target.value.length;
-              setAtToken(detectAtToken(e.target.value, caret));
-              setSlashToken(detectSlashToken(e.target.value, caret));
+              const caret = getCaretCharacterOffsetWithin(editorRef.current);
+              setAtToken(detectAtToken(next, caret));
+              setSlashToken(detectSlashToken(next, caret));
             }}
-            onSelect={(e) => {
-              const target = e.currentTarget;
-              const caret = target.selectionStart ?? target.value.length;
-              setAtToken(detectAtToken(target.value, caret));
-              setSlashToken(detectSlashToken(target.value, caret));
+            onSelect={() => {
+              if (!editorRef.current) return;
+              const next = serializeComposer(editorRef.current);
+              const caret = getCaretCharacterOffsetWithin(editorRef.current);
+              setAtToken(detectAtToken(next, caret));
+              setSlashToken(detectSlashToken(next, caret));
+            }}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (handleCommandKeyDown(e as unknown as KeyboardEvent<HTMLTextAreaElement>)) return;
+              if (handleFileKeyDown(e as unknown as KeyboardEvent<HTMLTextAreaElement>)) return;
+              if (handleHistoryKeyDown(e as unknown as KeyboardEvent<HTMLTextAreaElement>)) return;
+              if (e.key === 'Escape') {
+                if (cancelLastStagedItem()) {
+                  e.preventDefault();
+                  return;
+                }
+              }
+              if (e.key !== 'Enter') return;
+              const text = serializeComposer(editorRef.current!).trim();
+              if (text === '/' || text === '／' || text === '@') {
+                e.preventDefault();
+                return;
+              }
+              if (sendWith === 'cmdEnter') {
+                if (!e.metaKey && !e.ctrlKey) return;
+                e.preventDefault();
+                send(resolveStreamBehavior(followupBehavior, e.altKey));
+                return;
+              }
+              if (!e.shiftKey) {
+                e.preventDefault();
+                send(resolveStreamBehavior(followupBehavior, e.altKey));
+              }
+            }}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData.files);
+              const images = files.filter((f) => f.type.startsWith('image/'));
+              if (images.length > 0) {
+                e.preventDefault();
+                void stageFiles(images);
+              }
+            }}
+            onScroll={revealComposerScrollbar}
+            onWheel={revealComposerScrollbar}
+          />
+          <textarea
+            ref={textareaRef}
+            data-testid="chat-input"
+            className="composer-sync-textarea"
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value);
+              if (editorRef.current) {
+                populateComposer(editorRef.current, e.target.value);
+                const caret = e.target.value.length;
+                setAtToken(detectAtToken(e.target.value, caret));
+                setSlashToken(detectSlashToken(e.target.value, caret));
+              }
             }}
             onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            onScroll={(e) => {
-              setComposerScrollTop(e.currentTarget.scrollTop);
-              setComposerScrollLeft(e.currentTarget.scrollLeft);
-              revealComposerScrollbar();
-            }}
-            onWheel={revealComposerScrollbar}
-            rows={1}
+            tabIndex={-1}
+            aria-hidden="true"
           />
         </div>
         <ChatInputControls
