@@ -115,7 +115,6 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const [skills, setSkills] = useState<Array<{ name: string; description?: string }>>([]);
   const [composerScrollable, setComposerScrollable] = useState(false);
   const [composerScrollbarActive, setComposerScrollbarActive] = useState(false);
-  const [composerFileChips, setComposerFileChips] = useState<string[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerMenuRef = useRef<HTMLDivElement>(null);
@@ -141,11 +140,9 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const resizeComposer = () => {
     const textarea = textareaRef.current;
     if (!textarea) return;
-    const hasChips = composerFileChips.length > 0;
-    const minHeight = hasChips ? 26 : 56;
     const maximum = Math.max(112, Math.min(260, Math.round(window.innerHeight * 0.32)));
-    textarea.style.height = `${minHeight}px`;
-    const nextHeight = Math.max(minHeight, Math.min(textarea.scrollHeight, maximum));
+    textarea.style.height = 'auto';
+    const nextHeight = Math.min(textarea.scrollHeight, maximum);
     textarea.style.height = `${nextHeight}px`;
     const scrollable = textarea.scrollHeight > maximum + 1;
     setComposerScrollable(scrollable);
@@ -154,7 +151,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
 
   useLayoutEffect(() => {
     resizeComposer();
-  }, [value, composerFileChips.length]);
+  }, [value]);
 
   useEffect(() => {
     const resize = () => resizeComposer();
@@ -371,9 +368,6 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     setValue,
     setAttachments,
     textareaRef,
-    onAddFileChip: (relPath: string) => {
-      setComposerFileChips((prev) => (prev.includes(relPath) ? prev : [...prev, relPath]));
-    },
   });
 
   const {
@@ -423,9 +417,6 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     value,
     setValue,
     textareaRef,
-    onAddFileChip: (relPath: string) => {
-      setComposerFileChips((prev) => (prev.includes(relPath) ? prev : [...prev, relPath]));
-    },
   });
 
   const activeHistory = useMemo(() => {
@@ -591,17 +582,10 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const send = (behavior?: 'steer' | 'followUp') => {
     resetHistory();
     const rawInput = value.trim();
-    let text = rawInput;
-    if (composerFileChips.length > 0) {
-      const chipsText = composerFileChips
-        .map((f) => (f.includes(' ') ? `@"${f}"` : `@${f}`))
-        .join(' ');
-      text = text ? `${text} ${chipsText}` : chipsText;
-    }
+    const text = rawInput;
     if (!text && attachments.length === 0) return;
     if (text === '/' || text === '／' || text === '@') return;
     if (commandMode && bashing) return;
-    setComposerFileChips([]);
     const outgoingAttachments = attachments;
     const outgoing = outgoingAttachments.filter((attachment): attachment is StagedImage => attachment.kind === 'image');
 
@@ -840,17 +824,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     if (handleCommandKeyDown(e)) return;
     if (handleFileKeyDown(e)) return;
     if (handleHistoryKeyDown(e)) return;
-    if (e.key === 'Backspace' && value === '' && composerFileChips.length > 0) {
-      e.preventDefault();
-      setComposerFileChips((prev) => prev.slice(0, -1));
-      return;
-    }
     if (e.key === 'Escape') {
-      if (composerFileChips.length > 0) {
-        e.preventDefault();
-        setComposerFileChips((prev) => prev.slice(0, -1));
-        return;
-      }
       if (cancelLastStagedItem()) {
         e.preventDefault();
         return;
@@ -1292,81 +1266,43 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
             </button>
           </div>
         )}
-        <div
-          className={`composer-inline-flow${composerFileChips.length > 0 ? ' has-chips' : ''}`}
-          data-testid="composer-inline-flow"
-          onClick={(e) => {
-            if ((e.target as HTMLElement).closest('.composer-inline-chip-remove')) return;
-            textareaRef.current?.focus();
-          }}
-        >
-          {composerFileChips.length > 0 && (
-            <div className="composer-file-chips" data-testid="composer-file-chips">
-              {composerFileChips.map((file) => {
-                const fileName = file.includes('/') ? file.split('/').pop() || file : file;
-                return (
-                  <span
-                    key={file}
-                    className="composer-inline-chip"
-                    data-testid="staged-file"
-                    title={file}
-                  >
-                    <FileIcon name={fileName} size={14} />
-                    <span className="composer-inline-chip-name">{fileName}</span>
-                    <button
-                      type="button"
-                      className="composer-inline-chip-remove"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setComposerFileChips((prev) => prev.filter((f) => f !== file));
-                      }}
-                      aria-label={t('chat.removeAttachment')}
-                    >
-                      ×
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          <textarea
-            ref={textareaRef}
-            data-testid="chat-input"
-            className={`composer-flow-input${composerScrollable ? ' is-scrollable' : ''}${composerScrollbarActive ? ' scrollbar-active' : ''}`}
-            value={value}
-            placeholder={
-              commandMode
-                ? t('chat.command.placeholder')
-                : sendWith === 'cmdEnter'
-                  ? t('chat.placeholderCmdEnter')
-                  : t('chat.placeholder')
+        <textarea
+          ref={textareaRef}
+          data-testid="chat-input"
+          className={`${composerScrollable ? 'is-scrollable' : ''}${composerScrollbarActive ? ' scrollbar-active' : ''}`}
+          value={value}
+          placeholder={
+            commandMode
+              ? t('chat.command.placeholder')
+              : sendWith === 'cmdEnter'
+                ? t('chat.placeholderCmdEnter')
+                : t('chat.placeholder')
+          }
+          onChange={(e) => {
+            if (historyIndex !== -1) {
+              resetHistory();
             }
-            onChange={(e) => {
-              if (historyIndex !== -1) {
-                resetHistory();
-              }
-              setValue(e.target.value);
-              setSelected(0);
-              setFileSelected(0);
-              setAtSuppressed(false);
-              setSlashSuppressed(false);
-              const caret = e.target.selectionStart ?? e.target.value.length;
-              setAtToken(detectAtToken(e.target.value, caret));
-              setSlashToken(detectSlashToken(e.target.value, caret));
-            }}
-            onSelect={(e) => {
-              const target = e.currentTarget;
-              const caret = target.selectionStart ?? target.value.length;
-              setAtToken(detectAtToken(target.value, caret));
-              setSlashToken(detectSlashToken(target.value, caret));
-            }}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            onScroll={revealComposerScrollbar}
-            onWheel={revealComposerScrollbar}
-            rows={1}
-          />
-        </div>
+            setValue(e.target.value);
+            setSelected(0);
+            setFileSelected(0);
+            setAtSuppressed(false);
+            setSlashSuppressed(false);
+            const caret = e.target.selectionStart ?? e.target.value.length;
+            setAtToken(detectAtToken(e.target.value, caret));
+            setSlashToken(detectSlashToken(e.target.value, caret));
+          }}
+          onSelect={(e) => {
+            const target = e.currentTarget;
+            const caret = target.selectionStart ?? target.value.length;
+            setAtToken(detectAtToken(target.value, caret));
+            setSlashToken(detectSlashToken(target.value, caret));
+          }}
+          onKeyDown={onKeyDown}
+          onPaste={onPaste}
+          onScroll={revealComposerScrollbar}
+          onWheel={revealComposerScrollbar}
+          rows={1}
+        />
         <ChatInputControls
           cwd={cwd}
           onChooseWorkspace={onChooseWorkspace}

@@ -9,7 +9,6 @@ export interface UseComposerAttachmentsOptions {
   value?: string;
   setValue?: (next: string | ((current: string) => string)) => void;
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
-  onAddFileChip?: (relPath: string) => void;
 }
 
 export function useComposerAttachments({
@@ -18,7 +17,6 @@ export function useComposerAttachments({
   cwd,
   setValue,
   textareaRef,
-  onAddFileChip,
 }: UseComposerAttachmentsOptions) {
   const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
 
@@ -28,52 +26,45 @@ export function useComposerAttachments({
         try {
           const staged = await fileToStagedImage(file);
           setAttachments((prev) => {
-            if (prev.some((a) => a.kind === 'image' && a.name === staged.name && a.previewUrl === staged.previewUrl)) {
+            if (prev.some((a) => a.kind === 'image' && a.name === staged.name)) {
               return prev;
             }
             return [...prev, staged];
           });
         } catch {
-          // 忽略读不了的文件
+          // ignore unreadable image
         }
-        continue;
-      }
-      if (file.size > MAX_FILE_TEXT_BYTES) continue;
-      try {
-        const text = await file.text();
-        if (isProbablyBinary(text)) continue;
-        setAttachments((prev) => {
-          if (prev.some((a) => a.kind === 'file' && a.name === file.name && a.text === text)) {
-            return prev;
+      } else {
+        try {
+          const text = await file.text();
+          if (!isProbablyBinary(text) && file.size <= MAX_FILE_TEXT_BYTES) {
+            setAttachments((prev) => {
+              if (prev.some((a) => a.kind === 'file' && a.name === file.name)) {
+                return prev;
+              }
+              return [...prev, { kind: 'file', name: file.name, text }];
+            });
           }
-          return [...prev, { kind: 'file', name: file.name, text }];
-        });
-      } catch {
-        // 忽略读不了的文件
+        } catch {
+          // ignore unreadable file
+        }
       }
     }
   };
 
   const insertTextAtCursor = (textToInsert: string) => {
     const textarea = textareaRef?.current;
-    if (textarea && setValue) {
-      const start = textarea.selectionStart ?? textarea.value.length;
-      const end = textarea.selectionEnd ?? textarea.value.length;
-      const curr = textarea.value;
-      const next = curr.slice(0, start) + textToInsert + curr.slice(end);
-      setValue(next);
-      const nextPos = start + textToInsert.length;
-      const schedule =
-        typeof requestAnimationFrame === 'function'
-          ? requestAnimationFrame
-          : (cb: () => void) => setTimeout(cb, 0);
-      schedule(() => {
-        textarea.focus();
-        textarea.setSelectionRange(nextPos, nextPos);
-      });
-    } else if (setValue) {
-      setValue((curr) => `${curr}${curr.endsWith(' ') || curr === '' ? '' : ' '}${textToInsert}`);
-    }
+    if (!textarea || !setValue) return;
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? textarea.value.length;
+    const currentVal = textarea.value;
+    const nextVal = currentVal.slice(0, start) + textToInsert + currentVal.slice(end);
+    setValue(nextVal);
+    const nextCursor = start + textToInsert.length;
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    });
   };
 
   const insertMentionAtCursor = (relPath: string) => {
@@ -90,23 +81,14 @@ export function useComposerAttachments({
       e.dataTransfer.getData('application/x-pi-file-mention') ||
       e.dataTransfer.getData('text/x-pi-file-mention');
     if (mentionData) {
-      if (onAddFileChip) {
-        onAddFileChip(mentionData);
-      } else {
-        insertMentionAtCursor(mentionData);
-      }
+      insertMentionAtCursor(mentionData);
       return;
     }
 
     // 检查 plain text 是否含 mention 前缀 (如直接拖拽了 text/plain)
     const plain = e.dataTransfer.getData('text/plain');
     if (plain && (plain.startsWith('@"') || plain.startsWith('@'))) {
-      const cleanMention = plain.replace(/^@"?|"?\s*$/g, '');
-      if (onAddFileChip && cleanMention) {
-        onAddFileChip(cleanMention);
-      } else {
-        insertTextAtCursor(plain.endsWith(' ') ? plain : `${plain} `);
-      }
+      insertTextAtCursor(plain.endsWith(' ') ? plain : `${plain} `);
       return;
     }
 
@@ -126,11 +108,7 @@ export function useComposerAttachments({
         if (normalizedFile === normalizedCwd || normalizedFile.startsWith(normalizedCwd + '/')) {
           const relPath = normalizedFile.slice(normalizedCwd.length + 1);
           if (relPath) {
-            if (onAddFileChip) {
-              onAddFileChip(relPath);
-            } else {
-              insertMentionAtCursor(relPath);
-            }
+            insertMentionAtCursor(relPath);
             continue;
           }
         }

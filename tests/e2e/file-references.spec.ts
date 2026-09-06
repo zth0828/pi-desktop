@@ -74,7 +74,7 @@ async function waitSessionReady(page: import('@playwright/test').Page) {
   ).toBeVisible({ timeout: 30_000 });
 }
 
-test('@ 触发文件补全面板，选中后作为附件暂存', async ({ launchElectronApp }) => {
+test('@ 触发文件补全面板，选中后在光标处插入 @path', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
@@ -85,10 +85,8 @@ test('@ 触发文件补全面板，选中后作为附件暂存', async ({ launch
   await expect(panel.getByTestId('file-option').first()).toContainText('hello-e2e.txt');
 
   await panel.getByTestId('file-option').first().click();
-  // @token 被移除，文件作为附件暂存（不写入 @path 文本）
-  await expect(page.getByTestId('chat-input')).toHaveValue('');
-  await expect(page.getByTestId('staged-file')).toBeVisible();
-  await expect(page.getByTestId('staged-file')).toContainText('hello-e2e.txt');
+  // 在光标处就地插入 @path，保持标准内联引用
+  await expect(page.getByTestId('chat-input')).toHaveValue('@hello-e2e.txt ');
 });
 
 test('@ 补全尊重 .gitignore（fd 语义，与 pi TUI 一致）', async ({ launchElectronApp }) => {

@@ -42,7 +42,6 @@ export interface UseFileMentionsOptions {
   setValue: (next: string | ((current: string) => string)) => void;
   setAttachments: (next: StagedAttachment[] | ((current: StagedAttachment[]) => StagedAttachment[])) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
-  onAddFileChip?: (relPath: string) => void;
 }
 
 export function useFileMentions({
@@ -51,7 +50,6 @@ export function useFileMentions({
   setValue,
   setAttachments,
   textareaRef,
-  onAddFileChip,
 }: UseFileMentionsOptions) {
   const [atToken, setAtToken] = useState<AtToken | null>(null);
   const [atSuppressed, setAtSuppressed] = useState(false);
@@ -98,7 +96,7 @@ export function useFileMentions({
       ?.scrollIntoView({ block: 'nearest' });
   }, [atToken?.query, filePanelOpen, fileSelected, treeSelected, isTreeMode]);
 
-  /** 选中文件：把光标处的 @query 替换为附件（若文件读取暂未就绪则插入 @path） */
+  /** 选中文件：在光标处插入 @path（图片或二进制文件转为附件） */
   const pickFile = async (relPath: string) => {
     const result = await hostApi.workspace.readFile(relPath).catch(() => null);
     if (!result) {
@@ -127,25 +125,34 @@ export function useFileMentions({
           previewUrl: `data:${mediaType};base64,${data}`,
         },
       ]);
-    } else if (onAddFileChip) {
-      // 统一收敛为工作区文件胶囊：与侧边栏拖拽体验 100% 对齐
-      onAddFileChip(relPath);
+      if (atToken) {
+        setValue(value.slice(0, atToken.start) + value.slice(atToken.end));
+        setAtToken(null);
+      }
     } else {
       const text = result.text;
       if (text && !isProbablyBinary(text)) {
-        setAttachments((current) => [...current, { kind: 'file', name: relPath, text }]);
+        // 模式 1：标准内联引用（对齐 Cursor / VS Code，在光标处插入 @path）
+        const inserted = relPath.includes(' ') ? `@"${relPath}" ` : `@${relPath} `;
+        if (atToken) {
+          setValue(value.slice(0, atToken.start) + inserted + value.slice(atToken.end));
+          setAtToken(null);
+        } else {
+          setValue((prev) => (typeof prev === 'string' ? prev + inserted : inserted));
+        }
       } else {
+        // 二进制文件（如 docx）：转为附件暂存
         setAttachments((current) => [
           ...current,
           { kind: 'file', name: relPath, text: `[binary attachment: ${result.name}, ${result.size} bytes]` },
         ]);
+        if (atToken) {
+          setValue(value.slice(0, atToken.start) + value.slice(atToken.end));
+          setAtToken(null);
+        }
       }
     }
     if (filePanelManual) setFilePanelManual(false);
-    if (atToken) {
-      setValue(value.slice(0, atToken.start) + value.slice(atToken.end));
-      setAtToken(null);
-    }
     setAtSuppressed(true);
     textareaRef.current?.focus();
   };
