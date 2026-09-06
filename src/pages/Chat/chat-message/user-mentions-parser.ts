@@ -3,13 +3,14 @@ export interface InlineFileToken {
   text?: string;
   path?: string;
   name?: string;
+  raw?: string;
 }
 
 /**
  * 将用户消息原文解析为文本片段与内联文件引用。
  * 支持：
  * 1. Pi 展开格式：<file name="/abs/path/file.ext">...</file>
- * 2. 经典 @ 引用：@file.ext 或 @"path with spaces.ext"
+ * 2. 经典 @ 引用：@file.ext 或 @"path with spaces.ext"（支持直接紧随中文字符如 的复古风回家过节@index.html）
  * 3. 路径格式：@[/abs/path/file.ext]
  */
 export function parseUserMessageTokens(rawText: string): InlineFileToken[] {
@@ -28,9 +29,9 @@ export function parseUserMessageTokens(rawText: string): InlineFileToken[] {
   // - __PI_MENTION__:path__
   // - @[path]
   // - @"quoted path"
-  // - @filename.ext 或 @dir/file.ext
+  // - @filename.ext 或 @dir/file.ext（支持紧随中文字符或行首，排除邮箱如 user@example.com）
   const mentionRegex =
-    /(__PI_MENTION__:([^_]+)__)|@\[([^\]]+)\]|(?:^|\s)@("([^"\n]+)"|([a-zA-Z0-9_./\\-]+(?:\.[a-zA-Z0-9_-]+)+|[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_./\\-]+))/g;
+    /(__PI_MENTION__:([^_]+)__)|@\[([^\]]+)\]|(?:^|[^a-zA-Z0-9_])@("([^"\n]+)"|([a-zA-Z0-9_./\\-]+(?:\.[a-zA-Z0-9_-]+)+|[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_./\\-]+))/g;
 
   const tokens: InlineFileToken[] = [];
   let lastIndex = 0;
@@ -40,11 +41,11 @@ export function parseUserMessageTokens(rawText: string): InlineFileToken[] {
     const matchStart = match.index;
     const fullMatch = match[0];
 
-    // 如果是通过 @ 开头的匹配，可能带有前置空白
     const isSpecialPlaceholder = Boolean(match[1]);
     const isBracketMention = Boolean(match[3]);
-    const leadingWhitespace = isSpecialPlaceholder || isBracketMention ? '' : fullMatch.match(/^\s*/)?.[0] ?? '';
-    const actualStart = matchStart + leadingWhitespace.length;
+    const atIndex = fullMatch.indexOf('@');
+    const leadingText = isSpecialPlaceholder || isBracketMention ? '' : atIndex > 0 ? fullMatch.slice(0, atIndex) : '';
+    const actualStart = matchStart + leadingText.length;
 
     if (actualStart > lastIndex) {
       tokens.push({
@@ -67,10 +68,13 @@ export function parseUserMessageTokens(rawText: string): InlineFileToken[] {
         ? filePath.split('\\').pop() || filePath
         : filePath;
 
+    const rawToken = fullMatch.slice(leadingText.length);
+
     tokens.push({
       type: 'file',
       path: filePath,
       name: fileName,
+      raw: rawToken,
     });
 
     lastIndex = matchStart + fullMatch.length;

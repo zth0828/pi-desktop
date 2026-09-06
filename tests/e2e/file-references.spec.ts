@@ -87,6 +87,13 @@ test('@ 触发文件补全面板，选中后在光标处插入 @path', async ({ 
   await panel.getByTestId('file-option').first().click();
   // 在光标处就地插入 @path，保持标准内联引用
   await expect(page.getByTestId('chat-input')).toHaveValue('@hello-e2e.txt ');
+  // 输入框高亮层呈现胶囊徽章
+  await expect(page.locator('.composer-mention-capsule[data-mention="hello-e2e.txt"]')).toBeVisible();
+
+  // 原子退格测试：按一次 Backspace 整体删除整颗文件引用胶囊
+  await page.getByTestId('chat-input').press('Backspace');
+  await expect(page.getByTestId('chat-input')).toHaveValue('');
+  await expect(page.locator('.composer-mention-capsule[data-mention="hello-e2e.txt"]')).toHaveCount(0);
 });
 
 test('@ 补全尊重 .gitignore（fd 语义，与 pi TUI 一致）', async ({ launchElectronApp }) => {

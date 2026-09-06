@@ -4067,7 +4067,60 @@ button.danger-outline {
   margin-top: 2px;
 }
 
+/* 输入框智能徽章高亮层 (Mention Capsule Overlay) */
+.composer-overlay-wrapper {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.composer-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  box-sizing: border-box;
+  padding: 5px 6px 8px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  font-family: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  color: transparent;
+  user-select: none;
+  z-index: 0;
+}
+
+.composer-backdrop-text {
+  color: transparent;
+}
+
+.composer-mention-capsule {
+  display: inline;
+  color: transparent;
+}
+
+.composer-mention-capsule-bg {
+  display: inline;
+  color: transparent;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-left: 2.5px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: 0 -2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
 .chat-input-card textarea {
+  position: relative;
+  z-index: 1;
   width: 100%;
   min-height: 56px;
   max-height: min(260px, 32vh);

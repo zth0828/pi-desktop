@@ -7,8 +7,20 @@ describe('user-mentions (用户消息内联文件引用解析)', () => {
     const tokens = parseUserMessageTokens(raw);
     expect(tokens).toEqual([
       { type: 'text', text: '我说的这个是属于侧边栏拖拽的那个情况 ' },
-      { type: 'file', path: 'go.mod', name: 'go.mod' },
+      { type: 'file', path: 'go.mod', name: 'go.mod', raw: '@go.mod' },
       { type: 'text', text: ' 类似这样的效果' },
+    ]);
+  });
+
+  it('正确解析中文字符后直接紧跟的 @ 引用（无前置空格）', () => {
+    const raw = '的复古风回家过节@index.html 大大说@package.json 结束';
+    const tokens = parseUserMessageTokens(raw);
+    expect(tokens).toEqual([
+      { type: 'text', text: '的复古风回家过节' },
+      { type: 'file', path: 'index.html', name: 'index.html', raw: '@index.html' },
+      { type: 'text', text: ' 大大说' },
+      { type: 'file', path: 'package.json', name: 'package.json', raw: '@package.json' },
+      { type: 'text', text: ' 结束' },
     ]);
   });
 
@@ -17,7 +29,7 @@ describe('user-mentions (用户消息内联文件引用解析)', () => {
     const tokens = parseUserMessageTokens(raw);
     expect(tokens).toEqual([
       { type: 'text', text: '查看 ' },
-      { type: 'file', path: '/Users/bingking/Desktop/FlowGate/go.mod', name: 'go.mod' },
+      { type: 'file', path: '/Users/bingking/Desktop/FlowGate/go.mod', name: 'go.mod', raw: '__PI_MENTION__:/Users/bingking/Desktop/FlowGate/go.mod__' },
       { type: 'text', text: ' 的内容' },
     ]);
   });
@@ -27,7 +39,7 @@ describe('user-mentions (用户消息内联文件引用解析)', () => {
     const tokens = parseUserMessageTokens(raw);
     expect(tokens).toEqual([
       { type: 'text', text: '前面是文字 ' },
-      { type: 'file', path: 'docs/test plan.md', name: 'test plan.md' },
+      { type: 'file', path: 'docs/test plan.md', name: 'test plan.md', raw: '@"docs/test plan.md"' },
       { type: 'text', text: ' 后面是文字' },
     ]);
   });
@@ -37,7 +49,7 @@ describe('user-mentions (用户消息内联文件引用解析)', () => {
     const tokens = parseUserMessageTokens(raw);
     expect(tokens).toEqual([
       { type: 'text', text: '参考 ' },
-      { type: 'file', path: '/Users/bingking/walkthrough.md', name: 'walkthrough.md' },
+      { type: 'file', path: '/Users/bingking/walkthrough.md', name: 'walkthrough.md', raw: '@[/Users/bingking/walkthrough.md]' },
       { type: 'text', text: ' 这个方案' },
     ]);
   });
