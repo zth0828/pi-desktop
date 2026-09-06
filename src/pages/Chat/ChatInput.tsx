@@ -12,6 +12,7 @@ import { restoreToComposer } from '../../lib/message-restore';
 import { hostApi } from '../../lib/host-api';
 import { cacheHitRate, formatCost } from '../../lib/usage-stats';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
+import { FileIcon } from '../../components/FileIcon';
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
 import { QueueList } from './QueueList';
@@ -396,6 +397,8 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     setSelectedSkill,
   });
 
+  const [composerFileChips, setComposerFileChips] = useState<string[]>([]);
+
   const {
     previewImage,
     setPreviewImage,
@@ -410,6 +413,9 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     value,
     setValue,
     textareaRef,
+    onAddFileChip: (relPath: string) => {
+      setComposerFileChips((prev) => (prev.includes(relPath) ? prev : [...prev, relPath]));
+    },
   });
 
   const activeHistory = useMemo(() => {
@@ -574,10 +580,18 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
 
   const send = (behavior?: 'steer' | 'followUp') => {
     resetHistory();
-    const text = value.trim();
+    const rawInput = value.trim();
+    let text = rawInput;
+    if (composerFileChips.length > 0) {
+      const chipsText = composerFileChips
+        .map((f) => (f.includes(' ') ? `@"${f}"` : `@${f}`))
+        .join(' ');
+      text = text ? `${text} ${chipsText}` : chipsText;
+    }
     if (!text && attachments.length === 0) return;
     if (text === '/' || text === '／' || text === '@') return;
     if (commandMode && bashing) return;
+    setComposerFileChips([]);
     const outgoingAttachments = attachments;
     const outgoing = outgoingAttachments.filter((attachment): attachment is StagedImage => attachment.kind === 'image');
 
@@ -816,7 +830,17 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     if (handleCommandKeyDown(e)) return;
     if (handleFileKeyDown(e)) return;
     if (handleHistoryKeyDown(e)) return;
+    if (e.key === 'Backspace' && value === '' && composerFileChips.length > 0) {
+      e.preventDefault();
+      setComposerFileChips((prev) => prev.slice(0, -1));
+      return;
+    }
     if (e.key === 'Escape') {
+      if (composerFileChips.length > 0) {
+        e.preventDefault();
+        setComposerFileChips((prev) => prev.slice(0, -1));
+        return;
+      }
       if (cancelLastStagedItem()) {
         e.preventDefault();
         return;
@@ -1256,6 +1280,32 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
             >
               <X size={13} />
             </button>
+          </div>
+        )}
+        {composerFileChips.length > 0 && (
+          <div className="composer-file-chips" data-testid="composer-file-chips">
+            {composerFileChips.map((file) => {
+              const fileName = file.includes('/') ? file.split('/').pop() || file : file;
+              return (
+                <span
+                  key={file}
+                  className="composer-inline-chip"
+                  data-testid="composer-file-chip"
+                  title={file}
+                >
+                  <FileIcon name={fileName} size={14} />
+                  <span className="composer-inline-chip-name">{fileName}</span>
+                  <button
+                    type="button"
+                    className="composer-inline-chip-remove"
+                    onClick={() => setComposerFileChips((prev) => prev.filter((f) => f !== file))}
+                    aria-label={t('chat.removeAttachment')}
+                  >
+                    ×
+                  </button>
+                </span>
+              );
+            })}
           </div>
         )}
         <textarea

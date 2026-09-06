@@ -9,6 +9,7 @@ export interface UseComposerAttachmentsOptions {
   value?: string;
   setValue?: (next: string | ((current: string) => string)) => void;
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
+  onAddFileChip?: (relPath: string) => void;
 }
 
 export function useComposerAttachments({
@@ -17,6 +18,7 @@ export function useComposerAttachments({
   cwd,
   setValue,
   textareaRef,
+  onAddFileChip,
 }: UseComposerAttachmentsOptions) {
   const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
 
@@ -88,14 +90,23 @@ export function useComposerAttachments({
       e.dataTransfer.getData('application/x-pi-file-mention') ||
       e.dataTransfer.getData('text/x-pi-file-mention');
     if (mentionData) {
-      insertMentionAtCursor(mentionData);
+      if (onAddFileChip) {
+        onAddFileChip(mentionData);
+      } else {
+        insertMentionAtCursor(mentionData);
+      }
       return;
     }
 
     // 检查 plain text 是否含 mention 前缀 (如直接拖拽了 text/plain)
     const plain = e.dataTransfer.getData('text/plain');
     if (plain && (plain.startsWith('@"') || plain.startsWith('@'))) {
-      insertTextAtCursor(plain.endsWith(' ') ? plain : `${plain} `);
+      const cleanMention = plain.replace(/^@"?|"?\s*$/g, '');
+      if (onAddFileChip && cleanMention) {
+        onAddFileChip(cleanMention);
+      } else {
+        insertTextAtCursor(plain.endsWith(' ') ? plain : `${plain} `);
+      }
       return;
     }
 
@@ -115,7 +126,11 @@ export function useComposerAttachments({
         if (normalizedFile === normalizedCwd || normalizedFile.startsWith(normalizedCwd + '/')) {
           const relPath = normalizedFile.slice(normalizedCwd.length + 1);
           if (relPath) {
-            insertMentionAtCursor(relPath);
+            if (onAddFileChip) {
+              onAddFileChip(relPath);
+            } else {
+              insertMentionAtCursor(relPath);
+            }
             continue;
           }
         }
