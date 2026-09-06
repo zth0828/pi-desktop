@@ -42,6 +42,7 @@ export interface UseFileMentionsOptions {
   setValue: (next: string | ((current: string) => string)) => void;
   setAttachments: (next: StagedAttachment[] | ((current: StagedAttachment[]) => StagedAttachment[])) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
+  onAddFileChip?: (relPath: string) => void;
 }
 
 export function useFileMentions({
@@ -50,6 +51,7 @@ export function useFileMentions({
   setValue,
   setAttachments,
   textareaRef,
+  onAddFileChip,
 }: UseFileMentionsOptions) {
   const [atToken, setAtToken] = useState<AtToken | null>(null);
   const [atSuppressed, setAtSuppressed] = useState(false);
@@ -125,6 +127,9 @@ export function useFileMentions({
           previewUrl: `data:${mediaType};base64,${data}`,
         },
       ]);
+    } else if (onAddFileChip) {
+      // 统一收敛为工作区文件胶囊：与侧边栏拖拽体验 100% 对齐
+      onAddFileChip(relPath);
     } else {
       const text = result.text;
       if (text && !isProbablyBinary(text)) {

@@ -274,13 +274,11 @@ function MessageItemView({
       fallbackIndex += 1;
       orderedAttachments.push({ kind: 'image', index: fallbackIndex, name: t('chat.imageNumber', { index: index + 1 }), url });
     });
-    if (parsed.attachments.length === 0 && parsed.text === '') {
-      parsed.files.forEach((file, index) => {
-        if (usedFiles.has(index)) return;
-        fallbackIndex += 1;
-        orderedAttachments.push({ kind: 'file', index: fallbackIndex, name: file.name });
-      });
-    }
+    parsed.files.forEach((file, index) => {
+      if (usedFiles.has(index)) return;
+      fallbackIndex += 1;
+      orderedAttachments.push({ kind: 'file', index: fallbackIndex, name: file.name });
+    });
     return (
       <div
         className={`message message-user${highlighted ? ' search-target' : ''}`}
@@ -344,9 +342,9 @@ function MessageItemView({
               ))}
             </div>
           )}
-          {rawText.trim() && (
+          {parsed.text && (
             <div className="message-bubble" data-testid="message-user-text">
-              {renderUserMessageWithChips(rawText)}
+              {renderUserMessageWithChips(parsed.text)}
             </div>
           )}
         </div>
