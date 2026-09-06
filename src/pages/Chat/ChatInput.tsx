@@ -1270,11 +1270,6 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
                 ? t('chat.placeholderCmdEnter')
                 : t('chat.placeholder')
           }
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-          }}
-          onDrop={handleComposerDrop}
           onChange={(e) => {
             if (historyIndex !== -1) {
               resetHistory();

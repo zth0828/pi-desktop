@@ -25,7 +25,12 @@ export function useComposerAttachments({
       if (file.type.startsWith('image/')) {
         try {
           const staged = await fileToStagedImage(file);
-          setAttachments((prev) => [...prev, staged]);
+          setAttachments((prev) => {
+            if (prev.some((a) => a.kind === 'image' && a.name === staged.name && a.previewUrl === staged.previewUrl)) {
+              return prev;
+            }
+            return [...prev, staged];
+          });
         } catch {
           // 忽略读不了的文件
         }
@@ -35,23 +40,27 @@ export function useComposerAttachments({
       try {
         const text = await file.text();
         if (isProbablyBinary(text)) continue;
-        setAttachments((prev) => [...prev, { kind: 'file', name: file.name, text }]);
+        setAttachments((prev) => {
+          if (prev.some((a) => a.kind === 'file' && a.name === file.name && a.text === text)) {
+            return prev;
+          }
+          return [...prev, { kind: 'file', name: file.name, text }];
+        });
       } catch {
         // 忽略读不了的文件
       }
     }
   };
 
-  const insertMentionAtCursor = (relPath: string) => {
-    const formatted = relPath.includes(' ') ? `@"${relPath}" ` : `@${relPath} `;
+  const insertTextAtCursor = (textToInsert: string) => {
     const textarea = textareaRef?.current;
     if (textarea && setValue) {
       const start = textarea.selectionStart ?? textarea.value.length;
       const end = textarea.selectionEnd ?? textarea.value.length;
       const curr = textarea.value;
-      const next = curr.slice(0, start) + formatted + curr.slice(end);
+      const next = curr.slice(0, start) + textToInsert + curr.slice(end);
       setValue(next);
-      const nextPos = start + formatted.length;
+      const nextPos = start + textToInsert.length;
       const schedule =
         typeof requestAnimationFrame === 'function'
           ? requestAnimationFrame
@@ -61,17 +70,32 @@ export function useComposerAttachments({
         textarea.setSelectionRange(nextPos, nextPos);
       });
     } else if (setValue) {
-      setValue((curr) => `${curr}${curr.endsWith(' ') || curr === '' ? '' : ' '}${formatted}`);
+      setValue((curr) => `${curr}${curr.endsWith(' ') || curr === '' ? '' : ' '}${textToInsert}`);
     }
+  };
+
+  const insertMentionAtCursor = (relPath: string) => {
+    const formatted = relPath.includes(' ') ? `@"${relPath}" ` : `@${relPath} `;
+    insertTextAtCursor(formatted);
   };
 
   const handleComposerDrop = async (e: DragEvent<HTMLElement>) => {
     e.preventDefault();
+    e.stopPropagation();
 
-    // 1. 检查是否来自内部文件树拖拽 (application/x-pi-file-mention)
-    const mentionData = e.dataTransfer.getData('application/x-pi-file-mention');
+    // 1. 检查是否来自内部文件树拖拽 (application/x-pi-file-mention / text/x-pi-file-mention)
+    const mentionData =
+      e.dataTransfer.getData('application/x-pi-file-mention') ||
+      e.dataTransfer.getData('text/x-pi-file-mention');
     if (mentionData) {
       insertMentionAtCursor(mentionData);
+      return;
+    }
+
+    // 检查 plain text 是否含 mention 前缀 (如直接拖拽了 text/plain)
+    const plain = e.dataTransfer.getData('text/plain');
+    if (plain && (plain.startsWith('@"') || plain.startsWith('@'))) {
+      insertTextAtCursor(plain.endsWith(' ') ? plain : `${plain} `);
       return;
     }
 
