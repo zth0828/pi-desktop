@@ -712,16 +712,17 @@ test('引用文件：目录树逐层展开，选中作为附件，点击面板�
   await page.getByTestId('file-dir').filter({ hasText: 'nested-e2e' }).click();
   const deep = page.getByTestId('file-option').filter({ hasText: 'deep-e2e.txt' });
   await expect(deep).toBeVisible();
-  // 选中深层文件 → 作为附件（staged-file）暂存
+  // 选中深层文件 → 呈现为内联文件胶囊
   await deep.click();
-  await expect(page.getByTestId('staged-file')).toContainText('deep-e2e.txt');
+  await expect(page.locator('.composer-inline-chip[data-file="nested-e2e/deep-e2e.txt"]')).toBeVisible();
+  await expect(page.getByTestId('chat-input')).toHaveValue('@nested-e2e/deep-e2e.txt ');
   await expect(page.getByTestId('file-panel')).toBeHidden();
 
   // 再次打开，点击面板外部（输入框）关闭
   await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-file-reference').click();
   await expect(page.getByTestId('file-panel')).toBeVisible();
-  await page.getByTestId('chat-input').click();
+  await page.getByTestId('chat-input-editor').click();
   await expect(page.getByTestId('file-panel')).toBeHidden();
 });
 
@@ -856,23 +857,24 @@ test('长文本输入自然增长，达到上限后使用短暂滚动条', async
   await page.setViewportSize({ width: 1200, height: 800 });
 
   const input = page.getByTestId('chat-input');
-  const initialHeight = (await input.boundingBox())!.height;
+  const editor = page.getByTestId('chat-input-editor');
+  const initialHeight = (await editor.boundingBox())!.height;
   await input.fill(Array.from({ length: 40 }, (_, index) => `line ${index + 1} with enough text to edit comfortably`).join('\n'));
-  await expect(input).toHaveClass(/is-scrollable/);
-  const expandedHeight = (await input.boundingBox())!.height;
+  await expect(editor).toHaveClass(/is-scrollable/);
+  const expandedHeight = (await editor.boundingBox())!.height;
   expect(expandedHeight).toBeGreaterThan(initialHeight + 80);
   expect(expandedHeight).toBeLessThanOrEqual(260);
 
-  await input.evaluate((element) => {
+  await editor.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
     element.dispatchEvent(new Event('scroll'));
   });
-  await expect(input).toHaveClass(/scrollbar-active/);
-  await expect.poll(async () => (await input.getAttribute('class'))?.includes('scrollbar-active')).toBe(false);
+  await expect(editor).toHaveClass(/scrollbar-active/);
+  await expect.poll(async () => (await editor.getAttribute('class'))?.includes('scrollbar-active')).toBe(false);
 
   await input.fill('short prompt');
-  await expect(input).not.toHaveClass(/is-scrollable/);
-  const collapsedHeight = (await input.boundingBox())!.height;
+  await expect(editor).not.toHaveClass(/is-scrollable/);
+  const collapsedHeight = (await editor.boundingBox())!.height;
   expect(collapsedHeight).toBeLessThan(expandedHeight - 80);
 });
 

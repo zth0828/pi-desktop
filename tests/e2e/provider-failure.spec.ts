@@ -110,7 +110,7 @@ async function sendOneRound(page: import('@playwright/test').Page) {
 
 /** 布局断言：错误提示出现时输入区仍占聊天列主体宽度（挤压布局修复前会被挤成窄条） */
 async function expectLayoutIntact(page: import('@playwright/test').Page) {
-  const inputBox = await page.getByTestId('chat-input').boundingBox();
+  const inputBox = await page.getByTestId('chat-input-editor').boundingBox();
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
   expect(inputBox).not.toBeNull();
   expect(inputBox!.width).toBeGreaterThan(viewport.width * 0.3);

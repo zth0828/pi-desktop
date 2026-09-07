@@ -97,7 +97,9 @@ test('启动超时 → banner 不卡死面板，后台构建完成后重试即�
   await input.fill('still interactive');
   const retry = page.getByTestId('start-retry');
   await expect(retry).toBeVisible();
-  const inputBox = await input.boundingBox();
+  const editor = page.getByTestId('chat-input-editor');
+  await expect(editor).toBeVisible();
+  const inputBox = await editor.boundingBox();
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
   expect(inputBox!.width).toBeGreaterThan(viewport.width * 0.3);
 

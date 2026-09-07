@@ -63,6 +63,7 @@ test('rail 圆点 = user 消息数；悬浮显示原问题，点击跳转并高�
     seedSettings: { workspaceCwd: workspace },
   });
   const page = await app.firstWindow();
+  await page.setViewportSize({ width: 1200, height: 720 });
   await expect(
     page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
   ).toBeVisible({ timeout: 30_000 });
@@ -97,7 +98,7 @@ test('rail 圆点 = user 消息数；悬浮显示原问题，点击跳转并高�
 
   // 新消息自动滚到底 → 列表已溢出、末位圆点高亮
   const list = page.getByTestId('message-list');
-  await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  await expect.poll(() => list.evaluate((el) => el.scrollTop), { timeout: 10_000 }).toBeGreaterThan(0);
   await expect(page.getByTestId(`msg-rail-dot-chat-msg-${(rounds - 1) * 2}`)).toHaveClass(/active/);
 
   // 点击第一个圆点 → 平滑滚动回首条 user 消息
@@ -110,7 +111,7 @@ test('rail 圆点 = user 消息数；悬浮显示原问题，点击跳转并高�
   // 否则标题栏会被推离视口，composer 下方出现大片空白。
   await expect.poll(() => page.locator('.content').evaluate((el) => el.scrollTop)).toBe(0);
   await expect(page.getByTestId('session-titlebar')).toBeInViewport();
-  await expect(page.getByTestId('chat-input')).toBeInViewport();
+  await expect(page.getByTestId('chat-input-editor')).toBeInViewport();
   // 高亮跟随可视区：顶部位置高亮前几条的圆点之一（TOC 语义：读线之上最后一条）
   await expect(rail.locator('.msg-rail-dot.active')).toHaveCount(1);
   const activeId = await rail.locator('.msg-rail-dot.active').getAttribute('data-testid');
