@@ -1229,26 +1229,55 @@ export const piRuntimeApi = {
       // @path 就地展开为 <file> 块（pi file-processor 语义；图片转 images 通道）
       const expanded = await expandFileReferences(payload.text, active.cwd);
       const staged = (payload.images ?? []) as unknown[];
-      await session.prompt({
-        text: expanded.text,
-        images: [...expanded.images, ...staged],
-        // 流式中提交：默认 followUp（排队等当前 run 完成），behavior='steer' 时当前轮插入
-        ...(session.isStreaming
-          ? { streamingBehavior: payload.behavior ?? ('followUp' as const) }
-          : {}),
-        preflightResult: (accepted: boolean) => {
-          if (accepted) emitPromptLifecycle(active, 'accepted', requestId);
-          else {
-            emitPromptLifecycle(active, 'failed', requestId, 'prompt preflight rejected');
-            active.pendingPrompts = active.pendingPrompts.filter((item) => item !== pendingPrompt);
+
+      return await new Promise<{ success: boolean; error?: string }>((resolve) => {
+        let settled = false;
+        const complete = (res: { success: boolean; error?: string }) => {
+          if (!settled) {
+            settled = true;
+            resolve(res);
           }
-        },
+        };
+
+        session
+          .prompt({
+            text: expanded.text,
+            images: [...expanded.images, ...staged],
+            // 流式中提交：默认 followUp（排队等当前 run 完成），behavior='steer' 时当前轮插入
+            ...(session.isStreaming
+              ? { streamingBehavior: payload.behavior ?? ('followUp' as const) }
+              : {}),
+            preflightResult: (accepted: boolean) => {
+              if (accepted) {
+                emitPromptLifecycle(active, 'accepted', requestId);
+                complete({ success: true });
+              } else {
+                emitPromptLifecycle(active, 'failed', requestId, 'prompt preflight rejected');
+                active.pendingPrompts = active.pendingPrompts.filter((item) => item !== pendingPrompt);
+                complete({ success: false, error: 'prompt preflight rejected' });
+              }
+            },
+          })
+          .then(() => {
+            if (pendingPrompt.phase === 'accepted' && !session.isStreaming && !active.running) {
+              emitPromptLifecycle(active, 'finished', requestId);
+              active.pendingPrompts = active.pendingPrompts.filter((item) => item !== pendingPrompt);
+            }
+            complete({ success: true });
+          })
+          .catch((err) => {
+            writePiDiagnostic({
+              level: 'error',
+              event: 'prompt.failed',
+              requestId: ctx?.requestId,
+              sessionId: active.sessionId,
+              generation: active.generation,
+              piVersion: active.adapter.packageVersion,
+              ...safeErrorFields(err),
+            });
+            complete({ success: false, error: err instanceof Error ? err.message : String(err) });
+          });
       });
-      if (pendingPrompt.phase === 'accepted' && !session.isStreaming && !active.running) {
-        emitPromptLifecycle(active, 'finished', requestId);
-        active.pendingPrompts = active.pendingPrompts.filter((item) => item !== pendingPrompt);
-      }
-      return { success: true };
     } catch (err) {
       writePiDiagnostic({
         level: 'error',

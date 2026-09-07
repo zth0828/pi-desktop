@@ -43,6 +43,11 @@ const SLOW_HOST_ACTIONS_TIMEOUT_MS = new Map<string, number>([
   ['piMcp.installAdapter', 200_000],
   // 全量包更新检查：逐包访问 registry 元数据，包多或网络慢时超过默认值。
   ['piPackages.checkUpdates', 120_000],
+  // prompt 投递及长耗时运行时操作（压缩、会话树遍历、bash 执行等）
+  ['piRuntime.prompt', 120_000],
+  ['piRuntime.compact', 120_000],
+  ['piRuntime.navigateTree', 120_000],
+  ['piRuntime.executeBash', 300_000],
 ]);
 
 function hostInvokeTimeoutMs(module: string, action: string): number {
