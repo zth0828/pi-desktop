@@ -36,7 +36,7 @@ function useActiveAnchor<T extends { id: string }>(anchors: T[], listRef: Props[
     let raf = 0;
     const update = () => {
       raf = 0;
-      if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) {
+      if (list.scrollTop + list.clientHeight >= list.scrollHeight - 24) {
         setActiveId(anchors[anchors.length - 1]?.id);
         return;
       }
