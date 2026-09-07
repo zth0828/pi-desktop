@@ -139,6 +139,15 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     setComposerAttachments(typeof next === 'function' ? next(chatStore.getState().composerAttachments) : next);
   };
 
+  const focusComposer = () => {
+    if (editorRef.current) {
+      editorRef.current.focus();
+      moveCaretToEnd(editorRef.current);
+    } else {
+      textareaRef.current?.focus();
+    }
+  };
+
   const showNotice = (text: string) => {
     setNotice(text);
     if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
@@ -259,7 +268,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       setAttachments(inputDraft.attachments);
     }
     clearInputDraft();
-    textareaRef.current?.focus();
+    focusComposer();
   }, [inputDraft, clearInputDraft]);
 
   const contextUsage = usage?.context ?? runtimeContextUsage ?? null;
@@ -405,6 +414,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     setValue,
     setAttachments,
     textareaRef,
+    onFocusEditor: focusComposer,
     onInsertMention: (relPath: string) => {
       if (editorRef.current) {
         const chipId = `chip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -447,6 +457,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     setSessionInfo,
     contextPercent,
     textareaRef,
+    onFocusEditor: focusComposer,
     setSelectedSkill,
   });
 
@@ -943,7 +954,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         e.preventDefault();
         e.stopPropagation();
         setConfirmDialog(null);
-        textareaRef.current?.focus();
+        focusComposer();
         return;
       }
       if (sessionInfo) {
@@ -1184,7 +1195,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setConfirmDialog(null);
-              textareaRef.current?.focus();
+              focusComposer();
             }
           }}
         >
@@ -1204,7 +1215,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
                 data-testid="confirm-dialog-close"
                 onClick={() => {
                   setConfirmDialog(null);
-                  textareaRef.current?.focus();
+                  focusComposer();
                 }}
                 aria-label={t('common.close')}
               >
@@ -1224,7 +1235,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
                 autoFocus
                 onClick={() => {
                   setConfirmDialog(null);
-                  textareaRef.current?.focus();
+                  focusComposer();
                 }}
               >
                 {confirmDialog.type === 'slash'
@@ -1260,7 +1271,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         commandDescription={commandDescription}
         onClose={() => {
           setValue('');
-          textareaRef.current?.focus();
+          focusComposer();
         }}
       />
       <ChatInputMentionsPopup
@@ -1284,7 +1295,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
             setValue((current) => current.slice(0, atToken.start) + current.slice(atToken.end));
             setAtToken(null);
           }
-          textareaRef.current?.focus();
+          focusComposer();
         }}
       />
       <ContextWarningBar
@@ -1490,7 +1501,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
           onOpenFileReference={() => {
             setFilePanelManual(true);
             void hostApi.piFiles.listDir(cwd).then((r) => setDirTree(r)).catch(() => setDirTree(null));
-            textareaRef.current?.focus();
+            focusComposer();
           }}
           skills={skills}
           selectedSkill={selectedSkill}
@@ -1561,7 +1572,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
           formatTokens={formatTokens}
           onSend={send}
           onAbort={() => void abort()}
-          onFocusTextarea={() => textareaRef.current?.focus()}
+          onFocusTextarea={focusComposer}
         />
       </div>
       {previewImage && (

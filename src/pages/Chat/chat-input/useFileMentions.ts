@@ -42,6 +42,7 @@ export interface UseFileMentionsOptions {
   setValue: (next: string | ((current: string) => string)) => void;
   setAttachments: (next: StagedAttachment[] | ((current: StagedAttachment[]) => StagedAttachment[])) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
+  onFocusEditor?: () => void;
   onInsertMention?: (relPath: string) => void;
 }
 
@@ -51,6 +52,7 @@ export function useFileMentions({
   setValue,
   setAttachments,
   textareaRef,
+  onFocusEditor,
   onInsertMention,
 }: UseFileMentionsOptions) {
   const [atToken, setAtToken] = useState<AtToken | null>(null);
@@ -98,6 +100,14 @@ export function useFileMentions({
       ?.scrollIntoView({ block: 'nearest' });
   }, [atToken?.query, filePanelOpen, fileSelected, treeSelected, isTreeMode]);
 
+  const focusComposer = () => {
+    if (onFocusEditor) {
+      onFocusEditor();
+    } else {
+      textareaRef.current?.focus();
+    }
+  };
+
   /** 选中文件：在光标处插入 @path（图片或二进制文件转为附件） */
   const pickFile = async (relPath: string) => {
     const result = await hostApi.workspace.readFile(relPath).catch(() => null);
@@ -111,7 +121,7 @@ export function useFileMentions({
         setValue((prev) => (typeof prev === 'string' ? prev + inserted : inserted));
       }
       setAtSuppressed(true);
-      textareaRef.current?.focus();
+      focusComposer();
       return;
     }
     if (result.kind === 'image' && result.data) {
@@ -159,7 +169,9 @@ export function useFileMentions({
     }
     if (filePanelManual) setFilePanelManual(false);
     setAtSuppressed(true);
-    textareaRef.current?.focus();
+    if (!onInsertMention) {
+      focusComposer();
+    }
   };
 
   /** 目录节点展开/收起：首展开时按需加载子目录内容。 */
@@ -289,7 +301,7 @@ export function useFileMentions({
         }
         setAtSuppressed(true);
         setFilePanelManual(false);
-        textareaRef.current?.focus();
+        focusComposer();
         return true;
       }
       return false;
@@ -335,7 +347,7 @@ export function useFileMentions({
       }
       setAtSuppressed(true);
       setFilePanelManual(false);
-      textareaRef.current?.focus();
+      focusComposer();
       return true;
     }
     return false;

@@ -94,20 +94,24 @@ test('@ 触发文件补全面板，选中后在光标处插入 @path', async ({ 
   await expect(page.locator('.composer-inline-chip[data-file="hello-e2e.txt"]')).toHaveCount(0);
   await expect(page.getByTestId('chat-input')).toHaveValue('');
 
-  // 验证带有前缀文字时，按 Esc 仅移除胶囊，文本完好保留（防误触）
+  // 验证带有前缀文字时，选中后自动保持编辑器光标聚焦并可立即继续输入，按 Esc 仅移除胶囊
   await page.getByTestId('chat-input-editor').focus();
   await page.keyboard.type('前缀说明 @hello');
   await expect(panel).toBeVisible({ timeout: 10_000 });
   await panel.getByTestId('file-option').first().click();
   await expect(page.locator('.composer-inline-chip[data-file="hello-e2e.txt"]')).toBeVisible();
+  await expect(page.getByTestId('chat-input-editor')).toBeFocused();
+
+  await page.keyboard.type('后缀说明');
+  await expect(page.getByTestId('chat-input')).toHaveValue('前缀说明 @hello-e2e.txt 后缀说明');
 
   await page.keyboard.press('Escape');
   await expect(page.locator('.composer-inline-chip[data-file="hello-e2e.txt"]')).toHaveCount(0);
-  await expect(page.getByTestId('chat-input')).toHaveValue('前缀说明 ');
+  await expect(page.getByTestId('chat-input')).toHaveValue('前缀说明 后缀说明');
 
   // 再次按 Esc（纯文本无暂存项），文字继续保留不被意外清空
   await page.keyboard.press('Escape');
-  await expect(page.getByTestId('chat-input')).toHaveValue('前缀说明 ');
+  await expect(page.getByTestId('chat-input')).toHaveValue('前缀说明 后缀说明');
 });
 
 test('@ 补全尊重 .gitignore（fd 语义，与 pi TUI 一致）', async ({ launchElectronApp }) => {

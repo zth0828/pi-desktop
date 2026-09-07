@@ -4085,6 +4085,7 @@ button.danger-outline {
   line-height: 1.5;
   font-family: inherit;
   color: var(--text);
+  caret-color: var(--accent);
   background: transparent;
   outline: none;
   white-space: pre-wrap;

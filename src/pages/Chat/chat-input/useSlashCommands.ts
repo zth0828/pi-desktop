@@ -21,6 +21,7 @@ export interface UseSlashCommandsOptions {
   setSessionInfo: (info: PiRuntimeSessionInfo) => void;
   contextPercent: number | null;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
+  onFocusEditor?: () => void;
   setSelectedSkill?: (skill: string | null | ((curr: string | null) => string | null)) => void;
 }
 
@@ -72,6 +73,7 @@ export function useSlashCommands({
   setSessionInfo,
   contextPercent,
   textareaRef,
+  onFocusEditor,
   setSelectedSkill,
 }: UseSlashCommandsOptions) {
   const { t } = useTranslation();
@@ -237,6 +239,14 @@ export function useSlashCommands({
     }
   };
 
+  const focusComposer = () => {
+    if (onFocusEditor) {
+      onFocusEditor();
+    } else {
+      textareaRef.current?.focus();
+    }
+  };
+
   const pick = (cmd: PiCommandRow) => {
     if (cmd.source === 'skill' || cmd.name.startsWith('skill:')) {
       const skillName = cmd.name.startsWith('skill:') ? cmd.name.slice(6) : cmd.name;
@@ -251,7 +261,7 @@ export function useSlashCommands({
         }
         setSlashToken(null);
         setSlashSuppressed(true);
-        textareaRef.current?.focus();
+        focusComposer();
         return;
       }
     }
@@ -264,7 +274,7 @@ export function useSlashCommands({
     }
     setSlashToken(null);
     setSlashSuppressed(true);
-    textareaRef.current?.focus();
+    focusComposer();
   };
 
   const handleCommandKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): boolean => {

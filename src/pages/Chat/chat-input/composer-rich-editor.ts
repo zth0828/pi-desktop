@@ -111,13 +111,25 @@ export function insertChipAtCaret(
     const inserted = relPath.includes(' ') ? `@"${relPath}"` : `@${relPath}`;
     const full = `${before}${inserted}${after}`;
     populateComposer(editor, full);
+    let targetChip: HTMLElement | null = null;
     if (chipId) {
       const matchingChips = editor.querySelectorAll(`.composer-inline-chip[data-file="${relPath}"]`);
       if (matchingChips.length > 0) {
-        matchingChips[matchingChips.length - 1].setAttribute('data-chip-id', chipId);
+        targetChip = matchingChips[matchingChips.length - 1] as HTMLElement;
+        targetChip.setAttribute('data-chip-id', chipId);
       }
     }
-    moveCaretToEnd(editor);
+    if (!targetChip) {
+      const matchingChips = editor.querySelectorAll(`.composer-inline-chip[data-file="${relPath}"]`);
+      if (matchingChips.length > 0) {
+        targetChip = matchingChips[matchingChips.length - 1] as HTMLElement;
+      }
+    }
+    if (targetChip) {
+      setCaretAfterChip(targetChip);
+    } else {
+      moveCaretToEnd(editor);
+    }
     return;
   }
 
@@ -126,17 +138,39 @@ export function insertChipAtCaret(
     range.deleteContents();
     range.insertNode(chip);
     chip.after(space);
-
-    const nextRange = document.createRange();
-    nextRange.setStartAfter(space);
-    nextRange.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(nextRange);
+    setCaretAfterChip(chip);
   } else {
     editor.appendChild(chip);
     editor.appendChild(space);
-    moveCaretToEnd(editor);
+    setCaretAfterChip(chip);
   }
+}
+
+/**
+ * 将光标精确放置在文件胶囊后面的文本节点内，确保浏览器立即渲染真实的闪烁光标
+ */
+export function setCaretAfterChip(chip: HTMLElement) {
+  const editor = chip.closest('.composer-rich-editor') as HTMLElement | null;
+  if (editor) {
+    editor.focus();
+  }
+  const next = chip.nextSibling;
+  const sel = window.getSelection();
+  if (!sel) return;
+
+  const range = document.createRange();
+  if (next && next.nodeType === Node.TEXT_NODE) {
+    const len = Math.min(1, (next.textContent || '').length);
+    range.setStart(next, len);
+    range.collapse(true);
+  } else {
+    const space = document.createTextNode('\u00A0');
+    chip.after(space);
+    range.setStart(space, 1);
+    range.collapse(true);
+  }
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 /**
@@ -161,12 +195,19 @@ export function removeChip(editor: HTMLElement, chipId?: string, chipPath?: stri
   }
   if (!targetChip) return false;
 
-  if (
-    targetChip.nextSibling &&
-    targetChip.nextSibling.nodeType === Node.TEXT_NODE &&
-    (targetChip.nextSibling.textContent === '\u00A0' || targetChip.nextSibling.textContent === ' ')
-  ) {
-    targetChip.nextSibling.remove();
+  if (targetChip.nextSibling && targetChip.nextSibling.nodeType === Node.TEXT_NODE) {
+    const text = targetChip.nextSibling.textContent || '';
+    if (text === '\u00A0' || text === ' ') {
+      targetChip.nextSibling.remove();
+    } else if (text.startsWith('\u00A0')) {
+      targetChip.nextSibling.textContent = text.slice(1);
+    } else if (
+      text.startsWith(' ') &&
+      targetChip.previousSibling?.textContent &&
+      /[\s\u00A0]$/.test(targetChip.previousSibling.textContent)
+    ) {
+      targetChip.nextSibling.textContent = text.slice(1);
+    }
   }
   targetChip.remove();
   return true;
@@ -176,9 +217,26 @@ export function moveCaretToEnd(el: HTMLElement) {
   el.focus();
   const sel = window.getSelection();
   if (!sel) return;
+
+  let lastNode: Node = el;
+  while (lastNode.lastChild) {
+    lastNode = lastNode.lastChild;
+  }
+
   const range = document.createRange();
-  range.selectNodeContents(el);
-  range.collapse(false);
+  if (lastNode.nodeType === Node.TEXT_NODE) {
+    const len = (lastNode.textContent || '').length;
+    range.setStart(lastNode, len);
+    range.collapse(true);
+  } else if (lastNode.nodeType === Node.ELEMENT_NODE && (lastNode as HTMLElement).classList.contains('composer-inline-chip')) {
+    const space = document.createTextNode('\u00A0');
+    (lastNode as ChildNode).after(space);
+    range.setStart(space, 1);
+    range.collapse(true);
+  } else {
+    range.selectNodeContents(el);
+    range.collapse(false);
+  }
   sel.removeAllRanges();
   sel.addRange(range);
 }
