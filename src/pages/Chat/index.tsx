@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDown, Check, ChevronRight, ChevronUp, PanelRight, X } from 'lucide-react';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
@@ -19,7 +19,7 @@ import { PaneLayout } from '../../components/PaneLayout';
 import { ExtensionUiDialog } from '../../components/ExtensionUiDialog';
 import { ChatGreeting } from './ChatGreeting';
 import { ChatInput } from './ChatInput';
-import { MessageItem } from './MessageItem';
+import { MessageItem, type MessageItemProps } from './MessageItem';
 import { MessageNavRail, truncateRailText, type RailAnchor } from './MessageNavRail';
 import { StatusBar } from './StatusBar';
 import { ReviewPanel } from './ReviewPanel';
@@ -154,6 +154,78 @@ function ExtensionWidgets({ placement }: { placement: 'aboveEditor' | 'belowEdit
     </div>
   );
 }
+
+type LazyMessageItemProps = MessageItemProps & {
+  anchorId: string;
+  enableViewportCheck: boolean;
+};
+
+const LazyMessageItem = memo(function LazyMessageItem({
+  enableViewportCheck,
+  highlighted,
+  anchorId,
+  contentOverride,
+  message,
+  ...props
+}: LazyMessageItemProps) {
+  const [hasBeenVisible, setHasBeenVisible] = useState(!enableViewportCheck);
+
+  useEffect(() => {
+    if (!enableViewportCheck || highlighted || hasBeenVisible) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setHasBeenVisible(true);
+      return;
+    }
+
+    const el = document.getElementById(anchorId);
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry?.isIntersecting) {
+          setHasBeenVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '600px 0px 600px 0px' },
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [anchorId, enableViewportCheck, highlighted, hasBeenVisible]);
+
+  if (!hasBeenVisible && enableViewportCheck && !highlighted) {
+    const content = ((contentOverride ?? message.content) as Array<{ type: string; id?: string }>) ?? [];
+    const toolCallIds = content
+      .filter((b) => b.type === 'toolCall' && b.id)
+      .map((b) => b.id as string);
+    const estimatedHeight = message.role === 'user' ? 48 : toolCallIds.length > 0 ? 84 : 64;
+
+    return (
+      <div
+        id={anchorId}
+        className="chat-message-placeholder"
+        style={{ minHeight: `${estimatedHeight}px` }}
+        data-testid="chat-message-placeholder"
+      >
+        {toolCallIds.map((id) => (
+          <div key={id} id={`tool-call-${id}`} style={{ height: 0, overflow: 'hidden' }} />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <MessageItem
+      {...props}
+      message={message}
+      anchorId={anchorId}
+      highlighted={highlighted}
+      contentOverride={contentOverride}
+    />
+  );
+});
 
 type Props = {
   searchTarget?: { sessionId: string; messageIndex: number; nonce: number };
@@ -448,98 +520,6 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
         ? t('chat.turnFold.durationMinutes', { minutes, seconds })
         : t('chat.turnFold.durationSeconds', { seconds });
     return t('chat.turnFold.duration', { duration });
-  };
-
-  const LazyMessageItem = ({
-    message,
-    anchorId,
-    highlighted,
-    cacheMiss,
-    expandThinking,
-    suppressTail,
-    turnStats,
-    sessionCacheHitRate,
-    contentOverride,
-    enableViewportCheck,
-  }: {
-    message: (typeof displayMessages)[number];
-    anchorId: string;
-    highlighted?: boolean;
-    cacheMiss?: unknown;
-    expandThinking?: boolean;
-    suppressTail?: boolean;
-    turnStats?: unknown;
-    sessionCacheHitRate?: unknown;
-    contentOverride?: unknown;
-    enableViewportCheck: boolean;
-  }) => {
-    const [isVisible, setIsVisible] = useState(!enableViewportCheck);
-
-    useEffect(() => {
-      if (!enableViewportCheck || highlighted) {
-        setIsVisible(true);
-        return;
-      }
-      if (typeof IntersectionObserver === 'undefined') {
-        setIsVisible(true);
-        return;
-      }
-
-      const el = document.getElementById(anchorId);
-      if (!el) return;
-
-      const observer = new IntersectionObserver(
-        (entries) => {
-          const [entry] = entries;
-          if (entry) {
-            setIsVisible(entry.isIntersecting);
-          }
-        },
-        {
-          rootMargin: '600px 0px 600px 0px',
-        },
-      );
-
-      observer.observe(el);
-      return () => {
-        observer.disconnect();
-      };
-    }, [anchorId, enableViewportCheck, highlighted, isVisible]);
-
-    if (!isVisible && enableViewportCheck && !highlighted) {
-      const content = ((contentOverride ?? message.content) as Array<{ type: string; id?: string }>) ?? [];
-      const toolCallIds = content
-        .filter((b) => b.type === 'toolCall' && b.id)
-        .map((b) => b.id as string);
-      const estimatedHeight = message.role === 'user' ? 48 : toolCallIds.length > 0 ? 84 : 64;
-
-      return (
-        <div
-          id={anchorId}
-          className="chat-message-placeholder"
-          style={{ minHeight: `${estimatedHeight}px` }}
-          data-testid="chat-message-placeholder"
-        >
-          {toolCallIds.map((id) => (
-            <div key={id} id={`tool-call-${id}`} style={{ height: 0, overflow: 'hidden' }} />
-          ))}
-        </div>
-      );
-    }
-
-    return (
-      <MessageItem
-        message={message}
-        anchorId={anchorId}
-        highlighted={highlighted}
-        cacheMiss={cacheMiss as any}
-        expandThinking={expandThinking}
-        suppressTail={suppressTail}
-        turnStats={turnStats as any}
-        sessionCacheHitRate={sessionCacheHitRate as any}
-        contentOverride={contentOverride as any}
-      />
-    );
   };
 
   const renderTurn = (turn: (typeof logicalTurns)[number], turnIndex: number) => {

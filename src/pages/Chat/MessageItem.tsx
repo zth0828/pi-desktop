@@ -159,7 +159,7 @@ function AssistantBlock({
   return null;
 }
 
-type MessageItemProps = {
+export type MessageItemProps = {
   message: ChatMessage;
   anchorId?: string;
   /** 搜索跳转后的短暂定位反馈。 */
