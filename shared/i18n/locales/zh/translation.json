@@ -315,6 +315,7 @@
     "totalCost": "累计成本",
     "tokenUnknown": "—",
     "greeting": "今天想构建什么",
+    "starterPrompts": "入门建议",
     "greetingRotating": [
       "今天想构建什么",
       "帮我重构代码结构",
@@ -531,6 +532,38 @@
       "running": "正在运行中，请稍后重试。",
       "notGitRepo": "当前目录不是 Git 仓库。",
       "gitDirty": "工作区有未提交的改动，请暂存或提交后再试。",
+      "bashAlreadyRunning": "Bash 进程已在运行中。",
+      "commandOrUrlRequired": "命令或 URL 必须填写其中一项。",
+      "reviewConflictCannotRevert": "存在冲突的文件无法从审查面板还原。",
+      "reviewNoChanges": "没有可还原的改动。",
+      "emptyPatch": "补丁内容为空。",
+      "fileNotFound": "未找到指定文件。",
+      "fileOutsideWorkspace": "文件位于当前工作区之外且并非由本次会话生成。",
+      "noWorkspaceForProject": "当前项目未指定有效的工作区目录。",
+      "modelRefreshTimeout": "刷新模型目录超时，请稍后重试。",
+      "forkNoFile": "分叉会话未生成有效的会话文件。",
+      "noDownloadedInstaller": "未找到已下载的安装程序。",
+      "noActiveWindow": "没有活跃的窗口。",
+      "imageBufferFailed": "无法从剪贴板或缓冲区解析图像。",
+      "invalidName": "名称格式无效。",
+      "invalidPackageName": "扩展包名称格式无效。",
+      "uiNotAvailable": "用户界面组件当前不可用。",
+      "promptPreflightRejected": "提示词预检未通过，请检查会话状态后重试。",
+      "skillNotFound": "技能文件不存在。",
+      "skillReadOnly": "技能文件为只读，无法修改。",
+      "skillImportFailed": "技能导入失败。",
+      "skillUnsafe": "技能来源不可用或存在安全隐患。",
+      "checksumMismatch": "文件校验和不匹配，下载内容可能损坏。",
+      "noStableRelease": "未找到稳定版本。",
+      "runningSessions": "仍有正在运行的会话，请先停止。",
+      "aborted": "操作已中止。",
+      "notADirectory": "指定路径不是目录。",
+      "notAFile": "指定路径不是文件。",
+      "gitEmptyTreeFailed": "获取 Git 空树失败。",
+      "modelNotFound": "未找到模型：{{model}}",
+      "providerNotFound": "未找到供应商：{{id}}",
+      "providerAlreadyExists": "供应商 ID 已存在：{{id}}",
+      "downloadFailed": "下载失败（状态码 {{status}}）",
       "requestId": "请求 ID：{{id}}"
     }
   },
@@ -1056,6 +1089,7 @@
   },
   "review": {
     "title": "评审",
+    "clearSearch": "清空搜索",
     "resizeList": "调整审查列表宽度",
     "refresh": "刷新",
     "empty": "还没有改动",
@@ -1196,5 +1230,9 @@
     "waitingInstallVersion": "已下载 v{{version}}，等待安装",
     "readyTitle": "安装包下载完成，准备就绪",
     "readyDesc": "点击即可打开安装包完成升级"
+  },
+  "tray": {
+    "showMainWindow": "显示主窗口",
+    "quit": "退出"
   }
 }

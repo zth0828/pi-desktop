@@ -4,8 +4,22 @@
 import { app, Menu, nativeImage, Tray } from 'electron';
 import { resolveAppIconPath, windowIconFormat } from '../utils/app-icon';
 import { focusOrCreateMainWindow } from './window-manager';
+import { resolveMenuLanguage } from './menu';
 
 let tray: Tray | null = null;
+
+export async function rebuildTrayMenu(): Promise<void> {
+  if (!tray) return;
+  const language = await resolveMenuLanguage();
+  const zh = language.toLowerCase().startsWith('zh');
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: zh ? '显示主窗口' : 'Show Main Window', click: () => focusOrCreateMainWindow() },
+      { type: 'separator' },
+      { label: zh ? '退出' : 'Quit', click: () => app.quit() },
+    ]),
+  );
+}
 
 export function createTray(): void {
   if (process.platform === 'darwin') return;
@@ -27,13 +41,7 @@ export function createTray(): void {
 
     tray.setToolTip('Pi Desktop');
     tray.on('click', () => focusOrCreateMainWindow());
-    tray.setContextMenu(
-      Menu.buildFromTemplate([
-        { label: '显示主窗口', click: () => focusOrCreateMainWindow() },
-        { type: 'separator' },
-        { label: '退出', click: () => app.quit() },
-      ]),
-    );
+    void rebuildTrayMenu();
   } catch {
     tray = null;
   }

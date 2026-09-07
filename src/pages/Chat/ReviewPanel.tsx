@@ -510,7 +510,7 @@ function CommandList() {
               type="button"
               className="command-search-clear"
               onClick={() => setSearchQuery('')}
-              aria-label="clear"
+              aria-label={t('review.clearSearch')}
             >
               <X size={12} />
             </button>

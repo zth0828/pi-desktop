@@ -5,6 +5,7 @@ import type {
 import { getElectronStore } from '../utils/electron-store';
 import { riskyWorkspaceReason } from '../utils/workspace-safety';
 import { rebuildNativeMacMenu } from '../main/menu';
+import { rebuildTrayMenu } from '../main/tray';
 
 export const settingsApi = {
   getAll: async (): Promise<SettingsSnapshot> => {
@@ -55,12 +56,18 @@ export const settingsApi = {
     }
     if (payload.value === undefined) store.delete(payload.key);
     else store.set(payload.key, payload.value);
-    // macOS 原生菜单文案跟随应用语言设置（与 Windows 自绘菜单 react-i18next
-    // 即时切换对齐）；重建是幂等的，非 darwin 下菜单函数内部直接忽略。
-    if (payload.key === 'language' && process.platform === 'darwin') {
-      void rebuildNativeMacMenu().catch((error) => {
-        console.error('[menu] failed to rebuild native menu on language change', error);
-      });
+    // 系统菜单栏与托盘文案跟随应用语言设置（与 Windows 自绘菜单 react-i18next
+    // 即时切换对齐）；重建是幂等的。
+    if (payload.key === 'language') {
+      if (process.platform === 'darwin') {
+        void rebuildNativeMacMenu().catch((error) => {
+          console.error('[menu] failed to rebuild native menu on language change', error);
+        });
+      } else {
+        void rebuildTrayMenu().catch((error) => {
+          console.error('[tray] failed to rebuild tray menu on language change', error);
+        });
+      }
     }
     return { success: true };
   },

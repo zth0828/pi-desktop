@@ -10,6 +10,7 @@ const i18nInstance = i18next.createInstance();
 await i18nInstance.init({
   lng: 'zh',
   fallbackLng: 'en',
+  interpolation: { escapeValue: false },
   resources: {
     zh: { translation: zh },
     en: { translation: en },
@@ -75,6 +76,34 @@ describe('error-formatter（错误信息本地化转译）', () => {
       'running',
       'not a git repository',
       'dirty',
+      'bash already running',
+      'command or url required',
+      'conflicted files cannot be reverted from Review',
+      'no changes to revert',
+      'empty patch',
+      'file-not-found',
+      'file is outside the active workspace and was not produced by this session',
+      'no workspace for project scope',
+      'model refresh timed out',
+      'fork produced no session file',
+      'No downloaded installer',
+      'No active window',
+      'Failed to create image from buffer',
+      'invalid name',
+      'Invalid package name',
+      'UI not available',
+      'prompt preflight rejected',
+      'Skill file does not exist',
+      'Skill file is read-only',
+      'skill import failed',
+      'skill source is unavailable or unsafe',
+      'Checksum mismatch',
+      'No stable release found',
+      'RUNNING_SESSIONS',
+      'aborted',
+      'path is not a directory',
+      'path is not a file',
+      'git empty tree failed',
     ];
 
     for (const code of testCases) {
@@ -85,6 +114,32 @@ describe('error-formatter（错误信息本地化转译）', () => {
       expect(enText, `en translation for ${code}`).toBeDefined();
       expect(enText, `en translation for ${code}`).not.toBe(code);
     }
+  });
+
+  it('转译动态参数错误（model not found, provider already exists 等）', () => {
+    expect(formatErrorMessage('model not found: anthropic/claude-3-5-sonnet', tZh)).toBe(
+      '未找到模型：anthropic/claude-3-5-sonnet',
+    );
+    expect(formatErrorMessage('model not found: anthropic/claude-3-5-sonnet', tEn)).toBe(
+      'Model not found: anthropic/claude-3-5-sonnet',
+    );
+
+    expect(formatErrorMessage('custom provider not found: custom-open-ai', tZh)).toBe(
+      '未找到供应商：custom-open-ai',
+    );
+    expect(formatErrorMessage('custom provider not found: custom-open-ai', tEn)).toBe(
+      'Provider not found: custom-open-ai',
+    );
+
+    expect(formatErrorMessage('provider id already exists: my-provider', tZh)).toBe(
+      '供应商 ID 已存在：my-provider',
+    );
+    expect(formatErrorMessage('provider id already exists: my-provider', tEn)).toBe(
+      'Provider ID already exists: my-provider',
+    );
+
+    expect(formatErrorMessage('Download failed (404)', tZh)).toBe('下载失败（状态码 404）');
+    expect(formatErrorMessage('Download failed (404)', tEn)).toBe('Download failed (status 404)');
   });
 
   it('转译工作区安全错误', () => {

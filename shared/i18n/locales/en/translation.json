@@ -315,6 +315,7 @@
     "totalCost": "Session cost",
     "tokenUnknown": "—",
     "greeting": "What would you like to build today",
+    "starterPrompts": "Starter prompts",
     "greetingRotating": [
       "What would you like to build today",
       "Refactor codebase architecture",
@@ -531,6 +532,38 @@
       "running": "Operation is currently running. Please retry later.",
       "notGitRepo": "Not a Git repository.",
       "gitDirty": "Workspace has uncommitted changes. Please commit or stash them first.",
+      "bashAlreadyRunning": "A Bash process is already running.",
+      "commandOrUrlRequired": "Either a command or a URL is required.",
+      "reviewConflictCannotRevert": "Conflicted files cannot be reverted from Review.",
+      "reviewNoChanges": "No changes to revert.",
+      "emptyPatch": "Empty patch.",
+      "fileNotFound": "File not found.",
+      "fileOutsideWorkspace": "File is outside the active workspace and was not produced by this session.",
+      "noWorkspaceForProject": "No active workspace for the project scope.",
+      "modelRefreshTimeout": "Model refresh timed out. Please try again later.",
+      "forkNoFile": "Fork produced no session file.",
+      "noDownloadedInstaller": "No downloaded installer found.",
+      "noActiveWindow": "No active window.",
+      "imageBufferFailed": "Failed to create image from buffer.",
+      "invalidName": "Invalid name.",
+      "invalidPackageName": "Invalid package name.",
+      "uiNotAvailable": "User interface is not available.",
+      "promptPreflightRejected": "Prompt preflight rejected. Please check session state and retry.",
+      "skillNotFound": "Skill file does not exist.",
+      "skillReadOnly": "Skill file is read-only.",
+      "skillImportFailed": "Skill import failed.",
+      "skillUnsafe": "Skill source is unavailable or unsafe.",
+      "checksumMismatch": "Checksum mismatch; the downloaded file may be corrupted.",
+      "noStableRelease": "No stable release found.",
+      "runningSessions": "There are still running sessions. Please stop them first.",
+      "aborted": "Operation aborted.",
+      "notADirectory": "Path is not a directory.",
+      "notAFile": "Path is not a file.",
+      "gitEmptyTreeFailed": "Failed to obtain Git empty tree.",
+      "modelNotFound": "Model not found: {{model}}",
+      "providerNotFound": "Provider not found: {{id}}",
+      "providerAlreadyExists": "Provider ID already exists: {{id}}",
+      "downloadFailed": "Download failed (status {{status}})",
       "requestId": "Request ID: {{id}}"
     }
   },
@@ -1056,6 +1089,7 @@
   },
   "review": {
     "title": "Review",
+    "clearSearch": "Clear search",
     "resizeList": "Resize review list",
     "refresh": "Refresh",
     "empty": "No changes yet",
@@ -1196,5 +1230,9 @@
     "waitingInstallVersion": "Downloaded v{{version}}, waiting to install",
     "readyTitle": "Update downloaded and ready",
     "readyDesc": "Click to open installer and finish updating"
+  },
+  "tray": {
+    "showMainWindow": "Show Main Window",
+    "quit": "Quit"
   }
 }

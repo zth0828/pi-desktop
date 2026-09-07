@@ -103,7 +103,7 @@ export function ChatGreeting({ cwd: _cwd }: ChatGreetingProps) {
         </h1>
       </div>
 
-      <div className="chat-greeting-cards" role="region" aria-label="Starter prompts">
+      <div className="chat-greeting-cards" role="region" aria-label={t('chat.starterPrompts')}>
         {cards.map((card) => (
           <button
             key={card.key}
