@@ -1254,7 +1254,6 @@ export const piRuntimeApi = {
               } else {
                 emitPromptLifecycle(active, 'failed', requestId, 'prompt preflight rejected');
                 active.pendingPrompts = active.pendingPrompts.filter((item) => item !== pendingPrompt);
-                complete({ success: false, error: 'prompt preflight rejected' });
               }
             },
           })
