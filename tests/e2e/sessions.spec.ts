@@ -294,7 +294,9 @@ test('导出 HTML → 按项目分类目录并在会话列表中标记已导出�
   await expect(row.getByTestId('session-show-exported')).toBeVisible();
 
   await page.getByTestId('nav-settings').click();
-  const directory = (await page.getByTestId('settings-export-directory').textContent())?.trim();
+  const exportDirLocator = page.getByTestId('settings-export-directory');
+  await expect(exportDirLocator).toContainText('Exports', { timeout: 15_000 });
+  const directory = (await exportDirLocator.textContent())?.trim();
   expect(directory).toBeTruthy();
   expect(directory!.split(path.sep).slice(-2)).toEqual(['Pi Desktop', 'Exports']);
   const workspaceName = (await realpath(workspace)).split(/[\\/]/).filter(Boolean).pop()!;
