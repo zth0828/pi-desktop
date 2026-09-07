@@ -121,11 +121,11 @@ test('会话标题、消息复制与 composer 加号菜单', async ({ launchElec
   await expect(page.getByTestId('copy-markdown')).toHaveCount(0);
   await page.getByTestId('composer-menu').click();
   await expect(page.getByTestId('attach-image')).toBeVisible();
-  await page.getByTestId('chat-input').click();
+  await page.getByTestId('chat-input-editor').click();
   await expect(page.getByTestId('attach-image')).toBeHidden();
   await page.getByTestId('token-usage').click();
   await expect(page.getByTestId('token-usage-popover')).toBeVisible();
-  await page.getByTestId('chat-input').click();
+  await page.getByTestId('chat-input-editor').click();
   await expect(page.getByTestId('token-usage-popover')).toBeHidden();
 });
 
@@ -197,6 +197,12 @@ test('侧边栏完全收起并可立即恢复历史列表', async ({ launchElect
   expect(chatColumnBox).not.toBeNull();
   expect(composerBox!.width).toBeGreaterThan(chatColumnBox!.width - 80);
   expect(composerBox!.height).toBeGreaterThanOrEqual(110);
+
+  // 确保侧边栏中有会话记录以验证折叠/展开恢复逻辑
+  await page.getByTestId('chat-input').fill('Say PONG');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+  await expect(page.locator('.sidebar-session-row').first()).toBeVisible({ timeout: 15_000 });
 
   const expandedWidth = (await sidebar.boundingBox())!.width;
   const titlebarBox = isMac ? null : await page.getByTestId('titlebar').boundingBox();

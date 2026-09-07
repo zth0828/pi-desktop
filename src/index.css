@@ -4165,7 +4165,7 @@ button.danger-outline {
 /* 隐藏同步 textarea：无缝支持 Playwright E2E 测试 */
 .composer-sync-textarea {
   position: absolute;
-  bottom: 0;
+  top: 0;
   left: 0;
   width: 1px;
   height: 1px;
@@ -4176,6 +4176,7 @@ button.danger-outline {
   background: transparent;
   resize: none;
   overflow: hidden;
+  z-index: 1;
 }
 
 .chat-input-card textarea:focus-visible {
