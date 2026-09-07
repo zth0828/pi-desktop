@@ -6,7 +6,7 @@ import { parseUserMessageTokens } from '../chat-message/user-mentions-parser';
 /**
  * 创建可在 contenteditable 中内联渲染的文件实体胶囊 DOM
  */
-export function createChipElement(relPath: string): HTMLSpanElement {
+export function createChipElement(relPath: string, chipId?: string): HTMLSpanElement {
   const fileName = relPath.includes('/')
     ? relPath.split('/').pop() || relPath
     : relPath.includes('\\')
@@ -17,6 +17,9 @@ export function createChipElement(relPath: string): HTMLSpanElement {
   chip.className = 'composer-inline-chip';
   chip.contentEditable = 'false';
   chip.setAttribute('data-file', relPath);
+  if (chipId) {
+    chip.setAttribute('data-chip-id', chipId);
+  }
   chip.title = relPath;
 
   // 使用 FileIcon 渲染真实的语言/文件矢量图标
@@ -94,10 +97,11 @@ export function insertChipAtCaret(
   editor: HTMLElement,
   relPath: string,
   atTokenRange?: { start: number; end: number },
+  chipId?: string,
 ) {
   editor.focus();
   const sel = window.getSelection();
-  const chip = createChipElement(relPath);
+  const chip = createChipElement(relPath, chipId);
   const space = document.createTextNode('\u00A0');
 
   if (atTokenRange && atTokenRange.start >= 0) {
@@ -107,6 +111,12 @@ export function insertChipAtCaret(
     const inserted = relPath.includes(' ') ? `@"${relPath}"` : `@${relPath}`;
     const full = `${before}${inserted}${after}`;
     populateComposer(editor, full);
+    if (chipId) {
+      const matchingChips = editor.querySelectorAll(`.composer-inline-chip[data-file="${relPath}"]`);
+      if (matchingChips.length > 0) {
+        matchingChips[matchingChips.length - 1].setAttribute('data-chip-id', chipId);
+      }
+    }
     moveCaretToEnd(editor);
     return;
   }
@@ -127,6 +137,39 @@ export function insertChipAtCaret(
     editor.appendChild(space);
     moveCaretToEnd(editor);
   }
+}
+
+/**
+ * 从编辑器中移除指定或最后一个文件胶囊（及其后跟随的不换行空格）
+ */
+export function removeChip(editor: HTMLElement, chipId?: string, chipPath?: string): boolean {
+  let targetChip: HTMLElement | null = null;
+  if (chipId) {
+    targetChip = editor.querySelector(`.composer-inline-chip[data-chip-id="${chipId}"]`);
+  }
+  if (!targetChip && chipPath) {
+    const matchingChips = editor.querySelectorAll(`.composer-inline-chip[data-file="${chipPath}"]`);
+    if (matchingChips.length > 0) {
+      targetChip = matchingChips[matchingChips.length - 1] as HTMLElement;
+    }
+  }
+  if (!targetChip) {
+    const allChips = editor.querySelectorAll('.composer-inline-chip');
+    if (allChips.length > 0) {
+      targetChip = allChips[allChips.length - 1] as HTMLElement;
+    }
+  }
+  if (!targetChip) return false;
+
+  if (
+    targetChip.nextSibling &&
+    targetChip.nextSibling.nodeType === Node.TEXT_NODE &&
+    (targetChip.nextSibling.textContent === '\u00A0' || targetChip.nextSibling.textContent === ' ')
+  ) {
+    targetChip.nextSibling.remove();
+  }
+  targetChip.remove();
+  return true;
 }
 
 export function moveCaretToEnd(el: HTMLElement) {

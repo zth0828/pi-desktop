@@ -44,6 +44,8 @@ import {
   serializeComposer,
   populateComposer,
   getCaretCharacterOffsetWithin,
+  removeChip,
+  moveCaretToEnd,
 } from './chat-input/composer-rich-editor';
 
 export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: ChatInputProps) {
@@ -352,6 +354,26 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   };
 
 
+  type StagedItemType =
+    | { type: 'attachment'; id: string }
+    | { type: 'file_chip'; id: string; path: string }
+    | { type: 'skill'; name: string }
+    | { type: 'command' }
+    | { type: 'plan' };
+
+  const [stagedStack, setStagedStack] = useState<StagedItemType[]>([]);
+
+  const removeChipFromEditor = (chipId?: string, chipPath?: string): boolean => {
+    if (!editorRef.current) return false;
+    const removed = removeChip(editorRef.current, chipId, chipPath);
+    if (!removed) return false;
+    const next = serializeComposer(editorRef.current);
+    setValue(next);
+    if (textareaRef.current) textareaRef.current.value = next;
+    moveCaretToEnd(editorRef.current);
+    return true;
+  };
+
   const {
     atToken,
     setAtToken,
@@ -385,10 +407,12 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     textareaRef,
     onInsertMention: (relPath: string) => {
       if (editorRef.current) {
-        insertChipAtCaret(editorRef.current, relPath, atToken ?? undefined);
+        const chipId = `chip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        insertChipAtCaret(editorRef.current, relPath, atToken ?? undefined, chipId);
         const serialized = serializeComposer(editorRef.current);
         setValue(serialized);
         if (textareaRef.current) textareaRef.current.value = serialized;
+        setStagedStack((prev) => [...prev, { type: 'file_chip', id: chipId, path: relPath }]);
       }
     },
   });
@@ -442,10 +466,12 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     textareaRef,
     onInsertMention: (relPath: string) => {
       if (editorRef.current) {
-        insertChipAtCaret(editorRef.current, relPath);
+        const chipId = `chip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        insertChipAtCaret(editorRef.current, relPath, undefined, chipId);
         const serialized = serializeComposer(editorRef.current);
         setValue(serialized);
         if (textareaRef.current) textareaRef.current.value = serialized;
+        setStagedStack((prev) => [...prev, { type: 'file_chip', id: chipId, path: relPath }]);
       }
     },
   });
@@ -623,6 +649,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     if (commandMode) {
       setValue('');
       setAttachments(() => []);
+      setStagedStack([]);
       setCommandMode(false);
       if (text && !bashing) void runBash(text, commandExcludeFromContext);
       return;
@@ -630,6 +657,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     if ((text.startsWith('!') || text.startsWith('！')) && outgoingAttachments.length === 0) {
       setValue('');
       setAttachments(() => []);
+      setStagedStack([]);
       const isExcluded = text.startsWith('!!') || text.startsWith('！！');
       const command = (isExcluded ? text.slice(2) : text.slice(1)).trim();
       if (command) void runBash(command, isExcluded);
@@ -669,6 +697,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       if (rawName === 'plan' || rawName === 'plan-mode') {
         setValue('');
         setAttachments(() => []);
+        setStagedStack([]);
         setPlanMode((prev) => !prev);
         return;
       }
@@ -680,6 +709,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
           if (skillName) {
             setValue('');
             setAttachments(() => []);
+            setStagedStack([]);
             setSelectedSkill(skillName);
           }
           return;
@@ -689,6 +719,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       if (SHELL_BUILTIN_NAMES.has(rawName)) {
         setValue('');
         setAttachments(() => []);
+        setStagedStack([]);
         void runBuiltinCommand(rawName, arg);
         return;
       }
@@ -703,6 +734,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
         setValue('');
         setAttachments(() => []);
+        setStagedStack([]);
         executePrompt(promptText, outgoing, behavior);
         return;
       }
@@ -724,16 +756,10 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
     setValue('');
     setAttachments(() => []);
+    setStagedStack([]);
     executePrompt(promptText, outgoing, behavior);
   };
 
-  type StagedItemType =
-    | { type: 'attachment'; id: string }
-    | { type: 'skill'; name: string }
-    | { type: 'command' }
-    | { type: 'plan' };
-
-  const [stagedStack, setStagedStack] = useState<StagedItemType[]>([]);
   const prevAttachmentsRef = useRef(attachments);
   const prevSkillRef = useRef(selectedSkill);
   const prevCommandRef = useRef(commandMode);
@@ -803,6 +829,14 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const cancelLastStagedItem = (): boolean => {
     for (let i = stagedStack.length - 1; i >= 0; i--) {
       const item = stagedStack[i];
+      if (item.type === 'file_chip') {
+        const removed = removeChipFromEditor(item.id, item.path);
+        setStagedStack((prev) => prev.filter((_, idx) => idx !== i));
+        if (removed) {
+          return true;
+        }
+        continue;
+      }
       if (item.type === 'skill' && selectedSkill) {
         setSelectedSkill(null);
         setStagedStack((prev) => prev.filter((_, idx) => idx !== i));
@@ -825,6 +859,9 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       }
     }
 
+    if (removeChipFromEditor()) {
+      return true;
+    }
     if (selectedSkill) {
       setSelectedSkill(null);
       return true;
@@ -842,11 +879,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       return true;
     }
 
-    if (value !== '') {
-      setValue('');
-      return true;
-    }
-
+    // 防误触保护：保留已输入的提示词文本，不再清空 value
     return false;
   };
 
@@ -1326,6 +1359,22 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
             const removeBtn = (e.target as HTMLElement).closest('.composer-inline-chip-remove');
             if (removeBtn && editorRef.current) {
               const chip = removeBtn.closest('.composer-inline-chip');
+              const chipId = chip?.getAttribute('data-chip-id');
+              const chipPath = chip?.getAttribute('data-file');
+              if (chipId) {
+                setStagedStack((prev) => prev.filter((it) => it.type !== 'file_chip' || it.id !== chipId));
+              } else if (chipPath) {
+                setStagedStack((prev) => {
+                  let found = -1;
+                  for (let i = prev.length - 1; i >= 0; i--) {
+                    if (prev[i].type === 'file_chip' && (prev[i] as { path: string }).path === chipPath) {
+                      found = i;
+                      break;
+                    }
+                  }
+                  return found === -1 ? prev : prev.filter((_, i) => i !== found);
+                });
+              }
               if (chip?.nextSibling && chip.nextSibling.nodeType === Node.TEXT_NODE && /^\s+$/.test(chip.nextSibling.textContent || '')) {
                 chip.nextSibling.remove();
               }
