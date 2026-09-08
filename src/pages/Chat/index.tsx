@@ -461,7 +461,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     if (!list) return;
     const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
     const hasOverflow = list.scrollHeight > list.clientHeight + 2;
-    const atBottom = !hasOverflow || distanceFromBottom <= 24;
+    const atBottom = !hasOverflow || distanceFromBottom <= 64;
     // 会话切换复位窗口内不更新 stick，避免顶部瞬态滚动把自动钉底关掉
     if (!scrollResetRef.current) stickToBottomRef.current = atBottom;
     setShowScrollToBottom(hasOverflow && !atBottom);
@@ -476,14 +476,37 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     return () => list.removeEventListener('scroll', onScroll);
   }, [sessionId, started, updateScrollAffordance]);
 
+  const prevMessageCountRef = useRef(displayMessages.length);
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
+    const isNewMessage = displayMessages.length > prevMessageCountRef.current;
+    prevMessageCountRef.current = displayMessages.length;
+    const lastMsg = displayMessages[displayMessages.length - 1];
+    // 发送新消息或开始流式回复时，强制钉底并隐藏回到底部按钮
+    if (isNewMessage && (lastMsg?.role === 'user' || isStreaming)) {
+      stickToBottomRef.current = true;
+      setShowScrollToBottom(false);
+    }
     if (stickToBottomRef.current) {
-      list.scrollTo({ top: list.scrollHeight });
+      list.scrollTop = list.scrollHeight;
     }
     updateScrollAffordance();
-  }, [displayMessages, updateScrollAffordance]);
+  }, [displayMessages, bashDraft, isStreaming, updateScrollAffordance]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    // 监听输入框收缩或外部尺寸形变：保持贴底，彻底避免消息向上偏移
+    const ro = new ResizeObserver(() => {
+      if (stickToBottomRef.current) {
+        list.scrollTop = list.scrollHeight;
+      }
+      updateScrollAffordance();
+    });
+    ro.observe(list);
+    return () => ro.disconnect();
+  }, [updateScrollAffordance]);
 
   const scrollToBottom = () => {
     const list = listRef.current;
