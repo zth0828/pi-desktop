@@ -160,4 +160,25 @@ describe('version-check-api', () => {
     expect(result.app.updateAvailable).toBe(true);
     expect(result.app.latest).toBe('v1.1.0');
   });
+
+  it('does not return stale lower version on getStatus or network error', async () => {
+    // Current is 0.4.0 (mocked in appApi), saved is 0.3.0 (lower than current)
+    settingsApiMock.getAll.mockResolvedValue({
+      appVersionCheckLatest: 'v0.3.0',
+      appVersionCheckAssetName: 'Pi.Desktop-0.3.0-arm64.dmg',
+    });
+
+    const status = await versionCheckApi.getStatus();
+    expect(status.app.latest).toBeUndefined();
+    expect(status.app.assetName).toBeUndefined();
+    expect(status.app.updateAvailable).toBe(false);
+
+    // When check fails, it does not return the stale 0.3.0
+    hostFetchMock.hostFetch.mockRejectedValue(new Error('Network error'));
+    const checkResult = await versionCheckApi.check({ force: true });
+    expect(checkResult.app.latest).toBeUndefined();
+    expect(checkResult.app.assetName).toBeUndefined();
+    expect(checkResult.app.updateAvailable).toBe(false);
+    expect(checkResult.app.error).toBe('Network error');
+  });
 });

@@ -953,6 +953,7 @@
       "showInFolder": "Show in folder",
       "upgradePi": "Upgrade pi",
       "downloadFailedHint": "Download failed. You can configure a GitHub download mirror (e.g. https://ghproxy.net/) below and retry.",
+      "checkFailedHint": "Unable to connect to update server. If in a restricted network environment, configure a GitHub download mirror (e.g. https://ghproxy.net/) below and retry.",
       "releaseNotesTitle": "✨ What's new in {{version}}",
       "expand": "Expand ▾",
       "collapse": "Collapse ▴",
@@ -1005,6 +1006,14 @@
     "preventSleepDesc": "Keep the display awake while the agent is running (including auto-retry waits).",
     "notifyUiRequest": "Extension request notifications",
     "notifyUiRequestDesc": "Notify when an extension asks for confirmation or input (independent of the mode above).",
+    "closeAction": {
+      "title": "When closing main window",
+      "descMac": "Choose whether to keep running in the background or quit the application.",
+      "descOther": "Choose whether to minimize to the system tray or quit the application.",
+      "minimizeMac": "Keep running in background",
+      "minimizeOther": "Minimize to system tray",
+      "quit": "Quit application"
+    },
     "toggle": {
       "on": "On",
       "off": "Off"

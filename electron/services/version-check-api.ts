@@ -171,7 +171,16 @@ async function checkApp(previous: VersionCheckStatus & { releaseUrl?: string; re
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await settingsApi.set({ key: 'appVersionCheckError', value: message });
-    return { ...previous, current, lastAttemptAt: now, error: message };
+    const hasNewer = previous.latest && compare(current, previous.latest);
+    return {
+      ...previous,
+      current,
+      latest: hasNewer ? previous.latest : undefined,
+      assetName: hasNewer ? previous.assetName : undefined,
+      updateAvailable: Boolean(hasNewer),
+      lastAttemptAt: now,
+      error: message,
+    };
   }
 }
 
@@ -180,6 +189,26 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   const now = Date.now();
   const currentApp = appApi.version();
   const currentPi = (await piSystemApi.detect()).pi.version;
+
+  // 若本地版本已高于或等于缓存的最新版本，说明缓存已过时失效，自动清理
+  if (saved.appVersionCheckLatest && !compare(currentApp, saved.appVersionCheckLatest)) {
+    saved.appVersionCheckLatest = undefined;
+    saved.appVersionCheckAssetName = undefined;
+    saved.appVersionCheckReleaseUrl = undefined;
+    saved.appVersionCheckReleaseNotes = undefined;
+    saved.appVersionCheckDownloadedPath = undefined;
+    void settingsApi.set({ key: 'appVersionCheckLatest', value: undefined });
+    void settingsApi.set({ key: 'appVersionCheckAssetName', value: undefined });
+    void settingsApi.set({ key: 'appVersionCheckReleaseUrl', value: undefined });
+    void settingsApi.set({ key: 'appVersionCheckReleaseNotes', value: undefined });
+    void settingsApi.set({ key: 'appVersionCheckDownloadedPath', value: undefined });
+  }
+
+  if (saved.piVersionCheckLatest && currentPi && !compare(currentPi, saved.piVersionCheckLatest)) {
+    saved.piVersionCheckLatest = undefined;
+    void settingsApi.set({ key: 'piVersionCheckLatest', value: undefined });
+  }
+
   const piPrevious: VersionCheckStatus = { latest: saved.piVersionCheckLatest, updateAvailable: false, lastAttemptAt: saved.piVersionCheckLastAttemptAt, lastSuccessAt: saved.piVersionCheckLastSuccessAt, error: saved.piVersionCheckError };
   const appPrevious = { latest: saved.appVersionCheckLatest, updateAvailable: false, lastAttemptAt: saved.appVersionCheckLastAttemptAt, lastSuccessAt: saved.appVersionCheckLastSuccessAt, error: saved.appVersionCheckError, releaseUrl: saved.appVersionCheckReleaseUrl, releaseNotes: saved.appVersionCheckReleaseNotes, assetName: saved.appVersionCheckAssetName };
 
@@ -246,9 +275,30 @@ export const versionCheckApi = {
   getStatus: async () => {
     const saved = await settingsApi.getAll();
     const currentPi = (await piSystemApi.detect()).pi.version;
+    const currentApp = appApi.version();
+    const appHasNewer = saved.appVersionCheckLatest && compare(currentApp, saved.appVersionCheckLatest);
+    const piHasNewer = saved.piVersionCheckLatest && currentPi && compare(currentPi, saved.piVersionCheckLatest);
     return updateStatus({
-      pi: { current: currentPi, latest: saved.piVersionCheckLatest, updateAvailable: compare(currentPi, saved.piVersionCheckLatest), lastAttemptAt: saved.piVersionCheckLastAttemptAt, lastSuccessAt: saved.piVersionCheckLastSuccessAt, error: saved.piVersionCheckError },
-      app: { current: appApi.version(), latest: saved.appVersionCheckLatest, updateAvailable: compare(appApi.version(), saved.appVersionCheckLatest), lastAttemptAt: saved.appVersionCheckLastAttemptAt, lastSuccessAt: saved.appVersionCheckLastSuccessAt, error: saved.appVersionCheckError, releaseUrl: saved.appVersionCheckReleaseUrl, releaseNotes: saved.appVersionCheckReleaseNotes, assetName: saved.appVersionCheckAssetName, downloadedPath: saved.appVersionCheckDownloadedPath },
+      pi: {
+        current: currentPi,
+        latest: piHasNewer ? saved.piVersionCheckLatest : undefined,
+        updateAvailable: Boolean(piHasNewer),
+        lastAttemptAt: saved.piVersionCheckLastAttemptAt,
+        lastSuccessAt: saved.piVersionCheckLastSuccessAt,
+        error: saved.piVersionCheckError,
+      },
+      app: {
+        current: currentApp,
+        latest: appHasNewer ? saved.appVersionCheckLatest : undefined,
+        updateAvailable: Boolean(appHasNewer),
+        lastAttemptAt: saved.appVersionCheckLastAttemptAt,
+        lastSuccessAt: saved.appVersionCheckLastSuccessAt,
+        error: saved.appVersionCheckError,
+        releaseUrl: appHasNewer ? saved.appVersionCheckReleaseUrl : undefined,
+        releaseNotes: appHasNewer ? saved.appVersionCheckReleaseNotes : undefined,
+        assetName: appHasNewer ? saved.appVersionCheckAssetName : undefined,
+        downloadedPath: appHasNewer ? saved.appVersionCheckDownloadedPath : undefined,
+      },
     });
   },
   getPendingNotice: async () => {

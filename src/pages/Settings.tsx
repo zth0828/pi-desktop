@@ -73,6 +73,8 @@ export default function SettingsPage() {
   const [sendWith, setSendWith] = useState<SendWith>('enter');
   const [preventSleep, setPreventSleep] = useState(false);
   const [notifyUiRequest, setNotifyUiRequest] = useState(true);
+  const [closeAction, setCloseAction] = useState<'minimize' | 'quit'>('minimize');
+  const [platform, setPlatform] = useState('');
   const [compaction, setCompaction] = useState<PiCompactionSettings>({ reserveTokens: 16384, keepRecentTokens: 20000, enabled: true });
   const [modelWindow, setModelWindow] = useState<number>();
   const modelWindowRef = useRef<number | undefined>(undefined);
@@ -89,7 +91,10 @@ export default function SettingsPage() {
   const env = usePiSystemStore((s) => s.env);
   const detect = usePiSystemStore((s) => s.detect);
 
+  const isMac = platform === 'darwin';
+
   useEffect(() => {
+    void hostApi.app.platform().then(setPlatform);
     void hostApi.app.version().then(setAppVersion);
     void hostApi.versionCheck.getStatus().then(setVersionStatus).catch(() => {});
     void hostApi.settings.get('workspaceCwd').then(setCwd);
@@ -101,6 +106,7 @@ export default function SettingsPage() {
     void hostApi.settings.get('sendWith').then((v) => setSendWith(v === 'cmdEnter' ? 'cmdEnter' : 'enter'));
     void hostApi.settings.get('preventSleep').then((v) => setPreventSleep(v === true));
     void hostApi.settings.get('notifyUiRequest').then((v) => setNotifyUiRequest(v !== false));
+    void hostApi.settings.get('closeAction').then((v) => setCloseAction(v === 'quit' ? 'quit' : 'minimize'));
     let compactionLoaded: PiCompactionSettings | undefined;
     const applyRecommendedCompaction = () => {
       // 未显式配置过 compaction 时，按当前模型窗口套用推荐值
@@ -352,6 +358,37 @@ export default function SettingsPage() {
                 {t(on ? 'settings.toggle.on' : 'settings.toggle.off')}
               </button>
             ))}
+          </div>
+        </div>
+
+        <div className="settings-row" data-testid="settings-close-action">
+          <div className="settings-row-label">
+            <div>{t('settings.closeAction.title')}</div>
+            <div className="settings-row-desc">
+              {isMac ? t('settings.closeAction.descMac') : t('settings.closeAction.descOther')}
+            </div>
+          </div>
+          <div className="pill-group">
+            <button
+              data-testid="close-action-minimize"
+              className={closeAction === 'minimize' ? 'pill active' : 'pill'}
+              onClick={() => {
+                setCloseAction('minimize');
+                void hostApi.settings.set('closeAction', 'minimize');
+              }}
+            >
+              {isMac ? t('settings.closeAction.minimizeMac') : t('settings.closeAction.minimizeOther')}
+            </button>
+            <button
+              data-testid="close-action-quit"
+              className={closeAction === 'quit' ? 'pill active' : 'pill'}
+              onClick={() => {
+                setCloseAction('quit');
+                void hostApi.settings.set('closeAction', 'quit');
+              }}
+            >
+              {t('settings.closeAction.quit')}
+            </button>
           </div>
         </div>
       </section>
@@ -703,11 +740,9 @@ export default function SettingsPage() {
                 <div className="settings-version-title-row">
                   <span className="settings-version-name">Pi Desktop</span>
                   <span className="settings-version-badge">
-                    {versionStatus?.app.latest
-                      ? (versionStatus.app.updateAvailable
-                          ? `${t('settings.version.newAvailable')} ${versionStatus.app.latest}`
-                          : t('settings.version.upToDate', { version: versionStatus.app.latest.replace(/^v/, '') }))
-                      : t('settings.version.current', { version: appVersion })}
+                    {versionStatus?.app.updateAvailable && versionStatus.app.latest
+                      ? `${t('settings.version.newAvailable')} ${versionStatus.app.latest}`
+                      : t('settings.version.upToDate', { version: appVersion })}
                   </span>
                   {Boolean(downloadMirror?.trim()) && (
                     <span className="settings-version-badge settings-badge-mirror">
@@ -717,7 +752,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="settings-row-desc">
                   {t('settings.version.current', { version: appVersion })}
-                  {versionStatus?.app.assetName && ` · ${versionStatus.app.assetName}`}
+                  {versionStatus?.app.updateAvailable && versionStatus.app.assetName && ` · ${versionStatus.app.assetName}`}
                 </div>
               </div>
             </div>
@@ -834,7 +869,7 @@ export default function SettingsPage() {
           {versionStatus?.app.error && (
             <div className="error-text" data-testid="settings-app-check-error">
               {t('settings.version.checkFailed')}
-              <div className="settings-row-desc">{t('settings.version.downloadFailedHint')}</div>
+              <div className="settings-row-desc">{t('settings.version.checkFailedHint')}</div>
             </div>
           )}
         </div>

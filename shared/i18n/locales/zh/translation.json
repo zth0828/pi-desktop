@@ -953,6 +953,7 @@
       "showInFolder": "显示文件位置",
       "upgradePi": "升级 pi",
       "downloadFailedHint": "下载失败。如果在国内网络环境下，可在下方配置 GitHub 下载镜像加速（如 https://ghproxy.net/）后重试。",
+      "checkFailedHint": "无法连接到更新服务器。如果在国内网络环境下，可在下方配置 GitHub 下载镜像加速（如 https://ghproxy.net/）后重试。",
       "releaseNotesTitle": "✨ {{version}} 更新内容与特性",
       "expand": "展开 ▾",
       "collapse": "收起 ▴",
@@ -1005,6 +1006,14 @@
     "preventSleepDesc": "agent 运行期间阻止显示器休眠（含自动重试等待）。",
     "notifyUiRequest": "扩展请求通知",
     "notifyUiRequestDesc": "扩展请求确认/输入时发送系统通知（独立于上方档位）。",
+    "closeAction": {
+      "title": "关闭主窗口时",
+      "descMac": "选择关闭主窗口是保持在后台运行还是直接退出应用。",
+      "descOther": "选择关闭主窗口是最小化到系统托盘还是直接退出应用。",
+      "minimizeMac": "保持在后台运行",
+      "minimizeOther": "最小化到系统托盘",
+      "quit": "退出应用"
+    },
     "toggle": {
       "on": "开启",
       "off": "关闭"
