@@ -1067,6 +1067,7 @@ export function ReviewPanel() {
   const setWorkspaceOpen = usePaneChatStore((s) => s.setWorkspaceOpen);
   const workspaceFileRequest = usePaneChatStore((s) => s.workspaceFileRequest);
   const reviewFileRequest = usePaneChatStore((s) => s.reviewFileRequest);
+  const workbenchTabRequest = usePaneChatStore((s) => s.workbenchTabRequest);
   const cwd = usePaneChatStore((s) => s.cwd);
   const [tab, setTab] = useState<WorkbenchTab>('files');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -1129,6 +1130,12 @@ export function ReviewPanel() {
     setFileTreeOpen(false);
     setUserToggledInNarrow(false);
   }, [workspaceFileRequest]);
+
+  useEffect(() => {
+    if (!workbenchTabRequest) return;
+    setTab(workbenchTabRequest.tab);
+    setUserToggledInNarrow(false);
+  }, [workbenchTabRequest]);
 
   useEffect(() => {
     const container = getContainer(panelRef.current);

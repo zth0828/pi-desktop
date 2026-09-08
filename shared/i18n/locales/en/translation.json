@@ -94,6 +94,13 @@
     "stop": "Stop",
     "sendTip": "Send (Enter)",
     "sendTipCmdEnter": "Send (Cmd/Ctrl+Enter)",
+    "tasks": {
+      "running_one": "1 task running",
+      "running_other": "{{count}} tasks running",
+      "viewInPanel": "View in side panel",
+      "finished": "Finished",
+      "failed": "Failed"
+    },
     "queueSendTip": "Follow up after the current task finishes",
     "queueSendTipSteer": "Guide the current turn after its active tool call finishes",
     "gitBranchTitle": "Git branch: {{branch}}",

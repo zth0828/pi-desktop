@@ -681,6 +681,29 @@ test('bash 执行中可单独停止：流式卡停止按钮取消命令', async 
   }
 });
 
+test('吸顶运行态任务卡片：bash 运行中吸顶展示，点击在侧边栏查看可直接打开命令面板', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await page.getByTestId('composer-menu').click();
+  await page.getByTestId('composer-command-mode').click();
+  await page.getByTestId('chat-input').fill("bash -c 'echo pi-desktop-hud-running; sleep 2'");
+  await page.getByTestId('chat-send').click();
+
+  const taskCard = page.getByTestId('running-tasks-card');
+  await expect(taskCard).toBeVisible({ timeout: 10_000 });
+  await expect(taskCard).toContainText('pi-desktop-hud-running');
+
+  await taskCard.getByTestId('running-tasks-view-btn').click();
+
+  const commandsTab = page.getByTestId('workspace-commands-tab');
+  await expect(commandsTab).toHaveClass(/active/, { timeout: 10_000 });
+
+  await expect(taskCard).toContainText(/已完成|Finished/, { timeout: 10_000 });
+  await expect(taskCard).toHaveCount(0, { timeout: 10_000 });
+});
+
 test('计划模式：常驻切换，开启后发送带 /plan 前缀，可退出', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

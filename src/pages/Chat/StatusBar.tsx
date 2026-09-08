@@ -84,8 +84,8 @@ export function StatusBar() {
       text: t('chat.status.serverRunning'),
       title: (runningServerCommand.args as { command?: string } | undefined)?.command,
     };
-  } else if (isStreaming && runningTool) {
-    const toolName = ['bash', 'edit', 'write', 'read', 'grep'].includes(runningTool.toolName) ? runningTool.toolName : 'default';
+  } else if (isStreaming && runningTool && runningTool.toolName !== 'bash') {
+    const toolName = ['edit', 'write', 'read', 'grep'].includes(runningTool.toolName) ? runningTool.toolName : 'default';
     status = {
       testid: 'status-tool-running',
       text: t(`chat.tool.line.${toolName}.running`, {

@@ -135,6 +135,8 @@ export type ChatState = {
   workspaceOpen: boolean;
   /** 工具卡请求打开工作区文件（nonce 保证重复点击同一路径也能激活）。 */
   workspaceFileRequest: { path: string; nonce: number } | null;
+  /** 请求打开特定 Workbench 标签页（如 commands 命令行抽屉）。 */
+  workbenchTabRequest: { tab: 'files' | 'review' | 'commands'; nonce: number } | null;
   /** 评审面板请求打开/选中特定文件的 Diff（nonce 保证重复点击同一路径也能激活）。 */
   reviewFileRequest: { path?: string; nonce: number } | null;
   /** fork/跳分支后回填输入框的文本与附件（nonce 保证同文本也触发） */
@@ -170,6 +172,7 @@ export type ChatState = {
   openReviewFile: (path?: string) => void;
   setWorkspaceOpen: (open: boolean) => void;
   openWorkspaceFile: (path: string) => void;
+  openWorkbenchTab: (tab: 'files' | 'review' | 'commands') => void;
   setComposerText: (text: string) => void;
   setComposerAttachments: (attachments: ComposerAttachment[]) => void;
   setCommandMode: (mode: boolean) => void;
@@ -390,6 +393,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       reviewOpen: false,
       workspaceOpen: false,
       workspaceFileRequest: null,
+      workbenchTabRequest: null,
       reviewFileRequest: null,
       inputDraft: null,
       pendingEditEntryId: null,
@@ -593,6 +597,22 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           reviewOpen: false,
           workspaceFileRequest: { path, nonce: (get().workspaceFileRequest?.nonce ?? 0) + 1 },
         });
+      },
+
+      openWorkbenchTab: (tab) => {
+        if (tab === 'review') {
+          set({
+            reviewOpen: true,
+            workspaceOpen: false,
+            workbenchTabRequest: { tab, nonce: (get().workbenchTabRequest?.nonce ?? 0) + 1 },
+          });
+        } else {
+          set({
+            workspaceOpen: true,
+            reviewOpen: false,
+            workbenchTabRequest: { tab, nonce: (get().workbenchTabRequest?.nonce ?? 0) + 1 },
+          });
+        }
       },
 
       openReviewFile: (rawPath) => {

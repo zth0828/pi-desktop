@@ -94,6 +94,13 @@
     "stop": "停止",
     "sendTip": "发送（Enter）",
     "sendTipCmdEnter": "发送（Cmd/Ctrl+Enter）",
+    "tasks": {
+      "running_one": "1 个任务运行中",
+      "running_other": "{{count}} 个任务运行中",
+      "viewInPanel": "在侧边栏查看",
+      "finished": "已完成",
+      "failed": "执行失败"
+    },
     "queueSendTip": "稍后继续：当前任务全部完成后再发送",
     "queueSendTipSteer": "引导当前轮：当前工具调用结束后立即交给 pi",
     "gitBranchTitle": "Git 分支：{{branch}}",

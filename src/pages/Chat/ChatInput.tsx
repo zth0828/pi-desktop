@@ -39,6 +39,7 @@ import { ChatInputAttachments } from './chat-input/ChatInputAttachments';
 import { ChatInputMentionsPopup } from './chat-input/ChatInputMentionsPopup';
 import { ChatInputSlashPopup } from './chat-input/ChatInputSlashPopup';
 import { ChatInputControls } from './chat-input/ChatInputControls';
+import { RunningTasksCard } from './RunningTasksCard';
 import {
   insertChipAtCaret,
   serializeComposer,
@@ -1311,6 +1312,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         }}
         onDrop={handleComposerDrop}
       >
+        <RunningTasksCard />
         <ChatInputAttachments
           attachments={attachments}
           onRemove={removeAttachment}
