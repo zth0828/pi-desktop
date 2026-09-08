@@ -51,6 +51,22 @@ export default function Onboarding() {
     return () => window.clearTimeout(timer);
   }, [env, state]);
 
+  useEffect(() => {
+    if (state !== 'no-node' && state !== 'no-pi') return;
+    const onFocus = () => {
+      void detect(true);
+    };
+    window.addEventListener('focus', onFocus);
+    // 用户在外部浏览器/安装器完成安装后切回或等待期间，定时静默探测环境，无需反复手动点击
+    const timer = window.setInterval(() => {
+      void detect(true);
+    }, 4000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.clearInterval(timer);
+    };
+  }, [state, detect]);
+
   if (!env || !state) {
     return (
       <div className="onboarding">

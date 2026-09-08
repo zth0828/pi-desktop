@@ -11,7 +11,7 @@ import { sendHostEvent } from '../main/ipc/host-events';
 import { detectPiEnvironment, invalidatePiDetectCache } from '../utils/pi-detector';
 import { invalidatePiSdkCache } from '../utils/pi-loader';
 import { inspectPiCompatibility } from './pi-adapter';
-import { envWithUserPath } from '../utils/shell-env';
+import { envWithUserPath, refreshUserPath } from '../utils/shell-env';
 import { hostFetch } from '../utils/host-fetch';
 
 const DETECT_TTL_MS = 5 * 60 * 1000;
@@ -27,6 +27,10 @@ let installInFlight: Promise<PiInstallResult> | null = null;
 
 export const piSystemApi = {
   detect: async (payload?: { force?: boolean }): Promise<PiEnvironment> => {
+    if (payload?.force) {
+      refreshUserPath();
+      invalidateDetectCache();
+    }
     if (!payload?.force && detectCache && Date.now() - detectCache.at < DETECT_TTL_MS) {
       return detectCache.env;
     }
