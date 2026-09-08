@@ -10,6 +10,7 @@ import { resolveAppIconPath } from '../utils/app-icon';
 import { safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { scheduleVersionChecks } from '../services/version-check-api';
 import { installNativeMacMenu } from './menu';
+import { getElectronStore } from '../utils/electron-store';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
@@ -107,12 +108,13 @@ if (!hasSingleInstanceLock) {
       }));
       installNativeMacMenu();
     }
+    void getElectronStore();
     createMainWindow();
     createTray();
     scheduleVersionChecks();
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+      focusOrCreateMainWindow();
     });
   });
 

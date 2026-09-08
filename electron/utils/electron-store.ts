@@ -7,11 +7,19 @@ type ElectronStore = {
 };
 
 let storePromise: Promise<ElectronStore> | null = null;
+let cachedStore: ElectronStore | null = null;
 
 /** All shell persistence uses one electron-store instance to avoid config.json overwrites. */
 export function getElectronStore(): Promise<ElectronStore> {
   storePromise ??= import('electron-store').then(
-    (mod) => new mod.default<SettingsSnapshot>() as unknown as ElectronStore,
+    (mod) => {
+      cachedStore = new mod.default<SettingsSnapshot>() as unknown as ElectronStore;
+      return cachedStore;
+    },
   );
   return storePromise;
+}
+
+export function getLoadedElectronStore(): ElectronStore | null {
+  return cachedStore;
 }

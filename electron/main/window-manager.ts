@@ -11,6 +11,8 @@ import { samePath } from '../utils/same-path';
 import { resolveMinSizeFor, resolveWindowSizeFor } from '../utils/window-bounds';
 import { timingEnabled, timingMark } from '../utils/timing';
 import { registerContextMenu } from './menu';
+import { getLoadedElectronStore } from '../utils/electron-store';
+import { showTrayMinimizedNotice } from './tray';
 
 export type WindowRecord = {
   win: BrowserWindow;
@@ -345,13 +347,28 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
   registerWindow(win, { isMain: options.isMain });
   registerContextMenu(win);
   if (options.sessionPath) bindWindowSession(win.webContents.id, options.sessionPath);
-  // Windows/Linux：主窗口点关闭不退出，隐藏到托盘继续跑（托盘是恢复/退出入口）；
-  // 退出流程（before-quit 置 quitting）放行真正关闭。macOS 走 dock activate 重建，不拦截。
-  if (options.isMain && process.platform !== 'darwin') {
+  // 主窗口关闭拦截：根据 closeAction（'minimize' | 'quit'，默认 'minimize'）处理。
+  // - quit：放行退出，并调用 app.quit()；
+  // - minimize：
+  //   - Windows/Linux：隐藏到托盘并给出提示气泡/通知；
+  //   - macOS：隐藏窗口并保留在 Dock 中，点击 Dock 即恢复；
+  // 退出流程中（before-quit 置 quitting）直接放行。
+  if (options.isMain) {
     win.on('close', (event) => {
       if (isQuitting()) return;
+      const store = getLoadedElectronStore();
+      const closeAction = (store?.get('closeAction') as string | undefined) ?? 'minimize';
+      if (closeAction === 'quit') {
+        setQuitting(true);
+        app.quit();
+        return;
+      }
       event.preventDefault();
       win.hide();
+      if (process.platform !== 'darwin') {
+        const zh = ((store?.get('language') as string | undefined) ?? 'zh').toLowerCase().startsWith('zh');
+        showTrayMinimizedNotice(zh);
+      }
     });
   }
   timingMark('window:create:done');

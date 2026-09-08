@@ -1,12 +1,43 @@
 // 系统托盘（Windows/Linux）：主窗口关闭后隐藏到托盘继续运行，托盘是唯一的
 // 恢复与退出入口。macOS 不创建（dock 已承担，activate 事件负责重建主窗口）。
 // 图标解析失败时降级：不创建托盘，不影响主流程（hide 行为不依赖托盘）。
-import { app, Menu, nativeImage, Tray } from 'electron';
+import { app, Menu, nativeImage, Notification, Tray } from 'electron';
 import { resolveAppIconPath, windowIconFormat } from '../utils/app-icon';
 import { focusOrCreateMainWindow } from './window-manager';
 import { resolveMenuLanguage } from './menu';
 
 let tray: Tray | null = null;
+let hasNotifiedTrayMinimized = false;
+
+export function showTrayMinimizedNotice(zh: boolean): void {
+  if (process.platform === 'darwin') return;
+  if (hasNotifiedTrayMinimized) return;
+  hasNotifiedTrayMinimized = true;
+
+  const title = 'Pi Desktop';
+  const content = zh
+    ? '应用已最小化到系统托盘，将在后台继续运行。'
+    : 'Pi Desktop is minimized to the system tray and running in the background.';
+
+  if (tray && process.platform === 'win32') {
+    try {
+      tray.displayBalloon({ title, content });
+      return;
+    } catch {
+      // 托盘气泡不可用时回退标准通知
+    }
+  }
+
+  if (Notification.isSupported()) {
+    try {
+      const notice = new Notification({ title, body: content });
+      notice.on('click', () => focusOrCreateMainWindow());
+      notice.show();
+    } catch {
+      // 忽略通知不可用
+    }
+  }
+}
 
 export async function rebuildTrayMenu(): Promise<void> {
   if (!tray) return;

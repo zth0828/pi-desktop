@@ -562,6 +562,8 @@ export type SettingsSnapshot = {
   piVersionCheckNoticedLatest?: string;
   piVersionCheckNoticedAt?: number;
   downloadMirror?: string;
+  /** 关闭主窗口时的行为：minimize=最小化/隐藏到托盘或后台（默认），quit=直接退出应用 */
+  closeAction?: 'minimize' | 'quit';
 };
 
 export type SettingsGetPayload = { key: keyof SettingsSnapshot };

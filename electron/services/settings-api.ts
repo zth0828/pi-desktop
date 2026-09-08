@@ -38,6 +38,7 @@ export const settingsApi = {
       appVersionCheckNoticedAt: store.get('appVersionCheckNoticedAt') as number | undefined,
       piVersionCheckNoticedLatest: store.get('piVersionCheckNoticedLatest') as string | undefined,
       piVersionCheckNoticedAt: store.get('piVersionCheckNoticedAt') as number | undefined,
+      closeAction: store.get('closeAction') as SettingsSnapshot['closeAction'],
     };
   },
   get: async <K extends keyof SettingsSnapshot>(
