@@ -99,7 +99,9 @@
       "running_other": "{{count}} tasks running",
       "viewInPanel": "View in side panel",
       "finished": "Finished",
-      "failed": "Failed"
+      "failed": "Failed",
+      "collapse": "Collapse task details",
+      "expand": "Expand task details"
     },
     "queueSendTip": "Follow up after the current task finishes",
     "queueSendTipSteer": "Guide the current turn after its active tool call finishes",

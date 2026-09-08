@@ -3466,6 +3466,10 @@ button.danger-outline {
   animation: task-card-slide-down 0.2s ease-out;
 }
 
+.running-tasks-card.collapsed {
+  padding-bottom: 7px;
+}
+
 .running-tasks-card.completed {
   background: color-mix(in srgb, var(--success, #10b981) 8%, var(--bg-sunken));
   border-bottom-color: color-mix(in srgb, var(--success, #10b981) 25%, var(--border));
@@ -3488,6 +3492,8 @@ button.danger-outline {
   justify-content: space-between;
   gap: 8px;
   min-height: 20px;
+  cursor: pointer;
+  user-select: none;
 }
 
 .running-tasks-title-wrap {
@@ -3568,6 +3574,10 @@ button.danger-outline {
 
 .running-tasks-chevron {
   transition: transform 0.2s ease;
+}
+
+.running-tasks-chevron.collapsed {
+  transform: rotate(0deg);
 }
 
 .running-tasks-chevron.expanded {

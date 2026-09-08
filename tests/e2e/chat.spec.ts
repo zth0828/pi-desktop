@@ -695,6 +695,15 @@ test('吸顶运行态任务卡片：bash 运行中吸顶展示，点击在侧边
   await expect(taskCard).toBeVisible({ timeout: 10_000 });
   await expect(taskCard).toContainText('pi-desktop-hud-running');
 
+  // 点击折叠按钮验证收起与展开
+  const toggleBtn = taskCard.getByTestId('running-tasks-toggle');
+  await toggleBtn.click();
+  await expect(taskCard).toHaveClass(/collapsed/);
+  await expect(taskCard.locator('.running-tasks-content')).toHaveCount(0);
+  await toggleBtn.click();
+  await expect(taskCard).not.toHaveClass(/collapsed/);
+  await expect(taskCard.locator('.running-tasks-content')).toBeVisible();
+
   await taskCard.getByTestId('running-tasks-view-btn').click();
 
   const commandsTab = page.getByTestId('workspace-commands-tab');

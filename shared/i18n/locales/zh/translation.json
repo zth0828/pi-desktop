@@ -99,7 +99,9 @@
       "running_other": "{{count}} 个任务运行中",
       "viewInPanel": "在侧边栏查看",
       "finished": "已完成",
-      "failed": "执行失败"
+      "failed": "执行失败",
+      "collapse": "折叠任务详情",
+      "expand": "展开任务详情"
     },
     "queueSendTip": "稍后继续：当前任务全部完成后再发送",
     "queueSendTipSteer": "引导当前轮：当前工具调用结束后立即交给 pi",
