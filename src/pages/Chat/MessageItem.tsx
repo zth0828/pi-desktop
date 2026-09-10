@@ -1,7 +1,7 @@
 import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, ChevronRight, Copy, GitFork, Pencil, Sparkles, Square } from 'lucide-react';
-import { parseUserMessage, type ParsedSkillBlock } from '@shared/message-attachments';
+import { formatAttachmentDisplayName, parseUserMessage, type ParsedSkillBlock } from '@shared/message-attachments';
 import { parseProviderError, PROVIDER_ERROR_HINT_KEYS } from '../../lib/provider-error';
 import { Markdown } from '../../components/Markdown';
 import { FileIcon, getFileBadgeText } from '../../components/FileIcon';
@@ -229,6 +229,8 @@ function MessageItemView({
   const forkFrom = usePaneChatStore((s) => s.forkFrom);
   const editMessage = usePaneChatStore((s) => s.editMessage);
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
+  const cwd = usePaneChatStore((s) => (s.started ? s.cwd : undefined));
+  const openWorkspaceFile = usePaneChatStore((s) => s.openWorkspaceFile);
   const [copied, setCopied] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
   const [bashExpanded, setBashExpanded] = useState(false);
@@ -251,7 +253,7 @@ function MessageItemView({
     const usedFiles = new Set<number>();
     const orderedAttachments: Array<
       | { kind: 'image'; index: number; name: string; url: string }
-      | { kind: 'file'; index: number; name: string }
+      | { kind: 'file'; index: number; name: string; displayName: string; path: string }
     > = [];
     for (const attachment of parsed.attachments) {
       if (attachment.kind === 'image') {
@@ -265,7 +267,13 @@ function MessageItemView({
       const fileOffset = parsed.files.findIndex((file, index) => file.name === attachment.name && !usedFiles.has(index));
       if (fileOffset < 0) continue;
       usedFiles.add(fileOffset);
-      orderedAttachments.push({ kind: 'file', index: attachment.index, name: attachment.name });
+      orderedAttachments.push({
+        kind: 'file',
+        index: attachment.index,
+        name: attachment.name,
+        displayName: formatAttachmentDisplayName(attachment.name, cwd),
+        path: attachment.name,
+      });
     }
     // Older Pi Desktop sessions have no manifest. Keep all legacy attachments visible.
     let fallbackIndex = orderedAttachments.length;
@@ -277,7 +285,13 @@ function MessageItemView({
     parsed.files.forEach((file, index) => {
       if (usedFiles.has(index)) return;
       fallbackIndex += 1;
-      orderedAttachments.push({ kind: 'file', index: fallbackIndex, name: file.name });
+      orderedAttachments.push({
+        kind: 'file',
+        index: fallbackIndex,
+        name: file.name,
+        displayName: formatAttachmentDisplayName(file.name, cwd),
+        path: file.name,
+      });
     });
     return (
       <div
@@ -327,24 +341,34 @@ function MessageItemView({
                   <span className="message-attachment-name" title={attachment.name}>{attachment.name}</span>
                 </div>
               ) : (
-                <div className="message-attachment message-file-attachment" data-testid="message-attachment" data-attachment-index={attachment.index} key={`${attachment.index}-${attachment.name}`}>
+                <button
+                  type="button"
+                  className="message-attachment message-file-attachment message-file-button"
+                  data-testid="message-attachment"
+                  data-attachment-index={attachment.index}
+                  key={`${attachment.index}-${attachment.name}`}
+                  title={t('chat.viewFileAction', { name: attachment.name })}
+                  onClick={() => openWorkspaceFile(attachment.path || attachment.name)}
+                >
                   <span className="attachment-order">{attachment.index}</span>
                   <div className="message-file-icon">
-                    <FileIcon name={attachment.name} size={18} />
+                    <FileIcon name={attachment.displayName} size={15} />
                   </div>
                   <div className="message-file-info">
                     <div className="message-file-header">
-                      <span className="message-attachment-name" data-testid="message-file" title={attachment.name}>{attachment.name}</span>
-                      <span className="file-ext-badge">{getFileBadgeText(attachment.name)}</span>
+                      <span className="message-attachment-name" data-testid="message-file" title={attachment.name}>
+                        {attachment.displayName}
+                      </span>
+                      <span className="file-ext-badge">{getFileBadgeText(attachment.displayName)}</span>
                     </div>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
           {parsed.text && (
             <div className="message-bubble" data-testid="message-user-text">
-              {renderUserMessageWithChips(parsed.text)}
+              {renderUserMessageWithChips(parsed.text, openWorkspaceFile)}
             </div>
           )}
         </div>

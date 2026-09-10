@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  extractQueueAttachments,
+  formatAttachmentDisplayName,
   formatOrderedAttachmentPrompt,
+  normalizeDisplayPath,
   parseUserMessage,
   stripAttachmentEnvelope,
 } from '../../shared/message-attachments';
@@ -113,5 +116,41 @@ describe('stripAttachmentEnvelope — 标题等纯文本场景剥离附件信封
 
   it('leaves plain text untouched', () => {
     expect(stripAttachmentEnvelope('ordinary question')).toBe('ordinary question');
+  });
+});
+
+describe('normalizeDisplayPath & formatAttachmentDisplayName', () => {
+  it('strips workspace root prefix from paths inside cwd', () => {
+    expect(normalizeDisplayPath('/workspace/src/app.tsx', '/workspace')).toBe('src/app.tsx');
+    expect(normalizeDisplayPath('/workspace/src/app.tsx', '/workspace/')).toBe('src/app.tsx');
+    expect(normalizeDisplayPath('./src/app.tsx')).toBe('src/app.tsx');
+    expect(normalizeDisplayPath('src/app.tsx')).toBe('src/app.tsx');
+  });
+
+  it('handles macOS /private prefix symlink aliasing', () => {
+    expect(normalizeDisplayPath('/private/tmp/project/index.ts', '/tmp/project')).toBe('index.ts');
+    expect(normalizeDisplayPath('/tmp/project/index.ts', '/private/tmp/project')).toBe('index.ts');
+  });
+
+  it('keeps external absolute paths in normalizeDisplayPath but simplifies in formatAttachmentDisplayName', () => {
+    const ext = '/Users/someone/Downloads/report.pdf';
+    expect(normalizeDisplayPath(ext, '/workspace')).toBe(ext);
+    expect(formatAttachmentDisplayName(ext, '/workspace')).toBe('report.pdf');
+    expect(formatAttachmentDisplayName('/workspace/src/deep/util.ts', '/workspace')).toBe('src/deep/util.ts');
+  });
+
+  it('extractQueueAttachments extracts clean display names and full paths', () => {
+    const prompt = '<attachments>\n<attachment index="1" kind="file" name="/Users/someone/Desktop/test.txt"></attachment>\n</attachments>\n<file name="/Users/someone/Desktop/test.txt">\nhello\n</file>\nAnalyze this file';
+    const info = extractQueueAttachments(prompt, '/workspace');
+    expect(info.displayText).toBe('Analyze this file');
+    expect(info.attachments).toHaveLength(1);
+    expect(info.attachments[0]).toEqual({
+      key: 'att-1-/Users/someone/Desktop/test.txt',
+      index: 1,
+      kind: 'file',
+      name: 'test.txt',
+      fullName: '/Users/someone/Desktop/test.txt',
+      imageIndex: undefined,
+    });
   });
 });

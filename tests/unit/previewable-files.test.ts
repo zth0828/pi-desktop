@@ -87,6 +87,27 @@ describe('previewableExternalFilesFromMessages', () => {
     expect(result.has(normalizePreviewablePath(recentFile))).toBe(true);
     expect(result.has(normalizePreviewablePath(oldFile))).toBe(false);
   });
+
+  it('restores external file preview permissions from user attachments and file blocks', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'pi-preview-root-'));
+    const external = mkdtempSync(path.join(tmpdir(), 'pi-preview-external-'));
+    roots.push(root, external);
+    const attachedFile = path.join(external, 'user-attached.txt');
+    const expandedFile = path.join(external, 'user-expanded.txt');
+    writeFileSync(attachedFile, 'attached');
+    writeFileSync(expandedFile, 'expanded');
+
+    const messages = [
+      {
+        role: 'user',
+        content: `<attachments>\n<attachment index="1" kind="file" name="${attachedFile}"></attachment>\n</attachments>\n<file name="${expandedFile}">content</file>\nCheck these files`,
+      },
+    ];
+
+    const result = previewableExternalFilesFromMessages(messages, root);
+    expect(result.has(normalizePreviewablePath(attachedFile))).toBe(true);
+    expect(result.has(normalizePreviewablePath(expandedFile))).toBe(true);
+  });
 });
 
 function nameFor(file: string): string {

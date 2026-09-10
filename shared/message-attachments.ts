@@ -151,6 +151,37 @@ export type QueueDisplayInfo = {
   displayText: string;
 };
 
+/** 规范化文件展示路径：相对 cwd 的文件去除前缀，外部绝对路径保持原样。 */
+export function normalizeDisplayPath(filePath: string, cwd?: string): string {
+  let normalized = filePath.replace(/\\/g, '/');
+  if (normalized.startsWith('./')) {
+    normalized = normalized.slice(2);
+  }
+  if (!cwd) return normalized;
+  const root = cwd.replace(/\\/g, '/').replace(/\/$/, '');
+  if (normalized === root) return '.';
+  if (normalized.startsWith(`${root}/`)) {
+    return normalized.slice(root.length + 1);
+  }
+  const privateRoot = root.startsWith('/private/')
+    ? root.slice('/private'.length)
+    : `/private${root}`;
+  if (normalized.startsWith(`${privateRoot}/`)) {
+    return normalized.slice(privateRoot.length + 1);
+  }
+  return normalized;
+}
+
+/** 规范化附件卡片展示文案：优先展示简洁文件名（外部绝对路径展示文件名，避免 /Users/... 长路径挤占换行）。 */
+export function formatAttachmentDisplayName(filePath: string, cwd?: string): string {
+  const normalized = normalizeDisplayPath(filePath, cwd);
+  if (normalized.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(normalized)) {
+    const parts = normalized.split(/[/\\]/);
+    return parts[parts.length - 1] || normalized;
+  }
+  return normalized;
+}
+
 /**
  * 提取排队消息的完整附件列表（支持外部文件/图片信封 + 侧边栏/项目 @path 展开的文件块）
  * 以及适合展示的干净纯文本。
@@ -159,23 +190,6 @@ export function extractQueueAttachments(text: string, cwd?: string): QueueDispla
   const parsed = parseUserMessage(text);
   const attachments: QueueDisplayAttachment[] = [];
   const usedFileNames = new Set<string>();
-
-  const normalizeDisplayPath = (filePath: string): string => {
-    const normalizedPath = filePath.replace(/\\/g, '/');
-    if (cwd) {
-      const normalizedCwd = cwd.replace(/\\/g, '/').replace(/\/$/, '');
-      if (normalizedPath.startsWith(normalizedCwd + '/')) {
-        return normalizedPath.slice(normalizedCwd.length + 1);
-      }
-      const privateCwd = normalizedCwd.startsWith('/private/')
-        ? normalizedCwd.slice('/private'.length)
-        : `/private${normalizedCwd}`;
-      if (normalizedPath.startsWith(privateCwd + '/')) {
-        return normalizedPath.slice(privateCwd.length + 1);
-      }
-    }
-    return normalizedPath;
-  };
 
   // 1. 信封清单里的附件（外部上传的文件与暂存图片）
   for (const att of parsed.attachments) {
@@ -186,7 +200,7 @@ export function extractQueueAttachments(text: string, cwd?: string): QueueDispla
       key: `att-${att.index}-${att.name}`,
       index: att.index,
       kind: att.kind,
-      name: normalizeDisplayPath(att.name),
+      name: formatAttachmentDisplayName(att.name, cwd),
       fullName: att.name,
       imageIndex: att.imageIndex,
     });
@@ -207,7 +221,7 @@ export function extractQueueAttachments(text: string, cwd?: string): QueueDispla
       key: `file-${nextIndex}-${file.name}`,
       index: nextIndex,
       kind: isImage ? 'image' : 'file',
-      name: normalizeDisplayPath(file.name),
+      name: formatAttachmentDisplayName(file.name, cwd),
       fullName: file.name,
     });
   }

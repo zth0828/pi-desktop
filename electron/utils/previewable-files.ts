@@ -53,21 +53,44 @@ export function previewableExternalFilesFromMessages(
   for (const message of recentMessages) {
     if (!message || typeof message !== 'object') continue;
     const candidate = message as { role?: unknown; content?: unknown };
-    if (candidate.role !== 'assistant' || !Array.isArray(candidate.content)) continue;
-    for (const block of candidate.content) {
-      if (!block || typeof block !== 'object') continue;
-      const toolCall = block as {
-        type?: unknown;
-        name?: unknown;
-        arguments?: { path?: unknown; file_path?: unknown };
-      };
-      if (toolCall.type !== 'toolCall' || typeof toolCall.name !== 'string' || !PREVIEWABLE_TOOLS.has(toolCall.name)) continue;
-      const requested = toolCall.arguments?.path ?? toolCall.arguments?.file_path;
-      if (typeof requested !== 'string' || !path.isAbsolute(requested)) continue;
-      const normalized = normalizePreviewablePath(requested);
-      const relative = path.relative(root, normalized);
-      const outside = relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
-      if (outside) files.add(normalized);
+    if (candidate.role === 'user') {
+      const texts: string[] = [];
+      if (typeof candidate.content === 'string') {
+        texts.push(candidate.content);
+      } else if (Array.isArray(candidate.content)) {
+        for (const block of candidate.content) {
+          if (block && typeof block === 'object' && (block as { type?: unknown }).type === 'text' && typeof (block as { text?: unknown }).text === 'string') {
+            texts.push((block as { text: string }).text);
+          }
+        }
+      }
+      for (const text of texts) {
+        for (const match of text.matchAll(/<(?:file|attachment)\s+[^>]*name="([^"]*)"/g)) {
+          const filePath = match[1];
+          if (filePath && path.isAbsolute(filePath)) {
+            const normalized = normalizePreviewablePath(filePath);
+            const relative = path.relative(root, normalized);
+            const outside = relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+            if (outside) files.add(normalized);
+          }
+        }
+      }
+    } else if (candidate.role === 'assistant' && Array.isArray(candidate.content)) {
+      for (const block of candidate.content) {
+        if (!block || typeof block !== 'object') continue;
+        const toolCall = block as {
+          type?: unknown;
+          name?: unknown;
+          arguments?: { path?: unknown; file_path?: unknown };
+        };
+        if (toolCall.type !== 'toolCall' || typeof toolCall.name !== 'string' || !PREVIEWABLE_TOOLS.has(toolCall.name)) continue;
+        const requested = toolCall.arguments?.path ?? toolCall.arguments?.file_path;
+        if (typeof requested !== 'string' || !path.isAbsolute(requested)) continue;
+        const normalized = normalizePreviewablePath(requested);
+        const relative = path.relative(root, normalized);
+        const outside = relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+        if (outside) files.add(normalized);
+      }
     }
   }
   return files;

@@ -2111,23 +2111,42 @@ button.danger-outline {
 .message-file-attachment {
   display: flex;
   align-items: center;
-  width: min(240px, 100%);
-  min-height: 52px;
-  padding: 8px 12px 8px 34px;
-  gap: 10px;
+  width: min(220px, 100%);
+  min-height: 40px;
+  padding: 5px 8px 5px 28px;
+  gap: 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--bg-raised);
   box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  cursor: pointer;
+  appearance: none;
+  font: inherit;
+  text-align: left;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.08s ease;
+}
+
+.message-file-attachment:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.message-file-attachment:active {
+  transform: scale(0.99);
+}
+
+.message-file-attachment:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .message-file-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
   background: var(--bg-sunken);
   flex-shrink: 0;
 }
@@ -2189,18 +2208,18 @@ button.danger-outline {
 
 .attachment-order {
   position: absolute;
-  top: 5px;
-  left: 5px;
+  top: 4px;
+  left: 4px;
   z-index: 1;
   display: grid;
-  width: 19px;
-  height: 19px;
+  width: 17px;
+  height: 17px;
   place-items: center;
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
+  border-radius: 4px;
   background: var(--bg-raised);
   color: var(--text);
-  font: 600 10px/1 var(--font-mono);
+  font: 600 9px/1 var(--font-mono);
   box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
 }
 

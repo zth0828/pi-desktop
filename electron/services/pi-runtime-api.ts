@@ -1252,6 +1252,20 @@ export const piRuntimeApi = {
       const staged = (payload.images ?? []) as unknown[];
       const allImages = [...expanded.images, ...staged];
 
+      // 允许工作区预览用户消息中附加/展开的外部文件
+      const root = normalizePreviewablePath(active.cwd);
+      for (const match of expanded.text.matchAll(/<(?:file|attachment)\s+[^>]*name="([^"]*)"/g)) {
+        const candidate = match[1];
+        if (candidate && path.isAbsolute(candidate)) {
+          const normalized = normalizePreviewablePath(candidate);
+          const relative = path.relative(root, normalized);
+          const outside = relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+          if (outside) {
+            active.previewableExternalFiles.add(normalized);
+          }
+        }
+      }
+
       if (session.isStreaming && allImages.length > 0) {
         active.queuedImages.set(expanded.text, allImages);
       }

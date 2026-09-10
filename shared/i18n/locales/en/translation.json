@@ -305,6 +305,8 @@
     "attachFile": "Attach image or text file",
     "removeAttachment": "Remove attachment",
     "imageAttachment": "Attachment {{index}}, image {{name}}",
+    "fileAttachment": "Attachment {{index}}, file {{name}}",
+    "viewFileAction": "View file: {{name}}",
     "imageNumber": "Image {{index}}",
     "model": "Select model",
     "tokenUsage": "Token usage",
