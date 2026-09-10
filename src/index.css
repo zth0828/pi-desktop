@@ -3383,14 +3383,101 @@ button.danger-outline {
 .queue-list-header { display: flex; align-items: center; justify-content: space-between; padding: 0 3px 2px; color: var(--text-secondary); font-size: 11.5px; font-weight: 650; }
 .queue-list-header > span { display: inline-flex; align-items: center; gap: 6px; }
 .queue-list-header strong { color: var(--accent); font-size: 11px; }
-.queue-item { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 8px 9px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 9px; background: var(--bg-raised); font-size: 12px; color: var(--text-secondary); }
+.queue-item { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 9px; background: var(--bg-raised); font-size: 12px; color: var(--text-secondary); }
 .queue-item.queue-followUp { border-left-color: var(--warning); }
-.queue-item-icon { display: inline-flex; flex: none; color: var(--accent); }
+.queue-item-icon { display: inline-flex; flex: none; color: var(--accent); margin-top: 2px; }
 .queue-followUp .queue-item-icon { color: var(--warning); }
-.queue-item-content { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+.queue-item-content { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
 .queue-item-kind { color: var(--text-tertiary); font-size: 10.5px; }
-.queue-item-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text); }
-.queue-item-actions { display: flex; flex: none; align-items: center; gap: 3px; }
+.queue-item-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text); font-size: 12px; }
+
+.queue-item-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+
+.queue-attachment-image {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.queue-image-preview {
+  position: relative;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  cursor: zoom-in;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.queue-image-preview:hover,
+.queue-image-preview:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  outline: none;
+}
+
+.queue-image-preview img {
+  display: block;
+  height: 48px;
+  max-width: 96px;
+  object-fit: cover;
+}
+
+.queue-attachment-file {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 260px;
+  min-height: 32px;
+  padding: 5px 10px 5px 31px;
+  gap: 7px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.queue-attachment-file:hover {
+  border-color: var(--border-strong);
+}
+
+.queue-file-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--bg-raised);
+  flex-shrink: 0;
+}
+
+.queue-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.queue-item-attachment-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; background: var(--bg-hover); border: 1px solid var(--border); font-size: 11px; color: var(--text-secondary); max-width: 100%; }
+.queue-item-attachment-thumb { width: 14px; height: 14px; object-fit: cover; border-radius: 2px; flex: none; }
+.queue-item-attachment-icon { flex: none; color: var(--text-tertiary); }
+.queue-item-attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+
+.queue-item-actions { display: flex; flex: none; align-items: center; gap: 3px; margin-top: 1px; }
 .queue-item-action { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 6px; background: transparent; font-size: 10.5px; color: var(--text-tertiary); cursor: pointer; }
 .queue-item-action:hover { background: var(--bg-hover); color: var(--text); }
 .queue-item-mode { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }

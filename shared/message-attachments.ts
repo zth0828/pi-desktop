@@ -1,4 +1,4 @@
-import { formatFileBlock } from './file-references';
+import { formatFileBlock, imageMediaTypeForPath } from './file-references';
 
 export type OrderedPromptAttachment =
   | { kind: 'image'; name: string }
@@ -136,3 +136,88 @@ export function parseUserMessage(text: string): ParsedUserMessage {
     skills,
   };
 }
+
+export type QueueDisplayAttachment = {
+  key: string;
+  index: number;
+  kind: 'image' | 'file';
+  name: string;
+  fullName: string;
+  imageIndex?: number;
+};
+
+export type QueueDisplayInfo = {
+  attachments: QueueDisplayAttachment[];
+  displayText: string;
+};
+
+/**
+ * 提取排队消息的完整附件列表（支持外部文件/图片信封 + 侧边栏/项目 @path 展开的文件块）
+ * 以及适合展示的干净纯文本。
+ */
+export function extractQueueAttachments(text: string, cwd?: string): QueueDisplayInfo {
+  const parsed = parseUserMessage(text);
+  const attachments: QueueDisplayAttachment[] = [];
+  const usedFileNames = new Set<string>();
+
+  const normalizeDisplayPath = (filePath: string): string => {
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    if (cwd) {
+      const normalizedCwd = cwd.replace(/\\/g, '/').replace(/\/$/, '');
+      if (normalizedPath.startsWith(normalizedCwd + '/')) {
+        return normalizedPath.slice(normalizedCwd.length + 1);
+      }
+      const privateCwd = normalizedCwd.startsWith('/private/')
+        ? normalizedCwd.slice('/private'.length)
+        : `/private${normalizedCwd}`;
+      if (normalizedPath.startsWith(privateCwd + '/')) {
+        return normalizedPath.slice(privateCwd.length + 1);
+      }
+    }
+    return normalizedPath;
+  };
+
+  // 1. 信封清单里的附件（外部上传的文件与暂存图片）
+  for (const att of parsed.attachments) {
+    usedFileNames.add(att.name);
+    const basename = att.name.split(/[/\\]/).pop() || att.name;
+    usedFileNames.add(basename);
+    attachments.push({
+      key: `att-${att.index}-${att.name}`,
+      index: att.index,
+      kind: att.kind,
+      name: normalizeDisplayPath(att.name),
+      fullName: att.name,
+      imageIndex: att.imageIndex,
+    });
+  }
+
+  // 2. 独立 <file> 块（侧边栏文件、项目文件、或 @path 就地展开生成的内容）
+  for (const file of parsed.files) {
+    const basename = file.name.split(/[/\\]/).pop() || file.name;
+    if (usedFileNames.has(file.name) || usedFileNames.has(basename)) {
+      continue;
+    }
+    usedFileNames.add(file.name);
+    usedFileNames.add(basename);
+
+    const isImage = imageMediaTypeForPath(file.name) !== undefined;
+    const nextIndex = attachments.length + 1;
+    attachments.push({
+      key: `file-${nextIndex}-${file.name}`,
+      index: nextIndex,
+      kind: isImage ? 'image' : 'file',
+      name: normalizeDisplayPath(file.name),
+      fullName: file.name,
+    });
+  }
+
+  const hasAttachments = attachments.length > 0;
+  const displayText = parsed.text || (hasAttachments ? '' : stripAttachmentEnvelope(text).replace(/\s+/g, ' ').trim());
+
+  return {
+    attachments,
+    displayText,
+  };
+}
+

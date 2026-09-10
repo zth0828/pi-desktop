@@ -1,16 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { extractQueueAttachments, stripAttachmentEnvelope } from '@shared/message-attachments';
 import { retryRemainingSeconds } from '../../lib/retry-countdown';
 import { toolSummary } from '../../lib/tool-display';
 import { usePaneChatStore } from './chat-store-context';
 
 function QueueChip({ kind, items }: { kind: 'steering' | 'followUp'; items: string[] }) {
   const { t } = useTranslation();
+  const cwd = usePaneChatStore((s) => s.cwd);
   if (items.length === 0) return null;
-  const first = items[0].replace(/\s+/g, ' ').trim();
-  const preview = first.length > 40 ? `${first.slice(0, 40)}…` : first;
+  const first = items[0];
+  const { attachments, displayText } = extractQueueAttachments(first, cwd);
+  const clean = displayText || attachments.map((a) => a.name).join(', ') || stripAttachmentEnvelope(first).replace(/\s+/g, ' ').trim();
+  const preview = clean.length > 40 ? `${clean.slice(0, 40)}…` : clean;
+  const tooltip = items
+    .map((item) => {
+      const { attachments: itemAtts, displayText: itemText } = extractQueueAttachments(item, cwd);
+      return itemText || itemAtts.map((a) => a.name).join(', ') || stripAttachmentEnvelope(item);
+    })
+    .join('\n');
   return (
-    <span className="queue-chip" data-testid={`queue-chip-${kind}`} title={items.join('\n')}>
+    <span className="queue-chip" data-testid={`queue-chip-${kind}`} title={tooltip}>
       {t(`chat.queue.${kind}`, { count: items.length, preview })}
     </span>
   );

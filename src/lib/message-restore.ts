@@ -2,16 +2,55 @@ import type { ChatMessage, ComposerAttachment } from './chat-types';
 import { parseUserMessage } from '@shared/message-attachments';
 
 /**
- * 还原单段文本到输入框（剥离信封与文件块，还原文件附件）。
+ * 还原单段文本到输入框（剥离信封与文件块，还原文件附件与可解析的图片附件）。
  * 用于 abort 排队恢复、/tree 导航与 queueRemove 文本回填。
  */
-export function restoreFromText(text: string): { text: string; attachments: ComposerAttachment[] } {
+export function restoreFromText(
+  text: string,
+  imageResolver?: (name: string, imageIndex?: number) => ComposerAttachment | undefined,
+): { text: string; attachments: ComposerAttachment[] } {
   const parsed = parseUserMessage(text);
-  const attachments: ComposerAttachment[] = parsed.files.map((file) => ({
-    kind: 'file',
-    name: file.name,
-    text: file.text,
-  }));
+  const attachments: ComposerAttachment[] = [];
+
+  if (parsed.attachments.length > 0) {
+    const usedFiles = new Set<number>();
+    for (const att of parsed.attachments) {
+      if (att.kind === 'file') {
+        const fileOffset = parsed.files.findIndex((f, idx) => f.name === att.name && !usedFiles.has(idx));
+        if (fileOffset >= 0) {
+          usedFiles.add(fileOffset);
+          attachments.push({ kind: 'file', name: att.name, text: parsed.files[fileOffset].text });
+        }
+      } else if (att.kind === 'image') {
+        const resolved = imageResolver?.(att.name, att.imageIndex);
+        if (resolved) {
+          attachments.push(resolved);
+        }
+      }
+    }
+    const resolveFileOrImage = (file: { name: string; text: string }): ComposerAttachment => {
+      const resolved = imageResolver?.(file.name) || imageResolver?.(file.name.split(/[/\\]/).pop() || file.name);
+      if (resolved) return resolved;
+      return { kind: 'file', name: file.name, text: file.text };
+    };
+
+    parsed.files.forEach((file, idx) => {
+      if (!usedFiles.has(idx)) {
+        attachments.push(resolveFileOrImage(file));
+      }
+    });
+  } else {
+    const resolveFileOrImage = (file: { name: string; text: string }): ComposerAttachment => {
+      const resolved = imageResolver?.(file.name) || imageResolver?.(file.name.split(/[/\\]/).pop() || file.name);
+      if (resolved) return resolved;
+      return { kind: 'file', name: file.name, text: file.text };
+    };
+
+    for (const file of parsed.files) {
+      attachments.push(resolveFileOrImage(file));
+    }
+  }
+
   return {
     text: parsed.text,
     attachments,
