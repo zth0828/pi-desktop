@@ -1,8 +1,9 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDown, Check, ChevronRight, ChevronUp, PanelRight, X } from 'lucide-react';
+import { ArrowDown, Check, ChevronRight, ChevronUp, PanelRight, RefreshCw, X } from 'lucide-react';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { parseProviderError, PROVIDER_ERROR_HINT_KEYS } from '@shared/provider-error';
+import { retryRemainingSeconds } from '../../lib/retry-countdown';
 import { collectCacheMisses } from '../../lib/cache-stats';
 import { cacheHitRate, summarizeUsage } from '../../lib/usage-stats';
 import { hostApi } from '../../lib/host-api';
@@ -260,6 +261,13 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const bashDraft = usePaneChatStore((s) => s.bashDraft);
   const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
   const isStreaming = usePaneChatStore((s) => s.isStreaming);
+  const retry = usePaneChatStore((s) => s.retry);
+  const [, setRetryTick] = useState(0);
+  useEffect(() => {
+    if (!retry || retry.delayMs == null) return;
+    const timer = window.setInterval(() => setRetryTick((n) => n + 1), 250);
+    return () => window.clearInterval(timer);
+  }, [retry]);
   // 压缩后优先使用完整分支历史；流式期间仍用事件增量列表，避免等待快照时丢掉最新回复。
   const displayMessages = isStreaming || historyMessages.length === 0 ? messages : historyMessages;
   const turnStats = usePaneChatStore((s) => s.turnStats);
@@ -563,6 +571,12 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     });
 
     if (!canFold) {
+      const isLastTurn = turnIndex === logicalTurns.length - 1;
+      const turnHasAssistant = displayMessages
+        .slice(turn.startIndex, turn.endIndex + 1)
+        .some((m) => m.role === 'assistant');
+      const retrySeconds = retry ? retryRemainingSeconds(retry, Date.now()) : null;
+
       return (
         <Fragment key={turn.startIndex}>
           {Array.from({ length: turn.endIndex - turn.startIndex + 1 }, (_, offset) => turn.startIndex + offset).map((i) => (
@@ -577,6 +591,35 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               enableViewportCheck={isHistoricalTurn}
             />
           ))}
+          {isLastTurn && isStreaming && retry && (
+            <div className="message message-assistant message-streaming-retry" data-testid="streaming-retry-indicator">
+              <div className="streaming-retry-header">
+                <RefreshCw size={13} className="spin" />
+                <span>
+                  {retry.attempt != null && retry.maxAttempts != null
+                    ? (retrySeconds != null
+                        ? t('chat.status.retrying', {
+                            attempt: retry.attempt,
+                            maxAttempts: retry.maxAttempts,
+                            seconds: retrySeconds,
+                          })
+                        : t('chat.status.retryingNow', {
+                            attempt: retry.attempt,
+                            maxAttempts: retry.maxAttempts,
+                          }))
+                    : t('chat.status.retryingGeneric')}
+                </span>
+              </div>
+              {retry.errorMessage && (
+                <div className="streaming-retry-error">{retry.errorMessage}</div>
+              )}
+            </div>
+          )}
+          {isLastTurn && isStreaming && !retry && !turnHasAssistant && (
+            <div className="message message-assistant message-streaming-pending" data-testid="streaming-pending-indicator">
+              <span className="cursor-blink">▍</span>
+            </div>
+          )}
           {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
         </Fragment>
       );

@@ -495,8 +495,22 @@ function MessageItemView({
       </div>
     );
   }
-  // 无错误且 content 为空：没有可渲染内容，返回 null。
-  if (content.length === 0) return null;
+  // 无错误且 content 为空：若正在流式响应，渲染光标占位，避免白屏感知为消息丢失；否则返回 null。
+  if (content.length === 0) {
+    if (message.streaming) {
+      return (
+        <div
+          className={`message message-assistant message-streaming-pending${highlighted ? ' search-target' : ''}`}
+          data-testid="message-assistant"
+          id={anchorId}
+          tabIndex={highlighted ? -1 : undefined}
+        >
+          <span className="cursor-blink">▍</span>
+        </div>
+      );
+    }
+    return null;
+  }
   const copy = async () => {
     if (!plainText) return;
     try {
