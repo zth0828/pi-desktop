@@ -12,6 +12,46 @@ export interface UseComposerAttachmentsOptions {
   onInsertMention?: (relPath: string) => void;
 }
 
+export function disambiguateAttachmentName(name: string, existingNames: Set<string>): string {
+  if (!existingNames.has(name)) return name;
+  const dotIndex = name.lastIndexOf('.');
+  const base = dotIndex === -1 ? name : name.slice(0, dotIndex);
+  const ext = dotIndex === -1 ? '' : name.slice(dotIndex);
+  let counter = 2;
+  while (existingNames.has(`${base}-${counter}${ext}`)) {
+    counter++;
+  }
+  return `${base}-${counter}${ext}`;
+}
+
+export function extractFilesFromClipboard(clipboardData: DataTransfer | null): File[] {
+  if (!clipboardData) return [];
+  const files: File[] = [];
+  const seen = new Set<File>();
+  if (clipboardData.files && clipboardData.files.length > 0) {
+    for (let i = 0; i < clipboardData.files.length; i++) {
+      const file = clipboardData.files[i];
+      if (file && !seen.has(file)) {
+        seen.add(file);
+        files.push(file);
+      }
+    }
+  }
+  if (files.length === 0 && clipboardData.items && clipboardData.items.length > 0) {
+    for (let i = 0; i < clipboardData.items.length; i++) {
+      const item = clipboardData.items[i];
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file && !seen.has(file)) {
+          seen.add(file);
+          files.push(file);
+        }
+      }
+    }
+  }
+  return files;
+}
+
 export function useComposerAttachments({
   attachments,
   setAttachments,
@@ -23,16 +63,12 @@ export function useComposerAttachments({
   const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
 
   const stageFiles = async (files: Iterable<File>) => {
+    const newItems: StagedAttachment[] = [];
     for (const file of files) {
       if (file.type.startsWith('image/')) {
         try {
           const staged = await fileToStagedImage(file);
-          setAttachments((prev) => {
-            if (prev.some((a) => a.kind === 'image' && a.name === staged.name)) {
-              return prev;
-            }
-            return [...prev, staged];
-          });
+          newItems.push(staged);
         } catch {
           // ignore unreadable image
         }
@@ -40,18 +76,39 @@ export function useComposerAttachments({
         try {
           const text = await file.text();
           if (!isProbablyBinary(text) && file.size <= MAX_FILE_TEXT_BYTES) {
-            setAttachments((prev) => {
-              if (prev.some((a) => a.kind === 'file' && a.name === file.name)) {
-                return prev;
-              }
-              return [...prev, { kind: 'file', name: file.name, text }];
-            });
+            newItems.push({ kind: 'file', name: file.name, text });
           }
         } catch {
           // ignore unreadable file
         }
       }
     }
+
+    if (newItems.length === 0) return;
+
+    setAttachments((prev) => {
+      const result = [...prev];
+      const existingNames = new Set(result.map((a) => a.name));
+      for (const item of newItems) {
+        if (item.kind === 'image') {
+          // 内容相同则去重
+          if (result.some((a) => a.kind === 'image' && a.data === item.data)) {
+            continue;
+          }
+          const uniqueName = disambiguateAttachmentName(item.name, existingNames);
+          existingNames.add(uniqueName);
+          result.push({ ...item, name: uniqueName });
+        } else {
+          if (result.some((a) => a.kind === 'file' && a.name === item.name && a.text === item.text)) {
+            continue;
+          }
+          const uniqueName = disambiguateAttachmentName(item.name, existingNames);
+          existingNames.add(uniqueName);
+          result.push({ ...item, name: uniqueName });
+        }
+      }
+      return result;
+    });
   };
 
   const insertTextAtCursor = (textToInsert: string) => {
@@ -137,7 +194,7 @@ export function useComposerAttachments({
   };
 
   const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = Array.from(e.clipboardData.files);
+    const files = extractFilesFromClipboard(e.clipboardData);
     if (files.length > 0) {
       e.preventDefault();
       void stageFiles(files);

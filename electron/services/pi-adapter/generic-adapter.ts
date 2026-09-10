@@ -208,8 +208,8 @@ export function createGenericPiAdapter(input: AdapterInput): PiRuntimeAdapter {
       ...(value.streamingBehavior ? { streamingBehavior: value.streamingBehavior } : {}),
       ...(value.preflightResult ? { preflightResult: value.preflightResult } : {}),
     }); };
-    port.steer = (text) => raw.steer(text);
-    port.followUp = (text) => raw.followUp(text);
+    port.steer = (text, images) => raw.steer(text, images);
+    port.followUp = (text, images) => raw.followUp(text, images);
     port.subscribe = (listener) => raw.subscribe(listener);
     port.abort = () => raw.abort();
     port.abortBash = () => raw.abortBash();

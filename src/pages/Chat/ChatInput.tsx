@@ -32,7 +32,8 @@ import {
 } from './chat-input/types';
 import { useFileMentions } from './chat-input/useFileMentions';
 import { useSlashCommands } from './chat-input/useSlashCommands';
-import { useComposerAttachments } from './chat-input/useComposerAttachments';
+import { useComposerAttachments, extractFilesFromClipboard } from './chat-input/useComposerAttachments';
+import { composerAttachmentsCache } from './chat-input/composer-attachments-cache';
 import { useInputHistory } from './chat-input/useInputHistory';
 import { ContextWarningBar } from './chat-input/ContextWarningBar';
 import { ChatInputAttachments } from './chat-input/ChatInputAttachments';
@@ -633,6 +634,9 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     outgoing: StagedImage[],
     behavior?: 'steer' | 'followUp',
   ) => {
+    if (outgoing.length > 0) {
+      composerAttachmentsCache.remember(outgoing);
+    }
     const autoTitle = chatStore.getState().messages.length === 0
       ? sessionTitleFromQuestion(value.trim(), t('chat.imageSessionTitle'))
       : null;
@@ -1464,7 +1468,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
               }
             }}
             onPaste={(e) => {
-              const files = Array.from(e.clipboardData.files);
+              const files = extractFilesFromClipboard(e.clipboardData);
               const images = files.filter((f) => f.type.startsWith('image/'));
               if (images.length > 0) {
                 e.preventDefault();

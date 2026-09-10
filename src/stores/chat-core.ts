@@ -24,6 +24,7 @@ import {
 } from '../lib/session-binding';
 import { createStreamBatcher } from '../lib/stream-throttle';
 import { restoreFromText, restoreToComposer } from '../lib/message-restore';
+import { composerAttachmentsCache } from '../pages/Chat/chat-input/composer-attachments-cache';
 import {
   rebuildToolExecutionsFromMessages,
   type ChatMessage,
@@ -515,7 +516,9 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       abort: async () => {
         const result = await api().piRuntime.abort();
         if (result.success && result.restoredMessages?.length) {
-          const restoredList = result.restoredMessages.map((msg) => restoreFromText(msg));
+          const restoredList = result.restoredMessages.map((msg) =>
+            restoreFromText(msg, (name) => composerAttachmentsCache.get(name)),
+          );
           const text = restoredList.map((r) => r.text).filter(Boolean).join('\n\n');
           const attachments = restoredList.flatMap((r) => r.attachments);
           set({
@@ -541,7 +544,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           return;
         }
         if (result.text) {
-          const restored = restoreFromText(result.text);
+          const restored = restoreFromText(result.text, (name) => composerAttachmentsCache.get(name));
           set({ composerText: restored.text, composerAttachments: restored.attachments });
         }
       },

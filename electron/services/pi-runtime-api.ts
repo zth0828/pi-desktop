@@ -120,6 +120,7 @@ export type ActiveRuntime = {
   pendingBashRefresh: boolean;
   unsubscribe: () => void;
   pendingPrompts: Array<{ requestId: string; phase: 'accepted' | 'started' }>;
+  queuedImages: Map<string, unknown[]>;
 };
 
 /** pi-mcp-adapter 的版本化状态通道。 */
@@ -667,6 +668,14 @@ function bridgeSessionEvents(runtime: ActiveRuntime): () => void {
       if (mapped.type === 'tool.execution.started') {
         rememberPreviewableFile(runtime, mapped.toolName, mapped.args);
       }
+      if (mapped.type === 'queue.updated') {
+        const remaining = new Set([...mapped.steering, ...mapped.followUp]);
+        for (const text of runtime.queuedImages.keys()) {
+          if (!remaining.has(text)) {
+            runtime.queuedImages.delete(text);
+          }
+        }
+      }
       // 防休眠挂钩（main 侧自治）：run 期间顶住休眠，重试等待保持，结束/替换解除
       if (mapped.type === 'run.started') {
         runtime.running = true;
@@ -838,6 +847,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
     pendingBashRefresh: false,
     unsubscribe: () => {},
     pendingPrompts: [],
+    queuedImages: new Map(),
   };
   active_.eventBus.on(MCP_STATUS_CHANNEL, (data) => {
     active_.mcpStatus = (data ?? null) as Record<string, unknown> | null;
@@ -1111,19 +1121,30 @@ const SHELL_BUILTIN_COMMANDS: Array<{ name: string; description: string }> = [
  * steeringQueue/followUpQueue 要一并 clearAllQueues，否则重放会重复入队。
  */
 async function removeQueuedItem(
-  session: PiSessionPort,
+  active: ActiveRuntime,
   payload: PiRuntimeQueueItemPayload,
-): Promise<string | null> {
+): Promise<{ text: string; images?: unknown[] } | null> {
+  const session = active.adapterRuntime.session;
   const steering = [...session.getSteeringMessages()];
   const followUp = [...session.getFollowUpMessages()];
   const list = payload.kind === 'steering' ? steering : followUp;
   if (payload.index < 0 || payload.index >= list.length) return null;
   const [removed] = list.splice(payload.index, 1);
+  if (!removed) return null;
+  const removedImages = active.queuedImages.get(removed);
+  active.queuedImages.delete(removed);
+
   session.clearQueue();
   session.clearAgentQueues();
-  for (const text of steering) await session.steer(text);
-  for (const text of followUp) await session.followUp(text);
-  return removed ?? null;
+  for (const text of steering) {
+    const images = active.queuedImages.get(text);
+    await session.steer(text, images);
+  }
+  for (const text of followUp) {
+    const images = active.queuedImages.get(text);
+    await session.followUp(text, images);
+  }
+  return { text: removed, images: removedImages };
 }
 
 /**
@@ -1229,6 +1250,11 @@ export const piRuntimeApi = {
       // @path 就地展开为 <file> 块（pi file-processor 语义；图片转 images 通道）
       const expanded = await expandFileReferences(payload.text, active.cwd);
       const staged = (payload.images ?? []) as unknown[];
+      const allImages = [...expanded.images, ...staged];
+
+      if (session.isStreaming && allImages.length > 0) {
+        active.queuedImages.set(expanded.text, allImages);
+      }
 
       return await new Promise<{ success: boolean; error?: string }>((resolve) => {
         let settled = false;
@@ -1242,7 +1268,7 @@ export const piRuntimeApi = {
         session
           .prompt({
             text: expanded.text,
-            images: [...expanded.images, ...staged],
+            images: allImages,
             // 流式中提交：默认 followUp（排队等当前 run 完成），behavior='steer' 时当前轮插入
             ...(session.isStreaming
               ? { streamingBehavior: payload.behavior ?? ('followUp' as const) }
@@ -1294,8 +1320,8 @@ export const piRuntimeApi = {
   queueRemove: async (payload: PiRuntimeQueueItemPayload, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    const removed = await removeQueuedItem(active.adapterRuntime.session, payload);
-    return removed ? { success: true, text: removed } : { success: false, error: 'queue index out of range' };
+    const removed = await removeQueuedItem(active, payload);
+    return removed ? { success: true, text: removed.text } : { success: false, error: 'queue index out of range' };
   },
 
   queueMove: async (payload: PiRuntimeQueueItemPayload & { target: 'steering' | 'followUp' }, ctx?: HostActionContext) => {
@@ -1303,16 +1329,19 @@ export const piRuntimeApi = {
     if (!active) return { success: false, error: 'session not started' };
     if (payload.kind === payload.target) return { success: true };
     const session = active.adapterRuntime.session;
-    const text = await removeQueuedItem(session, payload);
-    if (text == null) return { success: false, error: 'queue index out of range' };
+    const removed = await removeQueuedItem(active, payload);
+    if (removed == null) return { success: false, error: 'queue index out of range' };
+    const { text, images } = removed;
     try {
       if (payload.target === 'steering') {
         // 立即发送：流式中 = steer（当前轮工具间隙插入），空闲 = 直接开新轮投递。
         // 只入队不投递会让消息在 run 结束后永远卡在队列里（改回 9c7ba38 前的语义）。
-        if (session.isStreaming) await session.steer(text);
-        else await session.prompt({ text });
+        if (images && images.length > 0) active.queuedImages.set(text, images);
+        if (session.isStreaming) await session.steer(text, images);
+        else await session.prompt({ text, images });
       } else {
-        await session.followUp(text);
+        if (images && images.length > 0) active.queuedImages.set(text, images);
+        await session.followUp(text, images);
       }
       return { success: true, text };
     } catch (err) {

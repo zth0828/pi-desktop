@@ -122,8 +122,8 @@ export type PiSessionPort = {
   readonly sessionManager: PiSessionDocumentHandle;
   readonly extensionRunner: PiExtensionRunnerPort;
   prompt(input: PiPromptInput): Promise<void>;
-  steer(text: string): Promise<void>;
-  followUp(text: string): Promise<void>;
+  steer(text: string, images?: unknown[]): Promise<void>;
+  followUp(text: string, images?: unknown[]): Promise<void>;
   subscribe(listener: (event: unknown) => void): () => void;
   abort(): Promise<void>;
   abortBash(): void;
