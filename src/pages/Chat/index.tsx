@@ -611,7 +611,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
                 </span>
               </div>
               {retry.errorMessage && (
-                <div className="streaming-retry-error">{retry.errorMessage}</div>
+                <div className="streaming-retry-error">{formatErrorMessage(retry.errorMessage, t) ?? retry.errorMessage}</div>
               )}
             </div>
           )}

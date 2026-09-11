@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Check, ChevronRight, Copy, GitFork, Pencil, Sparkles, Square } from 'lucide-react';
 import { formatAttachmentDisplayName, parseUserMessage, type ParsedSkillBlock } from '@shared/message-attachments';
 import { parseProviderError, PROVIDER_ERROR_HINT_KEYS } from '../../lib/provider-error';
+import { formatErrorMessage } from '../../lib/error-formatter';
 import { Markdown } from '../../components/Markdown';
 import { FileIcon, getFileBadgeText } from '../../components/FileIcon';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
@@ -103,9 +104,12 @@ function ErrorNotice({ message, responseId }: { message: string; responseId?: st
   const { t } = useTranslation();
   const parsed = parseProviderError(message);
   const requestId = parsed.requestId ?? responseId;
+  const formatted = formatErrorMessage(message, t);
+  const isTranslated = Boolean(formatted && formatted !== message);
+
   return (
     <div
-      className={`message-notice error${parsed.category !== 'unknown' ? ' known' : ''}`}
+      className={`message-notice error${parsed.category !== 'unknown' || isTranslated ? ' known' : ''}`}
       data-testid="message-error"
     >
       {parsed.category !== 'unknown' ? (
@@ -116,7 +120,7 @@ function ErrorNotice({ message, responseId }: { message: string; responseId?: st
           )}
         </div>
       ) : (
-        <div className="error-message-raw">{message}</div>
+        <div className="error-message-raw">{isTranslated ? formatted : message}</div>
       )}
     </div>
   );

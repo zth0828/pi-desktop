@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { PiCommandRow, PiRuntimeSessionInfo } from '@shared/host-api/contract';
 import { hostApi } from '../../../lib/host-api';
 import { navigateToPage } from '../../../lib/app-navigation';
+import { formatErrorMessage } from '../../../lib/error-formatter';
 import type { ChatMessage } from '../../../stores/chat';
 import type { SlashToken } from './types';
 
@@ -186,7 +187,7 @@ export function useSlashCommands({
         }
         const result = await paneApi.piRuntime.setSessionName(arg);
         if (result.success) showNotice(t('chat.notice.renamed', { name: result.name ?? arg }));
-        else showNotice(t('chat.notice.renameFailed', { message: result.error ?? 'unknown' }));
+        else showNotice(t('chat.notice.renameFailed', { message: formatErrorMessage(result.error, t) ?? result.error ?? 'unknown' }));
         return;
       }
       case 'copy': {
@@ -202,7 +203,7 @@ export function useSlashCommands({
       case 'export': {
         const result = await paneApi.piRuntime.exportHtml(arg || undefined);
         if (result.success) showNotice(t('chat.notice.exported', { path: result.path ?? '' }));
-        else showNotice(t('chat.notice.exportFailed', { message: result.error ?? 'unknown' }));
+        else showNotice(t('chat.notice.exportFailed', { message: formatErrorMessage(result.error, t) ?? result.error ?? 'unknown' }));
         return;
       }
       case 'session': {
@@ -230,7 +231,7 @@ export function useSlashCommands({
           showNotice(t('chat.notice.reloaded'));
           void paneApi.piRuntime.getCommands().then((r) => setCommands(r.commands));
         } else {
-          showNotice(t('chat.notice.reloadFailed', { message: result.error ?? 'unknown' }));
+          showNotice(t('chat.notice.reloadFailed', { message: formatErrorMessage(result.error, t) ?? result.error ?? 'unknown' }));
         }
         return;
       }

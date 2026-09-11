@@ -17,6 +17,7 @@ import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { groupByProject } from '../lib/session-groups';
 import { formatRelativeTime, sessionDisplayTitle } from '../lib/session-format';
+import { formatErrorMessage } from '../lib/error-formatter';
 import { panesStore } from '../stores/panes-default';
 
 type RowProps = {
@@ -279,8 +280,8 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
   hasRecentExportsRef.current = Boolean(exportInfo?.recentRecords && exportInfo.recentRecords.length > 0);
 
   const showNotice = useCallback((msg: string) => {
-    setNotice(msg);
-  }, []);
+    setNotice(formatErrorMessage(msg, t) ?? msg);
+  }, [t]);
 
   useEffect(() => {
     if (!notice) return;
@@ -295,6 +296,8 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
     if (err === 'file-not-found' || err.includes('ENOENT')) {
       return t('sessions.exportFileNotFound');
     }
+    const formatted = formatErrorMessage(err, t);
+    if (formatted && formatted !== err) return formatted;
     return t('sessions.actionFailed', { error: err });
   };
 

@@ -101,6 +101,15 @@ describe('error-formatter（错误信息本地化转译）', () => {
       'No stable release found',
       'RUNNING_SESSIONS',
       'aborted',
+      'Request aborted',
+      'request aborted',
+      'The user aborted a request.',
+      'The operation was aborted',
+      'BodyStreamBuffer was aborted',
+      'Nothing to export yet - start a conversation first',
+      'Cannot export in-memory session to HTML',
+      'Cannot clone session: no current entry selected',
+      'Session name cannot be empty',
       'path is not a directory',
       'path is not a file',
       'git empty tree failed',
@@ -140,6 +149,12 @@ describe('error-formatter（错误信息本地化转译）', () => {
 
     expect(formatErrorMessage('Download failed (404)', tZh)).toBe('下载失败（状态码 404）');
     expect(formatErrorMessage('Download failed (404)', tEn)).toBe('Download failed (status 404)');
+
+    expect(formatErrorMessage('entry not found: entry-12345', tZh)).toBe('未找到记录：entry-12345');
+    expect(formatErrorMessage('entry not found: entry-12345', tEn)).toBe('Entry not found: entry-12345');
+
+    expect(formatErrorMessage('AbortError: Request aborted', tZh)).toBe('请求已中止。');
+    expect(formatErrorMessage('AbortError: Request aborted', tEn)).toBe('Request aborted.');
   });
 
   it('转译工作区安全错误', () => {

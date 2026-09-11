@@ -46,6 +46,15 @@ const KNOWN_ERROR_KEYS: Record<string, string> = {
   'No stable release found': 'noStableRelease',
   'RUNNING_SESSIONS': 'runningSessions',
   'aborted': 'aborted',
+  'Request aborted': 'requestAborted',
+  'request aborted': 'requestAborted',
+  'The user aborted a request.': 'aborted',
+  'The operation was aborted': 'aborted',
+  'BodyStreamBuffer was aborted': 'aborted',
+  'Nothing to export yet - start a conversation first': 'nothingToExport',
+  'Cannot export in-memory session to HTML': 'cannotExportInMemory',
+  'Cannot clone session: no current entry selected': 'noCurrentEntry',
+  'Session name cannot be empty': 'emptyName',
   'path is not a directory': 'notADirectory',
   'path is not a file': 'notAFile',
   'git empty tree failed': 'gitEmptyTreeFailed',
@@ -107,6 +116,19 @@ export function formatErrorMessage(error: string | undefined, t: TFunction): str
   if (downloadFailedMatch) {
     return t('chat.errors.downloadFailed', {
       status: downloadFailedMatch[1],
+      interpolation: { escapeValue: false },
+    });
+  }
+
+  const abortMatch = error.match(/^(?:aborterror:\s*)?(?:request aborted|the user aborted a request\.?|the operation was aborted\.?|operation aborted\.?)$/i);
+  if (abortMatch) {
+    return t('chat.errors.requestAborted');
+  }
+
+  const entryNotFoundMatch = error.match(/^entry not found:\s*(.+)$/i);
+  if (entryNotFoundMatch) {
+    return t('chat.errors.entryNotFound', {
+      entry: entryNotFoundMatch[1],
       interpolation: { escapeValue: false },
     });
   }
