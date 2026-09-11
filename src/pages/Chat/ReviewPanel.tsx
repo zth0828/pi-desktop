@@ -327,7 +327,7 @@ function OpenWithMenu({ absolutePath }: { absolutePath: string }) {
   );
 }
 
-function FilePreview({ path }: { path: string }) {
+function FilePreview({ path, onClose }: { path: string; onClose?: () => void }) {
   const { t } = useTranslation();
   const [result, setResult] = useState<WorkspaceReadResult | null>(null);
   const [error, setError] = useState(false);
@@ -357,6 +357,18 @@ function FilePreview({ path }: { path: string }) {
             <button className={`icon-button${wrapLines ? ' active' : ''}`} data-testid="workspace-toggle-wrap" aria-pressed={wrapLines} title={wrapLines ? t('workspace.disableWrap') : t('workspace.enableWrap')} onClick={() => setWrapLines((current) => !current)}><WrapText size={15} /></button>
           )}
           <OpenWithMenu absolutePath={result.absolutePath} />
+          {onClose && (
+            <button
+              type="button"
+              className="icon-button"
+              data-testid="workspace-preview-close"
+              title={t('workspace.close')}
+              aria-label={t('workspace.close')}
+              onClick={onClose}
+            >
+              <X size={15} />
+            </button>
+          )}
         </div>
       </header>
       <div className="workspace-file-content"><FilePreviewContent result={result} wrapLines={wrapLines} /></div>
@@ -1315,15 +1327,13 @@ export function ReviewPanel() {
         event.stopPropagation();
         return;
       }
-      if (effectiveMode === 'overlay') {
-        close();
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      close();
+      event.preventDefault();
+      event.stopPropagation();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [effectiveTreeOpen, closeFileTree, effectiveMode, close]);
+  }, [effectiveTreeOpen, closeFileTree, close]);
 
   const chooseFile = (path: string) => {
     setSelectedFile(path);
@@ -1337,15 +1347,20 @@ export function ReviewPanel() {
     const remaining = openFiles.filter((item) => item !== path);
     setOpenFiles(remaining);
     if (tab === `file:${path}`) {
-      const next = remaining[Math.min(Math.max(index, 0), remaining.length - 1)];
-      setSelectedFile(next ?? null);
-      setTab(next ? `file:${next}` : 'files');
+      if (remaining.length === 0) {
+        setSelectedFile(null);
+        close();
+      } else {
+        const next = remaining[Math.min(Math.max(index, 0), remaining.length - 1)];
+        setSelectedFile(next ?? null);
+        setTab(`file:${next}`);
+      }
     }
   };
   const closeAllFiles = () => {
     setOpenFiles([]);
     setSelectedFile(null);
-    if (tab.startsWith('file:')) setTab('files');
+    close();
   };
   const cycleMode = useCallback(() => {
     setModePreference((current) => {
@@ -1441,7 +1456,7 @@ export function ReviewPanel() {
             >
               {modePreference === 'auto' ? <Sparkles size={15} /> : modePreference === 'docked' ? <Columns2 size={15} /> : <Layers size={15} />}
             </button>
-            <button className="icon-button" data-testid="workspace-close" title={t('workspace.close')} onClick={close}><PanelRightClose size={16} /></button>
+            <button className="icon-button" data-testid="workspace-close" title={t('workspace.close')} aria-label={t('workspace.close')} onClick={close}><X size={16} /></button>
           </div>
         </div>
         {tab === 'review' ? <ReviewWorkspace /> : tab === 'commands' ? <CommandList /> : (
@@ -1469,7 +1484,7 @@ export function ReviewPanel() {
               />
             )}
             <main className="workspace-preview" data-testid="workspace-preview">
-              {activeFile ? <FilePreview path={activeFile} /> : <div className="workspace-empty">{t('workspace.selectFile')}</div>}
+              {activeFile ? <FilePreview path={activeFile} onClose={close} /> : <div className="workspace-empty">{t('workspace.selectFile')}</div>}
             </main>
           </div>
         )}

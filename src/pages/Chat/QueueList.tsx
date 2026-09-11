@@ -19,6 +19,7 @@ export function QueueList() {
   const cwd = usePaneChatStore((s) => s.cwd);
   const queueRemove = usePaneChatStore((s) => s.queueRemove);
   const queueMove = usePaneChatStore((s) => s.queueMove);
+  const openWorkspaceFile = usePaneChatStore((s) => s.openWorkspaceFile);
   const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
 
   if (queue.steering.length === 0 && queue.followUp.length === 0) return null;
@@ -68,9 +69,11 @@ export function QueueList() {
                                 <span className="attachment-order">{att.index}</span>
                               </button>
                             ) : (
-                              <span
-                                className="queue-attachment-file queue-attachment-fallback-image"
+                              <button
+                                type="button"
+                                className="queue-attachment-file queue-attachment-button queue-attachment-fallback-image"
                                 title={att.fullName}
+                                onClick={() => openWorkspaceFile(att.fullName || att.name)}
                               >
                                 <span className="attachment-order">{att.index}</span>
                                 <span className="queue-file-icon">
@@ -78,19 +81,21 @@ export function QueueList() {
                                 </span>
                                 <span className="queue-file-name" title={att.fullName}>{att.name}</span>
                                 <span className="file-ext-badge">{getFileBadgeText(att.name)}</span>
-                              </span>
+                              </button>
                             )}
                           </span>
                         );
                       }
 
                       return (
-                        <span
+                        <button
+                          type="button"
                           key={att.key}
-                          className="queue-attachment-file"
+                          className="queue-attachment-file queue-attachment-button"
                           data-testid="queue-attachment-file"
                           data-attachment-index={att.index}
-                          title={att.fullName}
+                          title={t('chat.viewFileAction', { name: att.name })}
+                          onClick={() => openWorkspaceFile(att.fullName || att.name)}
                         >
                           <span className="attachment-order">{att.index}</span>
                           <span className="queue-file-icon">
@@ -98,7 +103,7 @@ export function QueueList() {
                           </span>
                           <span className="queue-file-name" title={att.fullName}>{att.name}</span>
                           <span className="file-ext-badge">{getFileBadgeText(att.name)}</span>
-                        </span>
+                        </button>
                       );
                     })}
                   </div>

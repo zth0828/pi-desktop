@@ -3504,6 +3504,15 @@ button.danger-outline {
   border-color: var(--border-strong);
 }
 
+button.queue-attachment-file {
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+button.queue-attachment-file:hover {
+  background: var(--bg-hover);
+}
+
 .queue-file-icon {
   display: flex;
   align-items: center;

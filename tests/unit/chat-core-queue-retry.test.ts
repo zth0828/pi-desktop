@@ -209,4 +209,15 @@ describe('chat-core queue and retry lifecycle', () => {
       followUp: ['next follow-up'],
     });
   });
+
+  it('openWorkspaceFile 正确设置 workspaceOpen 并发出 workspaceFileRequest', () => {
+    const store = createChatStore();
+    bindActiveSession(store, 'session-1', 1);
+
+    store.getState().openWorkspaceFile('cmd/flowgatectl/client_test.go');
+
+    expect(store.getState().workspaceOpen).toBe(true);
+    expect(store.getState().reviewOpen).toBe(false);
+    expect(store.getState().workspaceFileRequest?.path).toBe('cmd/flowgatectl/client_test.go');
+  });
 });
