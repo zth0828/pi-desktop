@@ -1309,10 +1309,14 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       <div
         className="chat-input-card chat-input-composer"
         onDragOver={(e) => {
+          if (e.dataTransfer.types.includes('application/x-pi-session')) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = 'copy';
         }}
-        onDrop={handleComposerDrop}
+        onDrop={(e) => {
+          if (e.dataTransfer.types.includes('application/x-pi-session')) return;
+          void handleComposerDrop(e);
+        }}
       >
         <RunningTasksCard />
         <ChatInputAttachments

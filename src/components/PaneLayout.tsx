@@ -78,6 +78,27 @@ function PaneLeaf({ node, shared }: { node: LeafNode; shared: SharedProps }) {
     setPaneDropHoverActive(dropZone !== null);
     return () => setPaneDropHoverActive(false);
   }, [dropZone]);
+
+  // 拖拽在任意位置结束（外部松手/取消/失焦）时兜底清空落区，避免蓝色高亮框常驻卡死
+  useEffect(() => {
+    const clearDrop = () => setDropZone(null);
+    window.addEventListener('dragend', clearDrop);
+    window.addEventListener('drop', clearDrop);
+    window.addEventListener('blur', clearDrop);
+    window.addEventListener('pointerup', clearDrop);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDropZone(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('dragend', clearDrop);
+      window.removeEventListener('drop', clearDrop);
+      window.removeEventListener('blur', clearDrop);
+      window.removeEventListener('pointerup', clearDrop);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
   if (!store) return null; // closePane 瞬态：实例已销毁、树尚未重渲染
   const primary = node.paneId === DEFAULT_CHAT_STORE_ID;
   const closable = shared.leafCount > 1;

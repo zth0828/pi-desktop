@@ -122,7 +122,7 @@ export const windowsApi = {
   },
   /** 已有窗口则聚焦；未找到时先为调用窗口原子占用路径，再由 renderer 打开面板。 */
   focusIfOpen: (payload: WindowsFocusPayload, ctx?: HostActionContext): boolean => {
-    const win = findWindowBySession(payload.sessionPath);
+    const win = findWindowBySession(payload.sessionPath, ctx ? { excludeWindowId: ctx.sender.id } : {});
     if (win) {
       activateAndFocusWindow(win);
       sendHostEventToWindow(win, 'windows', 'focusSession', { sessionPath: payload.sessionPath });
