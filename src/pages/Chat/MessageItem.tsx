@@ -348,7 +348,10 @@ function MessageItemView({
                   data-attachment-index={attachment.index}
                   key={`${attachment.index}-${attachment.name}`}
                   title={t('chat.viewFileAction', { name: attachment.name })}
-                  onClick={() => openWorkspaceFile(attachment.path || attachment.name)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openWorkspaceFile(attachment.path || attachment.name);
+                  }}
                 >
                   <span className="attachment-order">{attachment.index}</span>
                   <div className="message-file-icon">

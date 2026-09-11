@@ -1461,7 +1461,9 @@ export function ReviewPanel() {
         </div>
         {tab === 'review' ? <ReviewWorkspace /> : tab === 'commands' ? <CommandList /> : (
           <div className={`workspace-browser${effectiveTreeOpen ? ' tree-open' : ''}${workspaceTreeResizing ? ' tree-resizing' : ''}`}>
-            <button className="workspace-tree-backdrop" aria-label={t('workspace.hideFiles')} tabIndex={effectiveTreeOpen ? 0 : -1} onClick={closeFileTree} />
+            {effectiveTreeOpen && (
+              <button className="workspace-tree-backdrop" aria-label={t('workspace.hideFiles')} onClick={closeFileTree} />
+            )}
             <FileExplorer selected={activeFile} onSelect={chooseFile} onRootCount={setRootItemCount} />
             {effectiveTreeOpen && (
               <div

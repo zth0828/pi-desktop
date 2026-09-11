@@ -8885,12 +8885,14 @@ button.queue-attachment-file:hover {
     background: rgba(0, 0, 0, .08);
     opacity: 0;
     visibility: hidden;
+    pointer-events: none;
     cursor: default;
     transition: opacity 160ms ease, visibility 0s linear 160ms;
   }
   .workspace-browser.tree-open .workspace-tree-backdrop {
     opacity: 1;
     visibility: visible;
+    pointer-events: auto;
     transition-delay: 0s;
   }
   .workspace-tree-resizer {

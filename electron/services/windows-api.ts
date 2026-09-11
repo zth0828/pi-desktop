@@ -155,8 +155,9 @@ export const windowsApi = {
     if (applied <= 0) return { applied: 0 };
     expandRightStates.set(win.id, { originalX: bounds.x, originalWidth: bounds.width, applied, nextX, count: 1 });
     win.once('closed', () => expandRightStates.delete(win.id));
-    // macOS 第二参开启动画；Windows 忽略该参数
-    win.setBounds({ x: nextX, y: bounds.y, width: nextWidth, height: bounds.height }, true);
+    // 不传 animate 开启动画：macOS 上 animate: true 会进入 Cocoa 模态动画循环，
+    // 阻塞主进程事件循环并导致 Chromium 渲染层视口与鼠标命中测试脱节卡死。
+    win.setBounds({ x: nextX, y: bounds.y, width: nextWidth, height: bounds.height });
     return { applied };
   },
 
@@ -174,6 +175,6 @@ export const windowsApi = {
     const restoreX = bounds.x === state.nextX
       ? state.originalX
       : Math.round(bounds.x + (bounds.width - state.originalWidth) / 2);
-    win.setBounds({ x: restoreX, y: bounds.y, width: state.originalWidth, height: bounds.height }, true);
+    win.setBounds({ x: restoreX, y: bounds.y, width: state.originalWidth, height: bounds.height });
   },
 };
