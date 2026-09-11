@@ -708,3 +708,58 @@ test('拖拽全局提示：dragstart 出现浮条，悬停落区弱化，dragend
   await page.waitForTimeout(500);
   expect(app.windows()).toHaveLength(1);
 });
+
+test('未触发 dragleave 情况下松手或取消（dragend/drop）时，落区蓝色高亮 overlay 立即清空绝不残留卡死', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 1. 拖入落区显示蓝色高亮框与提示
+  await dragOverPaneLeaf(page, 'dragover-right');
+  await expect(page.getByTestId('pane-drop-overlay')).toBeVisible();
+  await expect(page.getByTestId('pane-drop-highlight')).toBeVisible();
+
+  // 2. 模拟真实用户松手或外部取消：不派发 dragleave，直接派发 dragend
+  await page.evaluate(() => {
+    window.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }));
+  });
+
+  // 3. 验证落区高亮与遮罩立即被清空，绝对不会在松手后卡死在界面上
+  await expect(page.getByTestId('pane-drop-overlay')).toHaveCount(0);
+  await expect(page.getByTestId('pane-drop-highlight')).toHaveCount(0);
+});
+
+test('会话面板处于极小宽度时，输入工具栏自适应仅保留加号、上下文用量与发送按钮，且发送按钮绝不挤压变形', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 将主窗口视口收缩到极窄（如 350px 宽）模拟超小窗口或多分栏平铺场景
+  await page.setViewportSize({ width: 350, height: 700 });
+
+  // 等待样式响应
+  const plusBtn = page.getByTestId('composer-menu');
+  const usageBtn = page.getByTestId('token-usage');
+  const sendBtn = page.getByTestId('chat-send');
+
+  await expect(plusBtn).toBeVisible();
+  await expect(usageBtn).toBeVisible();
+  await expect(sendBtn).toBeVisible();
+
+  // 验证不必要的臃肿组件被隐藏
+  await expect(page.getByTestId('chat-workspace')).not.toBeVisible();
+  await expect(page.getByTestId('composer-plan-toggle')).not.toBeVisible();
+  await expect(page.locator('.model-menu-wrap')).not.toBeVisible();
+
+  // 核心断言：发送按钮保持正圆，宽高等比，绝不被 flex 挤压成椭圆
+  const box = await sendBtn.boundingBox();
+  expect(box).toBeTruthy();
+  expect(box!.width).toBeGreaterThanOrEqual(28);
+  expect(box!.height).toBeGreaterThanOrEqual(28);
+  expect(Math.abs(box!.width - box!.height)).toBeLessThanOrEqual(2);
+});
+

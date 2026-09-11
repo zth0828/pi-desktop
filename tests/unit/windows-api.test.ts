@@ -159,6 +159,7 @@ describe('windowsApi', () => {
       { sessionPath: '/tmp/missing.jsonl' },
       { sender: { id: 42 } } as never,
     )).toBe(false);
+    expect(mocks.findWindowBySession).toHaveBeenCalledWith('/tmp/missing.jsonl', { excludeWindowId: 42 });
     expect(mocks.claimWindowSession).toHaveBeenCalledWith(42, '/tmp/missing.jsonl');
     expect(mocks.createSessionWindow).not.toHaveBeenCalled();
   });
