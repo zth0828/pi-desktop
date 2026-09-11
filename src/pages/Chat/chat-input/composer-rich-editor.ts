@@ -282,3 +282,6 @@ export function getCaretCharacterOffsetWithin(element: HTMLElement): number {
 
   return count;
 }
+
+export { computeComposerHeight } from './composer-height';
+

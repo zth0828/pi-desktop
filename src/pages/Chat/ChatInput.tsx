@@ -48,6 +48,7 @@ import {
   getCaretCharacterOffsetWithin,
   removeChip,
   moveCaretToEnd,
+  computeComposerHeight,
 } from './chat-input/composer-rich-editor';
 
 export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: ChatInputProps) {
@@ -159,27 +160,38 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const resizeComposer = () => {
     const editor = editorRef.current;
     if (!editor) return;
-    const maximum = Math.max(112, Math.min(260, Math.round(window.innerHeight * 0.32)));
     editor.style.height = 'auto';
-    const nextHeight = Math.max(56, Math.min(editor.scrollHeight, maximum));
-    editor.style.height = `${nextHeight}px`;
-    const scrollable = editor.scrollHeight > maximum + 1;
+    const current = serializeComposer(editor);
+    const { heightStyle, scrollable } = computeComposerHeight(
+      Boolean(current.trim()),
+      editor.scrollHeight,
+      window.innerHeight,
+    );
+    editor.style.height = heightStyle;
     setComposerScrollable(scrollable);
     if (!scrollable) setComposerScrollbarActive(false);
   };
 
   useLayoutEffect(() => {
-    resizeComposer();
-  }, [value]);
-
-  useEffect(() => {
     if (editorRef.current) {
       const current = serializeComposer(editorRef.current);
       if (current !== value) {
         populateComposer(editorRef.current, value);
       }
     }
+    resizeComposer();
   }, [value]);
+
+  const clearComposerInput = () => {
+    if (editorRef.current) {
+      populateComposer(editorRef.current, '');
+      resizeComposer();
+    }
+    setValue('');
+    if (textareaRef.current) textareaRef.current.value = '';
+    setAttachments(() => []);
+    setStagedStack([]);
+  };
 
   useEffect(() => {
     const resize = () => resizeComposer();
@@ -663,17 +675,13 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     const outgoing = outgoingAttachments.filter((attachment): attachment is StagedImage => attachment.kind === 'image');
 
     if (commandMode) {
-      setValue('');
-      setAttachments(() => []);
-      setStagedStack([]);
+      clearComposerInput();
       setCommandMode(false);
       if (text && !bashing) void runBash(text, commandExcludeFromContext);
       return;
     }
     if ((text.startsWith('!') || text.startsWith('！')) && outgoingAttachments.length === 0) {
-      setValue('');
-      setAttachments(() => []);
-      setStagedStack([]);
+      clearComposerInput();
       const isExcluded = text.startsWith('!!') || text.startsWith('！！');
       const command = (isExcluded ? text.slice(2) : text.slice(1)).trim();
       if (command) void runBash(command, isExcluded);
@@ -711,9 +719,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       if (!rawName) return;
 
       if (rawName === 'plan' || rawName === 'plan-mode') {
-        setValue('');
-        setAttachments(() => []);
-        setStagedStack([]);
+        clearComposerInput();
         setPlanMode((prev) => !prev);
         return;
       }
@@ -723,9 +729,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
         const promptAfterSkill = rawName.startsWith('skill:') ? arg : arg.slice(skillName.length).trim();
         if (!promptAfterSkill) {
           if (skillName) {
-            setValue('');
-            setAttachments(() => []);
-            setStagedStack([]);
+            clearComposerInput();
             setSelectedSkill(skillName);
           }
           return;
@@ -733,9 +737,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       }
 
       if (SHELL_BUILTIN_NAMES.has(rawName)) {
-        setValue('');
-        setAttachments(() => []);
-        setStagedStack([]);
+        clearComposerInput();
         void runBuiltinCommand(rawName, arg);
         return;
       }
@@ -748,9 +750,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
       if (isKnownCommand) {
         const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
         const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
-        setValue('');
-        setAttachments(() => []);
-        setStagedStack([]);
+        clearComposerInput();
         executePrompt(promptText, outgoing, behavior);
         return;
       }
@@ -770,9 +770,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
 
     const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
     const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
-    setValue('');
-    setAttachments(() => []);
-    setStagedStack([]);
+    clearComposerInput();
     executePrompt(promptText, outgoing, behavior);
   };
 
@@ -1424,6 +1422,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
               const next = serializeComposer(editorRef.current);
               setValue(next);
               if (textareaRef.current) textareaRef.current.value = next;
+              resizeComposer();
               setSelected(0);
               setFileSelected(0);
               setAtSuppressed(false);
@@ -1490,6 +1489,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
                 const caret = e.target.value.length;
                 setAtToken(detectAtToken(e.target.value, caret));
                 setSlashToken(detectSlashToken(e.target.value, caret));
+                resizeComposer();
               }
             }}
             onKeyDown={onKeyDown}
