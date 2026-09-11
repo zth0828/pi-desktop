@@ -23,6 +23,7 @@
 import http from "node:http";
 
 const sse = (res, obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // FLAKE_429 只失败一次（触发 auto_retry_start 后第二次请求成功）
 let flaked429 = false;
@@ -101,9 +102,15 @@ const server = http.createServer((req, res) => {
   }
   let body = "";
   req.on("data", (c) => (body += c));
-  req.on("end", () => {
+  req.on("end", async () => {
     const parsed = JSON.parse(body);
     const msgs = parsed.messages || [];
+    const requestText = JSON.stringify(parsed);
+    // pi 0.84 sends compaction summaries as a standalone conversation prompt.
+    // Keep this request slow enough for the renderer's send-during-compaction race
+    // to be exercised by the GUI test below.
+    const isCompactionRequest = /<conversation>[\s\S]*<\/conversation>/i.test(requestText);
+    if (isCompactionRequest) await sleep(5_000);
     const lastUserIdx = msgs.map((m) => m.role).lastIndexOf("user");
     const lastUserMessage = lastUserIdx >= 0 ? msgs[lastUserIdx] : null;
     const lastUser = lastUserMessage ? JSON.stringify(lastUserMessage) : "";
@@ -347,7 +354,7 @@ const server = http.createServer((req, res) => {
     }
 
     // pi 压缩/分支摘要的总结请求：慢速流，让 compaction 状态条有可观测窗口
-    if (lastUser.includes("context checkpoint summary")) {
+    if (isCompactionRequest) {
       const text = "MOCK_SUMMARY";
       send({ role: "assistant", content: "" });
       let i = 0;
