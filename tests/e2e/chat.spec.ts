@@ -929,16 +929,17 @@ test('发送长文本后输入框自动收起', async ({ launchElectronApp }) =>
   await page.setViewportSize({ width: 1200, height: 800 });
 
   const input = page.getByTestId('chat-input');
+  const editor = page.getByTestId('chat-input-editor');
   const longPrompt = Array.from({ length: 40 }, (_, index) => `line ${index + 1} with enough text to edit comfortably`).join('\n');
   await input.fill(longPrompt);
-  await expect(input).toHaveClass(/is-scrollable/);
-  const expandedHeight = (await input.boundingBox())!.height;
+  await expect(editor).toHaveClass(/is-scrollable/);
+  const expandedHeight = (await editor.boundingBox())!.height;
 
   await page.getByTestId('chat-send').click();
 
   await expect(input).toHaveValue('');
-  await expect(input).not.toHaveClass(/is-scrollable/);
-  const collapsedHeight = (await input.boundingBox())!.height;
+  await expect(editor).not.toHaveClass(/is-scrollable/);
+  const collapsedHeight = (await editor.boundingBox())!.height;
   expect(collapsedHeight).toBeLessThan(expandedHeight - 80);
 });
 test('新会话 → 消息列表清空', async ({ launchElectronApp }) => {
