@@ -388,6 +388,75 @@ test('任务 A 运行时可创建任务 B，切回 A 后继续控制并停止', 
   });
 });
 
+test('3 个会话并发流式运行并在侧栏来回切换：所有会话保持存活可控且状态互不干扰', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 1. 启动会话 1（长流式 HANG）
+  await page.getByTestId('chat-input').fill('HANG session ONE');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 30_000 });
+
+  // 2. 启动会话 2（长流式 HANG）
+  await page.getByTestId('new-chat').click();
+  await expect(page.getByTestId('chat-input')).toBeEditable({ timeout: 30_000 });
+  await page.getByTestId('chat-input').fill('HANG session TWO');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 30_000 });
+
+  // 3. 启动会话 3（长流式 HANG）
+  await page.getByTestId('new-chat').click();
+  await expect(page.getByTestId('chat-input')).toBeEditable({ timeout: 30_000 });
+  await page.getByTestId('chat-input').fill('HANG session THREE');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 30_000 });
+
+  // 侧栏中检查 3 个会话是否都处于运行状态标记
+  const row1 = page.locator('.sidebar-session-row').filter({ hasText: 'HANG session ONE' });
+  const row2 = page.locator('.sidebar-session-row').filter({ hasText: 'HANG session TWO' });
+  const row3 = page.locator('.sidebar-session-row').filter({ hasText: 'HANG session THREE' });
+
+  await expect(row1).toBeVisible({ timeout: 15_000 });
+  await expect(row2).toBeVisible({ timeout: 15_000 });
+  await expect(row3).toBeVisible({ timeout: 15_000 });
+
+  await expect(row1.locator('[data-testid^="sidebar-session-running-"]')).toBeVisible();
+  await expect(row2.locator('[data-testid^="sidebar-session-running-"]')).toBeVisible();
+  await expect(row3.locator('[data-testid^="sidebar-session-running-"]')).toBeVisible();
+
+  // 切回会话 1：验证仍存活且可被停止
+  await row1.locator('[data-testid^="sidebar-session-"]').first().click();
+  await expect(page.getByTestId('message-user').last()).toContainText('HANG session ONE');
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('chat-stop').click();
+  await expect(page.getByTestId('chat-stop')).toHaveCount(0, { timeout: 15_000 });
+  await expect(row1.locator('[data-testid^="sidebar-session-running-"]')).toHaveCount(0, { timeout: 15_000 });
+
+  // 此时会话 2 和 3 仍在后台健康运行
+  await expect(row2.locator('[data-testid^="sidebar-session-running-"]')).toBeVisible();
+  await expect(row3.locator('[data-testid^="sidebar-session-running-"]')).toBeVisible();
+
+  // 切回会话 2：验证仍存活且可被停止
+  await row2.locator('[data-testid^="sidebar-session-"]').first().click();
+  await expect(page.getByTestId('message-user').last()).toContainText('HANG session TWO');
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('chat-stop').click();
+  await expect(page.getByTestId('chat-stop')).toHaveCount(0, { timeout: 15_000 });
+  await expect(row2.locator('[data-testid^="sidebar-session-running-"]')).toHaveCount(0, { timeout: 15_000 });
+
+  // 会话 3 仍在运行
+  await expect(row3.locator('[data-testid^="sidebar-session-running-"]')).toBeVisible();
+
+  // 切回会话 3 并停止
+  await row3.locator('[data-testid^="sidebar-session-"]').first().click();
+  await expect(page.getByTestId('message-user').last()).toContainText('HANG session THREE');
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('chat-stop').click();
+  await expect(page.getByTestId('chat-stop')).toHaveCount(0, { timeout: 15_000 });
+  await expect(row3.locator('[data-testid^="sidebar-session-running-"]')).toHaveCount(0, { timeout: 15_000 });
+});
+
 test('侧栏会话入口：从其他功能页点击后切回对话并恢复目标消息', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();

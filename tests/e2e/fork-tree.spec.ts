@@ -219,3 +219,44 @@ test('消息级编辑重发：点击编辑按钮，回填输入框，修改后�
   await expect(page.getByTestId('message-user')).toHaveCount(2);
   await expect(page.getByTestId('message-user').last()).toContainText('edited question');
 });
+
+test('中断后分支与编辑：运行中点击停止后，点击分支能正常回填并生成新对话，绝无 session not started', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendAndWaitReply(page, 'first question');
+
+  // 发起一个长耗时流式任务并停止
+  await page.getByTestId('chat-input').fill('SLOW question to interrupt');
+  await page.getByTestId('chat-send').click();
+
+  await expect(page.getByTestId('chat-stop')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('chat-stop').click();
+  await expect(page.getByTestId('chat-stop')).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator('.runtime-error-notice')).toHaveCount(0);
+
+  // 对中断的这轮消息点击「分支」
+  const secondUser = page.getByTestId('message-user').filter({ hasText: 'SLOW question to interrupt' });
+  const forkBtn = secondUser.getByTestId('fork-message');
+  await expect(forkBtn).toBeAttached({ timeout: 30_000 });
+  await secondUser.hover();
+  await forkBtn.click();
+
+  // 分叉后回到第一轮，输入框回填中断的消息文本
+  await expect(page.getByTestId('message-user')).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.getByTestId('message-user').first()).toContainText('first question');
+  await expect(page.getByTestId('chat-input')).toHaveValue('SLOW question to interrupt');
+  await expect(page.locator('.runtime-error-notice')).toHaveCount(0);
+
+  // 在分叉后提交新消息，验证会话 active 正常，绝不报「会话未启动或已失效」
+  await page.getByTestId('chat-input').fill('new question after interrupt fork');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
+    timeout: 30_000,
+  });
+  await expect(page.locator('.runtime-error-notice')).toHaveCount(0);
+});
+
