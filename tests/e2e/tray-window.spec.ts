@@ -9,58 +9,46 @@ test.describe('主窗口关闭行为', () => {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
 
-    // 模拟用户点窗口关闭按钮
-    await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0].close();
-    });
-
-    // 应用未退出：主窗口 hide（未销毁、不可见）
-    const state = await app.evaluate(({ BrowserWindow }) => {
-      const wins = BrowserWindow.getAllWindows();
-      return {
-        count: wins.length,
-        destroyed: wins.map((w) => w.isDestroyed()),
-        visible: wins.map((w) => w.isVisible()),
-      };
-    });
-    expect(state.count).toBe(1);
-    expect(state.destroyed).toEqual([false]);
-    expect(state.visible).toEqual([false]);
-
-    // 恢复（Dock / 托盘唤醒路径）：show + focus 后窗口可见
-    await app.evaluate(({ BrowserWindow }) => {
+    // 模拟用户点窗口关闭按钮（被拦截为 hide），随后通过 Dock/托盘恢复
+    const result = await app.evaluate(({ BrowserWindow }) => {
       const win = BrowserWindow.getAllWindows()[0];
+      win.close();
+      const hiddenState = {
+        count: BrowserWindow.getAllWindows().length,
+        destroyed: win.isDestroyed(),
+        visible: win.isVisible(),
+      };
+
       win.show();
       win.focus();
+
+      return {
+        ...hiddenState,
+        restoredVisible: win.isVisible(),
+      };
     });
-    const visible = await app.evaluate(
-      ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible(),
-    );
-    expect(visible).toBe(true);
+
+    expect(result.count).toBe(1);
+    expect(result.destroyed).toBe(false);
+    expect(result.visible).toBe(false);
+    expect(result.restoredVisible).toBe(true);
   });
 
   test('配置 closeAction 为 quit：关闭主窗口直接退出应用', async ({ launchElectronApp }) => {
-    const app = await launchElectronApp();
+    const app = await launchElectronApp({
+      seedSettings: { closeAction: 'quit' },
+    });
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
 
-    // 切换设置 closeAction 为 quit
-    await page.evaluate(async () => {
-      await (window as any).pidesktop.hostInvoke({
-        id: 'test-set',
-        module: 'settings',
-        action: 'set',
-        payload: { key: 'closeAction', value: 'quit' },
-      });
-    });
-
+    const closePromise = app.waitForEvent('close', { timeout: 10_000 });
     // 点击关闭按钮触发 close
     await app.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0].close();
     });
 
     // 进程应该退出
-    await app.waitForEvent('close', { timeout: 10_000 });
+    await closePromise;
   });
 
   test('退出流程不被 close 拦截卡住（before-quit 放行）', async ({ launchElectronApp }) => {
@@ -68,7 +56,8 @@ test.describe('主窗口关闭行为', () => {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
     // app.quit() 走 before-quit → setQuitting(true) → 主窗口 close 放行 → 应用退出。
+    const closePromise = app.waitForEvent('close', { timeout: 10_000 });
     await app.evaluate(({ app: electronApp }) => electronApp.quit());
-    await app.waitForEvent('close', { timeout: 10_000 });
+    await closePromise;
   });
 });
