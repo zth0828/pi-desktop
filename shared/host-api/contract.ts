@@ -295,6 +295,8 @@ export type PiRuntimeStateResult = {
   historyMessageEntryIds?: (string | null)[];
   sessionFile?: string;
   contextUsage?: PiRuntimeContextUsage;
+  /** 当前排队消息快照（steer 与 followUp）。 */
+  queue?: { steering: string[]; followUp: string[] };
   /** pi branchSummary.skipPrompt 设置：true 时跳分支默认不询问摘要（TUI 同款语义）。 */
   branchSummarySkipPrompt?: boolean;
   extensionUi?: PiExtensionUiState;

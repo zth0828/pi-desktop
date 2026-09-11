@@ -574,6 +574,10 @@ function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
     historyMessageEntryIds: history.entryIds,
     sessionFile: session.sessionFile,
     contextUsage: contextUsage(runtime),
+    queue: {
+      steering: typeof session.getSteeringMessages === 'function' ? [...session.getSteeringMessages()] : [],
+      followUp: typeof session.getFollowUpMessages === 'function' ? [...session.getFollowUpMessages()] : [],
+    },
     branchSummarySkipPrompt: runtime.adapter.settings.getBranchSummarySkipPrompt(runtime.settingsHandle),
     extensionUi: getExtensionUiStateSnapshot({
       sessionId: runtime.sessionId,
@@ -1266,7 +1270,9 @@ export const piRuntimeApi = {
         }
       }
 
-      if (session.isStreaming && allImages.length > 0) {
+      const isBusy = session.isStreaming || session.isRetrying;
+
+      if (isBusy && allImages.length > 0) {
         active.queuedImages.set(expanded.text, allImages);
       }
 
@@ -1283,8 +1289,8 @@ export const piRuntimeApi = {
           .prompt({
             text: expanded.text,
             images: allImages,
-            // 流式中提交：默认 followUp（排队等当前 run 完成），behavior='steer' 时当前轮插入
-            ...(session.isStreaming
+            // 流式或重试中提交：默认 followUp（排队等当前 run 完成），behavior='steer' 时当前轮插入
+            ...(isBusy
               ? { streamingBehavior: payload.behavior ?? ('followUp' as const) }
               : {}),
             preflightResult: (accepted: boolean) => {
@@ -1298,7 +1304,7 @@ export const piRuntimeApi = {
             },
           })
           .then(() => {
-            if (pendingPrompt.phase === 'accepted' && !session.isStreaming && !active.running) {
+            if (pendingPrompt.phase === 'accepted' && !isBusy && !active.running) {
               emitPromptLifecycle(active, 'finished', requestId);
               active.pendingPrompts = active.pendingPrompts.filter((item) => item !== pendingPrompt);
             }

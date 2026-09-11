@@ -591,7 +591,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
               enableViewportCheck={isHistoricalTurn}
             />
           ))}
-          {isLastTurn && isStreaming && retry && (
+          {isLastTurn && retry && (
             <div className="message message-assistant message-streaming-retry" data-testid="streaming-retry-indicator">
               <div className="streaming-retry-header">
                 <RefreshCw size={13} className="spin" />

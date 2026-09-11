@@ -735,7 +735,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           compaction: null,
           lastCompaction: null,
           retry: null,
-          queue: { steering: [], followUp: [] },
+          queue: state.queue ?? { steering: [], followUp: [] },
           bashDraft: null,
           branchSummarySkipPrompt: state.branchSummarySkipPrompt ?? false,
           uiRequests: state.pendingUiRequests ?? [],
@@ -827,13 +827,13 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         switch (event.type) {
           case 'run.started':
             awaitingRun = false;
-            set({ isStreaming: true, running: true, runStartedAt: Date.now(), turnStats: null, retry: null, queue: { steering: [], followUp: [] } });
+            set({ isStreaming: true, running: true, runStartedAt: Date.now(), turnStats: null, retry: null });
             break;
           case 'run.ended': {
             // 收尾：run 结束时仍在 running 的工具（abort/error 中断）标记为中断，
-            // 避免工具卡永远停在 running。willRetry 时 run 会继续，不动工具状态。
+            // 避免工具卡永远停在 running。willRetry 时 run 会继续，不动工具与运行状态。
             if (event.willRetry) {
-              set({ isStreaming: false, running: false, retry: null });
+              set({ isStreaming: false, retry: null });
               break;
             }
             const now = Date.now();
