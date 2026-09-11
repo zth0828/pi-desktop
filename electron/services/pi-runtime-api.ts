@@ -52,6 +52,7 @@ import type { HostActionContext } from '../main/ipc/host-contract';
 import {
   bindWindowSession,
   findWindowBySession,
+  getMainWindow,
   hasSessionInOtherWindow,
   isMainWindow,
   rebindWindowSession,
@@ -183,16 +184,37 @@ export function sendRuntimeStateToWindow(runtime: ActiveRuntime, target: HostAct
  * 按调用方上下文寻址 runtime：ctx 带 sessionPath（窗口绑定的会话）
  * 时用该会话的保活 runtime；否则回退全局 active（单窗口行为不变）。
  */
-export function resolveRuntimeForContext(ctx?: { sessionPath?: string | null }): ActiveRuntime | null {
-  if (ctx?.sessionPath) return getRuntimeForSession(ctx.sessionPath);
+export function resolveRuntimeForContext(
+  ctx?: { sessionPath?: string | null; sender?: { id: number } },
+): ActiveRuntime | null {
+  if (ctx?.sessionPath) {
+    const found = getRuntimeForSession(ctx.sessionPath);
+    if (found) return found;
+    if (active && (!active.adapterRuntime.session.view.sessionFile || samePath(active.adapterRuntime.session.view.sessionFile, ctx.sessionPath))) {
+      return active;
+    }
+    if (ctx.sender && isMainWindow(ctx.sender.id) && active) {
+      return active;
+    }
+    return null;
+  }
   return active;
 }
 
 /** resolveRuntimeForContext 的异步变体：无绑定会话时保留 getActiveRuntimeReady 的等待语义。 */
 export async function resolveRuntimeForContextReady(
-  ctx?: { sessionPath?: string | null },
+  ctx?: { sessionPath?: string | null; sender?: { id: number } },
 ): Promise<ActiveRuntime | null> {
-  if (ctx?.sessionPath) return getRuntimeForSession(ctx.sessionPath);
+  if (ctx?.sessionPath) {
+    const found = getRuntimeForSession(ctx.sessionPath);
+    if (found) return found;
+    if (active && (!active.adapterRuntime.session.view.sessionFile || samePath(active.adapterRuntime.session.view.sessionFile, ctx.sessionPath))) {
+      return active;
+    }
+    if (ctx.sender && isMainWindow(ctx.sender.id) && active) {
+      return active;
+    }
+  }
   return getActiveRuntimeReady();
 }
 
@@ -294,8 +316,9 @@ function disposeRuntime(runtime: ActiveRuntime): void {
 /**
  * 替换/失联后的 runtime 回收判定：无人观看（findWindowBySession 为 null）、
  * 非全局 active、且不在运行（running/isStreaming）才 dispose。
- * 运行中的不能中断：登记待回收，由 run.ended / 窗口销毁的清扫兜底，
- * 否则持有它的窗口在流式期间关闭后 runtime 永久滞留（事件订阅等泄漏）。
+ * 运行中的不能中断：登记待回收，由 run.ended / 窗口销毁的清扫兜底。
+ * 只要主窗口或观看窗口存活，后台运行任务绝不强杀（属于正常并发运行）；
+ * 仅在所有窗口均关闭或不可见的真正孤儿 runtime 下才启动兜底超时防泄漏。
  */
 function maybeDisposeRuntime(runtime: ActiveRuntime): boolean {
   if (runtime === active) {
@@ -303,8 +326,19 @@ function maybeDisposeRuntime(runtime: ActiveRuntime): boolean {
     pendingDisposeRuntimes.delete(runtime);
     return false;
   }
+  const sessionFile = runtime.adapterRuntime.session.view.sessionFile;
+  if (sessionFile && findWindowBySession(sessionFile) !== null) {
+    clearPendingDisposeTimer(runtime);
+    pendingDisposeRuntimes.delete(runtime);
+    return false;
+  }
   if (runtime.running || runtime.adapterRuntime.session.view.isStreaming) {
     pendingDisposeRuntimes.add(runtime);
+    const mainWin = getMainWindow();
+    if (mainWin && !mainWin.isDestroyed()) {
+      clearPendingDisposeTimer(runtime);
+      return false;
+    }
     if (!pendingDisposeTimers.has(runtime)) {
       const timer = setTimeout(() => {
         pendingDisposeTimers.delete(runtime);
@@ -331,8 +365,6 @@ function maybeDisposeRuntime(runtime: ActiveRuntime): boolean {
   }
   clearPendingDisposeTimer(runtime);
   pendingDisposeRuntimes.delete(runtime);
-  const sessionFile = runtime.adapterRuntime.session.view.sessionFile;
-  if (sessionFile && findWindowBySession(sessionFile) !== null) return false;
   disposeRuntime(runtime);
   return true;
 }
@@ -1029,6 +1061,11 @@ export async function afterSessionReplaced(
   }
   // 主窗口发起的隔离替换要更新全局 active（侧栏 isCurrent / 无 scope 回退）；
   // 独立窗口发起时则保持主窗口 active 不变。
+  if (!target || isMainWindow(target.sender.id)) {
+    active = runtime;
+    latestMcpStatus = runtime.mcpStatus;
+    sendHostEvent('piMcp', 'statusChanged', { snapshot: latestMcpStatus });
+  }
   if (options?.preserveRunning) runtime.running = true;
   const state = snapshotState(runtime);
   if (options?.replacesSessionId) state.replacesSessionId = options.replacesSessionId;

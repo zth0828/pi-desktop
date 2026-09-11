@@ -635,6 +635,20 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       forkFrom: async (entryId) => {
+        const s = get();
+        if (s.isStreaming || s.running) {
+          set({ pendingEditEntryId: entryId });
+          try {
+            await s.abort();
+          } catch (err) {
+            set({
+              pendingEditEntryId: null,
+              runtimeError: err instanceof Error ? err.message : String(err),
+            });
+          }
+          return;
+        }
+
         const targetMessage = get().messages.find((m) => m.entryId === entryId)
           ?? get().historyMessages.find((m) => m.entryId === entryId);
         const restored = targetMessage
@@ -663,19 +677,6 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       editMessage: async (entryId) => {
-        const s = get();
-        if (s.isStreaming || s.running) {
-          set({ pendingEditEntryId: entryId });
-          try {
-            await s.abort();
-          } catch (err) {
-            set({
-              pendingEditEntryId: null,
-              runtimeError: err instanceof Error ? err.message : String(err),
-            });
-          }
-          return;
-        }
         await get().forkFrom(entryId);
       },
 
