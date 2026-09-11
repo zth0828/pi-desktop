@@ -86,9 +86,14 @@ const launchOptions = () => ({
 
 /** 等会话启动（模型选择器/徽标出现 = runtime 就绪） */
 async function waitSessionReady(page: import('@playwright/test').Page) {
-  await expect(
-    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
-  ).toBeVisible({ timeout: 30_000 });
+  const trustDialog = page.getByTestId('trust-dialog');
+  const modelReady = page.getByTestId('model-select').or(page.getByTestId('model-badge')).first();
+  await expect(trustDialog.or(modelReady).first()).toBeVisible({ timeout: 30_000 });
+  if (await trustDialog.isVisible()) {
+    await trustDialog.getByTestId('trust-option').first().click();
+    await expect(trustDialog).toBeHidden();
+  }
+  await expect(modelReady).toBeVisible({ timeout: 30_000 });
 }
 
 test('发消息 → 流式渲染回复', async ({ launchElectronApp }) => {
@@ -916,6 +921,26 @@ test('长文本输入自然增长，达到上限后使用短暂滚动条', async
   expect(collapsedHeight).toBeLessThan(expandedHeight - 80);
 });
 
+
+test('发送长文本后输入框自动收起', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+  await page.setViewportSize({ width: 1200, height: 800 });
+
+  const input = page.getByTestId('chat-input');
+  const longPrompt = Array.from({ length: 40 }, (_, index) => `line ${index + 1} with enough text to edit comfortably`).join('\n');
+  await input.fill(longPrompt);
+  await expect(input).toHaveClass(/is-scrollable/);
+  const expandedHeight = (await input.boundingBox())!.height;
+
+  await page.getByTestId('chat-send').click();
+
+  await expect(input).toHaveValue('');
+  await expect(input).not.toHaveClass(/is-scrollable/);
+  const collapsedHeight = (await input.boundingBox())!.height;
+  expect(collapsedHeight).toBeLessThan(expandedHeight - 80);
+});
 test('新会话 → 消息列表清空', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
@@ -1057,4 +1082,37 @@ test('/compact → 压缩状态条，完成后消息列表刷新为摘要', asyn
     .poll(() => page.getByTestId('message-list').evaluate((el) => el.scrollTop), { timeout: 10_000 })
     .toBeLessThan(60);
   await expect(page.locator('#chat-msg-0')).toBeInViewport();
+});
+
+test('/compact 进行中发送消息 → 压缩完成后按原顺序投递，不吞消息', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  const big = 'word '.repeat(15_000);
+  for (let i = 0; i < 2; i += 1) {
+    await page.getByTestId('chat-input').fill(big);
+    await page.getByTestId('chat-send').click();
+    await expect(page.getByTestId('message-user')).toHaveCount(i + 1, { timeout: 30_000 });
+    await expect(page.getByTestId('message-assistant')).toHaveCount(i + 1, { timeout: 30_000 });
+    await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
+      timeout: 30_000,
+    });
+  }
+
+  await page.getByTestId('chat-input').fill('/compact');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('status-compaction')).toBeVisible({ timeout: 10_000 });
+
+  // 在摘要请求仍进行时发送；这条消息必须先进入 renderer 的 FIFO，
+  // 压缩完成并刷新 transcript 后再提交给 runtime。
+  const queued = 'QUEUED_DURING_COMPACTION';
+  await page.getByTestId('chat-input').fill(queued);
+  await page.getByTestId('chat-send').click();
+
+  await expect(page.getByTestId('message-user').filter({ hasText: queued })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
+  await expect(page.getByTestId('status-compaction')).toHaveCount(0, { timeout: 30_000 });
+  // 新消息发送后会清除一次性的压缩结果状态；压缩摘要消息本身仍保留在 transcript。
+  await expect(page.getByTestId('message-compaction')).toBeVisible({ timeout: 30_000 });
 });

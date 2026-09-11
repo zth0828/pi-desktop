@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDown, Check, ChevronRight, ChevronUp, PanelRight, RefreshCw, X } from 'lucide-react';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
@@ -241,6 +241,11 @@ type Props = {
   onClosePane?: () => void;
 };
 
+function findMessageElement(list: HTMLElement, id: string): HTMLElement | null {
+  // Each pane owns its own message list; IDs are intentionally local to that list.
+  return list.querySelector<HTMLElement>(`[id="${id}"]`);
+}
+
 export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachSession, attachTarget, onClosePane }: Props) {
   const { t } = useTranslation();
   const chatStore = usePaneChatStoreApi();
@@ -285,54 +290,123 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   // 一个 user 问题对应一个完整回合；完成后默认收起 thinking/阶段文本/工具调用。
   const [expandedTurns, setExpandedTurns] = useState<Record<number, boolean>>({});
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  const [searchHighlightIndex, setSearchHighlightIndex] = useState<number>();
+  const [searchHighlight, setSearchHighlight] = useState<{ sessionId: string; messageIndex: number; nonce: number }>();
   const stickToBottomRef = useRef(true);
+  const [returnToBottomVersion, setReturnToBottomVersion] = useState(0);
   // 会话切换后的滚动复位窗口：期间忽略顶部瞬态滚动，防止 stickToBottom 被误置为 false
   const scrollResetRef = useRef(false);
+  const scrollFrameRef = useRef<number | null>(null);
+  const scrollTokenRef = useRef(0);
+  // 搜索高亮可继续显示，但旧搜索不再拥有后续用户操作的滚动位置。
+  const searchAlignTokenRef = useRef(0);
+  const searchHighlightIndex = searchHighlight && searchHighlight.sessionId === sessionId
+    ? searchHighlight.messageIndex
+    : undefined;
+
+  const cancelListScroll = useCallback(() => {
+    scrollTokenRef.current += 1;
+    if (scrollFrameRef.current !== null) {
+      cancelAnimationFrame(scrollFrameRef.current);
+      scrollFrameRef.current = null;
+    }
+  }, []);
+
+  const updateScrollAffordance = useCallback(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+    const hasOverflow = list.scrollHeight > list.clientHeight + 2;
+    const atBottom = !hasOverflow || distanceFromBottom <= 64;
+    // 会话切换复位窗口内不更新 stick，避免顶部瞬态滚动把自动钉底关掉
+    if (!scrollResetRef.current && scrollFrameRef.current === null) stickToBottomRef.current = atBottom;
+    setShowScrollToBottom(hasOverflow && !atBottom);
+  }, []);
+
+
+  const animateListScrollTo = useCallback((targetTop: number) => {
+    searchAlignTokenRef.current += 1;
+    cancelListScroll();
+    const list = listRef.current;
+    if (!list) return;
+    // 用户跳转优先于会话切换后的延迟复位和消息增量的自动钉底。
+    scrollResetRef.current = false;
+    stickToBottomRef.current = false;
+    const token = scrollTokenRef.current;
+    const startTop = list.scrollTop;
+    const endTop = Math.max(0, Math.min(list.scrollHeight - list.clientHeight, targetTop));
+    const startedAt = performance.now();
+    const duration = 320;
+    const step = (now: number) => {
+      if (token !== scrollTokenRef.current || listRef.current !== list) return;
+      const progress = Math.min(1, Math.max(0, (now - startedAt) / duration));
+      const eased = progress < 0.5
+        ? 2 * progress * progress
+        : 1 - ((-2 * progress + 2) ** 2) / 2;
+      list.scrollTop = startTop + (endTop - startTop) * eased;
+      if (progress < 1) {
+        scrollFrameRef.current = requestAnimationFrame(step);
+      } else {
+        scrollFrameRef.current = null;
+        list.scrollTop = endTop;
+        updateScrollAffordance();
+      }
+    };
+    scrollFrameRef.current = requestAnimationFrame(step);
+  }, [cancelListScroll, updateScrollAffordance]);
+
+  // 空列表/历史替换同样使旧目标失效；卸载时不能留下写入旧 DOM 的 frame。
   useEffect(() => {
+    if (transcriptSyncing || displayMessages.length === 0) cancelListScroll();
+  }, [transcriptSyncing, displayMessages.length, cancelListScroll]);
+  useEffect(() => cancelListScroll, [cancelListScroll]);
+  useEffect(() => {
+    cancelListScroll();
     setExpandedTurns({});
     setShowScrollToBottom(false);
     stickToBottomRef.current = true;
     // 搜索定位跳转由 searchTarget 对齐逻辑接管，不强制回底部
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    if (searchTarget?.sessionId === sessionId) return;
+    if (searchTarget?.sessionId === sessionId) return cancelListScroll;
     // 进入/切换会话：直接定位到最新消息（底部）。列表内容替换后 scrollTop 会留在
     // 顶部，若不主动复位会停在第一条输入处；复位窗口内的 affordance 计算不改变 stick。
     const list = listRef.current;
     if (list) {
       scrollResetRef.current = true;
-      list.scrollTop = list.scrollHeight;
+      list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
       // 图片/代码块等延迟布局后再钉一次底
       const raf = requestAnimationFrame(() => {
         const el = listRef.current;
         if (el && scrollResetRef.current) {
-          el.scrollTop = el.scrollHeight;
+          el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
           el.dispatchEvent(new Event('scroll'));
         }
       });
       const settle = window.setTimeout(() => {
         const el = listRef.current;
-        if (el) {
-          el.scrollTop = el.scrollHeight;
+        if (el && scrollResetRef.current) {
+          el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
           el.dispatchEvent(new Event('scroll'));
         }
       }, 100);
       const release = window.setTimeout(() => {
+        if (!scrollResetRef.current) return;
+        cancelListScroll();
         scrollResetRef.current = false;
         const el = listRef.current;
-        if (el) el.scrollTop = el.scrollHeight;
+        if (el) el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
         updateScrollAffordance();
       }, 400);
       return () => {
+        cancelListScroll();
         cancelAnimationFrame(raf);
         window.clearTimeout(settle);
         window.clearTimeout(release);
         scrollResetRef.current = false;
       };
     }
-    return undefined;
+    return cancelListScroll;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, cancelListScroll, updateScrollAffordance]);
   const railAnchors = useMemo<RailAnchor[]>(() => {
     let n = 0;
     return displayMessages.flatMap((m, i) =>
@@ -340,16 +414,14 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
         id: `chat-msg-${i}`,
         n: (n += 1),
         // 附件信封（<attachments>…）不属于问题文字，rail 悬浮预览里同样不展示
-        question: truncateRailText(
-          stripAttachmentEnvelope(
-            m.content
-              .filter((block) => block.type === 'text')
-              .map((block) => block.text ?? '')
-              .join(' '),
-          )
-            .replace(/\s+/g, ' ')
-            .trim(),
-        ),
+        question: stripAttachmentEnvelope(
+          m.content
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text ?? '')
+            .join(' '),
+        )
+          .replace(/\s+/g, ' ')
+          .trim(),
       }] : [],
     );
   }, [displayMessages]);
@@ -385,21 +457,33 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
 
   useEffect(() => {
     if (!searchTarget || searchTarget.sessionId !== sessionId || !displayMessages[searchTarget.messageIndex]) return;
+    // 同会话搜索也会接管滚动：淘汰旧跳转，并关闭可能尚未结束的会话复位窗口。
+    cancelListScroll();
+    scrollResetRef.current = false;
     const targetIndex = searchTarget.messageIndex;
     const targetTurn = logicalTurns.find((turn) => targetIndex >= turn.startIndex && targetIndex <= turn.endIndex);
     if (targetTurn) {
       setExpandedTurns((current) => ({ ...current, [targetTurn.startIndex]: true }));
     }
     stickToBottomRef.current = false;
-    setSearchHighlightIndex(targetIndex);
-  }, [logicalTurns, displayMessages, searchTarget, sessionId]);
+    setSearchHighlight((current) => (
+      current?.sessionId === searchTarget.sessionId && current.nonce === searchTarget.nonce
+        ? current
+        : { ...searchTarget }
+    ));
+  }, [logicalTurns, displayMessages, searchTarget, sessionId, cancelListScroll]);
 
   useEffect(() => {
-    if (searchHighlightIndex === undefined) return;
+    if (!searchHighlight || searchHighlight.sessionId !== sessionId) return;
+    const { messageIndex } = searchHighlight;
+    const token = ++searchAlignTokenRef.current;
     const alignTarget = () => {
+      if (token !== searchAlignTokenRef.current) return;
       const list = listRef.current;
-      const target = document.getElementById(`chat-msg-${searchHighlightIndex}`);
-      if (!list || !target) return;
+      if (!list) return;
+      const target = findMessageElement(list, `chat-msg-${messageIndex}`);
+      if (!target) return;
+      scrollResetRef.current = false;
       list.scrollTop = Math.max(
         0,
         target.offsetTop - (list.clientHeight - target.offsetHeight) / 2,
@@ -411,25 +495,32 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     // target first renders. Keep the selected hit aligned during its short
     // highlight window, then release normal scrolling.
     const alignTimer = window.setInterval(() => {
+      if (token !== searchAlignTokenRef.current) return;
       const list = listRef.current;
-      const target = document.getElementById(`chat-msg-${searchHighlightIndex}`);
-      if (!list || !target) return;
+      if (!list) return;
+      const target = findMessageElement(list, `chat-msg-${messageIndex}`);
+      if (!target) return;
       const listRect = list.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
       if (targetRect.bottom <= listRect.top || targetRect.top >= listRect.bottom) alignTarget();
     }, 100);
     const handledTimer = window.setTimeout(() => onSearchTargetHandled?.(), 2_000);
     return () => {
+      // 只释放本次搜索的对齐权限，不能取消高亮期间用户新发起的 RAF。
+      if (token === searchAlignTokenRef.current) searchAlignTokenRef.current += 1;
       window.clearInterval(alignTimer);
       window.clearTimeout(handledTimer);
     };
-  }, [onSearchTargetHandled, searchHighlightIndex]);
+  }, [onSearchTargetHandled, searchHighlight, sessionId]);
 
   useEffect(() => {
-    if (searchHighlightIndex === undefined) return;
-    const timer = window.setTimeout(() => setSearchHighlightIndex(undefined), 2400);
+    if (!searchHighlight) return;
+    const target = searchHighlight;
+    const timer = window.setTimeout(() => {
+      setSearchHighlight((current) => (current === target ? undefined : current));
+    }, 2400);
     return () => window.clearTimeout(timer);
-  }, [searchHighlightIndex]);
+  }, [searchHighlight]);
 
   // 独立会话窗口的 attach：cwd 优先取建窗 query（main 侧已随 ?cwd= 下发），
   // 缺省再回退全量 listAll 推导；都找不到时 cwd 缺省，由 main 侧 switch 报错
@@ -464,16 +555,6 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const updateScrollAffordance = useCallback(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
-    const hasOverflow = list.scrollHeight > list.clientHeight + 2;
-    const atBottom = !hasOverflow || distanceFromBottom <= 64;
-    // 会话切换复位窗口内不更新 stick，避免顶部瞬态滚动把自动钉底关掉
-    if (!scrollResetRef.current) stickToBottomRef.current = atBottom;
-    setShowScrollToBottom(hasOverflow && !atBottom);
-  }, []);
 
   useEffect(() => {
     const list = listRef.current;
@@ -483,6 +564,16 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     list.addEventListener('scroll', onScroll, { passive: true });
     return () => list.removeEventListener('scroll', onScroll);
   }, [sessionId, started, updateScrollAffordance]);
+
+  // 回合折叠/展开导致列表高度骤变时，若仍钉在底部则重新对齐。
+  // 用 useLayoutEffect 在浏览器绘制前同步执行，避免用户看到"先显示中间再跳底部"的闪烁。
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    if (stickToBottomRef.current && scrollFrameRef.current === null) {
+      list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
+    }
+  }, [logicalTurns]);
 
   const prevMessageCountRef = useRef(displayMessages.length);
   useEffect(() => {
@@ -496,8 +587,8 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
       stickToBottomRef.current = true;
       setShowScrollToBottom(false);
     }
-    if (stickToBottomRef.current) {
-      list.scrollTop = list.scrollHeight;
+    if (stickToBottomRef.current && scrollFrameRef.current === null) {
+      list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
     }
     updateScrollAffordance();
   }, [displayMessages, bashDraft, isStreaming, updateScrollAffordance]);
@@ -516,13 +607,31 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     return () => ro.disconnect();
   }, [updateScrollAffordance]);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
+    searchAlignTokenRef.current += 1;
+    cancelListScroll();
     const list = listRef.current;
     if (!list) return;
+    scrollResetRef.current = false;
     stickToBottomRef.current = true;
     setShowScrollToBottom(false);
-    list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' });
-  };
+    list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
+    updateScrollAffordance();
+    // 即使 active 未变，也让普通 rail 关闭展开组并重新测量底部 active。
+    setReturnToBottomVersion((version) => version + 1);
+  }, [cancelListScroll, updateScrollAffordance]);
+
+  const jumpToAnchor = useCallback((anchorId: string) => {
+    const list = listRef.current;
+    if (!list) return;
+    const target = findMessageElement(list, anchorId);
+    if (!target) return;
+
+    const listRect = list.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const targetTop = list.scrollTop + targetRect.top - listRect.top;
+    animateListScrollTo(targetTop - 8);
+  }, [animateListScrollTo]);
 
   const chooseWorkspace = async () => {
     const result = await hostApi.dialog.openDirectory(t('chat.workspace.choose'));
@@ -982,7 +1091,13 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
             )}
           </div>
           {!transcriptSyncing && (
-            <MessageNavRail anchors={railAnchors} compactionAnchors={compactionAnchors} listRef={listRef} />
+            <MessageNavRail
+              anchors={railAnchors}
+              compactionAnchors={compactionAnchors}
+              listRef={listRef}
+              onJumpTo={jumpToAnchor}
+              returnToBottomVersion={returnToBottomVersion}
+            />
           )}
           {showScrollToBottom && (
             <button

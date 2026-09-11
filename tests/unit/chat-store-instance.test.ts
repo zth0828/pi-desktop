@@ -156,6 +156,237 @@ describe('chat store 实例隔离（多面板 P2）', () => {
     }
   });
 
+  it('压缩期间发送的 prompt 会延后到压缩完成并保留图片与投递方式', async () => {
+    const bus = createFakeBus();
+    const promptRequests: HostRequest[] = [];
+    let resolveState!: () => void;
+    const stateReady = new Promise<void>((resolve) => {
+      resolveState = resolve;
+    });
+    (globalThis as { window?: unknown }).window = {
+      pidesktop: {
+        hostInvoke: vi.fn(async (request: HostRequest) => {
+          if (request.action === 'prompt') {
+            promptRequests.push(request);
+            return { id: request.id, ok: true, data: { success: true } };
+          }
+          if (request.action === 'getState') {
+            await stateReady;
+            return { id: request.id, ok: true, data: { ...stateSnapshot('s1', 1), sessionFile: '/tmp/s1.jsonl' } };
+          }
+          return { id: request.id, ok: true, data: { success: true } };
+        }),
+      },
+    };
+    try {
+      const store = createChatStore({ onEvent: bus.onEvent });
+      store.setState({ boundSessionId: 's1', sessionId: 's1', generation: 1, boundSessionPath: '/tmp/s1.jsonl' });
+
+      bus.emit('piRuntime.event', {
+        sessionId: 's1',
+        generation: 1,
+        at: Date.now(),
+        event: { type: 'compaction.started', reason: 'manual' },
+      } as PiRuntimeEventEnvelope);
+
+      await store.getState().prompt(
+        'message during compaction',
+        [{ type: 'image', data: 'base64-image', mimeType: 'image/png' }],
+        'followUp',
+      );
+      await store.getState().prompt('second message during compaction');
+      expect(promptRequests).toHaveLength(0);
+
+      bus.emit('piRuntime.event', {
+        sessionId: 's1',
+        generation: 1,
+        at: Date.now(),
+        event: { type: 'compaction.ended', reason: 'manual', result: { tokensBefore: 239039, estimatedTokensAfter: 102904, usage: { input: 682, output: 2654, cacheRead: 0, cacheWrite: 0, cost: 0 } } },
+      } as PiRuntimeEventEnvelope);
+      resolveState();
+
+      await vi.waitFor(() => {
+        expect(promptRequests).toHaveLength(2);
+      });
+      expect(promptRequests.map((request) => (request.payload as { text: string }).text)).toEqual([
+        'message during compaction',
+        'second message during compaction',
+      ]);
+      expect(promptRequests[0]).toMatchObject({
+        module: 'piRuntime',
+        action: 'prompt',
+        sessionPath: '/tmp/s1.jsonl',
+        payload: {
+          text: 'message during compaction',
+          images: [{ type: 'image', data: 'base64-image', mimeType: 'image/png' }],
+          behavior: 'followUp',
+        },
+      });
+      expect(store.getState().lastCompaction).toBeNull();
+    } finally {
+      delete (globalThis as { window?: unknown }).window;
+    }
+  });
+
+  it('压缩期间发送新消息会立即清除旧的压缩结果提示', async () => {
+    const store = createChatStore();
+    store.setState({
+      boundSessionId: 's1',
+      sessionId: 's1',
+      generation: 1,
+      compaction: { reason: 'manual' },
+      lastCompaction: {
+        tokensBefore: 239039,
+        estimatedTokensAfter: 102904,
+        usage: { input: 682, output: 2654, cacheRead: 0, cacheWrite: 0, cost: 0 },
+      },
+    });
+
+    await store.getState().prompt('queued message');
+
+    expect(store.getState().lastCompaction).toBeNull();
+  });
+
+  it('重试等待期间保持运行态，直到最终 run.ended 才结束', () => {
+    const bus = createFakeBus();
+    const store = createChatStore({ onEvent: bus.onEvent });
+    store.setState({ boundSessionId: 's1', sessionId: 's1', generation: 1, running: true, isStreaming: true });
+
+    bus.emit('piRuntime.event', {
+      sessionId: 's1',
+      generation: 1,
+      at: Date.now(),
+      event: { type: 'run.ended', willRetry: true },
+    } as PiRuntimeEventEnvelope);
+
+    expect(store.getState().running).toBe(true);
+    expect(store.getState().isStreaming).toBe(false);
+
+    bus.emit('piRuntime.event', {
+      sessionId: 's1',
+      generation: 1,
+      at: Date.now(),
+      event: { type: 'run.ended', willRetry: false },
+    } as PiRuntimeEventEnvelope);
+
+    expect(store.getState().running).toBe(false);
+  });
+
+  it('compaction 事件尚未到达时 pi 拒绝 prompt 也会自动重试，而不是吞掉', async () => {
+    const bus = createFakeBus();
+    const promptRequests: HostRequest[] = [];
+    let promptAttempts = 0;
+    (globalThis as { window?: unknown }).window = {
+      pidesktop: {
+        hostInvoke: vi.fn(async (request: HostRequest) => {
+          if (request.action === 'prompt') {
+            promptRequests.push(request);
+            promptAttempts += 1;
+            if (promptAttempts === 1) {
+              return {
+                id: request.id,
+                ok: true,
+                data: {
+                  success: false,
+                  error: 'Cannot submit a prompt while compaction is in progress. Wait for compaction to finish and retry.',
+                },
+              };
+            }
+            return { id: request.id, ok: true, data: { success: true } };
+          }
+          if (request.action === 'getState') {
+            return { id: request.id, ok: true, data: stateSnapshot('s1', 1) };
+          }
+          return { id: request.id, ok: true, data: { success: true } };
+        }),
+      },
+    };
+    try {
+      const store = createChatStore({ onEvent: bus.onEvent });
+      store.setState({ boundSessionId: 's1', sessionId: 's1', generation: 1 });
+
+      await store.getState().prompt('race-safe message');
+      expect(promptRequests).toHaveLength(1);
+      expect(store.getState().runtimeError).toBeUndefined();
+
+      bus.emit('piRuntime.event', {
+        sessionId: 's1',
+        generation: 1,
+        at: Date.now(),
+        event: { type: 'compaction.started', reason: 'manual' },
+      } as PiRuntimeEventEnvelope);
+      bus.emit('piRuntime.event', {
+        sessionId: 's1',
+        generation: 1,
+        at: Date.now(),
+        event: { type: 'compaction.ended', reason: 'manual' },
+      } as PiRuntimeEventEnvelope);
+
+      await vi.waitFor(() => {
+        expect(promptRequests).toHaveLength(2);
+      });
+      expect((promptRequests[1].payload as { text: string }).text).toBe('race-safe message');
+    } finally {
+      delete (globalThis as { window?: unknown }).window;
+    }
+  });
+
+  it('切换会话时不会把旧会话待发送的 prompt 投递到新会话，切回后仍会继续发送', async () => {
+    const promptRequests: HostRequest[] = [];
+    let promptAttempts = 0;
+    (globalThis as { window?: unknown }).window = {
+      pidesktop: {
+        hostInvoke: vi.fn(async (request: HostRequest) => {
+          if (request.action === 'prompt') {
+            promptRequests.push(request);
+            promptAttempts += 1;
+            if (promptAttempts === 1) {
+              return {
+                id: request.id,
+                ok: true,
+                data: {
+                  success: false,
+                  error: 'Cannot submit a prompt while compaction is in progress. Wait for compaction to finish and retry.',
+                },
+              };
+            }
+            return { id: request.id, ok: true, data: { success: true } };
+          }
+          return { id: request.id, ok: true, data: { success: true } };
+        }),
+      },
+    };
+    try {
+      const store = createChatStore();
+      store.setState({ boundSessionId: 's1', sessionId: 's1', generation: 1, boundSessionPath: '/tmp/s1.jsonl' });
+
+      await store.getState().prompt('keep for s1');
+      store.getState().applyState({
+        ...stateSnapshot('s2', 2),
+        sessionFile: '/tmp/s2.jsonl',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      expect(promptRequests).toHaveLength(1);
+
+      store.getState().applyState({
+        ...stateSnapshot('s1', 1),
+        sessionFile: '/tmp/s1.jsonl',
+      });
+      await vi.waitFor(() => {
+        expect(promptRequests).toHaveLength(2);
+      });
+      expect(promptRequests[1]).toMatchObject({
+        module: 'piRuntime',
+        action: 'prompt',
+        sessionPath: '/tmp/s1.jsonl',
+        payload: { text: 'keep for s1' },
+      });
+    } finally {
+      delete (globalThis as { window?: unknown }).window;
+    }
+  });
+
   it('compaction.ended 后 refreshMessages 用完整分支历史（messages 仍为压缩上下文）', async () => {
     const bus = createFakeBus();
     (globalThis as { window?: unknown }).window = {

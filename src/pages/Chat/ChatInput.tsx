@@ -134,9 +134,20 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
   const usageControlRef = useRef<HTMLDivElement>(null);
   const noticeTimerRef = useRef<number | null>(null);
   const composerScrollTimerRef = useRef<number | null>(null);
+  const composerResizeFrameRef = useRef<number | null>(null);
 
   const setValue = (next: string | ((current: string) => string)) => {
-    setComposerText(typeof next === 'function' ? next(chatStore.getState().composerText) : next);
+    const nextValue = typeof next === 'function' ? next(chatStore.getState().composerText) : next;
+    setComposerText(nextValue);
+    if (!nextValue && typeof window.requestAnimationFrame === 'function') {
+      if (composerResizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(composerResizeFrameRef.current);
+      }
+      composerResizeFrameRef.current = window.requestAnimationFrame(() => {
+        composerResizeFrameRef.current = null;
+        resizeComposer();
+      });
+    }
   };
   const setAttachments = (next: StagedAttachment[] | ((current: StagedAttachment[]) => StagedAttachment[])) => {
     setComposerAttachments(typeof next === 'function' ? next(chatStore.getState().composerAttachments) : next);
@@ -210,6 +221,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     return () => {
       if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
       if (composerScrollTimerRef.current) window.clearTimeout(composerScrollTimerRef.current);
+      if (composerResizeFrameRef.current !== null) window.cancelAnimationFrame(composerResizeFrameRef.current);
     };
   }, []);
 
