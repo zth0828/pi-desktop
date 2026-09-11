@@ -25,6 +25,10 @@ const TINY_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
   'base64',
 );
+const TINY_PNG_2 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
 
 let mock: ChildProcess;
 let mockPort: number;
@@ -356,7 +360,7 @@ test('混合附件：按上传顺序独立渲染，并向模型声明图片序�
   await page.getByTestId('attach-input').setInputFiles([
     { name: 'first.png', mimeType: 'image/png', buffer: TINY_PNG },
     { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('ORDERED_FILE_CONTENT') },
-    { name: 'second.png', mimeType: 'image/png', buffer: TINY_PNG },
+    { name: 'second.png', mimeType: 'image/png', buffer: TINY_PNG_2 },
   ]);
   const staged = page.getByTestId('staged-attachments').locator('[data-attachment-index]');
   await expect(staged).toHaveCount(3);

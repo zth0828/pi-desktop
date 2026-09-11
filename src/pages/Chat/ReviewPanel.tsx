@@ -1327,13 +1327,15 @@ export function ReviewPanel() {
         event.stopPropagation();
         return;
       }
-      close();
-      event.preventDefault();
-      event.stopPropagation();
+      if (effectiveMode === 'overlay') {
+        close();
+        event.preventDefault();
+        event.stopPropagation();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [effectiveTreeOpen, closeFileTree, close]);
+  }, [effectiveTreeOpen, closeFileTree, effectiveMode, close]);
 
   const chooseFile = (path: string) => {
     setSelectedFile(path);
@@ -1342,25 +1344,22 @@ export function ReviewPanel() {
     setFileTreeOpen(false);
     setUserToggledInNarrow(false);
   };
-  const closeFile = (path: string) => {
+
+  const closeFile = (path: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     const index = openFiles.indexOf(path);
     const remaining = openFiles.filter((item) => item !== path);
     setOpenFiles(remaining);
     if (tab === `file:${path}`) {
-      if (remaining.length === 0) {
-        setSelectedFile(null);
-        close();
-      } else {
-        const next = remaining[Math.min(Math.max(index, 0), remaining.length - 1)];
-        setSelectedFile(next ?? null);
-        setTab(`file:${next}`);
-      }
+      const next = remaining[Math.min(Math.max(index, 0), remaining.length - 1)];
+      setSelectedFile(next ?? null);
+      setTab(next ? `file:${next}` : 'files');
     }
   };
   const closeAllFiles = () => {
     setOpenFiles([]);
     setSelectedFile(null);
-    close();
+    if (tab.startsWith('file:')) setTab('files');
   };
   const cycleMode = useCallback(() => {
     setModePreference((current) => {
