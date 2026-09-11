@@ -4594,15 +4594,15 @@ button.queue-attachment-file:hover {
   border-radius: 50%;
   background: var(--accent);
   color: var(--accent-text);
+  flex: none;
+  flex-shrink: 0;
 }
 
 .send-button.stop {
   background: var(--danger);
+  flex: none;
+  flex-shrink: 0;
 }
-
-
-
-.send-button.stop { flex: none; }
 
 @media (max-width: 620px) {
   .chat-input { padding-inline: 12px; }
@@ -4617,7 +4617,36 @@ button.queue-attachment-file:hover {
   .workspace-chip { padding-inline: 6px; }
   .workspace-chip span { display: none; }
   .model-menu-trigger { max-width: 104px; padding-inline: 6px; }
+  .model-menu-trigger-thinking,
+  .model-menu-trigger-context { display: none; }
   .usage-button { padding-inline: 6px; }
+}
+
+@container chat-column (max-width: 480px) {
+  .composer-tools { display: none !important; }
+  .git-branch-wrap { display: none !important; }
+  .model-menu-trigger { max-width: 86px; }
+}
+
+@container chat-column (max-width: 380px) {
+  .chat-input-card { padding: 8px 10px; }
+  .workspace-chip,
+  .git-branch-wrap,
+  .composer-tools,
+  .model-menu-wrap {
+    display: none !important;
+  }
+  .usage-control {
+    margin-left: auto;
+  }
+}
+
+@container chat-column (max-width: 260px) {
+  .chat-input { padding-inline: 6px; }
+  .chat-input-card { padding: 6px 8px; }
+  .chat-input-toolbar { gap: 2px; }
+  .usage-button { padding-inline: 4px; }
+  .usage-button span { display: none !important; }
 }
 
 .turn-fold {
