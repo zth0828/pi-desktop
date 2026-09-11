@@ -1,18 +1,11 @@
 // 消息导航 rail：普通 user 消息与上下文压缩检查点使用两套独立锚点。
-// 所有跳转只滚动消息列表，不调用 scrollIntoView，避免带动外层 content。
-import { useEffect, useState, type RefObject } from 'react';
+// 跳转由父级通过 onJumpTo 负责；本组件只负责渲染与 active 状态计算。
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
+import { buildRailItems, truncateRailText, type RailAnchor } from '../../lib/nav-rail';
 
-export { truncateRailText } from '../../lib/nav-rail';
-
-export type RailAnchor = {
-  /** 对应消息的稳定 DOM id。 */
-  id: string;
-  /** 在同类锚点中的序号（1 起）。 */
-  n: number;
-  /** 悬浮预览文本。 */
-  question: string;
-};
+export { truncateRailText };
+export type { RailAnchor };
 
 export type CompactionRailAnchor = {
   id: string;
@@ -23,11 +16,15 @@ export type CompactionRailAnchor = {
 type Props = {
   anchors: RailAnchor[];
   compactionAnchors?: CompactionRailAnchor[];
-  /** 消息列表滚动容器。 */
+  /** 消息列表滚动容器，仅用于计算当前 active 锚点。 */
   listRef: RefObject<HTMLDivElement | null>;
+  /** 由父级执行消息定位。 */
+  onJumpTo: (anchorId: string) => void;
+  /** 回底部恢复普通 rail 状态，不耦合压缩 rail 的 active。 */
+  returnToBottomVersion?: number;
 };
 
-function useActiveAnchor<T extends { id: string }>(anchors: T[], listRef: Props['listRef']): string | undefined {
+function useActiveAnchor<T extends { id: string }>(anchors: T[], listRef: Props['listRef'], refreshVersion = 0): string | undefined {
   const [activeId, setActiveId] = useState<string>();
 
   useEffect(() => {
@@ -43,7 +40,7 @@ function useActiveAnchor<T extends { id: string }>(anchors: T[], listRef: Props[
       const listTop = list.getBoundingClientRect().top;
       let current: string | undefined;
       for (const anchor of anchors) {
-        const el = document.getElementById(anchor.id);
+        const el = list.querySelector<HTMLElement>(`[id="${anchor.id}"]`);
         if (!el) continue;
         if (el.getBoundingClientRect().top - listTop <= list.clientHeight * 0.35) current = anchor.id;
       }
@@ -58,46 +55,193 @@ function useActiveAnchor<T extends { id: string }>(anchors: T[], listRef: Props[
       list.removeEventListener('scroll', onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [anchors, listRef]);
+  }, [anchors, listRef, refreshVersion]);
 
   return activeId;
 }
 
-function jumpTo(anchorId: string, listRef: Props['listRef']): void {
-  const list = listRef.current;
-  const target = document.getElementById(anchorId);
-  if (!list || !target) return;
-  const listRect = list.getBoundingClientRect();
-  const targetRect = target.getBoundingClientRect();
-  list.scrollTo({
-    top: Math.max(0, list.scrollTop + targetRect.top - listRect.top - 20),
-    behavior: 'smooth',
-  });
-}
+const GROUP_COLLAPSE_DELAY_MS = 180;
 
-export function MessageNavRail({ anchors, compactionAnchors = [], listRef }: Props) {
+export function MessageNavRail({ anchors, compactionAnchors = [], listRef, onJumpTo, returnToBottomVersion = 0 }: Props) {
   const { t } = useTranslation();
-  const activeId = useActiveAnchor(anchors, listRef);
+  const activeId = useActiveAnchor(anchors, listRef, returnToBottomVersion);
   const activeCompactionId = useActiveAnchor(compactionAnchors, listRef);
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeReadyRef = useRef(false);
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+
+  const clearCollapseTimer = useCallback(() => {
+    if (collapseTimerRef.current !== null) {
+      clearTimeout(collapseTimerRef.current);
+      collapseTimerRef.current = null;
+    }
+  }, []);
+
+  const closeGroup = useCallback(() => {
+    clearCollapseTimer();
+    setOpenGroupId(null);
+  }, [clearCollapseTimer]);
+
+  const scheduleGroupClose = useCallback(() => {
+    clearCollapseTimer();
+    collapseTimerRef.current = setTimeout(() => {
+      collapseTimerRef.current = null;
+      setOpenGroupId(null);
+    }, GROUP_COLLAPSE_DELAY_MS);
+  }, [clearCollapseTimer]);
+
+  // 初始 active 计算可能在 mount 后才完成；等这一帧后再把 active 变化视为收起信号，
+  // 避免点击刚展开的组时被初始测量立刻关闭。
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      activeReadyRef.current = true;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  useEffect(() => {
+    if (!activeReadyRef.current) return;
+    closeGroup();
+  }, [activeId, closeGroup]);
+
+  const anchorSignature = anchors
+    .map((anchor) => `${anchor.id}:${anchor.n}:${anchor.question}`)
+    .join('\u0000');
+  const compactionSignature = compactionAnchors
+    .map((anchor) => `${anchor.id}:${anchor.n}:${anchor.summary}`)
+    .join('\u0000');
+
+  useEffect(() => {
+    closeGroup();
+  }, [anchorSignature, compactionSignature, returnToBottomVersion, closeGroup]);
+
+  useEffect(() => {
+    return clearCollapseTimer;
+  }, [clearCollapseTimer]);
+
+  useEffect(() => {
+    if (openGroupId === null) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target && railRef.current?.contains(event.target as Node)) return;
+      closeGroup();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      closeGroup();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [closeGroup, openGroupId]);
+
+  const railItems = buildRailItems(anchors, activeId);
   if (anchors.length < 2 && compactionAnchors.length === 0) return null;
 
   return (
     <>
       {anchors.length >= 2 && (
-        <div className="msg-rail" data-testid="msg-rail" aria-label={t('rail.messages')}>
-          {anchors.map((anchor) => (
-            <button
-              key={anchor.id}
-              className={activeId === anchor.id ? 'msg-rail-dot active' : 'msg-rail-dot'}
-              data-testid={`msg-rail-dot-${anchor.id}`}
-              aria-label={t('rail.jumpTo', { index: anchor.n })}
-              onClick={() => jumpTo(anchor.id, listRef)}
-            >
-              <span className="msg-rail-tooltip" data-testid="msg-rail-tooltip">
-                {anchor.question || t('rail.attachmentQuestion')}
-              </span>
-            </button>
-          ))}
+        <div
+          ref={railRef}
+          className="msg-rail"
+          data-testid="msg-rail"
+          aria-label={t('rail.messages')}
+          onPointerEnter={clearCollapseTimer}
+        >
+          {railItems.map((item) => {
+            if (item.kind === 'anchor') {
+              const { anchor } = item;
+              const question = anchor.question || t('rail.attachmentQuestion');
+              return (
+                <button
+                  key={anchor.id}
+                  type="button"
+                  className={activeId === anchor.id ? 'msg-rail-dot active' : 'msg-rail-dot'}
+                  data-testid={`msg-rail-dot-${anchor.id}`}
+                  aria-label={t('rail.jumpToMessage', { question })}
+                  title={question}
+                  onClick={() => onJumpTo(anchor.id)}
+                >
+                  <span className="msg-rail-tooltip" data-testid="msg-rail-tooltip">
+                    {truncateRailText(question)}
+                  </span>
+                </button>
+              );
+            }
+
+            const isOpen = openGroupId === item.id;
+            const containsActive = item.anchors.some((anchor) => anchor.id === activeId);
+            const panelId = `${item.id}-panel`;
+            return (
+              <div
+                key={item.id}
+                className="msg-rail-group"
+                data-active={containsActive ? 'true' : undefined}
+                onPointerEnter={clearCollapseTimer}
+                onPointerLeave={scheduleGroupClose}
+              >
+                <button
+                  type="button"
+                  className={containsActive ? 'msg-rail-group-dot active' : 'msg-rail-group-dot'}
+                  id={`msg-rail-group-${item.id}`}
+                  data-testid="msg-rail-group"
+                  aria-expanded={isOpen}
+                  aria-controls={panelId}
+                  aria-label={t(isOpen ? 'rail.collapseGroup' : 'rail.expandGroup', {
+                    count: item.hiddenCount,
+                  })}
+                  title={t('rail.hiddenMessages', { count: item.hiddenCount })}
+                  onClick={() => {
+                    clearCollapseTimer();
+                    setOpenGroupId((current) => (current === item.id ? null : item.id));
+                  }}
+                >
+                  <span className="msg-rail-group-mark" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                </button>
+                {isOpen && (
+                  <div
+                    id={panelId}
+                    className="msg-rail-group-panel"
+                    data-testid="msg-rail-group-panel"
+                    role="region"
+                    aria-labelledby={`msg-rail-group-${item.id}`}
+                    onPointerEnter={clearCollapseTimer}
+                    onPointerLeave={scheduleGroupClose}
+                  >
+                    {item.anchors.map((anchor) => {
+                      const question = anchor.question || t('rail.attachmentQuestion');
+                      return (
+                        <button
+                          key={anchor.id}
+                          type="button"
+                          className={anchor.id === activeId ? 'msg-rail-group-row active' : 'msg-rail-group-row'}
+                          data-testid={`msg-rail-group-row-${anchor.id}`}
+                          aria-label={t('rail.jumpToMessage', { question })}
+                          title={question}
+                          onClick={() => {
+                            closeGroup();
+                            onJumpTo(anchor.id);
+                          }}
+                        >
+                          <span className="msg-rail-group-row-text" title={question}>
+                            {question}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
       {compactionAnchors.length > 0 && (
@@ -105,10 +249,11 @@ export function MessageNavRail({ anchors, compactionAnchors = [], listRef }: Pro
           {compactionAnchors.map((anchor) => (
             <button
               key={anchor.id}
+              type="button"
               className={activeCompactionId === anchor.id ? 'compaction-rail-dot active' : 'compaction-rail-dot'}
               data-testid={`compaction-rail-dot-${anchor.id}`}
               aria-label={t('rail.jumpToCompaction', { index: anchor.n })}
-              onClick={() => jumpTo(anchor.id, listRef)}
+              onClick={() => onJumpTo(anchor.id)}
             >
               <span className="msg-rail-tooltip" data-testid="compaction-rail-tooltip">
                 {anchor.summary || t('rail.compaction')}

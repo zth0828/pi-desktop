@@ -2,7 +2,7 @@
 // 覆盖：
 //   - 流式中排队的 steer 消息在 run 结束后自动投递（第二轮回复 + 队列清空）
 //   - 流式中排队的 followUp 消息在 run 结束后自动投递
-//   - 队列项「改为本轮引导」（立即发送）→ 移出 followUp 并 steer 插入当前轮
+//   - 队列项「改为插入当前轮」→ 移出下一轮队列并插入当前轮
 // mock 的 SLOW_END 分支 = 30 chunk × 100ms 且自然结束（区别于 SLOW 的挂起流，供 abort 测试）。
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -67,9 +67,14 @@ const launchOptions = () => ({
 });
 
 async function waitSessionReady(page: import('@playwright/test').Page) {
-  await expect(
-    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
-  ).toBeVisible({ timeout: 30_000 });
+  const trustDialog = page.getByTestId('trust-dialog');
+  const modelReady = page.getByTestId('model-select').or(page.getByTestId('model-badge')).first();
+  await expect(trustDialog.or(modelReady).first()).toBeVisible({ timeout: 30_000 });
+  if (await trustDialog.isVisible()) {
+    await trustDialog.getByTestId('trust-option').first().click();
+    await expect(trustDialog).toBeHidden();
+  }
+  await expect(modelReady).toBeVisible({ timeout: 30_000 });
 }
 
 /** 启动 SLOW_END 流式窗口并等聊天运行起来（chat-stop 出现）。 */
@@ -111,7 +116,7 @@ test('流式中排队的 followUp 消息在 run 结束后自动投递', async ({
 
   await startSlowEnd(page);
 
-  // Enter = 排队 followUp（稍后继续）
+  // Enter = 排队到下一轮
   await page.getByTestId('chat-input').fill('followup queued');
   await page.keyboard.press('Enter');
   const followUp = page.getByTestId('queue-item-followUp');
@@ -124,14 +129,14 @@ test('流式中排队的 followUp 消息在 run 结束后自动投递', async ({
   await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', { timeout: 30_000 });
 });
 
-test('队列项「改为本轮引导」→ 移出 followUp 并 steer 插入当前轮，run 结束后投递', async ({ launchElectronApp }) => {
+test('队列项「改为插入当前轮」→ 移出下一轮队列并插入当前轮，run 结束后投递', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
   await startSlowEnd(page);
 
-  // Enter 排队 followUp，再点「改为本轮引导」（立即发送语义）
+  // Enter 排队到下一轮，再点「改为插入当前轮」
   await page.getByTestId('chat-input').fill('steer this now');
   await page.keyboard.press('Enter');
   const followUp = page.getByTestId('queue-item-followUp');

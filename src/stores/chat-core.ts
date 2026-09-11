@@ -45,6 +45,16 @@ export type RetryState = {
 export type QueueState = { steering: string[]; followUp: string[] };
 export type TurnStats = PiRuntimeUsageTurn & { durationMs: number };
 
+type PendingPrompt = {
+  text: string;
+  images?: unknown[];
+  behavior?: 'steer' | 'followUp';
+  sessionId: string | null;
+  generation: number;
+};
+
+type PromptSubmissionResult = 'submitted' | 'retry' | 'failed' | 'stale';
+
 /** host 事件订阅入口（与 lib/host-events 的 onHostEvent 同签名；web 侧传它，测试传伪总线） */
 export type HostEventSubscriber = <M extends HostEventModule, E extends HostEventName<M>>(
   module: M,
@@ -319,6 +329,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
   // expectingReplacement 的超时兜底句柄：sessionReplaced 事件丢失（窗口重载、
   // 订阅竞态）时标志会永远悬挂，之后任意广播都可能误命中，必须在时限内收敛。
   const replacementTimer: { handle: ReturnType<typeof setTimeout> | null } = { handle: null };
+  let clearPendingCompactionFlush = () => {};
   const clearReplacementTimer = () => {
     if (replacementTimer.handle !== null) {
       clearTimeout(replacementTimer.handle);
@@ -341,6 +352,72 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
     const backgroundRuns = new Map<string, { sessionPath?: string; summary: string }>();
     // prompt 提交后等待 run.started 的窗口期标记（防「发送后立即切换」漏跟踪）
     let awaitingRun = false;
+    // pi 在 compaction 期间会拒绝 prompt；输入框已经在 renderer 清空，
+    // 所以必须在 store 内保留完整请求（包括图片和投递方式），待快照同步完成后 FIFO 重放。
+    const pendingCompactionPrompts: PendingPrompt[] = [];
+    let flushingCompactionPrompts = false;
+    let pendingCompactionFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    clearPendingCompactionFlush = () => {
+      if (pendingCompactionFlushTimer !== null) {
+        clearTimeout(pendingCompactionFlushTimer);
+        pendingCompactionFlushTimer = null;
+      }
+    };
+
+    const currentSessionId = () => get().sessionId ?? get().boundSessionId;
+    const belongsToCurrentSession = (prompt: PendingPrompt) =>
+      prompt.sessionId === currentSessionId() && prompt.generation === get().generation;
+    const schedulePendingCompactionFlush = () => {
+      if (pendingCompactionFlushTimer !== null) return;
+      pendingCompactionFlushTimer = setTimeout(() => {
+        pendingCompactionFlushTimer = null;
+        void flushPendingCompactionPrompts();
+      }, 50);
+    };
+
+    const submitPrompt = async (prompt: PendingPrompt): Promise<PromptSubmissionResult> => {
+      if (!belongsToCurrentSession(prompt)) return 'stale';
+      // 启动竞态：start 还在进行时（页面已可输入但 runtime 未就绪）先等它结束，
+      // 否则用户秒发消息会吃到「session not started」
+      for (let i = 0; i < 100 && get().starting; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      if (!belongsToCurrentSession(prompt)) return 'stale';
+      const result = await api().piRuntime.prompt(prompt.text, prompt.images, prompt.behavior);
+      if (!result.success) {
+        // compaction.started 事件与点击发送存在 IPC 时序竞争：若 pi 先拒绝，
+        // 仍转入同一 FIFO，避免把已清空的输入吞掉。
+        const promptError = result.error?.toLowerCase() ?? '';
+        if (promptError.includes('compaction is in progress') || promptError.includes('session is compacting')) return 'retry';
+        set({ runtimeError: result.error });
+        return 'failed';
+      }
+      // 压缩结果只提示到下一条消息真正提交为止；新消息已被 runtime 接收后，
+      // 状态栏应让位给当前这轮执行状态，避免旧的压缩统计一直挂着。
+      set({ lastCompaction: null });
+      awaitingRun = true; // run.started 到达后清除（applyEnvelope）
+      return 'submitted';
+    };
+
+    const flushPendingCompactionPrompts = async () => {
+      if (flushingCompactionPrompts || get().compaction || get().transcriptSyncing) return;
+      flushingCompactionPrompts = true;
+      try {
+        while (!get().compaction && !get().transcriptSyncing) {
+          const index = pendingCompactionPrompts.findIndex(belongsToCurrentSession);
+          if (index < 0) break;
+          const prompt = pendingCompactionPrompts.splice(index, 1)[0];
+          const result = await submitPrompt(prompt);
+          if (result === 'retry' || result === 'stale') {
+            pendingCompactionPrompts.splice(index, 0, prompt);
+            if (result === 'retry') schedulePendingCompactionFlush();
+            break;
+          }
+        }
+      } finally {
+        flushingCompactionPrompts = false;
+      }
+    };
 
     // 撤销替换等待（事件已应用 / 动作失败 / 新绑定建立）：清定时器与标志
     const endReplacementWait = () => {
@@ -486,25 +563,27 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       prompt: async (text, images, behavior) => {
-        // 启动竞态：start 还在进行时（页面已可输入但 runtime 未就绪）先等它结束，
-        // 否则用户秒发消息会吃到「session not started」
-        for (let i = 0; i < 100 && get().starting; i += 1) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
+        const state = get();
+        const pendingPrompt: PendingPrompt = {
+          text,
+          images,
+          behavior,
+          sessionId: state.sessionId ?? state.boundSessionId,
+          generation: state.generation,
+        };
+        // 用户已经发送新消息时，上一轮压缩统计不再代表当前输入状态；
+        // 即使消息需要等待压缩完成，也应立即收起旧提示，而不是等 runtime 接收后才清除。
+        set({ lastCompaction: null });
+        // compaction.ended 后还要先 refreshMessages；在此期间不能直接调用 pi.prompt。
+        // 这里入队而不是依赖 ChatInput 恢复草稿，保证连续发送和附件顺序都不丢。
+        if (state.compaction || state.transcriptSyncing || pendingCompactionPrompts.some(belongsToCurrentSession)) {
+          pendingCompactionPrompts.push(pendingPrompt);
+          return;
         }
-        awaitingRun = true;
-        try {
-          const result = await api().piRuntime.prompt(text, images, behavior);
-          if (!result.success) {
-            awaitingRun = false;
-            set({ isStreaming: false, running: false, runtimeError: result.error });
-          }
-        } catch (err) {
-          awaitingRun = false;
-          set({
-            isStreaming: false,
-            running: false,
-            runtimeError: err instanceof Error ? err.message : String(err),
-          });
+        const result = await submitPrompt(pendingPrompt);
+        if (result === 'retry') {
+          pendingCompactionPrompts.push(pendingPrompt);
+          schedulePendingCompactionFlush();
         }
       },
 
@@ -720,6 +799,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           contextUsage: state.contextUsage ?? null,
           transcriptSyncing: false,
         });
+        // 切回此前排队的会话时继续投递；其他会话的队列保持隔离，不能误发到当前会话。
+        void flushPendingCompactionPrompts();
       },
 
       applyModelUpdate: (result) => {
@@ -810,7 +891,9 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             // 收尾：run 结束时仍在 running 的工具（abort/error 中断）标记为中断，
             // 避免工具卡永远停在 running。willRetry 时 run 会继续，不动工具状态。
             if (event.willRetry) {
-              set({ isStreaming: false, running: false, retry: null });
+              // agent_end(willRetry) 只是一次低层请求结束，runtime 仍在退避等待；
+              // 保持整轮 running，避免发送/停止按钮和运行期状态提前进入 idle。
+              set({ isStreaming: false, running: true, retry: null });
               break;
             }
             const now = Date.now();
@@ -933,6 +1016,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           case 'compaction.ended': {
             if (event.aborted) {
               set({ compaction: null, transcriptSyncing: false, lastCompaction: null });
+              void flushPendingCompactionPrompts();
               break;
             }
             // compaction_end 只表示 pi 完成摘要请求；完整分支和新上下文
@@ -941,6 +1025,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             set({ transcriptSyncing: true, lastCompaction: event.result ?? null });
             void get().refreshMessages().then(() => {
               set({ compaction: null, transcriptSyncing: false });
+              void flushPendingCompactionPrompts();
             });
             break;
           }
@@ -956,6 +1041,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
     : () => {};
   const dispose = () => {
     clearReplacementTimer();
+    clearPendingCompactionFlush();
     unbindEvents();
   };
   return Object.assign(store, { dispose });

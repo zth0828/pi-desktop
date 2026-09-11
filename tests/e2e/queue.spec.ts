@@ -64,9 +64,14 @@ const launchOptions = () => ({
 
 /** 等会话启动（模型选择器/徽标出现 = runtime 就绪） */
 async function waitSessionReady(page: import('@playwright/test').Page) {
-  await expect(
-    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
-  ).toBeVisible({ timeout: 30_000 });
+  const trustDialog = page.getByTestId('trust-dialog');
+  const modelReady = page.getByTestId('model-select').or(page.getByTestId('model-badge')).first();
+  await expect(trustDialog.or(modelReady).first()).toBeVisible({ timeout: 30_000 });
+  if (await trustDialog.isVisible()) {
+    await trustDialog.getByTestId('trust-option').first().click();
+    await expect(trustDialog).toBeHidden();
+  }
+  await expect(modelReady).toBeVisible({ timeout: 30_000 });
 }
 
 /** SLOW 流式窗口（30 chunk × 100ms）内默认发送一条 steer 消息。 */
@@ -120,19 +125,23 @@ test('停止当前运行会清空队列并将内容恢复到编辑器', async ({
   await expect(page.getByTestId('chat-input')).toHaveValue('guide before stop\n\nsecond guide');
 });
 
-test('已发送横栏可从引导回复切换为直接发送', async ({ launchElectronApp }) => {
+test('已发送横栏可在当前轮与下一轮发送之间切换', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
   const item = await startSlowAndQueue(page, 'send this after the task');
 
-  // 默认是 steer；在已发送横栏中切换为 followUp。
+  // 默认插入当前轮；在消息栏中切换为下一轮发送。
+  await expect(item).toContainText(/插入当前轮|Insert into current turn/);
+  await expect(page.getByTestId('queue-mode-steering-0')).toContainText(/改为下一轮发送|Switch to next turn/);
   await page.getByTestId('queue-mode-steering-0').click();
   await expect(item).toHaveCount(0, { timeout: 30_000 });
   const followUp = page.getByTestId('queue-item-followUp');
   await expect(followUp).toBeVisible({ timeout: 30_000 });
+  await expect(followUp).toContainText(/下一轮发送|Send in next turn/);
   await expect(followUp).toContainText('send this after the task');
+  await expect(page.getByTestId('queue-mode-followUp-0')).toContainText(/改为插入当前轮|Switch to current turn/);
 
   await page.getByTestId('chat-stop').click();
 });
