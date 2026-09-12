@@ -192,49 +192,64 @@ npm i -g @earendil-works/pi-coding-agent
 pi --version
 ```
 
-## Download Preview Builds
+## Installation Guide
 
-Download the package for your platform from
-[GitHub Releases](https://github.com/zth0828/pi-desktop/releases). Compare the
-file against the published `SHA256SUMS-<platform>.txt` before opening it.
+### Option A: Prebuilt Packages (Recommended)
 
-The macOS release workflow has two modes. When Apple credentials are available,
-it produces Developer ID signed and notarized packages that open normally.
-Without those credentials, it produces a fully ad-hoc signed preview and adds
-a prominent `Install Pi Desktop.command` to the DMG. Double-click the installer;
-if browser quarantine blocks it, run it through Terminal to install without
-changing Privacy & Security settings. Direct Finder launch of the app remains
-unavailable for unsigned applications. Windows and Linux preview packages are
-also unsigned.
+Download the package for your platform from [GitHub Releases](https://github.com/zth0828/pi-desktop/releases):
 
-The `v0.1.0` macOS packages predate the bundled installer. After checking
-`SHA256SUMS-macOS.txt`, install the app and remove quarantine from this app only:
+| Operating System | Format | Architectures | Notes |
+| :--- | :--- | :--- | :--- |
+| **macOS** | `.dmg` | Apple Silicon (arm64) / Intel (x64) | Drag to `/Applications` to install |
+| **Windows** | `.exe` (Setup) | 64-bit (x64) | Standard Windows installer wizard |
+| **Linux** | `.AppImage` / `.deb` | x64 / arm64 | AppImage requires no installation; deb for Debian/Ubuntu |
 
-```bash
-xattr -dr com.apple.quarantine "/Applications/Pi Desktop.app"
-```
+> [!TIP]
+> **Modern In-Place Auto-Updates**  
+> Pi Desktop features an online in-place auto-updater. When a new version is released, the client can silently download it in the background and display "Restart & Apply Update" in Settings. Clicking it atomically swaps the application bundle in place and relaunches smoothly without dragging DMGs manually. Upon restart, a "What's New" modal presents the latest release notes. Users in regions with restricted access to GitHub can configure a download mirror (e.g. `https://ghproxy.net/`) in Settings for fast resume-supported downloads.
 
-Do not use `sudo spctl --master-disable`: it disables Gatekeeper globally for
-every downloaded application. A system warning does not mean the download is
-corrupt, but never bypass one for a file whose checksum or source you cannot
-verify.
+---
 
-### macOS release signing
+## 🛠️ Troubleshooting
 
-Tag releases require an active Apple Developer Program membership and these
-GitHub Actions repository secrets:
+### macOS displays "App is damaged and can't be opened"?
 
-- `MACOS_CSC_LINK`: base64-encoded `.p12` containing the Developer ID
-  Application certificate and private key
-- `MACOS_CSC_KEY_PASSWORD`: password used when exporting that `.p12`
-- `APPLE_ID`: Apple account used for notarization
-- `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for that account
-- `APPLE_TEAM_ID`: the 10-character Apple Developer team ID
+Current open-source preview builds are not yet signed with a paid Apple Developer ID certificate. macOS Gatekeeper flags unsigned applications as quarantined. **This does not indicate a corrupt download. You can quickly unblock it:**
 
-When all five secrets are present, the release job signs, notarizes, and checks
-the app's sealed signature, Gatekeeper assessment, stapled notarization ticket,
-and signed DMG. When they are absent, it deliberately uses ad-hoc signing and
-verifies bundle integrity before publishing the terminal-based installer.
+1. **Terminal one-liner (Recommended)**:
+   Open Terminal and run:
+   ```bash
+   sudo xattr -rd com.apple.quarantine "/Applications/Pi Desktop.app"
+   ```
+2. **System Settings**:
+   Go to macOS **System Settings → Privacy & Security**, scroll down to "Security", and click **"Open Anyway"** next to Pi Desktop.
+
+### Windows displays Defender SmartScreen warning?
+
+On unsigned preview builds, Windows Defender SmartScreen may display a blue warning:
+- Click **"More info"**;
+- Click **"Run anyway"**.
+
+### Slow downloads or timeouts in restricted network environments?
+
+If direct GitHub downloads time out or fail:
+- Open Pi Desktop **Settings**;
+- Under **"Download Mirror"**, enter the recommended mirror prefix: `https://ghproxy.net/` to enable accelerated downloads with HTTP Range resumption.
+
+---
+
+## Security & Privacy
+
+- **100% Local-First**: Pi Desktop is a native local desktop workbench. It connects directly to your configured model providers with no proprietary cloud backend or data collection.
+- **Data stays on your machine**:
+  - Session history, credentials, and settings remain in your native pi directories (such as `~/.pi`).
+  - Chat logs and code remain strictly local.
+- **Network requests**:
+  - The app only accesses the network when you interact with AI models (direct to provider endpoints), check for updates, or download extensions.
+- **Zero Lock-in**:
+  - Fully native to the pi ecosystem. All work done in Pi Desktop can be resumed seamlessly in the `pi` CLI at any time.
+
+---
 
 ## Run from Source
 

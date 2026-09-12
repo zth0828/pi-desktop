@@ -172,21 +172,64 @@ npm i -g @earendil-works/pi-coding-agent
 pi --version
 ```
 
-## 下载预览版
+## 安装指南 (Installation)
 
-从 [GitHub Releases](https://github.com/zth0828/pi-desktop/releases) 下载对应平台的
-安装包。打开前请对照随 Release 发布的 `SHA256SUMS-<platform>.txt` 校验文件。
+### 选项 A: 预编译安装包 (推荐)
 
-当前预览包**尚未进行代码签名或 Apple 公证**：
+前往 [GitHub Releases](https://github.com/zth0828/pi-desktop/releases) 下载对应操作系统的安装包：
 
-- **macOS：** Gatekeeper 首次启动时可能阻止打开。右键点击 Pi Desktop 并选择
-  **打开**，或在**系统设置 → 隐私与安全性**中允许打开。
-- **Windows：** 可能出现 Microsoft Defender SmartScreen。确认校验和与仓库来源
-  后，选择**更多信息 → 仍要运行**。
-- **Linux：** AppImage 必要时先执行 `chmod +x Pi-Desktop-*.AppImage`。
+| 操作系统 | 安装包格式 | 架构支持 | 说明 |
+| :--- | :--- | :--- | :--- |
+| **macOS** | `.dmg` | Apple Silicon (arm64) / Intel (x64) | 拖拽至 Applications 即可运行 |
+| **Windows** | `.exe` (Setup) | 64 位 (x64) | 标准 Windows 安装向导 |
+| **Linux** | `.AppImage` / `.deb` | x64 / arm64 | AppImage 免安装即开即用，deb 适用于 Debian/Ubuntu |
 
-正式代码签名与 macOS 公证需要平台证书，后续会单独接入。系统警告不代表文件已经
-损坏，但对于无法确认来源或校验和的文件，请勿绕过安全提示。
+> [!TIP]
+> **现代在线就地热更新（In-Place Auto-Update）**  
+> Pi Desktop 支持完整的在线热更新体验。检测到新版本时，客户端可在后台静默下载，并在设置页提示「重启并应用更新」，一键完成就地原子替换与自动重启；更新重启后自动呈现「What's New」更新特性弹窗。若在国内网络环境下，可在「设置 → 下载镜像加速」中配置 GitHub 镜像前缀（如 `https://ghproxy.net/`）享受高速下载与断点续传。
+
+---
+
+## 🛠️ 常见问题排查 (Troubleshooting)
+
+### macOS 提示“应用已损坏，无法打开”？
+
+当前开源预览版本尚未接入 Apple 开发者证书签名与公证，macOS Gatekeeper 安全机制会将未签名应用标记为隔离状态（quarantine）并提示“已损坏”。**这并不代表文件损坏，可通过以下任一方式快速修复：**
+
+1. **终端一行命令解除隔离（推荐）**：
+   打开终端（Terminal），执行以下命令：
+   ```bash
+   sudo xattr -rd com.apple.quarantine "/Applications/Pi Desktop.app"
+   ```
+2. **系统设置放行**：
+   前往 macOS **「系统设置」→「隐私与安全性」**，向下滑动找到“安全性”一栏，点击被阻止的 Pi Desktop 旁边的 **「仍要打开」**。
+
+### Windows 提示 Defender SmartScreen 拦截？
+
+Windows 预览版本可能出现 Microsoft Defender SmartScreen 提示窗口：
+- 点击窗口中的 **「更多信息」**；
+- 点击右下角的 **「仍要运行」** 即可。
+
+### 国内网络环境下下载或更新卡顿？
+
+GitHub 下载在部分国内网络环境下可能出现连通困难：
+- 打开 Pi Desktop **设置**，找到 **「下载镜像加速」**；
+- 输入官方推荐的加速镜像前缀：`https://ghproxy.net/`，即可享受快速下载与断点续传。
+
+---
+
+## 安全性与隐私（简明版）
+
+- **100% 本地优先（Local-First）**：这是一个纯本地桌面客户端，不设任何自建云端中转服务器，不需要注册第三方平台账号。
+- **数据完全保存在本机**：
+  - 会话历史、用户凭据与配置全部保存在用户本地原生目录（如 `~/.pi`）；
+  - 聊天记录与本地代码完全私有，绝不上传到任何非用户授权的第三方服务器。
+- **何时联网**：
+  - 仅在你与 AI 模型对话（直接向你配置的模型供应商发起 API 请求）、检查版本更新或下载扩展包时联网。
+- **零锁定（Zero Lock-in）**：
+  - 100% 遵循 pi 原生 SDK 与规范，你在桌面端的所有会话与资产，均可直接在 `pi` 官方命令行 CLI 中无缝读取与继续。
+
+---
 
 ## 从源码运行
 
