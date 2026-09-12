@@ -33,9 +33,20 @@ describe('app update asset selection', () => {
     expect(selectAssetName(assets, 'win32', 'x64')).toBe('Pi.Desktop-Setup-0.2.2-x64.exe');
   });
 
-  it('selects the matching macOS architecture', () => {
+  it('selects the matching macOS architecture and falls back to dmg when zip is absent', () => {
     expect(selectAsset(assets, 'darwin', 'arm64')).toEqual({ name: 'Pi.Desktop-0.2.2-arm64.dmg', url: 'dmg-arm' });
     expect(selectAsset(assets, 'darwin', 'x64')).toEqual({ name: 'Pi.Desktop-0.2.2-x64.dmg', url: 'dmg-x64' });
     expect(selectAssetName(assets, 'darwin', 'arm64')).toBe('Pi.Desktop-0.2.2-arm64.dmg');
+  });
+
+  it('prefers zip on macOS for in-place auto-update when available', () => {
+    const assetsWithZip = [
+      ...assets,
+      { name: 'Pi.Desktop-0.2.2-arm64.zip', browser_download_url: 'zip-arm' },
+      { name: 'Pi.Desktop-0.2.2-mac-x64.zip', browser_download_url: 'zip-x64' },
+    ];
+    expect(selectAsset(assetsWithZip, 'darwin', 'arm64')).toEqual({ name: 'Pi.Desktop-0.2.2-arm64.zip', url: 'zip-arm' });
+    expect(selectAsset(assetsWithZip, 'darwin', 'x64')).toEqual({ name: 'Pi.Desktop-0.2.2-mac-x64.zip', url: 'zip-x64' });
+    expect(selectAssetName(assetsWithZip, 'darwin', 'arm64')).toBe('Pi.Desktop-0.2.2-arm64.zip');
   });
 });

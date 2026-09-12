@@ -181,4 +181,49 @@ describe('version-check-api', () => {
     expect(checkResult.app.updateAvailable).toBe(false);
     expect(checkResult.app.error).toBe('Network error');
   });
+
+  it('supports skipVersion and unskipVersion', async () => {
+    await versionCheckApi.skipVersion({ version: 'v1.2.0' });
+    expect(settingsApiMock.set).toHaveBeenCalledWith({
+      key: 'appVersionCheckSkippedVersion',
+      value: 'v1.2.0',
+    });
+
+    await versionCheckApi.unskipVersion();
+    expect(settingsApiMock.set).toHaveBeenCalledWith({
+      key: 'appVersionCheckSkippedVersion',
+      value: undefined,
+    });
+  });
+
+  it('detects version jump when lastRunVersion is older than current version', async () => {
+    // Current app version is mocked as '0.4.0'
+    settingsApiMock.getAll.mockResolvedValue({
+      lastRunVersion: '0.3.0',
+      appVersionCheckReleaseNotes: 'New feature notes',
+    });
+
+    const jump = await versionCheckApi.checkVersionJump();
+    expect(jump).toEqual({
+      hasJump: true,
+      previousVersion: '0.3.0',
+      currentVersion: '0.4.0',
+      releaseNotes: 'New feature notes',
+    });
+
+    await versionCheckApi.dismissVersionJump();
+    expect(settingsApiMock.set).toHaveBeenCalledWith({
+      key: 'lastRunVersion',
+      value: '0.4.0',
+    });
+  });
+
+  it('does not detect version jump when versions match', async () => {
+    settingsApiMock.getAll.mockResolvedValue({
+      lastRunVersion: '0.4.0',
+    });
+
+    const jump = await versionCheckApi.checkVersionJump();
+    expect(jump).toEqual({ hasJump: false });
+  });
 });
