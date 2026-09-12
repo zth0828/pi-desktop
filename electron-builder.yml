@@ -48,14 +48,6 @@ dmg:
       y: 140
       type: link
       path: /Applications
-    - x: 270
-      y: 285
-      type: file
-      path: resources/macos/Install Pi Desktop.command
-    - x: 270
-      y: 360
-      type: file
-      path: resources/macos/Uninstall Pi Desktop.command
 
 win:
   icon: resources/icon.ico
