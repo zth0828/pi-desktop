@@ -28,7 +28,7 @@ export type HostEventContract = {
     progress: (payload: import('../host-api/contract').AppUpdateProgressEvent) => void;
   };
   versionCheck: {
-    updateAvailable: (payload: { current: string; latest: string; releaseUrl?: string; kind: 'app' | 'pi' }) => void;
+    updateAvailable: (payload: { current: string; latest: string; releaseUrl?: string; releaseNotes?: string; kind: 'app' | 'pi' }) => void;
   };
   piSystem: {
     installProgress: (payload: PiInstallProgressEvent) => void;

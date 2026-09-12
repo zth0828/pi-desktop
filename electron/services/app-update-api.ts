@@ -198,14 +198,14 @@ export const appUpdateApi = {
         const releaseChannels = customMirror
           ? [releaseUrl(customMirror), githubUrl(), ...(isCustomUrl ? [] : [releaseUrl(DEFAULT_DOWNLOAD_MIRROR)])]
           : (isCustomUrl ? [githubUrl()] : [githubUrl(), releaseUrl(DEFAULT_DOWNLOAD_MIRROR)]);
-        let release: { tag_name?: string; assets?: Array<{ name: string; browser_download_url: string }> } | undefined;
+        let release: { tag_name?: string; body?: string; assets?: Array<{ name: string; browser_download_url: string }> } | undefined;
         let lastReleaseError: unknown;
 
         for (const rUrl of releaseChannels) {
           try {
             const res = await hostFetch(rUrl, { signal: AbortSignal.timeout(10000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
             if (res.ok) {
-              release = (await res.json()) as { tag_name?: string; assets?: Array<{ name: string; browser_download_url: string }> };
+              release = (await res.json()) as { tag_name?: string; body?: string; assets?: Array<{ name: string; browser_download_url: string }> };
               break;
             }
           } catch (err) {
@@ -275,8 +275,9 @@ export const appUpdateApi = {
         await settingsApi.set({ key: 'appVersionCheckDownloadedPath', value: finalPath });
         const version = release.tag_name?.replace(/^v/, '');
         const isSilent = payload?.silent === true;
-        sendHostEvent('appUpdate', 'progress', { phase: 'completed', path: finalPath, stagedAppPath, version, silent: isSilent });
-        sendHostEvent('appUpdate', 'progress', { phase: 'ready', path: finalPath, stagedAppPath, version, silent: isSilent });
+        const releaseNotes = release.body;
+        sendHostEvent('appUpdate', 'progress', { phase: 'completed', path: finalPath, stagedAppPath, version, releaseNotes, silent: isSilent });
+        sendHostEvent('appUpdate', 'progress', { phase: 'ready', path: finalPath, stagedAppPath, version, releaseNotes, silent: isSilent });
         return { success: true, path: finalPath, assetName: asset.name, stagedAppPath };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

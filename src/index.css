@@ -9219,7 +9219,7 @@ button.queue-attachment-file:hover {
 }
 
 .version-install-dialog {
-  width: min(460px, 90vw);
+  width: min(500px, 92vw);
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -9288,5 +9288,43 @@ button.queue-attachment-file:hover {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* 版本更新内容 / Release Notes 滚动预览容器 */
+.version-install-changelog {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.version-install-changelog-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.version-install-notes-scroll,
+.version-jump-notes-scroll {
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.version-jump-dialog {
+  width: min(520px, 92vw);
+}
+
+.version-jump-subtitle {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
 }
 

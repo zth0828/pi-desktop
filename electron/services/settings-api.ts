@@ -43,6 +43,7 @@ export const settingsApi = {
       downloadMirror: store.get('downloadMirror') as string | undefined,
       autoDownloadUpdate: (store.get('autoDownloadUpdate') ?? true) as boolean,
       lastRunVersion: store.get('lastRunVersion') as string | undefined,
+      lastReleaseNotes: store.get('lastReleaseNotes') as string | undefined,
       closeAction: store.get('closeAction') as SettingsSnapshot['closeAction'],
     };
   },

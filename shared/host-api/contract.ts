@@ -171,6 +171,7 @@ export type VersionCheckPendingNotice = {
   current: string;
   latest: string;
   releaseUrl?: string;
+  releaseNotes?: string;
   kind: 'app' | 'pi';
 };
 
@@ -203,6 +204,7 @@ export type AppUpdateProgressEvent = {
   path?: string;
   stagedAppPath?: string;
   version?: string;
+  releaseNotes?: string;
   silent?: boolean;
   retryAttempt?: number;
   maxRetries?: number;
@@ -592,6 +594,7 @@ export type SettingsSnapshot = {
   downloadMirror?: string;
   autoDownloadUpdate?: boolean;
   lastRunVersion?: string;
+  lastReleaseNotes?: string;
   /** 关闭主窗口时的行为：minimize=最小化/隐藏到托盘或后台（默认），quit=直接退出应用 */
   closeAction?: 'minimize' | 'quit';
 };

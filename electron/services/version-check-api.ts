@@ -192,6 +192,9 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
 
   // 若本地版本已高于或等于缓存的最新版本，说明缓存已过时失效，自动清理
   if (saved.appVersionCheckLatest && !compare(currentApp, saved.appVersionCheckLatest)) {
+    if (saved.appVersionCheckReleaseNotes) {
+      void settingsApi.set({ key: 'lastReleaseNotes', value: saved.appVersionCheckReleaseNotes });
+    }
     saved.appVersionCheckLatest = undefined;
     saved.appVersionCheckAssetName = undefined;
     saved.appVersionCheckReleaseUrl = undefined;
@@ -253,6 +256,7 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
         current,
         latest: appResult.latest!,
         releaseUrl: appResult.releaseUrl,
+        releaseNotes: appResult.releaseNotes,
         kind: 'app',
       });
     }
@@ -363,6 +367,7 @@ export const versionCheckApi = {
         current: appCurrent,
         latest: saved.appVersionCheckLatest!,
         releaseUrl: saved.appVersionCheckReleaseUrl,
+        releaseNotes: saved.appVersionCheckReleaseNotes,
         kind: 'app' as const,
       };
     }
@@ -396,13 +401,14 @@ export const versionCheckApi = {
         hasJump: true,
         previousVersion: lastRun,
         currentVersion: current,
-        releaseNotes: saved.appVersionCheckReleaseNotes,
+        releaseNotes: saved.lastReleaseNotes || saved.appVersionCheckReleaseNotes,
       };
     }
     return { hasJump: false };
   },
   dismissVersionJump: async () => {
     await settingsApi.set({ key: 'lastRunVersion', value: appApi.version() });
+    await settingsApi.set({ key: 'lastReleaseNotes', value: undefined });
     return { success: true };
   },
   skipVersion: async (payload: { version: string }) => {

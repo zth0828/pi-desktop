@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CheckCircle, FolderOpen, RefreshCw, X } from 'lucide-react';
 import { onHostEvent } from '../lib/host-events';
 import { hostApi } from '../lib/host-api';
+import { Markdown } from './Markdown';
 
 export function VersionInstallDialog() {
   const { t } = useTranslation();
@@ -12,6 +13,7 @@ export function VersionInstallDialog() {
   const [showRunningWarning, setShowRunningWarning] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [targetVersion, setTargetVersion] = useState<string | null>(null);
+  const [releaseNotes, setReleaseNotes] = useState<string | null>(null);
   const [platform, setPlatform] = useState<string>(() => window.pidesktop?.platform ?? '');
 
   useEffect(() => {
@@ -23,6 +25,7 @@ export function VersionInstallDialog() {
         }
         setCompletedPath(event.path ?? '');
         if (event.version) setTargetVersion(event.version);
+        if (event.releaseNotes) setReleaseNotes(event.releaseNotes);
         setFailedError(null);
         setRetryStatus(null);
         setShowRunningWarning(false);
@@ -79,6 +82,16 @@ export function VersionInstallDialog() {
     }
     handleDismiss();
   };
+
+  useEffect(() => {
+    if (completedPath && !releaseNotes) {
+      void hostApi.versionCheck.getStatus().then((status) => {
+        if (status.app.releaseNotes) {
+          setReleaseNotes(status.app.releaseNotes);
+        }
+      }).catch(() => {});
+    }
+  }, [completedPath, releaseNotes]);
 
   useEffect(() => {
     if (!failedError && !completedPath) return;
@@ -193,6 +206,16 @@ export function VersionInstallDialog() {
               {fileName && (
                 <div className="version-install-file-info">
                   <span className="version-install-filename">{fileName}</span>
+                </div>
+              )}
+              {releaseNotes?.trim() && (
+                <div className="version-install-changelog" data-testid="version-install-changelog">
+                  <div className="version-install-changelog-title">
+                    {t('settings.version.releaseNotesTitle', { version: targetVersion ?? '' })}
+                  </div>
+                  <div className="version-install-notes-scroll">
+                    <Markdown text={releaseNotes.trim()} />
+                  </div>
                 </div>
               )}
             </>
