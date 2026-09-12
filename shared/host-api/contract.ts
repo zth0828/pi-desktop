@@ -160,6 +160,9 @@ export type VersionCheckSnapshot = {
     releaseNotes?: string;
     assetName?: string;
     downloadedPath?: string;
+    stagedAppPath?: string;
+    readyToInstall?: boolean;
+    skipped?: boolean;
   };
 };
 
@@ -171,17 +174,37 @@ export type VersionCheckPendingNotice = {
   kind: 'app' | 'pi';
 };
 
+export type VersionJumpInfo = {
+  hasJump: boolean;
+  previousVersion?: string;
+  currentVersion?: string;
+  releaseNotes?: string;
+};
+
 export type AppUpdateDownloadResult = HostSuccess & {
   path?: string;
   assetName?: string;
+  stagedAppPath?: string;
 };
 
+export type AppUpdateProgressPhase =
+  | 'started'
+  | 'progress'
+  | 'completed'
+  | 'ready'
+  | 'retrying'
+  | 'failed';
+
 export type AppUpdateProgressEvent = {
-  phase: 'started' | 'progress' | 'completed' | 'failed';
+  phase: AppUpdateProgressPhase;
   downloadedBytes?: number;
   totalBytes?: number;
   speedBytesPerSec?: number;
   path?: string;
+  stagedAppPath?: string;
+  version?: string;
+  retryAttempt?: number;
+  maxRetries?: number;
   error?: string;
 };
 
@@ -559,11 +582,15 @@ export type SettingsSnapshot = {
   appVersionCheckReleaseNotes?: string;
   appVersionCheckAssetName?: string;
   appVersionCheckDownloadedPath?: string;
+  appVersionCheckStagedAppPath?: string;
+  appVersionCheckSkippedVersion?: string;
   appVersionCheckNoticedLatest?: string;
   appVersionCheckNoticedAt?: number;
   piVersionCheckNoticedLatest?: string;
   piVersionCheckNoticedAt?: number;
   downloadMirror?: string;
+  autoDownloadUpdate?: boolean;
+  lastRunVersion?: string;
   /** 关闭主窗口时的行为：minimize=最小化/隐藏到托盘或后台（默认），quit=直接退出应用 */
   closeAction?: 'minimize' | 'quit';
 };
@@ -1112,9 +1139,13 @@ export type HostApiContract = {
     getPendingNotice: () => VersionCheckPendingNotice | null;
     /** 用户关闭/点击通知后标记该版本已读，重启不再弹。 */
     dismissNotice: (payload: { kind: 'app' | 'pi'; latest: string }) => HostSuccess;
+    checkVersionJump: () => VersionJumpInfo;
+    dismissVersionJump: () => HostSuccess;
+    skipVersion: (payload: { version: string }) => HostSuccess;
+    unskipVersion: () => HostSuccess;
   };
   appUpdate: {
-    download: () => AppUpdateDownloadResult;
+    download: (payload?: { silent?: boolean }) => AppUpdateDownloadResult;
     openDownloaded: () => HostSuccess;
     showDownloaded: () => HostSuccess;
     installDownloaded: (payload?: { force?: boolean }) => HostSuccess;

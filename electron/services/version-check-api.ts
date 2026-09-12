@@ -6,7 +6,7 @@ import { compareSemver, parseSemver } from '../utils/semver';
 import { hostFetch } from '../utils/host-fetch';
 import { sendHostEvent } from '../main/ipc/host-events';
 
-import { selectAssetName } from './app-update-api';
+import { appUpdateApi, selectAssetName } from './app-update-api';
 
 export const VERSION_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 export const GITHUB_RELEASE_URL = 'https://api.github.com/repos/zth0828/pi-desktop/releases/latest';
@@ -242,7 +242,13 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
 
   const appStatusPromise = (appDue ? checkApp(appPrevious, now) : Promise.resolve(appPrevious)).then((appResult) => {
     const current = ('current' in appResult && typeof appResult.current === 'string') ? appResult.current : currentApp;
-    if (isNoticePending({ current, latest: appResult.latest, noticedLatest: saved.appVersionCheckNoticedLatest, noticedAt: saved.appVersionCheckNoticedAt, now })) {
+    const isSkipped = Boolean(
+      saved.appVersionCheckSkippedVersion &&
+      appResult.latest &&
+      saved.appVersionCheckSkippedVersion === appResult.latest,
+    );
+
+    if (!isSkipped && isNoticePending({ current, latest: appResult.latest, noticedLatest: saved.appVersionCheckNoticedLatest, noticedAt: saved.appVersionCheckNoticedAt, now })) {
       sendHostEvent('versionCheck', 'updateAvailable', {
         current,
         latest: appResult.latest!,
@@ -250,6 +256,16 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
         kind: 'app',
       });
     }
+
+    const hasNewer = appResult.latest && compare(current, appResult.latest);
+    if (!isSkipped && hasNewer && saved.autoDownloadUpdate !== false) {
+      if (!saved.appVersionCheckDownloadedPath && !saved.appVersionCheckStagedAppPath) {
+        void appUpdateApi.download({ silent: true }).catch((err) => {
+          console.warn('[versionCheckApi] Silent background download failed:', err);
+        });
+      }
+    }
+
     return appResult;
   });
 
@@ -264,7 +280,25 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
     });
   }
 
-  return updateStatus({ pi, app: { ...appStatus, downloadedPath: saved.appVersionCheckDownloadedPath } });
+  const stagedAppPath = saved.appVersionCheckStagedAppPath;
+  const downloadedPath = saved.appVersionCheckDownloadedPath;
+  const readyToInstall = Boolean(stagedAppPath || downloadedPath);
+  const skipped = Boolean(
+    saved.appVersionCheckSkippedVersion &&
+    appStatus.latest &&
+    saved.appVersionCheckSkippedVersion === appStatus.latest,
+  );
+
+  return updateStatus({
+    pi,
+    app: {
+      ...appStatus,
+      downloadedPath,
+      stagedAppPath,
+      readyToInstall,
+      skipped,
+    },
+  });
 }
 
 export const versionCheckApi = {
@@ -278,6 +312,15 @@ export const versionCheckApi = {
     const currentApp = appApi.version();
     const appHasNewer = saved.appVersionCheckLatest && compare(currentApp, saved.appVersionCheckLatest);
     const piHasNewer = saved.piVersionCheckLatest && currentPi && compare(currentPi, saved.piVersionCheckLatest);
+    const downloadedPath = appHasNewer ? saved.appVersionCheckDownloadedPath : undefined;
+    const stagedAppPath = appHasNewer ? saved.appVersionCheckStagedAppPath : undefined;
+    const readyToInstall = Boolean(appHasNewer && (stagedAppPath || downloadedPath));
+    const skipped = Boolean(
+      saved.appVersionCheckSkippedVersion &&
+      saved.appVersionCheckLatest &&
+      saved.appVersionCheckSkippedVersion === saved.appVersionCheckLatest,
+    );
+
     return updateStatus({
       pi: {
         current: currentPi,
@@ -297,7 +340,10 @@ export const versionCheckApi = {
         releaseUrl: appHasNewer ? saved.appVersionCheckReleaseUrl : undefined,
         releaseNotes: appHasNewer ? saved.appVersionCheckReleaseNotes : undefined,
         assetName: appHasNewer ? saved.appVersionCheckAssetName : undefined,
-        downloadedPath: appHasNewer ? saved.appVersionCheckDownloadedPath : undefined,
+        downloadedPath,
+        stagedAppPath,
+        readyToInstall,
+        skipped,
       },
     });
   },
@@ -305,7 +351,13 @@ export const versionCheckApi = {
     const saved = await settingsApi.getAll();
     const appCurrent = appApi.version();
     const now = Date.now();
-    if (isNoticePending({ current: appCurrent, latest: saved.appVersionCheckLatest, noticedLatest: saved.appVersionCheckNoticedLatest, noticedAt: saved.appVersionCheckNoticedAt, now })) {
+    const isSkipped = Boolean(
+      saved.appVersionCheckSkippedVersion &&
+      saved.appVersionCheckLatest &&
+      saved.appVersionCheckSkippedVersion === saved.appVersionCheckLatest,
+    );
+
+    if (!isSkipped && isNoticePending({ current: appCurrent, latest: saved.appVersionCheckLatest, noticedLatest: saved.appVersionCheckNoticedLatest, noticedAt: saved.appVersionCheckNoticedAt, now })) {
       return {
         current: appCurrent,
         latest: saved.appVersionCheckLatest!,
@@ -328,6 +380,36 @@ export const versionCheckApi = {
       await settingsApi.set({ key: 'piVersionCheckNoticedLatest', value: payload.latest });
       await settingsApi.set({ key: 'piVersionCheckNoticedAt', value: now });
     }
+    return { success: true };
+  },
+  checkVersionJump: async () => {
+    const current = appApi.version();
+    const saved = await settingsApi.getAll();
+    const lastRun = saved.lastRunVersion;
+    if (!lastRun) {
+      await settingsApi.set({ key: 'lastRunVersion', value: current });
+      return { hasJump: false };
+    }
+    if (compare(lastRun, current)) {
+      return {
+        hasJump: true,
+        previousVersion: lastRun,
+        currentVersion: current,
+        releaseNotes: saved.appVersionCheckReleaseNotes,
+      };
+    }
+    return { hasJump: false };
+  },
+  dismissVersionJump: async () => {
+    await settingsApi.set({ key: 'lastRunVersion', value: appApi.version() });
+    return { success: true };
+  },
+  skipVersion: async (payload: { version: string }) => {
+    await settingsApi.set({ key: 'appVersionCheckSkippedVersion', value: payload.version });
+    return { success: true };
+  },
+  unskipVersion: async () => {
+    await settingsApi.set({ key: 'appVersionCheckSkippedVersion', value: undefined });
     return { success: true };
   },
 };

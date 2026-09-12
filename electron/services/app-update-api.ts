@@ -1,7 +1,8 @@
 import { app, shell } from 'electron';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, rename, rm, stat } from 'node:fs/promises';
+import { createReadStream, createWriteStream, existsSync } from 'node:fs';
+import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { buildMirrorUrl, DEFAULT_DOWNLOAD_MIRROR, type AppUpdateDownloadResult, type HostSuccess } from '@shared/host-api/contract';
 import { settingsApi } from './settings-api';
@@ -30,10 +31,14 @@ export function selectAsset(
   arch = process.arch,
 ): { name: string; url: string } | null {
   const assetArch = platformAssetArch(platform, arch);
-  const candidates = assets.filter((asset) => assetArch.some((suffix) => asset.name.includes(`-${suffix}.`)));
+  const candidates = assets.filter((asset) =>
+    assetArch.some((suffix) => asset.name.includes(`-${suffix}.`) || asset.name.includes(`-${suffix}-`)),
+  );
   if (platform === 'darwin') {
-    const asset = candidates.find((candidate) => candidate.name.endsWith('.dmg'));
-    return asset ? { name: asset.name, url: asset.browser_download_url } : null;
+    const zipAsset = candidates.find((candidate) => candidate.name.endsWith('.zip'));
+    if (zipAsset) return { name: zipAsset.name, url: zipAsset.browser_download_url };
+    const dmgAsset = candidates.find((candidate) => candidate.name.endsWith('.dmg'));
+    return dmgAsset ? { name: dmgAsset.name, url: dmgAsset.browser_download_url } : null;
   }
   if (platform === 'win32') {
     const asset = candidates.find((candidate) => candidate.name.includes('-Setup-') && candidate.name.endsWith('.exe'));
@@ -80,6 +85,12 @@ async function downloadToFile(
   for (const channelUrl of channels) {
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) {
+        sendHostEvent('appUpdate', 'progress', {
+          phase: 'retrying',
+          retryAttempt: attempt + 1,
+          maxRetries: 3,
+          error: lastError instanceof Error ? lastError.message : String(lastError ?? 'Network error'),
+        });
         await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
       }
       try {
@@ -175,7 +186,7 @@ async function fetchChecksumText(
 }
 
 export const appUpdateApi = {
-  download: (): Promise<AppUpdateDownloadResult> => {
+  download: (payload?: { silent?: boolean }): Promise<AppUpdateDownloadResult> => {
     if (inFlight) return inFlight;
     inFlight = (async () => {
       let tempPath: string | undefined;
@@ -187,14 +198,14 @@ export const appUpdateApi = {
         const releaseChannels = customMirror
           ? [releaseUrl(customMirror), githubUrl(), ...(isCustomUrl ? [] : [releaseUrl(DEFAULT_DOWNLOAD_MIRROR)])]
           : (isCustomUrl ? [githubUrl()] : [githubUrl(), releaseUrl(DEFAULT_DOWNLOAD_MIRROR)]);
-        let release: { assets?: Array<{ name: string; browser_download_url: string }> } | undefined;
+        let release: { tag_name?: string; assets?: Array<{ name: string; browser_download_url: string }> } | undefined;
         let lastReleaseError: unknown;
 
         for (const rUrl of releaseChannels) {
           try {
             const res = await hostFetch(rUrl, { signal: AbortSignal.timeout(10000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
             if (res.ok) {
-              release = (await res.json()) as { assets?: Array<{ name: string; browser_download_url: string }> };
+              release = (await res.json()) as { tag_name?: string; assets?: Array<{ name: string; browser_download_url: string }> };
               break;
             }
           } catch (err) {
@@ -235,9 +246,37 @@ export const appUpdateApi = {
         await rm(finalPath, { force: true }).catch(() => undefined);
         await rename(tempPath, finalPath);
         tempPath = undefined;
+
+        let stagedAppPath: string | undefined;
+        if (process.platform === 'darwin' && finalPath.endsWith('.zip')) {
+          try {
+            const stagedDir = path.join(app.getPath('userData'), 'updates', 'staged');
+            await rm(stagedDir, { recursive: true, force: true }).catch(() => undefined);
+            await mkdir(stagedDir, { recursive: true });
+            await new Promise<void>((resolve, reject) => {
+              const child = spawn('/usr/bin/ditto', ['-xk', finalPath, stagedDir], { stdio: 'ignore' });
+              child.on('error', reject);
+              child.on('close', (code) => {
+                if (code === 0) resolve();
+                else reject(new Error(`Failed to extract update package (exit code ${code})`));
+              });
+            });
+            const entries = await readdir(stagedDir);
+            const appEntry = entries.find((e) => e.endsWith('.app'));
+            if (appEntry) {
+              stagedAppPath = path.join(stagedDir, appEntry);
+              await settingsApi.set({ key: 'appVersionCheckStagedAppPath', value: stagedAppPath });
+            }
+          } catch (extractErr) {
+            console.warn('[appUpdateApi] Failed to stage .zip bundle:', extractErr);
+          }
+        }
+
         await settingsApi.set({ key: 'appVersionCheckDownloadedPath', value: finalPath });
-        sendHostEvent('appUpdate', 'progress', { phase: 'completed', path: finalPath });
-        return { success: true, path: finalPath, assetName: asset.name };
+        const version = release.tag_name?.replace(/^v/, '');
+        sendHostEvent('appUpdate', 'progress', { phase: 'completed', path: finalPath, stagedAppPath, version });
+        sendHostEvent('appUpdate', 'progress', { phase: 'ready', path: finalPath, stagedAppPath, version });
+        return { success: true, path: finalPath, assetName: asset.name, stagedAppPath };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendHostEvent('appUpdate', 'progress', { phase: 'failed', error: message });
@@ -264,15 +303,104 @@ export const appUpdateApi = {
     if (!payload?.force && hasStreamingRuntimes()) {
       return { success: false, error: 'RUNNING_SESSIONS' };
     }
-    const error = await shell.openPath(pathName);
-    if (error) return { success: false, error };
-    if (process.platform !== 'linux') {
-      if (process.env.PI_DESKTOP_E2E !== '1' && process.env.NODE_ENV !== 'test') {
+
+    if (process.env.PI_DESKTOP_E2E === '1' || process.env.NODE_ENV === 'test') {
+      const error = await shell.openPath(pathName);
+      if (error) return { success: false, error };
+      return { success: true };
+    }
+
+    if (process.platform === 'darwin') {
+      const stagedAppPath = await settingsApi.get({ key: 'appVersionCheckStagedAppPath' });
+      if (stagedAppPath && typeof stagedAppPath === 'string' && existsSync(stagedAppPath)) {
+        const currentExec = process.execPath;
+        const targetAppPath = path.resolve(currentExec, '../../..');
+        const isDev = targetAppPath.includes('.dev') || targetAppPath.includes('node_modules') || !targetAppPath.endsWith('.app');
+
+        if (!isDev && existsSync(targetAppPath)) {
+          const script = [
+            'OLD_PID="$1"',
+            'SRC_APP="$2"',
+            'DEST_APP="$3"',
+            'while kill -0 "$OLD_PID" 2>/dev/null; do sleep 0.05; done',
+            'rm -rf "$DEST_APP"',
+            '/usr/bin/ditto "$SRC_APP" "$DEST_APP"',
+            'xattr -dr com.apple.quarantine "$DEST_APP" 2>/dev/null || true',
+            'rm -rf "$(dirname "$SRC_APP")"',
+            'open -n "$DEST_APP"',
+          ].join('\n');
+
+          const child = spawn('/bin/sh', ['-c', script, '--', String(process.pid), stagedAppPath, targetAppPath], {
+            detached: true,
+            stdio: 'ignore',
+          });
+          child.unref();
+
+          setTimeout(() => {
+            app.quit();
+          }, 100);
+          return { success: true };
+        }
+      }
+
+      const error = await shell.openPath(pathName);
+      if (error) return { success: false, error };
+      setTimeout(() => {
+        app.quit();
+      }, 500);
+      return { success: true };
+    }
+
+    if (process.platform === 'win32') {
+      if (pathName.endsWith('.exe')) {
+        const cmd = `timeout /t 1 /nobreak >nul & "${pathName}" /S & start "" "${process.execPath}"`;
+        const child = spawn('cmd.exe', ['/c', cmd], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
         setTimeout(() => {
           app.quit();
-        }, 500);
+        }, 100);
+        return { success: true };
       }
+      const error = await shell.openPath(pathName);
+      if (error) return { success: false, error };
+      setTimeout(() => {
+        app.quit();
+      }, 500);
+      return { success: true };
     }
+
+    if (process.platform === 'linux') {
+      if (process.env.APPIMAGE && pathName.endsWith('.AppImage')) {
+        const appImagePath = process.env.APPIMAGE;
+        const script = [
+          'OLD_PID="$1"',
+          'NEW_IMG="$2"',
+          'TARGET_IMG="$3"',
+          'while kill -0 "$OLD_PID" 2>/dev/null; do sleep 0.05; done',
+          'cp -f "$NEW_IMG" "$TARGET_IMG"',
+          'chmod +x "$TARGET_IMG"',
+          'rm -f "$NEW_IMG"',
+          '"$TARGET_IMG" &',
+        ].join('\n');
+
+        const child = spawn('/bin/sh', ['-c', script, '--', String(process.pid), pathName, appImagePath], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+        setTimeout(() => {
+          app.quit();
+        }, 100);
+        return { success: true };
+      }
+      const error = await shell.openPath(pathName);
+      if (error) return { success: false, error };
+      return { success: true };
+    }
+
     return { success: true };
   },
 };
