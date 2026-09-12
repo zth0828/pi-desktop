@@ -979,7 +979,11 @@
       "newAvailable": "发现新版本",
       "mirrorActive": "镜像加速中",
       "alreadyLatest": "已是最新 ✓",
-      "alreadyLatestHint": "当前已是最新版本，无需更新"
+      "alreadyLatestHint": "当前已是最新版本，无需更新",
+      "autoDownload": "自动静默下载更新",
+      "autoDownloadDesc": "检测到新版本时在后台静默下载，并在就绪后提示重启更新",
+      "skippedBadge": "已跳过此版本",
+      "unskip": "恢复接收更新"
     },
     "downloadMirror": {
       "title": "下载镜像加速",
@@ -1258,7 +1262,16 @@
     "waitingInstall": "已下载安装包，等待安装",
     "waitingInstallVersion": "已下载 v{{version}}，等待安装",
     "readyTitle": "安装包下载完成，准备就绪",
-    "readyDesc": "点击即可打开安装包完成升级"
+    "readyDesc": "点击即可打开安装包完成升级",
+    "restartToApply": "重启并应用更新",
+    "skipVersion": "跳过此版本",
+    "retrying": "下载失败，正在重试 ({{attempt}}/{{max}})..."
+  },
+  "versionJump": {
+    "title": "欢迎使用 Pi Desktop v{{version}}",
+    "subtitle": "已从 v{{from}} 升级至 v{{to}}，探索最新更新与改进",
+    "confirm": "开始体验",
+    "noNotes": "暂无本次更新的详细说明。"
   },
   "tray": {
     "showMainWindow": "显示主窗口",

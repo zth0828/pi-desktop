@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, CheckCircle, FolderOpen, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, FolderOpen, RefreshCw, X } from 'lucide-react';
 import { onHostEvent } from '../lib/host-events';
 import { hostApi } from '../lib/host-api';
 
@@ -8,20 +8,32 @@ export function VersionInstallDialog() {
   const { t } = useTranslation();
   const [completedPath, setCompletedPath] = useState<string | null>(null);
   const [failedError, setFailedError] = useState<string | null>(null);
+  const [retryStatus, setRetryStatus] = useState<string | null>(null);
   const [showRunningWarning, setShowRunningWarning] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [targetVersion, setTargetVersion] = useState<string | null>(null);
   const [platform, setPlatform] = useState<string>(() => window.pidesktop?.platform ?? '');
 
   useEffect(() => {
     void hostApi.app.platform().then(setPlatform);
     return onHostEvent('appUpdate', 'progress', (event) => {
-      if (event.phase === 'completed') {
+      if (event.phase === 'completed' || event.phase === 'ready') {
         setCompletedPath(event.path ?? '');
+        if (event.version) setTargetVersion(event.version);
         setFailedError(null);
+        setRetryStatus(null);
         setShowRunningWarning(false);
+      } else if (event.phase === 'retrying') {
+        setRetryStatus(
+          t('versionInstall.retrying', {
+            attempt: event.retryAttempt ?? 1,
+            max: event.maxRetries ?? 3,
+          }),
+        );
       } else if (event.phase === 'failed') {
         setFailedError(event.error ?? t('settings.version.checkFailed'));
         setCompletedPath(null);
+        setRetryStatus(null);
         setShowRunningWarning(false);
       }
     });
@@ -54,7 +66,15 @@ export function VersionInstallDialog() {
   const handleDismiss = () => {
     setCompletedPath(null);
     setFailedError(null);
+    setRetryStatus(null);
     setShowRunningWarning(false);
+  };
+
+  const handleSkip = async () => {
+    if (targetVersion) {
+      await hostApi.versionCheck.skipVersion(targetVersion).catch(() => {});
+    }
+    handleDismiss();
   };
 
   useEffect(() => {
@@ -112,7 +132,17 @@ export function VersionInstallDialog() {
     );
   }
 
-  if (!completedPath) return null;
+  if (!completedPath) {
+    if (retryStatus) {
+      return (
+        <div className="version-install-toast" data-testid="version-retry-toast">
+          <RefreshCw size={14} className="spin" />
+          <span>{retryStatus}</span>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const fileName = completedPath.split(/[/\\]/).pop() ?? '';
   const isLinux = platform === 'linux';
@@ -135,7 +165,7 @@ export function VersionInstallDialog() {
       >
         <div className="version-install-header">
           <div className="version-install-header-title">
-            <CheckCircle size={16} />
+            <CheckCircle size={16} className="text-success" />
             <span>{t('versionInstall.title')}</span>
           </div>
           <button
@@ -185,8 +215,17 @@ export function VersionInstallDialog() {
                 {t('versionInstall.confirmQuit')}
               </button>
             </>
-          ) : isLinux ? (
+          ) : (
             <>
+              {targetVersion && (
+                <button
+                  className="pill"
+                  data-testid="version-install-skip"
+                  onClick={() => void handleSkip()}
+                >
+                  {t('versionInstall.skipVersion')}
+                </button>
+              )}
               <button
                 className="pill"
                 data-testid="version-install-later"
@@ -195,28 +234,11 @@ export function VersionInstallDialog() {
                 {t('versionInstall.later')}
               </button>
               <button
-                className="pill active"
+                className="pill"
                 data-testid="version-install-show"
                 onClick={handleShowInFolder}
               >
                 <FolderOpen size={14} />
-                {t('versionInstall.showInFolder')}
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                className="pill"
-                data-testid="version-install-later"
-                onClick={handleDismiss}
-              >
-                {t('versionInstall.later')}
-              </button>
-              <button
-                className="pill"
-                data-testid="version-install-show"
-                onClick={handleShowInFolder}
-              >
                 {t('versionInstall.showInFolder')}
               </button>
               <button

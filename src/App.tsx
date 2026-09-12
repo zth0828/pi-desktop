@@ -31,6 +31,7 @@ import { ExtensionUiNotifications } from './components/ExtensionUiDialog';
 import { TrustDialog } from './components/TrustDialog';
 import { VersionUpdateToast } from './components/VersionUpdateToast';
 import { VersionInstallDialog } from './components/VersionInstallDialog';
+import { VersionJumpDialog } from './components/VersionJumpDialog';
 import Onboarding from './pages/Onboarding';
 import ChatPage from './pages/Chat';
 import ModelsPage from './pages/Models';
@@ -455,6 +456,7 @@ export default function App() {
       <TrustDialog />
       <VersionUpdateToast onNavigate={navigate} />
       <VersionInstallDialog />
+      <VersionJumpDialog />
       <SessionSearchDialog
         open={sessionSearchOpen}
         onClose={() => setSessionSearchOpen(false)}

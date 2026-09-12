@@ -979,7 +979,11 @@
       "newAvailable": "New version available",
       "mirrorActive": "Mirror active",
       "alreadyLatest": "Up to date ✓",
-      "alreadyLatestHint": "Already running the latest version"
+      "alreadyLatestHint": "Already running the latest version",
+      "autoDownload": "Automatically Download Updates",
+      "autoDownloadDesc": "Silently download new versions in the background and prompt to restart when ready",
+      "skippedBadge": "Skipped",
+      "unskip": "Resume Updates"
     },
     "downloadMirror": {
       "title": "Download Mirror",
@@ -1258,7 +1262,16 @@
     "waitingInstall": "Installer downloaded, waiting to install",
     "waitingInstallVersion": "Downloaded v{{version}}, waiting to install",
     "readyTitle": "Update downloaded and ready",
-    "readyDesc": "Click to open installer and finish updating"
+    "readyDesc": "Click to open installer and finish updating",
+    "restartToApply": "Restart & Apply Update",
+    "skipVersion": "Skip This Version",
+    "retrying": "Download failed, retrying ({{attempt}}/{{max}})..."
+  },
+  "versionJump": {
+    "title": "Welcome to Pi Desktop v{{version}}",
+    "subtitle": "Upgraded from v{{from}} to v{{to}}. Explore the latest updates and improvements",
+    "confirm": "Get Started",
+    "noNotes": "No release notes available for this update."
   },
   "tray": {
     "showMainWindow": "Show Main Window",

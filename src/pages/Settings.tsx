@@ -88,6 +88,7 @@ export default function SettingsPage() {
   const [proxyStatus, setProxyStatus] = useState<ProxyStatus>();
   const [proxyMessage, setProxyMessage] = useState<string>();
   const [downloadMirror, setDownloadMirror] = useState('');
+  const [autoDownloadUpdate, setAutoDownloadUpdate] = useState(true);
   const env = usePiSystemStore((s) => s.env);
   const detect = usePiSystemStore((s) => s.detect);
 
@@ -97,6 +98,7 @@ export default function SettingsPage() {
     void hostApi.app.platform().then(setPlatform);
     void hostApi.app.version().then(setAppVersion);
     void hostApi.versionCheck.getStatus().then(setVersionStatus).catch(() => {});
+    void hostApi.settings.get('autoDownloadUpdate').then((v) => setAutoDownloadUpdate(v !== false));
     void hostApi.settings.get('workspaceCwd').then(setCwd);
     void hostApi.settings.get('theme').then((v) => setThemeState((v as Theme) ?? 'system'));
     void hostApi.settings.get('notifyMode').then((v) => setNotifyMode((v as NotifyMode) ?? 'unfocused'));
@@ -744,6 +746,11 @@ export default function SettingsPage() {
                       ? `${t('settings.version.newAvailable')} ${versionStatus.app.latest}`
                       : t('settings.version.upToDate', { version: appVersion })}
                   </span>
+                  {versionStatus?.app.skipped && (
+                    <span className="settings-version-badge settings-badge-skipped">
+                      {t('settings.version.skippedBadge')}
+                    </span>
+                  )}
                   {Boolean(downloadMirror?.trim()) && (
                     <span className="settings-version-badge settings-badge-mirror">
                       {t('settings.downloadMirror.activeBadge')}
@@ -757,6 +764,18 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="pill-group">
+              {versionStatus?.app.skipped && (
+                <button
+                  className="pill"
+                  data-testid="settings-app-unskip"
+                  onClick={async () => {
+                    await hostApi.versionCheck.unskipVersion();
+                    setVersionStatus(await hostApi.versionCheck.getStatus());
+                  }}
+                >
+                  {t('settings.version.unskip')}
+                </button>
+              )}
               <button
                 className="pill"
                 data-testid="settings-app-check"
@@ -860,7 +879,9 @@ export default function SettingsPage() {
                   data-testid="settings-app-install"
                   onClick={() => void hostApi.appUpdate.installDownloaded()}
                 >
-                  {t('versionInstall.installAndQuit')}
+                  {versionStatus?.app.readyToInstall
+                    ? t('versionInstall.restartToApply')
+                    : t('versionInstall.installAndQuit')}
                 </button>
               </div>
             </div>
@@ -888,6 +909,29 @@ export default function SettingsPage() {
             value={downloadMirror}
             onChange={(e) => void changeDownloadMirror(e.target.value)}
           />
+        </div>
+
+        {/* 自动下载更新配置行 */}
+        <div className="settings-row" data-testid="settings-auto-download-row" id="settings-auto-download-row">
+          <div className="settings-row-label">
+            <div>{t('settings.version.autoDownload')}</div>
+            <div className="settings-row-desc">{t('settings.version.autoDownloadDesc')}</div>
+          </div>
+          <div className="pill-group" data-testid="settings-auto-download">
+            {[true, false].map((on) => (
+              <button
+                key={String(on)}
+                data-testid={`auto-download-${on ? 'on' : 'off'}`}
+                className={autoDownloadUpdate === on ? 'pill active' : 'pill'}
+                onClick={() => {
+                  setAutoDownloadUpdate(on);
+                  void hostApi.settings.set('autoDownloadUpdate', on);
+                }}
+              >
+                {t(on ? 'settings.toggle.on' : 'settings.toggle.off')}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* 独立卡片 2：pi 核心 CLI 引擎（独立解耦） */}
