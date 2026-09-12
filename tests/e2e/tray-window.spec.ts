@@ -5,7 +5,7 @@ import { expect, test } from './fixtures/electron';
 
 test.describe('主窗口关闭行为', () => {
   test('默认模式（minimize）：关闭主窗口 → 隐藏不退出，可恢复', async ({ launchElectronApp }) => {
-    const app = await launchElectronApp();
+    const app = await launchElectronApp({ mockPi: true });
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
 
@@ -36,6 +36,7 @@ test.describe('主窗口关闭行为', () => {
 
   test('配置 closeAction 为 quit：关闭主窗口直接退出应用', async ({ launchElectronApp }) => {
     const app = await launchElectronApp({
+      mockPi: true,
       seedSettings: { closeAction: 'quit' },
     });
     const page = await app.firstWindow();
@@ -52,7 +53,7 @@ test.describe('主窗口关闭行为', () => {
   });
 
   test('退出流程不被 close 拦截卡住（before-quit 放行）', async ({ launchElectronApp }) => {
-    const app = await launchElectronApp();
+    const app = await launchElectronApp({ mockPi: true });
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
     // app.quit() 走 before-quit → setQuitting(true) → 主窗口 close 放行 → 应用退出。
