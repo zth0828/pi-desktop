@@ -362,7 +362,38 @@ async function runDetection(fingerprint: string): Promise<PiEnvironment> {
   return env;
 }
 
+function devMockEnvironment(): PiEnvironment | null {
+  const isDev = process.env.NODE_ENV === 'development'
+    || !!process.env.VITE_DEV_SERVER_URL
+    || process.env.PI_DESKTOP_E2E === '1'
+    || process.defaultApp === true;
+  if (!isDev) return null;
+  if (process.env.PI_DESKTOP_MOCK_ENV === 'ready') {
+    return {
+      node: { found: true, path: '/mock/bin/node', version: '20.18.0', meetsMin: true },
+      npm: { found: true, path: '/mock/bin/npm', version: '10.8.2', globalRoot: '/mock/lib/node_modules' },
+      pi: {
+        found: true,
+        binPath: '/mock/bin/pi',
+        realBinPath: '/mock/bin/pi',
+        packageRoot: '/mock/lib/node_modules/@earendil-works/pi-coding-agent',
+        version: '0.84.2',
+        cliVersion: '0.84.2',
+        installKind: 'npm',
+        meetsMin: true,
+      },
+      minNodeVersion: MIN_NODE_VERSION,
+      minPiVersion: MIN_PI_VERSION,
+    };
+  }
+  return null;
+}
+
 export function detectPiEnvironment(force = false): Promise<PiEnvironment> {
+  const mockEnv = devMockEnvironment();
+  if (mockEnv) {
+    return Promise.resolve(mockEnv);
+  }
   const fingerprint = detectionFingerprint();
   if (
     !force

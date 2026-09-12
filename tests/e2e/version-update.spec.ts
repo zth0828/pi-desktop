@@ -91,7 +91,7 @@ test('版本更新提醒：发现新版本弹出 Toast，关闭后重启不重�
 }) => {
   const githubApiUrl = `http://127.0.0.1:${serverPort}/releases/latest`;
   const app = await launchElectronApp({
-    withPi: true,
+    mockPi: true,
     agentDir,
     githubApiUrl,
   });
@@ -120,7 +120,7 @@ test('版本更新提醒：发现新版本弹出 Toast，关闭后重启不重�
   // 4. 重启应用：同一版本不再重复弹窗
   await app.close();
   const restartedApp = await launchElectronApp({
-    withPi: true,
+    mockPi: true,
     agentDir,
     githubApiUrl,
   });
@@ -134,7 +134,7 @@ test('设置页：下载更新后弹出安装引导对话框，稍后关闭后�
 }) => {
   const githubApiUrl = `http://127.0.0.1:${serverPort}/releases/latest`;
   const app = await launchElectronApp({
-    withPi: true,
+    mockPi: true,
     agentDir,
     initialPage: 'settings',
     githubApiUrl,
@@ -171,7 +171,7 @@ test('设置页：镜像加速配置修改与落盘', async ({
   homeDir,
 }) => {
   const app = await launchElectronApp({
-    withPi: true,
+    mockPi: true,
     agentDir,
     initialPage: 'settings',
   });

@@ -38,7 +38,7 @@ export const piSystemApi = {
     detectCache = { at: Date.now(), env };
     // 兼容性报告需要加载 pi SDK（约 2-3s）：异步补齐后推送 envChanged，
     // 不阻塞启动/主界面（onboarding 状态只依赖基础检测，不需要 SDK）。
-    if (env.pi.found && env.pi.packageRoot) {
+    if (env.pi.found && env.pi.packageRoot && !env.pi.packageRoot.startsWith('/mock')) {
       void inspectPiCompatibility()
         .then((compatibility) => {
           if (!compatibility) return;

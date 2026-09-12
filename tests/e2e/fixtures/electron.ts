@@ -20,6 +20,8 @@ export type LaunchOptions = {
   npmRoot?: string;
   /** 使用测试前缀里 npm 安装的 pi（onboarding 走 ready 路径） */
   withPi?: boolean;
+  /** 仅 E2E：注入 mock ready 环境跳过系统检测与 SDK 加载（适用于纯 UI / 设置 / 更新用例） */
+  mockPi?: boolean;
   /** pi 的配置目录（models.json/sessions 隔离） */
   agentDir?: string;
   /** 预置壳设置（如 workspaceCwd；布尔项如 preventSleep 直接给 boolean） */
@@ -211,6 +213,7 @@ export const test = base.extend<ElectronFixtures>({
               }
               : {}),
             ...(options.devAllowOutdated ? { PI_DESKTOP_DEV_ALLOW_OUTDATED: '1' } : {}),
+            ...(options.mockPi ? { PI_DESKTOP_E2E: '1', PI_DESKTOP_MOCK_ENV: 'ready' } : {}),
             PI_DESKTOP_USER_DATA_DIR: join(homeDir, 'user-data'),
           },
           timeout: 60_000,

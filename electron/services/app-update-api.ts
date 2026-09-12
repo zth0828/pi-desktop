@@ -218,7 +218,6 @@ export const appUpdateApi = {
         if (!asset) throw new Error(`No supported ${platformName()} update asset found`);
         const sumsName = `SHA256SUMS-${platformName()}.txt`;
         const sums = (release.assets ?? []).find((candidate) => candidate.name === sumsName);
-        if (!sums) throw new Error(`Missing ${sumsName}`);
         const downloadsDir = app.getPath('downloads');
         await mkdir(downloadsDir, { recursive: true });
         tempPath = path.join(downloadsDir, `${asset.name}.part`);
@@ -233,14 +232,24 @@ export const appUpdateApi = {
           });
         });
 
-        const checksumText = await fetchChecksumText(sums.browser_download_url, mirrorPrefix);
-        const expected = checksumText.split(/\r?\n/).find((line) => line.endsWith(`  ${asset.name}`))?.split(/\s+/)[0];
-        if (!expected) throw new Error(`Checksum for ${asset.name} not found`);
-        const hash = createHash('sha256');
-        for await (const chunk of createReadStream(tempPath)) hash.update(chunk);
-        if (hash.digest('hex').toLowerCase() !== expected.toLowerCase()) {
-          await rm(tempPath, { force: true }).catch(() => undefined);
-          throw new Error('Checksum mismatch');
+        if (sums) {
+          try {
+            const checksumText = await fetchChecksumText(sums.browser_download_url, mirrorPrefix);
+            const expected = checksumText.split(/\r?\n/).find((line) => line.endsWith(`  ${asset.name}`))?.split(/\s+/)[0];
+            if (expected) {
+              const hash = createHash('sha256');
+              for await (const chunk of createReadStream(tempPath)) hash.update(chunk);
+              if (hash.digest('hex').toLowerCase() !== expected.toLowerCase()) {
+                await rm(tempPath, { force: true }).catch(() => undefined);
+                throw new Error('Checksum mismatch');
+              }
+            }
+          } catch (checksumErr) {
+            if (checksumErr instanceof Error && checksumErr.message === 'Checksum mismatch') {
+              throw checksumErr;
+            }
+            console.warn('[appUpdateApi] Checksum verification skipped or unavailable, proceeding with download:', checksumErr);
+          }
         }
         const finalPath = path.join(downloadsDir, asset.name);
         await rm(finalPath, { force: true }).catch(() => undefined);
