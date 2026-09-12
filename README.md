@@ -206,7 +206,9 @@ Download the package for your platform from [GitHub Releases](https://github.com
 
 > [!TIP]
 > **Modern In-Place Auto-Updates**  
-> Pi Desktop features an online in-place auto-updater. When a new version is released, the client can silently download it in the background and display "Restart & Apply Update" in Settings. Clicking it atomically swaps the application bundle in place and relaunches smoothly without dragging DMGs manually. Upon restart, a "What's New" modal presents the latest release notes. Users in regions with restricted access to GitHub can configure a download mirror (e.g. `https://ghproxy.net/`) in Settings for fast resume-supported downloads.
+> Pi Desktop features a built-in seamless auto-update experience. When a new release is available, the client can download it in the background, preview release notes markdown in the update dialog, and apply updates with one-click restart.
+> - **macOS No-Repeat Terminal Commands**: In-place auto-updates automatically strip the macOS quarantine flag during application swap. Therefore, **you only need to run the quarantine removal command once during initial setup. All subsequent updates can be completed directly within the app without redownloading DMGs or running terminal commands again**.
+> - **Download Acceleration**: Users in regions with restricted access to GitHub can configure a download mirror (e.g. `https://ghproxy.net/`) in Settings for high-speed resume-supported downloads.
 
 ---
 
