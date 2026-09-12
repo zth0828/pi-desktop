@@ -274,8 +274,9 @@ export const appUpdateApi = {
 
         await settingsApi.set({ key: 'appVersionCheckDownloadedPath', value: finalPath });
         const version = release.tag_name?.replace(/^v/, '');
-        sendHostEvent('appUpdate', 'progress', { phase: 'completed', path: finalPath, stagedAppPath, version });
-        sendHostEvent('appUpdate', 'progress', { phase: 'ready', path: finalPath, stagedAppPath, version });
+        const isSilent = payload?.silent === true;
+        sendHostEvent('appUpdate', 'progress', { phase: 'completed', path: finalPath, stagedAppPath, version, silent: isSilent });
+        sendHostEvent('appUpdate', 'progress', { phase: 'ready', path: finalPath, stagedAppPath, version, silent: isSilent });
         return { success: true, path: finalPath, assetName: asset.name, stagedAppPath };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

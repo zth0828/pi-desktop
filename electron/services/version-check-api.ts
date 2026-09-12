@@ -257,8 +257,9 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
       });
     }
 
+    const isE2E = process.env.PI_DESKTOP_E2E === '1' || process.env.NODE_ENV === 'test';
     const hasNewer = appResult.latest && compare(current, appResult.latest);
-    if (!isSkipped && hasNewer && saved.autoDownloadUpdate !== false) {
+    if (!isE2E && !isSkipped && hasNewer && saved.autoDownloadUpdate !== false) {
       if (!saved.appVersionCheckDownloadedPath && !saved.appVersionCheckStagedAppPath) {
         void appUpdateApi.download({ silent: true }).catch((err) => {
           console.warn('[versionCheckApi] Silent background download failed:', err);

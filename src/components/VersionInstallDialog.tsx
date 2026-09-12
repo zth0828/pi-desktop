@@ -18,6 +18,9 @@ export function VersionInstallDialog() {
     void hostApi.app.platform().then(setPlatform);
     return onHostEvent('appUpdate', 'progress', (event) => {
       if (event.phase === 'completed' || event.phase === 'ready') {
+        if (event.silent) {
+          return;
+        }
         setCompletedPath(event.path ?? '');
         if (event.version) setTargetVersion(event.version);
         setFailedError(null);

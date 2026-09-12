@@ -203,6 +203,7 @@ export type AppUpdateProgressEvent = {
   path?: string;
   stagedAppPath?: string;
   version?: string;
+  silent?: boolean;
   retryAttempt?: number;
   maxRetries?: number;
   error?: string;
