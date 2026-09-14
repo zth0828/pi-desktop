@@ -14,7 +14,7 @@ import { sessionTitleFromQuestion } from '../../lib/session-title';
 import { workspaceErrorMessage } from '../../lib/workspace-error';
 import { formatErrorMessage } from '../../lib/error-formatter';
 import { timingMark } from '../../lib/timing';
-import { groupLogicalTurns, turnDurationMs, turnFinalResponseIndex } from '../../lib/turn-changes';
+import { groupLogicalTurns, isTurnCompleted, turnDurationMs, turnFinalResponseIndex } from '../../lib/turn-changes';
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
 import { PaneLayout } from '../../components/PaneLayout';
 import { ExtensionUiDialog } from '../../components/ExtensionUiDialog';
@@ -565,7 +565,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     return () => list.removeEventListener('scroll', onScroll);
   }, [sessionId, started, updateScrollAffordance]);
 
-  // 回合折叠/展开导致列表高度骤变时，若仍钉在底部则重新对齐。
+  // 回合折叠/展开或消息增量导致列表高度骤变时，若仍钉在底部则重新对齐。
   // 用 useLayoutEffect 在浏览器绘制前同步执行，避免用户看到"先显示中间再跳底部"的闪烁。
   useLayoutEffect(() => {
     const list = listRef.current;
@@ -573,17 +573,20 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     if (stickToBottomRef.current && scrollFrameRef.current === null) {
       list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
     }
-  }, [logicalTurns]);
+  }, [logicalTurns, displayMessages, isStreaming]);
 
   const prevMessageCountRef = useRef(displayMessages.length);
+  const wasStreamingRef = useRef(isStreaming);
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
     const isNewMessage = displayMessages.length > prevMessageCountRef.current;
     prevMessageCountRef.current = displayMessages.length;
+    const streamingStarted = !wasStreamingRef.current && isStreaming;
+    wasStreamingRef.current = isStreaming;
     const lastMsg = displayMessages[displayMessages.length - 1];
     // 发送新消息或开始流式回复时，强制钉底并隐藏回到底部按钮
-    if (isNewMessage && (lastMsg?.role === 'user' || isStreaming)) {
+    if ((isNewMessage && lastMsg?.role === 'user') || streamingStarted) {
       stickToBottomRef.current = true;
       setShowScrollToBottom(false);
     }
@@ -599,13 +602,24 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     // 监听输入框收缩或外部尺寸形变：保持贴底，彻底避免消息向上偏移
     const ro = new ResizeObserver(() => {
       if (stickToBottomRef.current) {
-        list.scrollTop = list.scrollHeight;
+        list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
       }
       updateScrollAffordance();
     });
     ro.observe(list);
     return () => ro.disconnect();
   }, [updateScrollAffordance]);
+
+  const handleSendPrompt = useCallback(() => {
+    cancelListScroll();
+    scrollResetRef.current = false;
+    stickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+    const list = listRef.current;
+    if (list) {
+      list.scrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
+    }
+  }, [cancelListScroll]);
 
   const scrollToBottom = useCallback(() => {
     searchAlignTokenRef.current += 1;
@@ -666,8 +680,14 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     const isLongSession = displayMessages.length > 40;
     const isHistoricalTurn = isLongSession && turnIndex < logicalTurns.length - 1;
     const finalIndex = turnFinalResponseIndex(displayMessages, turn);
-    const completed = !turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running')
-      && (turnIndex < logicalTurns.length - 1 || !isStreaming);
+    const completed = isTurnCompleted(
+      displayMessages,
+      turn,
+      turnIndex,
+      logicalTurns.length,
+      toolExecutions,
+      isStreaming,
+    );
     // 压缩摘要是会话历史的重要内容，不能随着它恰好落入某一轮而被折叠隐藏。
     const hasCompactionSummary = displayMessages
       .slice(turn.startIndex, turn.endIndex + 1)
@@ -1144,6 +1164,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
           cwd={effectiveCwd}
           onChooseWorkspace={chooseWorkspace}
           openModelMenuNonce={modelMenuNonce}
+          onSendPrompt={handleSendPrompt}
         />
         <ExtensionWidgets placement="belowEditor" />
       </div>

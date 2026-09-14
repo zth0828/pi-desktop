@@ -51,7 +51,7 @@ import {
   computeComposerHeight,
 } from './chat-input/composer-rich-editor';
 
-export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: ChatInputProps) {
+export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSendPrompt }: ChatInputProps) {
   const { t } = useTranslation();
   const chatStore = usePaneChatStoreApi();
   const paneApi = usePaneHostApi();
@@ -658,6 +658,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     outgoing: StagedImage[],
     behavior?: 'steer' | 'followUp',
   ) => {
+    onSendPrompt?.();
     if (outgoing.length > 0) {
       composerAttachmentsCache.remember(outgoing);
     }
@@ -683,6 +684,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0 }: Ch
     if (!text && attachments.length === 0) return;
     if (text === '/' || text === '／' || text === '@') return;
     if (commandMode && bashing) return;
+    onSendPrompt?.();
     const outgoingAttachments = attachments;
     const outgoing = outgoingAttachments.filter((attachment): attachment is StagedImage => attachment.kind === 'image');
 

@@ -176,3 +176,38 @@ export function collectTurnChanges(
     deleted: files.reduce((sum, f) => sum + f.deleted, 0),
   };
 }
+
+/**
+ * 判断某一轮对话是否已经执行完成（可安全折叠过程）。
+ *
+ * 核心考量：
+ * 1. 本轮内若有工具仍在 running，或有消息正在流式传输中（m.streaming === true），必定未完成；
+ * 2. 历史轮次（turnIndex < totalTurns - 1）且无上述未完状态，必定已完成；
+ * 3. 全局未流式状态（!isStreaming），必定已完成；
+ * 4. 全局处于流式状态（新一轮刚启动但其 user 消息尚未被事件循环加入列表时）：
+ *    若本轮已经产出最终答复（finalIndex !== undefined），说明它属于早前已跑完的轮次，
+ *    绝不能被误判为正在运行而发生意外解折叠。
+ */
+export function isTurnCompleted(
+  messages: ChatMessage[],
+  turn: LogicalTurn,
+  turnIndex: number,
+  totalTurns: number,
+  toolExecutions: Record<string, ToolExecution>,
+  isStreaming: boolean,
+): boolean {
+  const turnHasRunningTool = turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running');
+  if (turnHasRunningTool) return false;
+
+  const turnHasStreamingMessage = messages
+    .slice(turn.startIndex, turn.endIndex + 1)
+    .some((m) => m.streaming);
+  if (turnHasStreamingMessage) return false;
+
+  if (turnIndex < totalTurns - 1) return true;
+  if (!isStreaming) return true;
+
+  const finalIndex = turnFinalResponseIndex(messages, turn);
+  return finalIndex !== undefined;
+}
+

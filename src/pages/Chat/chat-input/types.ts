@@ -32,6 +32,8 @@ export type ChatInputProps = {
   onChooseWorkspace: () => Promise<void>;
   /** 「选择模型」入口信号（nonce 递增触发打开模型菜单；0 = 无请求） */
   openModelMenuNonce?: number;
+  /** 发送新提示词时触发（通知外层立即钉底，防止跳顶） */
+  onSendPrompt?: () => void;
 };
 
 export type FollowupBehavior = 'queue' | 'steer';

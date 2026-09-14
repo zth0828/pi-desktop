@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectTurnChanges, groupLogicalTurns, turnDurationMs, turnFinalResponseIndex, turnTimeRange } from '../../src/lib/turn-changes';
+import { collectTurnChanges, groupLogicalTurns, isTurnCompleted, turnDurationMs, turnFinalResponseIndex, turnTimeRange } from '../../src/lib/turn-changes';
 import { formatWorkDuration } from '../../src/lib/tool-display';
 import type { ChatMessage, ToolExecution } from '../../src/lib/chat-types';
 
@@ -216,3 +216,68 @@ describe('turnDurationMs', () => {
     expect(turnDurationMs(messages, turn, {})).toBeNull();
   });
 });
+
+describe('isTurnCompleted', () => {
+  it('全局未流式时返回 true', () => {
+    const messages = [msg('user'), { ...msg('assistant'), content: [{ type: 'text', text: 'Done' }] }];
+    const [turn] = groupLogicalTurns(messages);
+    expect(isTurnCompleted(messages, turn, 0, 1, {}, false)).toBe(true);
+  });
+
+  it('历史轮次在非流式和流式下只要没有未完状态都返回 true', () => {
+    const messages = [
+      msg('user'),
+      { ...msg('assistant'), content: [{ type: 'text', text: 'Turn 1 done' }] },
+      msg('user'),
+      { ...msg('assistant'), content: [{ type: 'text', text: 'Turn 2 streaming' }] },
+    ];
+    const turns = groupLogicalTurns(messages);
+    // Turn 0 作为历史轮（turnIndex = 0, totalTurns = 2），即使 isStreaming 为 true 也是已完成
+    expect(isTurnCompleted(messages, turns[0], 0, 2, {}, true)).toBe(true);
+  });
+
+  it('新一轮刚触发 agent_start（isStreaming=true）但消息列表尚未加入新 user 消息时，上一轮因已有最终回复仍保持已完成（避免解折叠顶高）', () => {
+    // 场景：Turn 0 刚执行完，用户发出新问题，后台 isStreaming 变为 true，
+    // 但 logicalTurns 暂时只有 [turn0] (totalTurns=1, turnIndex=0)。
+    const messages = [
+      msg('user'),
+      msg('assistant', ['call1']),
+      msg('toolResult'),
+      { ...msg('assistant'), content: [{ type: 'text', text: 'Turn 0 final answer' }] },
+    ];
+    const [turn] = groupLogicalTurns(messages);
+    const executions: Record<string, ToolExecution> = {
+      call1: exec({ toolCallId: 'call1', status: 'success' }),
+    };
+
+    expect(isTurnCompleted(messages, turn, 0, 1, executions, true)).toBe(true);
+  });
+
+  it('当前轮若仍在运行工具，无论是否历史轮均返回 false', () => {
+    const messages = [msg('user'), msg('assistant', ['call1'])];
+    const [turn] = groupLogicalTurns(messages);
+    const executions: Record<string, ToolExecution> = {
+      call1: exec({ toolCallId: 'call1', status: 'running' }),
+    };
+    expect(isTurnCompleted(messages, turn, 0, 1, executions, true)).toBe(false);
+  });
+
+  it('当前轮若有流式消息，返回 false', () => {
+    const messages = [
+      msg('user'),
+      { ...msg('assistant'), streaming: true, content: [{ type: 'text', text: 'generating...' }] },
+    ];
+    const [turn] = groupLogicalTurns(messages);
+    expect(isTurnCompleted(messages, turn, 0, 1, {}, true)).toBe(false);
+  });
+
+  it('当前活跃轮（无最终回复）在流式下返回 false', () => {
+    const messages = [
+      msg('user'),
+      { ...msg('assistant', ['call1']), content: [{ type: 'toolCall', id: 'call1', name: 'read' }] },
+    ];
+    const [turn] = groupLogicalTurns(messages);
+    expect(isTurnCompleted(messages, turn, 0, 1, {}, true)).toBe(false);
+  });
+});
+
