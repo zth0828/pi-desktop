@@ -1,55 +1,47 @@
 ### 📥 下载地址 (Download)
 
 #### 🪟 Windows (不支持 Win7)
-- **标准安装版（推荐，支持在线自动静默更新）**：[Windows 64位安装包 (.exe)](https://github.com/zth0828/pi-desktop/releases/download/v1.4.0/Pi.Desktop-Setup-1.4.0-x64.exe)
+- **标准安装版（推荐，支持在线自动静默更新）**：[Windows 64位安装包 (.exe)](https://github.com/zth0828/pi-desktop/releases/download/v1.4.1/Pi.Desktop-Setup-1.4.1-x64.exe)
 
 #### 🍏 macOS (macOS 11.0+)
-- **Apple M芯片（M1 / M2 / M3 / M4 系列）**：[Apple M芯片 DMG 安装镜像](https://github.com/zth0828/pi-desktop/releases/download/v1.4.0/Pi.Desktop-1.4.0-arm64.dmg)
-- **Intel芯片（老款 Intel 处理器 Mac）**：[Intel芯片 DMG 安装镜像](https://github.com/zth0828/pi-desktop/releases/download/v1.4.0/Pi.Desktop-1.4.0-x64.dmg)
+- **Apple M芯片（M1 / M2 / M3 / M4 系列）**：[Apple M芯片 DMG 安装镜像](https://github.com/zth0828/pi-desktop/releases/download/v1.4.1/Pi.Desktop-1.4.1-arm64.dmg)
+- **Intel芯片（老款 Intel 处理器 Mac）**：[Intel芯片 DMG 安装镜像](https://github.com/zth0828/pi-desktop/releases/download/v1.4.1/Pi.Desktop-1.4.1-x64.dmg)
 
 ---
 
-## 长会话导航轨折叠、上下文压缩防丢保护、运行态吸顶任务卡与窗格拆分自适应
+## 应用内原地自动无感更新、版本跳跃更新日志、双平台架构精简与多轮长会话贴底优化
 
-本版本基于 `v1.3.1`，引入长会话消息导航轨折叠与分组跳转抽屉，彻底解决密集提问下的右侧圆点堆叠；增加上下文压缩期间的消息队列保护与重试机制，杜绝压缩时发消息丢失；新增吸顶运行态任务卡片与命令面板联动，重构多窗格拆分布局与窄屏工具栏自适应，并优化首包等待呼吸光标与轮内重试倒计时。
+本版本基于 `v1.4.0`，引入桌面应用原地静默无感自动更新与版本跳跃变更日志弹窗，全面精简构建架构并专注于 macOS 与 Windows 双平台体验，优化长会话连续提问滚动贴底与历史折叠稳定性，并修复开发模式系统通知图标冲突。
 
 ## 核心特性与改进
 
-- **消息导航轨多轮折叠与抽屉面板（Message Nav Rail Folding）**（致谢社区共创 @xiluyu）：
-  - 当单会话提问超过 10 条时，导航轨自动将中间连续圆点折叠为三点图标（`...`），始终保留首尾圆点与当前激活位置附近的定位点；
-  - 点击折叠点即可展开轻量浮层抽屉面板，完整列出隐藏的消息标题，支持点击直接平滑跳转；支持按键 `Escape`、点击面板外或跳转后自动防抖收起；
-  - 引入原生平滑滚动与布局绘制前对齐（`useLayoutEffect`），彻底杜绝折叠切换与快速跳转时的页面跳动与闪烁。
-- **上下文压缩期间 Prompt 保护队列与重试（Compaction Prompt Queue）**（致谢社区共创 @xiluyu 与核心联动）：
-  - 彻底解决用户在 `/compact` 上下文压缩或历史快照同步期间发送消息被 pi 底层拒绝、导致输入被吞的问题；
-  - 引入前端 FIFO 暂存缓冲队列，在压缩完成后自动重放投递；遭遇 IPC 竞态时自动重试，确保长对话压缩期间发送消息绝对不丢、不报错。
-- **吸顶运行态任务卡片与 Workbench 命令行联动（Running Tasks Card）**：
-  - 在输入框上方吸顶展示当前前台与后台正在执行的 Bash 命令或多工具调用任务；
-  - 支持一键展开/折叠任务运行详情，并支持直接点击“在侧边栏查看”无缝联动打开 Workbench 命令行抽屉。
-- **多窗格分栏拆分自适应与窄屏优化（Adaptive Panes & Narrow Toolbar）**：
-  - 彻底解决拖拽分栏高亮覆盖层在鼠标释放时偶尔粘连卡住的问题；
-  - 发送按钮与底部工具栏在超窄分栏模式下智能自适应紧凑布局，防止按钮被挤压变形。
-- **流式即时响应与轮内重试倒计时（Instant Streaming Cursor & Retry Indicator）**：
-  - 点击发送后到模型吐出首个 Token 的等待期内，直接显示呼吸闪烁光标（`▍`），消除首包等待的空白迟滞感；
-  - 遭遇模型 429 限流或服务错误触发退避重试时，在当前回合内直接显示实时倒计时指示器（如“重试中 1/3，12 秒后重试…”）。
-- **输入框高度自适应重构与多图粘贴**：
-  - 重构富文本高度计算与布局生命周期同步，长文本发送后立即自适应回弹收起；
-  - 支持剪贴板多图同时粘贴并保留草稿缓存，优化图片卡片与文件附件的排版展示。
-- **窗口生命周期与环境探测增强**：
-  - 新增主窗口关闭动作设置项：支持配置关闭主窗口时是直接退出应用还是最小化到系统托盘；
-  - Windows 环境下动态扫描注册表自动识别 Node.js 全局运行环境。
-
-## 社区共创致谢
-
-特别感谢社区贡献者 [@xiluyu](https://github.com/xiluyu) 为本项目提交并贡献的消息导航轨折叠交互与上下文压缩保护队列！
+- **应用内原地自动无感更新与自动重启（In-Place Auto-Update）**：
+  - macOS 端更新包下载完成后支持原子解压替换自身并自动拉起，自动清除 macOS Gatekeeper quarantine 隔离属性，无需每次版本升级都手动重新下载并拖入应用程序目录；
+  - Windows 端支持静默安装与无感重启；
+  - 安装引导对话框内嵌完整可滚动的 Markdown 变更日志展示；
+  - 设置页新增「跳过此版本」管理与自动下载更新开关；下载遭遇网络波动时自动指数退避重试并伴有实时 Toast 状态提醒。
+- **版本跳跃说明弹窗（Version Jump / What's New）**：
+  - 应用更新后首次启动自动弹出「新版更新日志」浮层，清晰展示当前版本的核心特性，点击关闭后自动记为已读不再打扰。
+- **架构收敛：专注 macOS 与 Windows 双平台（Streamlined Architecture）**：
+  - 彻底清理维护成本较高的 Linux 构建、打包与运行分支，精简 CI/CD 工作流与单测/E2E 运行矩阵；
+  - Windows 构建产物移除便携版（Portable），统一收敛为单一标准的 NSIS 安装包，确保安装与原地更新行为完全一致。
+- **连续提问滚动贴底防跳顶与长会话折叠优化（Chat Stick-to-Bottom）**：
+  - 用户提交新 Prompt 瞬间立即锁定底部并重置滚动位置，彻底解决连续快速提问时由于布局测量与高度抖动引发的向上跳顶现象；
+  - 引入 `isTurnCompleted` 精准判定历史轮次完成态，防止长会话流式启动瞬间上一轮因消息事件循环微小间隙发生意外解折叠，保证列表高度绝对平稳。
+- **本地开发模式专属 Bundle ID 与通知图标修复（macOS Dev Bundle）**：
+  - 为本地开发生成的 `.dev/Electron.app` 注入专属 `CFBundleIdentifier: io.github.zth0828.pidesktop.dev` 并向 LaunchServices 注册，彻底解决本地开发态系统通知回退显示本机微信开发者工具等其他 Electron 应用图标的 Bug。
+- **文档与发版导航完善**：
+  - README 补充 macOS Gatekeeper、Windows SmartScreen 排错与隐私说明；
+  - 发布说明头部提供结构化、可直达的双平台安装包下载链接。
 
 ## 验证情况
 
 - TypeScript 严格类型检查 100% 通过（`pnpm typecheck`）。
-- 全量单元测试 100% 通过（91 个测试套件，730 个单元测试全部通过）。
-- Playwright Electron 端到端全量测试 100% 通过（38 个测试套件，243 个 E2E 用例覆盖）。
+- 全量单元测试 100% 通过（91 个测试套件，738 项单元测试全部通过）。
+- Playwright Electron 端到端全量测试 100% 通过（237 个 E2E 用例全部通过，6 个平台条件性跳过）。
 - 中英文字典 key 100% 对齐（`i18n-parity.test.ts` 通过）。
 
-## 安装提示
+## 安装与升级提示
 
 Pi Desktop 需要 Node.js 22.19.0 或更新版本，并要求通过 npm 全局安装兼容版本的 pi：
 
@@ -57,8 +49,7 @@ Pi Desktop 需要 Node.js 22.19.0 或更新版本，并要求通过 npm 全局�
 npm i -g @earendil-works/pi-coding-agent
 ```
 
-Windows 安装包尚未进行商业代码签名，Windows SmartScreen 可能显示安全提示。请只从本仓库 GitHub Releases 下载，并在运行前核对 SHA-256。
-
-macOS 产物使用完整的 ad-hoc 签名。打开 DMG 后将 Pi Desktop 拖入「应用程序」文件夹即可运行。后续版本支持在应用内直接原地自动无感更新，无需重复手动安装。
+- **macOS**：打开 DMG 后将 Pi Desktop 拖入「应用程序」文件夹即可。本版本已内置原地自动无感更新，后续新版本可在应用内一键静默自动升级。
+- **Windows**：运行 Setup 安装包完成安装，Windows SmartScreen 如提示安全警告请选择“仍要运行”，后续版本同样支持应用内自动更新。
 
 本软件可免费用于个人和非商业用途；商业使用需事先获得书面授权，详见 LICENSE。
