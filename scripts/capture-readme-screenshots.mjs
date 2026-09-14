@@ -56,13 +56,18 @@ try {
   await mkdir(path.join(workspace, 'docs'), { recursive: true });
   await writeFile(path.join(workspace, 'docs', 'design.md'), '# Design\n\nWorkbench panels stay docked beside the chat.\n');
   await writeFile(path.join(workspace, 'docs', 'rollout.md'), '# Rollout\n\n1. Preview builds\n2. Signed releases\n');
-  execFileSync('git', ['init', '--quiet'], { cwd: workspace });
-  execFileSync('git', ['add', '.'], { cwd: workspace });
-  execFileSync('git', [
-    '-c', 'user.name=Pi Desktop',
-    '-c', 'user.email=demo@localhost',
-    'commit', '--quiet', '-m', 'demo baseline',
-  ], { cwd: workspace });
+  const gitEnv = {
+    ...process.env,
+    HOME: fixtureRoot,
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_AUTHOR_NAME: 'Pi Desktop',
+    GIT_AUTHOR_EMAIL: 'demo@localhost',
+    GIT_COMMITTER_NAME: 'Pi Desktop',
+    GIT_COMMITTER_EMAIL: 'demo@localhost',
+  };
+  execFileSync('git', ['init', '--quiet'], { cwd: workspace, env: gitEnv });
+  execFileSync('git', ['add', '.'], { cwd: workspace, env: gitEnv });
+  execFileSync('git', ['commit', '--quiet', '-m', 'demo baseline'], { cwd: workspace, env: gitEnv });
   await writeFile(path.join(agentDir, 'models.json'), JSON.stringify({
     providers: {
       'openai-compatible': {
@@ -162,15 +167,35 @@ try {
     },
   });
   const page = await app.firstWindow();
+  app.process().stdout.on('data', (d) => console.log('ELECTRON STDOUT:', String(d).trim()));
+  app.process().stderr.on('data', (d) => console.error('ELECTRON STDERR:', String(d).trim()));
+  app.process().on('exit', (code, sig) => console.log('ELECTRON EXITED WITH:', code, sig));
+  page.on('console', (msg) => console.log('PAGE LOG:', msg.type(), msg.text()));
+  page.on('pageerror', (err) => console.error('PAGE ERROR:', err));
+  page.on('close', () => console.log('PAGE CLOSED!'));
   await page.waitForLoadState('domcontentloaded');
   await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addStyleTag({ content: '.version-update-toast { display: none !important; }' });
   await page.getByTestId('model-select').or(page.getByTestId('model-badge')).first().waitFor({ timeout: 30_000 });
 
+  // Turn 1: Project exploration
+  await page.getByTestId('chat-input').fill('Inspect workspace layout.');
+  await page.getByTestId('chat-send').click();
+  await page.getByTestId('turn-fold-toggle').last().waitFor({ timeout: 30_000 });
+
+  // Turn 2: Rich Markdown
   await page.getByTestId('chat-input').fill('Create a concise release plan for Pi Desktop.');
   await page.getByTestId('chat-send').click();
   await page.getByText('Release plan', { exact: true }).waitFor({ timeout: 30_000 });
+
+  // Right nav rail is now visible (2 anchors)
+  const firstRailDot = page.locator('.msg-rail-dot').first();
+  await firstRailDot.waitFor({ timeout: 5000 });
+  await firstRailDot.hover();
+  await page.locator('.msg-rail-hover-preview').waitFor({ timeout: 5000 }).catch(() => {});
   await page.screenshot({ path: path.join(outputDir, 'chat.png') });
 
+  // Turn 3: Code change and review
   await page.getByTestId('chat-input').fill('Please update the release status from alpha to beta.');
   await page.getByTestId('chat-send').click();
   await page.getByTestId('turn-fold-toggle').last().waitFor({ timeout: 30_000 });
@@ -178,6 +203,14 @@ try {
   await page.getByTestId('workspace-review-tab').click();
   await page.getByText('release-status.txt', { exact: true }).first().waitFor({ timeout: 30_000 });
   await page.screenshot({ path: path.join(outputDir, 'review.png') });
+
+  // Fork Tree Dialog!
+  await page.getByTestId('chat-input').fill('/tree');
+  await page.getByTestId('chat-input').press('Enter');
+  await page.getByTestId('tree-dialog').waitFor({ timeout: 10_000 });
+  await page.screenshot({ path: path.join(outputDir, 'fork-tree.png') });
+  await page.keyboard.press('Escape');
+  await page.getByTestId('tree-dialog').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
 
   await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-command-mode').click();
@@ -189,21 +222,36 @@ try {
   await page.locator('.command-run.expanded').getByTestId('command-run-output').waitFor({ timeout: 30_000 });
   await page.screenshot({ path: path.join(outputDir, 'commands.png') });
 
+  console.log('[STEP] Navigating to models...');
   await page.getByTestId('nav-models').click();
   await page.getByTestId('models-search').fill('openai-compatible');
   await page.getByTestId('provider-openai-compatible').waitFor({ timeout: 30_000 });
   await page.getByTestId('provider-openai-compatible').locator('.provider-row-header').click();
   await page.getByTestId('provider-model-openai-compatible-pi-code').waitFor();
   await page.screenshot({ path: path.join(outputDir, 'models.png') });
+  console.log('[STEP] models.png captured.');
 
+  console.log('[STEP] Returning to chat for new session...');
+  await page.getByTestId('nav-chat').click();
+  const wsClose = page.getByTestId('workspace-close');
+  if (await wsClose.isVisible().catch(() => false)) await wsClose.click();
   await page.getByTestId('new-chat').click();
+  await page.getByTestId('chat-input').waitFor({ timeout: 30_000 });
   await page.getByTestId('chat-input').fill('Review the release checklist.');
+  console.log('[STEP] Sending "Review the release checklist."...');
   await page.getByTestId('chat-send').click();
+  console.log('[STEP] Waiting for assistant reply...');
   await page.getByTestId('message-assistant').last().waitFor({ timeout: 30_000 });
+  console.log('[STEP] Navigating to sessions...');
   await page.getByTestId('nav-sessions').click();
   await page.locator('.session-row').nth(1).waitFor({ timeout: 30_000 });
   await page.addStyleTag({ content: '.session-export-status { display: none !important; }' });
   await page.screenshot({ path: path.join(outputDir, 'sessions.png') });
+  console.log('[STEP] sessions.png captured.');
+
+  // Return to chat view
+  await page.getByTestId('nav-chat').click();
+  await page.locator('.sidebar-session-row').filter({ hasText: 'Review the release c' }).waitFor({ timeout: 30_000 });
 
   // 多窗口合成图：主窗口打开第二个会话，第一个会话拆为独立窗口，
   // 再用 canvas 把两个窗口截图错位叠加（圆角 + 投影，透明背景）。
@@ -212,7 +260,8 @@ try {
   await page.getByTestId('message-assistant').first().waitFor({ timeout: 30_000 });
   const mainWsClose = page.getByTestId('workspace-close');
   if (await mainWsClose.isVisible().catch(() => false)) await mainWsClose.click();
-  const planRow = page.locator('.sidebar-session-row').filter({ hasText: 'Create a concise r' });
+  const planRow = page.locator('.sidebar-session-row').filter({ hasText: 'Inspect workspace' });
+  await planRow.waitFor({ timeout: 30_000 });
   const planTestId = await planRow.locator('[data-testid^="sidebar-session-"]').first().getAttribute('data-testid');
   const planSessionId = (planTestId ?? '').replace('sidebar-session-', '');
   const detachedPromise = app.waitForEvent('window');
@@ -221,7 +270,7 @@ try {
   const detached = await detachedPromise;
   await detached.waitForLoadState('domcontentloaded');
   await detached.getByText('Release plan', { exact: true }).waitFor({ timeout: 30_000 });
-  await detached.addStyleTag({ content: '.scroll-to-bottom { display: none !important; }' });
+  await detached.addStyleTag({ content: '.scroll-to-bottom { display: none !important; } .version-update-toast { display: none !important; }' });
   const backShot = await page.screenshot();
   const frontShot = await detached.screenshot();
   const composed = await page.evaluate(async ({ back, front }) => {
@@ -301,7 +350,7 @@ try {
   const notesFile = page.locator('[data-testid="file-option"]', { hasText: 'release-notes.md' });
   await notesFile.waitFor({ timeout: 30_000 });
   await notesFile.click();
-  await page.getByTestId('staged-attachments').waitFor({ timeout: 30_000 });
+  await page.locator('.composer-inline-chip').waitFor({ timeout: 30_000 });
   await page.getByTestId('composer-menu').click();
   await page.getByTestId('composer-file-reference').click();
   await page.getByTestId('file-dir').first().waitFor({ timeout: 30_000 });

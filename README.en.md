@@ -120,7 +120,9 @@ Switch models mid-session from the composer picker, which groups providers and s
 
 ![Pi Desktop session management](./resources/screenshots/sessions.png)
 
-Sessions are not disposable chat tabs. Continue earlier work, archive completed tasks, or export self-contained, high-fidelity HTML records. When forking from any message node, the interactive Session Branch Tree displays the full topological lineage and fork depth, letting you traverse and experiment with alternative implementations effortlessly.
+Sessions are not disposable chat tabs. Continue earlier work, archive completed tasks, or export self-contained, high-fidelity HTML records. When forking from any message node, the interactive Session Branch Tree displays the full topological lineage and fork depth, letting you traverse and experiment with alternative implementations effortlessly:
+
+![Pi Desktop session branch tree](./resources/screenshots/fork-tree.png)
 
 ### Multitask with split panes and separate windows
 

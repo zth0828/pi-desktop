@@ -116,7 +116,7 @@ const server = http.createServer((req, res) => {
     const lastUser = lastUserMessage ? JSON.stringify(lastUserMessage) : "";
     const hasToolResult = msgs.slice(lastUserIdx + 1).some((m) => m.role === "tool");
     const wantsTool = !hasToolResult && (
-      lastUser.includes("USE_TOOL_LS") || lastUser.includes("USE_TOOL_EDIT") || lastUser.includes("update the release status") ||
+      lastUser.includes("USE_TOOL_LS") || lastUser.includes("Inspect workspace layout") || lastUser.includes("USE_TOOL_EDIT") || lastUser.includes("update the release status") ||
       lastUser.includes("USE_TOOL_LONG") || lastUser.includes("USE_TOOL_LINES") ||
       lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_GREP") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_READ_EXTERNAL_HISTORY") || lastUser.includes("USE_TOOL_EDIT_WRITE") || lastUser.includes("USE_TOOL_WRITE_SIX") ||
       lastUser.includes("USE_TOOL_FOREGROUND_SERVER") ||
