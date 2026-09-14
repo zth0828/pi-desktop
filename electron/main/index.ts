@@ -14,6 +14,9 @@ import { getElectronStore } from '../utils/electron-store';
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
+// 强制本地回环地址绕过系统代理，防止 dev 模式开发服务器与本地模型接口出现 ERR_SOCKET_NOT_CONNECTED
+app.commandLine.appendSwitch('proxy-bypass-list', '<local>;127.0.0.1;localhost;::1');
+
 // dev 下 app.name 默认是 Electron，打包产物是 productName（Pi Desktop）；
 // 统一全平台应用名，确保 macOS 系统菜单栏与 Linux X11/Wayland 的 WM_CLASS 一致。
 // 需在 userData 派生之前设置（dev 下 userData 也随之与打包产物对齐）。

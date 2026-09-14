@@ -335,7 +335,13 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
 
   if (process.env.VITE_DEV_SERVER_URL) {
     const url = new URL(process.env.VITE_DEV_SERVER_URL);
+    if (url.hostname === 'localhost') {
+      url.hostname = '127.0.0.1';
+    }
     for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
+    win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+      console.error(`[window-manager] Failed to load ${validatedURL}: ${errorDescription} (${errorCode})`);
+    });
     win.loadURL(url.toString());
   } else {
     win.loadFile(
