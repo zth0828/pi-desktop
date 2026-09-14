@@ -560,3 +560,44 @@ for (const handoff of ['highlight expiry', 'alignment interval', 'return to bott
       : page.locator('#chat-msg-0')).toBeInViewport();
   });
 }
+
+test('clicking the last anchor smoothly scrolls to bottom, revealing the latest response, and earlier anchors track target', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspace },
+  });
+  const page = await app.firstWindow();
+  const trustDialog = page.getByTestId('trust-dialog');
+  const modelReady = page.getByTestId('model-select').or(page.getByTestId('model-badge')).first();
+  await expect(trustDialog.or(modelReady).first()).toBeVisible({ timeout: 30_000 });
+  if (await trustDialog.isVisible()) {
+    await trustDialog.getByTestId('trust-option').first().click();
+    await expect(trustDialog).toBeHidden();
+  }
+  await expect(modelReady).toBeVisible({ timeout: 30_000 });
+
+  for (let i = 1; i <= 4; i++) {
+    await page.getByTestId('chat-input').fill(`Question round ${i}`);
+    await page.getByTestId('chat-send').click();
+    await expect(page.getByTestId('message-user')).toHaveCount(i, { timeout: 30_000 });
+    await expect(page.getByTestId('message-assistant')).toHaveCount(i, { timeout: 30_000 });
+  }
+
+  const list = page.getByTestId('message-list');
+  const lastDot = page.getByTestId('msg-rail-dot-chat-msg-6');
+  const firstDot = page.getByTestId('msg-rail-dot-chat-msg-0');
+
+  // 1. 点击第一个点跳到顶部，并校验聚焦高亮样式
+  await firstDot.click();
+  await expect.poll(() => list.evaluate((el) => el.scrollTop), { timeout: 10_000 }).toBeLessThan(40);
+  await expect(page.locator('#chat-msg-0')).toBeInViewport();
+  await expect(page.locator('#chat-msg-0')).toHaveClass(/rail-jump-focus/);
+
+  // 2. 点击最后一个点：必须平滑完整落底，最新助手回复必须处于视口中，向下箭头隐藏
+  await lastDot.click();
+  await expect.poll(() => list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight), { timeout: 10_000 }).toBeLessThan(24);
+  await expect(page.getByTestId('message-assistant').last()).toBeInViewport();
+  await expect(lastDot).toHaveClass(/active/);
+  await expect(page.getByTestId('scroll-to-bottom')).toBeHidden();
+});

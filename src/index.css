@@ -541,6 +541,21 @@ button.danger-outline {
   animation: search-target-pulse 700ms ease-out;
 }
 
+.message.rail-jump-focus {
+  position: relative;
+  z-index: 1;
+  border-radius: 8px;
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 4px;
+  animation: rail-jump-pulse 1200ms ease-out forwards;
+}
+
+@keyframes rail-jump-pulse {
+  0% { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+  60% { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  100% { background: transparent; }
+}
+
 @keyframes search-target-pulse {
   from { background: color-mix(in srgb, var(--accent) 16%, transparent); }
   to { background: transparent; }

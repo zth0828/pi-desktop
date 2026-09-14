@@ -303,11 +303,17 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
     ? searchHighlight.messageIndex
     : undefined;
 
+  const settleTimerRef = useRef<number | null>(null);
+
   const cancelListScroll = useCallback(() => {
     scrollTokenRef.current += 1;
     if (scrollFrameRef.current !== null) {
       cancelAnimationFrame(scrollFrameRef.current);
       scrollFrameRef.current = null;
+    }
+    if (settleTimerRef.current !== null) {
+      window.clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = null;
     }
   }, []);
 
@@ -323,21 +329,43 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   }, []);
 
 
-  const animateListScrollTo = useCallback((targetTop: number) => {
+  const animateListScrollTo = useCallback((
+    targetTop: number,
+    options?: { targetElement?: HTMLElement | null; stickToBottom?: boolean },
+  ) => {
     searchAlignTokenRef.current += 1;
     cancelListScroll();
     const list = listRef.current;
     if (!list) return;
     // 用户跳转优先于会话切换后的延迟复位和消息增量的自动钉底。
     scrollResetRef.current = false;
-    stickToBottomRef.current = false;
+    stickToBottomRef.current = Boolean(options?.stickToBottom);
+    if (options?.stickToBottom) {
+      setShowScrollToBottom(false);
+    }
     const token = scrollTokenRef.current;
     const startTop = list.scrollTop;
-    const endTop = Math.max(0, Math.min(list.scrollHeight - list.clientHeight, targetTop));
+
+    const computeCurrentEndTop = (): number => {
+      if (options?.stickToBottom) {
+        return Math.max(0, list.scrollHeight - list.clientHeight);
+      }
+      if (options?.targetElement) {
+        const listRect = list.getBoundingClientRect();
+        const targetRect = options.targetElement.getBoundingClientRect();
+        const rawTop = list.scrollTop + targetRect.top - listRect.top - 8;
+        return Math.max(0, Math.min(list.scrollHeight - list.clientHeight, rawTop));
+      }
+      return Math.max(0, Math.min(list.scrollHeight - list.clientHeight, targetTop));
+    };
+
+    let endTop = computeCurrentEndTop();
     const startedAt = performance.now();
     const duration = 320;
     const step = (now: number) => {
       if (token !== scrollTokenRef.current || listRef.current !== list) return;
+      // 随着滚动展开占位符或异步排版变化，动态更新 endTop 保证落点绝对精准
+      endTop = computeCurrentEndTop();
       const progress = Math.min(1, Math.max(0, (now - startedAt) / duration));
       const eased = progress < 0.5
         ? 2 * progress * progress
@@ -348,7 +376,24 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
       } else {
         scrollFrameRef.current = null;
         list.scrollTop = endTop;
+        if (options?.stickToBottom) {
+          stickToBottomRef.current = true;
+          setShowScrollToBottom(false);
+          setReturnToBottomVersion((version) => version + 1);
+        }
         updateScrollAffordance();
+
+        if (options?.targetElement) {
+          // 针对异步排版（如代码块高亮/图片延迟载入）导致的后续轻微抖动，进行二次对齐补正
+          settleTimerRef.current = window.setTimeout(() => {
+            if (token !== scrollTokenRef.current || listRef.current !== list) return;
+            const finalTop = computeCurrentEndTop();
+            if (Math.abs(list.scrollTop - finalTop) > 2) {
+              list.scrollTop = finalTop;
+              updateScrollAffordance();
+            }
+          }, 60);
+        }
       }
     };
     scrollFrameRef.current = requestAnimationFrame(step);
@@ -638,14 +683,30 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
   const jumpToAnchor = useCallback((anchorId: string) => {
     const list = listRef.current;
     if (!list) return;
+
+    // 最后一个用户消息锚点的用户意图是定位到最新模型答复与对话最底部
+    const isLastRailAnchor = railAnchors.length > 0 && anchorId === railAnchors[railAnchors.length - 1].id;
+    if (isLastRailAnchor) {
+      animateListScrollTo(list.scrollHeight - list.clientHeight, { stickToBottom: true });
+      return;
+    }
+
     const target = findMessageElement(list, anchorId);
     if (!target) return;
+
+    // 视觉反馈：添加瞬时聚焦高亮动画（不影响已有 search-target 测试）
+    target.classList.remove('rail-jump-focus');
+    void target.offsetWidth;
+    target.classList.add('rail-jump-focus');
+    window.setTimeout(() => {
+      target.classList.remove('rail-jump-focus');
+    }, 1600);
 
     const listRect = list.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
     const targetTop = list.scrollTop + targetRect.top - listRect.top;
-    animateListScrollTo(targetTop - 8);
-  }, [animateListScrollTo]);
+    animateListScrollTo(targetTop - 8, { targetElement: target });
+  }, [railAnchors, animateListScrollTo]);
 
   const chooseWorkspace = async () => {
     const result = await hostApi.dialog.openDirectory(t('chat.workspace.choose'));
