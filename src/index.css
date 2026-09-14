@@ -7724,72 +7724,236 @@ button.queue-attachment-file:hover {
   overflow: hidden;
 }
 
-.extui-title {
-  padding: 12px 16px;
-  font-size: 13px;
-  font-weight: 600;
+/* 扩展 UI 输入框上方吸附卡片 (Docked Above Input Box) */
+.extui-dock {
+  position: relative;
+  width: 100%;
+  padding: 0 24px 10px;
+  box-sizing: border-box;
+  animation: extui-slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 20;
+}
+
+@keyframes extui-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.extui-card {
+  width: 100%;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.extui-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 16px;
+  background: var(--bg-sunken);
   border-bottom: 1px solid var(--border);
 }
 
-.extui-message {
-  padding: 14px 16px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
+.extui-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
-.extui-options {
-  overflow-y: auto;
-  padding: 6px;
+.extui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
 }
 
-.extui-option {
-  display: block;
-  width: 100%;
-  padding: 7px 10px;
+.extui-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extui-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.extui-countdown {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  background: var(--bg-hover);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.extui-close-btn {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
   border: none;
-  border-radius: 8px;
   background: transparent;
-  font-size: 13px;
-  color: var(--text-secondary);
-  text-align: left;
+  color: var(--text-tertiary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.extui-option:hover {
+.extui-close-btn:hover {
   background: var(--bg-hover);
   color: var(--text);
 }
 
-.extui-input {
-  margin: 14px 16px 0;
-  padding: 8px 10px;
+.extui-options {
+  overflow-y: auto;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 42vh;
+}
+
+.extui-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.extui-option:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.extui-option:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.extui-option-index {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  transition: all 0.15s ease;
+  margin-top: 1px;
+}
+
+.extui-option:hover .extui-option-index {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.extui-option-text {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.extui-message {
+  padding: 16px 20px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.extui-input-wrap,
+.extui-editor-wrap {
+  padding: 12px 16px 4px;
+}
+
+.extui-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   background: var(--bg);
   color: var(--text);
-  font-size: 13px;
+  font-size: 13.5px;
+  box-sizing: border-box;
 }
 
 .extui-input:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .extui-editor {
-  min-height: 220px;
-  margin: 14px 16px 0;
-  padding: 10px;
+  width: 100%;
+  min-height: 160px;
+  padding: 10px 12px;
   resize: vertical;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
+  box-sizing: border-box;
 }
 
-.extui-editor:focus { outline: none; border-color: var(--accent); }
+.extui-editor:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.chat-empty .extui-dock {
+  max-width: 520px;
+  padding: 0 16px;
+  margin: 0 auto;
+}
 
 .extui-toast {
   position: fixed;
@@ -7848,15 +8012,24 @@ button.queue-attachment-file:hover {
 .extui-footer {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 16px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-sunken);
+  border-top: 1px solid var(--border);
 }
 
-.extui-countdown {
-  margin-right: auto;
+.extui-hint {
   font-size: 11.5px;
   color: var(--text-tertiary);
+  user-select: none;
+}
+
+.extui-footer-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 /* 斜杠命令的轻量确认（/name /copy /export /reload 等） */

@@ -1221,6 +1221,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
 
         <ExtensionWidgets placement="aboveEditor" />
         <StatusBar />
+        <ExtensionUiDialog />
         <ChatInput
           cwd={effectiveCwd}
           onChooseWorkspace={chooseWorkspace}
@@ -1231,7 +1232,6 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
       </div>
       <TreeDialog />
       <ReviewPanel />
-      <ExtensionUiDialog />
     </div>
   );
 }

@@ -900,7 +900,10 @@
     "cancel": "Cancel",
     "ok": "OK",
     "countdown": "Auto-cancel in {{seconds}}s",
-    "unsupportedTui": "An extension used a TUI-only capability that the desktop app does not support: {{feature}} (ignored)"
+    "unsupportedTui": "An extension used a TUI-only capability that the desktop app does not support: {{feature}} (ignored)",
+    "selectHint": "Press 1-{{count}} to select · Esc to cancel",
+    "keyboardHint": "Esc to cancel",
+    "questionBadge": "Question"
   },
   "skills": {
     "title": "Skills",

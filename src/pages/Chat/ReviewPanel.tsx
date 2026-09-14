@@ -1320,7 +1320,7 @@ export function ReviewPanel() {
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
-      if (document.querySelector('.image-lightbox, .extui-overlay, .session-search-overlay, .tree-overlay, .skill-view-overlay')) return;
+      if (document.querySelector('.image-lightbox, .extui-overlay, .extui-dock, .plan-install-overlay, .session-search-overlay, .tree-overlay, .skill-view-overlay')) return;
       if (effectiveTreeOpen) {
         closeFileTree();
         event.preventDefault();
