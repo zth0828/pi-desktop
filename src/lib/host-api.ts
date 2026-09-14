@@ -197,6 +197,10 @@ function createHostApi(sessionPath?: string) {
     }) => invoke('piPackages', 'catalog', query),
     detail: (name: string, refresh = false) =>
       invoke('piPackages', 'detail', { name, refresh }),
+    getCompanionStatus: (id: string) =>
+      invoke('piPackages', 'getCompanionStatus', { id }),
+    toggleCompanion: (id: string, enable: boolean) =>
+      invoke('piPackages', 'toggleCompanion', { id, enable }),
   },
   piMcp: {
     list: () => invoke('piMcp', 'list'),

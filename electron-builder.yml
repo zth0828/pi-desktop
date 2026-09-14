@@ -19,6 +19,8 @@ extraResources:
     to: icon.ico
   - from: resources/icon.icns
     to: icon.icns
+  - from: resources/extensions
+    to: extensions
 
 asar: true
 npmRebuild: false

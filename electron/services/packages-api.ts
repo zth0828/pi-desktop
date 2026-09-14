@@ -1,8 +1,12 @@
 // piPackages：扩展包管理。所有 pi SDK package-manager 操作经 adapter port。
-import { existsSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import type {
   HostSuccess,
+  PiCompanionExtensionQuery,
+  PiCompanionExtensionStatus,
+  PiCompanionExtensionTogglePayload,
+  PiCompanionExtensionToggleResult,
   PiPackageCheckUpdatesResult,
   PiPackageCatalogQuery,
   PiPackageCatalogResult,
@@ -16,7 +20,7 @@ import type {
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiAdapter, type PiPackageManagerHandle } from './pi-adapter';
-import { resolveRuntimeForContext } from './pi-runtime-api';
+import { piRuntimeApi, resolveRuntimeForContext } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 import { fetchPackageCatalog, fetchPackageDetail } from './package-catalog';
@@ -47,6 +51,29 @@ function installedVersion(installedPath?: string): string | undefined {
 function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
+
+function getBundledCompanionSource(id: string): string | null {
+  const fileName = `${id}.ts`;
+  const candidates = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'extensions', fileName) : null,
+    path.join(__dirname, '../../resources/extensions', fileName),
+    path.join(process.cwd(), 'resources/extensions', fileName),
+  ].filter(Boolean) as string[];
+
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+function getCompanionTargetPath(agentDir: string, id: string): string {
+  return path.join(agentDir, 'extensions', `${id}.ts`);
+}
+
+export const companionInternal = {
+  getBundledCompanionSource,
+  getCompanionTargetPath,
+};
 
 async function getPackageManager(ctx?: HostActionContext): Promise<{
   adapter: Awaited<ReturnType<typeof loadPiAdapter>>;
@@ -126,4 +153,40 @@ export const packagesApi = {
 
   catalog: async (payload: PiPackageCatalogQuery): Promise<PiPackageCatalogResult> => fetchPackageCatalog(payload),
   detail: async (payload: PiPackageDetailQuery): Promise<PiPackageDetailResult> => fetchPackageDetail(payload),
+
+  getCompanionStatus: async (payload: PiCompanionExtensionQuery, ctx?: HostActionContext): Promise<PiCompanionExtensionStatus> => {
+    const { agentDir } = await getPackageManager(ctx);
+    const targetPath = getCompanionTargetPath(agentDir, payload.id);
+    const installed = existsSync(targetPath);
+    return { id: payload.id, installed, path: installed ? targetPath : undefined };
+  },
+
+  toggleCompanion: async (
+    payload: PiCompanionExtensionTogglePayload,
+    ctx?: HostActionContext,
+  ): Promise<PiCompanionExtensionToggleResult> => {
+    const { agentDir } = await getPackageManager(ctx);
+    const targetPath = getCompanionTargetPath(agentDir, payload.id);
+
+    try {
+      if (payload.enable) {
+        const sourcePath = getBundledCompanionSource(payload.id);
+        if (!sourcePath) {
+          return { success: false, installed: false, error: `Bundled companion extension '${payload.id}' not found` };
+        }
+        mkdirSync(path.dirname(targetPath), { recursive: true });
+        copyFileSync(sourcePath, targetPath);
+        await piRuntimeApi.reload(undefined, ctx).catch(() => {});
+        return { success: true, installed: true };
+      } else {
+        if (existsSync(targetPath)) {
+          unlinkSync(targetPath);
+        }
+        await piRuntimeApi.reload(undefined, ctx).catch(() => {});
+        return { success: true, installed: false };
+      }
+    } catch (err) {
+      return { success: false, installed: existsSync(targetPath), error: toError(err) };
+    }
+  },
 };

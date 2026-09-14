@@ -1061,6 +1061,10 @@ export type PiPackageProgressEvent = {
   source: string;
   message?: string;
 };
+export type PiCompanionExtensionQuery = { id: string };
+export type PiCompanionExtensionStatus = { id: string; installed: boolean; path?: string };
+export type PiCompanionExtensionTogglePayload = { id: string; enable: boolean };
+export type PiCompanionExtensionToggleResult = HostSuccess & { installed: boolean };
 
 // —— piMcp：MCP server 配置（pi-mcp-adapter 的标准 mcpServers 格式）——
 
@@ -1323,6 +1327,10 @@ export type HostApiContract = {
     catalog: (payload: PiPackageCatalogQuery) => PiPackageCatalogResult;
     /** 查询单个 pi.dev Package 详情，包含 manifest 与经过清洗的 README HTML。 */
     detail: (payload: PiPackageDetailQuery) => PiPackageDetailResult;
+    /** 查询随桌面打包的内置伴生扩展（如 ask-question）安装状态。 */
+    getCompanionStatus: (payload: PiCompanionExtensionQuery) => PiCompanionExtensionStatus;
+    /** 一键安装或移除内置伴生扩展。 */
+    toggleCompanion: (payload: PiCompanionExtensionTogglePayload) => PiCompanionExtensionToggleResult;
   };
   piMcp: {
     /** 合并 <agentDir>/mcp.json（global）与 <cwd>/.mcp.json（project）的 server 列表。 */
