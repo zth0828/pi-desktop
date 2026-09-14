@@ -41,6 +41,8 @@ import { ChatInputAttachments } from './chat-input/ChatInputAttachments';
 import { ChatInputMentionsPopup } from './chat-input/ChatInputMentionsPopup';
 import { ChatInputSlashPopup } from './chat-input/ChatInputSlashPopup';
 import { ChatInputControls } from './chat-input/ChatInputControls';
+import { PlanInstallDialog } from './chat-input/PlanInstallDialog';
+import { isPlanExtensionInstalled } from './chat-input/plan-extension-check';
 import { RunningTasksCard } from './RunningTasksCard';
 import {
   insertChipAtCaret,
@@ -120,6 +122,33 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
   const [switchingBranch, setSwitchingBranch] = useState(false);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [planMode, setPlanMode] = useState(false);
+  const [planInstallOpen, setPlanInstallOpen] = useState(false);
+
+  const isPlanActive = Boolean(
+    extensionUi?.statuses.some((s) => s.key.toLowerCase().includes('plan')) ||
+    extensionUi?.widgets.some((w) => w.key.toLowerCase().includes('plan')),
+  );
+
+  const handleTogglePlan = async () => {
+    if (planMode) {
+      setPlanMode(false);
+      return;
+    }
+    if (isPlanActive) {
+      setPlanMode(true);
+      return;
+    }
+    try {
+      const { packages } = await hostApi.piPackages.list();
+      if (isPlanExtensionInstalled(packages)) {
+        setPlanMode(true);
+      } else {
+        setPlanInstallOpen(true);
+      }
+    } catch {
+      setPlanInstallOpen(true);
+    }
+  };
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelMenuSection, setModelMenuSection] = useState<ModelMenuSection>(null);
@@ -679,7 +708,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
     });
   };
 
-  const send = (behavior?: 'steer' | 'followUp') => {
+  const send = async (behavior?: 'steer' | 'followUp') => {
     resetHistory();
     const rawInput = value.trim();
     const text = rawInput;
@@ -737,7 +766,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
       if (rawName === 'plan' || rawName === 'plan-mode') {
         if (!arg) {
           clearComposerInput();
-          setPlanMode((prev) => !prev);
+          void handleTogglePlan();
           return;
         }
         if (arg === 'exit' || arg === 'quit') {
@@ -745,6 +774,19 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
           const promptText = formatOrderedAttachmentPrompt(text, outgoingAttachments);
           clearComposerInput();
           executePrompt(promptText, outgoing, behavior);
+          return;
+        }
+        let hasPlanPkg = isPlanActive;
+        if (!hasPlanPkg) {
+          try {
+            const { packages } = await hostApi.piPackages.list();
+            hasPlanPkg = isPlanExtensionInstalled(packages);
+          } catch {
+            hasPlanPkg = false;
+          }
+        }
+        if (!hasPlanPkg) {
+          setPlanInstallOpen(true);
           return;
         }
         if (!planMode) setPlanMode(true);
@@ -812,10 +854,6 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
   const prevCommandRef = useRef(commandMode);
   const prevPlanRef = useRef(planMode);
 
-  const isPlanActive = Boolean(
-    extensionUi?.statuses.some((s) => s.key.toLowerCase().includes('plan')) ||
-    extensionUi?.widgets.some((w) => w.key.toLowerCase().includes('plan'))
-  );
   const prevPlanActiveRef = useRef(isPlanActive);
   useEffect(() => {
     if (isPlanActive !== prevPlanActiveRef.current) {
@@ -1572,6 +1610,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
           setAttachments={setAttachments}
           planMode={planMode}
           setPlanMode={setPlanMode}
+          onTogglePlan={handleTogglePlan}
           gitBranch={gitBranch}
           canSwitchBranch={canSwitchBranch}
           branchMenuRef={branchMenuRef}
@@ -1637,6 +1676,11 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
           onFocusTextarea={focusComposer}
         />
       </div>
+      <PlanInstallDialog
+        open={planInstallOpen}
+        onClose={() => setPlanInstallOpen(false)}
+        onInstalled={() => setPlanMode(true)}
+      />
       {previewImage && (
         <ImageLightbox
           src={previewImage.url}

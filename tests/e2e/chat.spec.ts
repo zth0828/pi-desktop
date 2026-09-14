@@ -718,20 +718,41 @@ test('吸顶运行态任务卡片：bash 运行中吸顶展示，点击在侧边
   await expect(taskCard).toHaveCount(0, { timeout: 10_000 });
 });
 
-test('计划模式：常驻切换，开启后发送带 /plan 前缀，可退出', async ({ launchElectronApp }) => {
+test('计划模式：未安装社区扩展时点击弹出安装确认，已安装时常驻切换带 /plan 前缀', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
   // 默认关闭（直接执行）
   await expect(page.getByTestId('composer-plan-toggle')).toHaveAttribute('aria-pressed', 'false');
-  // 开启：发送带 /plan 前缀（ECHO_USER 回显收到的 user 文本验证）
+
+  // 1) 未安装扩展：点击计划模式按钮，弹出安装确认弹窗
+  await page.getByTestId('composer-plan-toggle').click();
+  const installDialog = page.getByTestId('plan-install-dialog');
+  await expect(installDialog).toBeVisible();
+
+  // 2) 点击暂不下载：弹窗关闭，计划模式保持关闭（未下载无法使用）
+  await page.getByTestId('plan-install-cancel').click();
+  await expect(installDialog).toBeHidden();
+  await expect(page.getByTestId('composer-plan-toggle')).toHaveAttribute('aria-pressed', 'false');
+
+  // 3) 模拟已安装扩展（写入 agentDir/settings.json packages 字段）
+  await writeFile(
+    path.join(agentDir, 'settings.json'),
+    JSON.stringify({
+      packages: ['npm:@narumitw/pi-plan-mode'],
+      compaction: { enabled: true, reserveTokens: 16_384, keepRecentTokens: 100 },
+      retry: { enabled: true, baseDelayMs: 8_000, maxRetries: 3 },
+    }),
+  );
+
+  // 4) 已安装扩展：开启发送带 /plan 前缀（ECHO_USER 回显收到的 user 文本验证）
   await page.getByTestId('composer-plan-toggle').click();
   await expect(page.getByTestId('composer-plan-toggle')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('chat-input').fill('ECHO_USER 帮我设计架构');
   await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('message-assistant').last()).toContainText('/plan ECHO_USER 帮我设计架构', { timeout: 30_000 });
-  // 退出：恢复直接执行
+  // 5) 退出：恢复直接执行
   await page.getByTestId('composer-plan-toggle').click();
   await expect(page.getByTestId('composer-plan-toggle')).toHaveAttribute('aria-pressed', 'false');
   await page.getByTestId('chat-input').fill('ECHO_USER 直接执行这条');

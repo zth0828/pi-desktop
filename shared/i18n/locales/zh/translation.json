@@ -400,6 +400,16 @@
     "noSkills": "暂无可用 Skill",
     "planMode": "计划模式",
     "planModeUnavailable": "安装 plan-mode 扩展后可用",
+    "planInstall": {
+      "title": "启用计划模式",
+      "desc": "计划模式需要安装社区扩展 @narumitw/pi-plan-mode。是否立即下载安装？",
+      "note": "未安装扩展时无法使用计划模式。",
+      "installBtn": "下载安装",
+      "installing": "正在安装扩展…",
+      "cancelBtn": "暂不下载",
+      "success": "扩展安装成功，已开启计划模式",
+      "failed": "安装失败：{{error}}"
+    },
     "cacheStatsNote": "部分本地模型不会上报缓存统计。",
     "mentionsHint": {
       "tree": "↑↓ 移动 · ←→ 层级 · 空格/Tab 选择 · Esc 取消",

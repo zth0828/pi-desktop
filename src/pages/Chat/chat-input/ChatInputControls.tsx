@@ -44,6 +44,7 @@ export interface ChatInputControlsProps {
   setAttachments: (setter: (current: StagedAttachment[]) => StagedAttachment[]) => void;
   planMode: boolean;
   setPlanMode: (setter: (on: boolean) => boolean) => void;
+  onTogglePlan?: () => void;
   gitBranch: string | null;
   canSwitchBranch: boolean;
   branchMenuRef: RefObject<HTMLDivElement | null>;
@@ -116,6 +117,7 @@ export function ChatInputControls({
   setAttachments,
   planMode,
   setPlanMode,
+  onTogglePlan,
   gitBranch,
   canSwitchBranch,
   branchMenuRef,
@@ -320,7 +322,7 @@ export function ChatInputControls({
           data-testid="composer-plan-toggle"
           title={planMode ? t('chat.planModeOn') : t('chat.planMode')}
           aria-pressed={planMode}
-          onClick={() => setPlanMode((on) => !on)}
+          onClick={onTogglePlan ?? (() => setPlanMode((on) => !on))}
         >
           <Brain size={14} />
         </button>

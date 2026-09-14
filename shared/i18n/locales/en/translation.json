@@ -400,6 +400,16 @@
     "noSkills": "No skills available",
     "planMode": "Plan mode",
     "planModeUnavailable": "Install the plan-mode extension to enable this",
+    "planInstall": {
+      "title": "Enable Plan Mode",
+      "desc": "Plan mode requires the community extension @narumitw/pi-plan-mode. Would you like to download and install it now?",
+      "note": "Plan mode is unavailable without installing the extension.",
+      "installBtn": "Download & Install",
+      "installing": "Installing extension…",
+      "cancelBtn": "Not Now",
+      "success": "Extension installed successfully, plan mode enabled",
+      "failed": "Installation failed: {{error}}"
+    },
     "cacheStatsNote": "Some local models do not report cache statistics.",
     "mentionsHint": {
       "tree": "↑↓ Navigate · ←→ Folders · Space/Tab Pick · Esc Cancel",

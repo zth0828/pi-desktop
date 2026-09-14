@@ -8032,6 +8032,108 @@ button.queue-attachment-file:hover {
   margin-left: auto;
 }
 
+/* 计划模式社区扩展安装确认弹窗 */
+.plan-install-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.plan-install-dialog {
+  width: min(480px, 90vw);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: slideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.plan-install-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.plan-install-icon-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.plan-install-title-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.plan-install-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.plan-install-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.plan-install-note {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}
+
+.plan-install-note code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--bg-hover);
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.plan-install-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+  line-height: 1.4;
+}
+
+.plan-install-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.plan-install-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* 斜杠命令的轻量确认（/name /copy /export /reload 等） */
 
 .chat-notice {
