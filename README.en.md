@@ -78,13 +78,13 @@ actual installation and execution to pi.
 
 | Area | What is available |
 | --- | --- |
-| **Agent chat** | Streaming text and reasoning, tool-call progress, message navigation rail on the right (prompt hover preview/smart folding panel/independent compaction rail/smooth precise jump), historical turn auto-folding (aggregation of reasoning and tool executions/duration metrics/one-click collapse at bottom), stop, queue and steer, slash commands, a plan mode toggle, message editing and forking with attachments restored, bash command mode with context control, rich Markdown, task lists, tables, code blocks, copy actions, workspace file references, and image attachments |
-| **Workspace** | Expandable file browser; text, code, image, Markdown, PDF, DOCX, XLSX and CSV previews; open files in native apps; session bash run history; docked side-by-side or overlay layout with optional window expansion |
-| **Change review** | Git and non-Git change detection, staged/unstaged/untracked/conflict states, split or unified diff, per-file and per-hunk revert confirmation, and edited-file turn summary cards (single-click revert per turn) |
-| **Sessions** | Project-grouped history with group expand and collapse, title/message search, rename, live-session indicators, switch, fork, visual session branch tree (topological node switching/depth inspection), archive/restore, delete, context compaction, and standalone HTML export |
-| **Models** | Built-in and extension providers, API keys, OAuth, custom compatible endpoints, protocol probing, model discovery, context/output limits, token pricing, thinking levels, usage and cost details, provider error diagnostic guidance (401/429/500), and a composer picker with provider grouping and per-provider search |
-| **pi ecosystem** | Read active Skills, browse the official package catalog, inspect package metadata and README files, install/update/remove packages, configure global/project MCP servers, and render supported extension dialogs/widgets/notifications |
-| **Desktop experience** | Light/dark/system themes, English/Chinese UI, split panes and detached session windows, session search shortcut, collapsible sidebar, notification policy, send-key and follow-up behavior, prevent-sleep support, version update notifications with mirror-accelerated downloads, and pi environment diagnostics |
+| **Agent chat** | • Streaming text and reasoning with real-time display<br>• Persistent message navigation rail on the right (prompt hover preview, smart folding for long threads, precise smooth jump)<br>• Historical turn auto-folding (compact reasoning & tool call summaries, elapsed time metrics, one-click collapse at bottom)<br>• Stop, queue, and steer message delivery<br>• Slash commands, Plan mode toggle, inline message editing and forking<br>• Bash command mode with context inclusion control<br>• Rich Markdown, syntax-highlighted code blocks with copy actions, task lists, and tables<br>• Workspace `@` file tree references and image attachments |
+| **Workspace** | • Docked side-by-side and overlay layouts with optional window expansion<br>• Full built-in previews: code, Markdown, PDF (page controls & zoom), DOCX, XLSX, CSV, images<br>• Open files directly in native desktop applications<br>• Session bash run history and terminal logs (Commands tab) |
+| **Change review** | • Git and non-Git workspace change detection (staged/unstaged/untracked/conflict)<br>• Split and unified diff views<br>• Per-file and per-hunk review and revert confirmation<br>• Turn summary cards for edited files with single-click per-turn revert |
+| **Sessions** | • Project-grouped history with group expand/collapse and live status<br>• Real-time title and message content search<br>• Visual session branch tree (Fork Tree: topological graph, fork depth inspection, seamless cross-branch switching)<br>• Session archive, restore, rename, and deletion<br>• Context compaction checkpoints and standalone HTML export |
+| **Models** | • Built-in and extension providers, API keys, OAuth fast authorization, custom compatible endpoints<br>• Protocol probing, model discovery, context/output limits, token pricing and cost estimation<br>• Smooth thinking level adjustment<br>• Provider error diagnostic guidance (root-cause insights for 401/429/500 errors)<br>• Composer model picker with provider grouping and real-time search |
+| **pi ecosystem** | • Live Skill listing and documentation cards<br>• Package catalog browsing, metadata, and README viewing<br>• Package installation, update, and removal via pi<br>• Graphical configuration for global and project MCP servers<br>• Native dialogs, widgets, and desktop notifications for supported extensions |
+| **Desktop experience** | • Light / dark / system themes, seamless English and Chinese UI switching<br>• Magnetic drag-and-drop split panes and detached parallel session windows<br>• Global session search and command shortcuts, collapsible sidebar<br>• Desktop notification policies, send-key customizations, sleep prevention<br>• In-app update notifications, release notes preview, and mirror-accelerated downloads<br>• Local Node.js / npm / pi environment diagnostics and onboarding guide |
 
 ## Product Tour
 
@@ -92,34 +92,27 @@ actual installation and execution to pi.
 
 ![Pi Desktop workspace and Git diff review](./resources/screenshots/review.png)
 
-The right-hand workbench keeps source files and changes next to the conversation. Historical turns automatically fold verbose reasoning and multi-step tool calls with precise duration stats, while a persistent navigation rail on the right lets you preview prompts and jump smoothly; edited files remain visible for inspection or rollback.
+The right-hand workbench keeps source files and changes next to the conversation. Historical turns automatically collapse intermediate reasoning and multi-step tool executions into compact summaries with accurate elapsed time stats, while a persistent message navigation rail on the right lets you preview prompts and jump smoothly to any turn. Each turn automatically summarizes edited files with single-click revert, and modified files remain accessible for granular per-hunk review.
 
 ### Drive the session from the composer toolbar
 
 ![Pi Desktop composer toolbar with workspace file reference tree](./resources/screenshots/composer.png)
 
-Plan mode, skills, workspace and git branch switching, and the model picker live in a
-persistent toolbar. The @ reference panel browses the workspace as a file tree and
-stages any file — not just images — as an attachment for the next message.
+Plan mode, skills, workspace and git branch switching, and the model picker live in a persistent toolbar. The `@` reference panel browses the workspace as a file tree and stages any file — not just images — as an attachment for the next message. You can also queue or steer messages while the assistant is streaming without disrupting the conversational flow.
 
 ### Run shell commands beside the conversation
 
 ![Pi Desktop command mode and run history](./resources/screenshots/commands.png)
 
-Command mode runs bash straight from the composer, with a toggle to keep output out of
-the model context. A run can be stopped independently of the conversation turn, and the
-workspace Commands tab keeps every command with its output and exit code.
+Command mode runs bash straight from the composer, with a toggle to keep output out of the model context. A run can be stopped independently of the conversation turn, and the workspace Commands tab keeps every command with its output and exit code, with quick links back to the originating message.
 
 ### Use the model stack that fits the project
 
 ![Pi Desktop providers and models](./resources/screenshots/models.png)
 
-Credentials remain in pi's native storage. Pi Desktop adds a clear management
-surface for provider status, available models, context windows, output limits,
-and the active model.
+Credentials remain in pi's native storage. Pi Desktop adds a clear management surface for provider status, available models, context windows, output limits, and token pricing. When connection or quota issues occur (such as 401 unauthorized or 429 rate limit), built-in diagnostic guidance points directly to the resolution.
 
-Switch models mid-session from the composer picker, which groups providers and
-searches within each group:
+Switch models mid-session from the composer picker, which groups providers and searches within each group:
 
 ![Pi Desktop composer model picker with provider groups](./resources/screenshots/model-menu.png)
 
@@ -127,20 +120,17 @@ searches within each group:
 
 ![Pi Desktop session management](./resources/screenshots/sessions.png)
 
-Sessions are not disposable chat tabs. Continue earlier work, fork an alternative approach, explore the visual session branch tree to inspect topological relationships and switch across branches, archive completed threads, or export a self-contained HTML record.
+Sessions are not disposable chat tabs. Continue earlier work, archive completed tasks, or export self-contained, high-fidelity HTML records. When forking from any message node, the interactive Session Branch Tree displays the full topological lineage and fork depth, letting you traverse and experiment with alternative implementations effortlessly.
 
 ### Multitask with split panes and separate windows
 
 ![Pi Desktop window split into two session panes](./resources/screenshots/panes.png)
 
-Drag a session onto a pane edge to split the window and follow two conversations
-side by side, each with its own streaming state and workspace.
+Drag a session onto a pane edge to magnetically split the window and follow two conversations side by side, each with its own streaming state and workspace binding.
 
 ![Pi Desktop sessions running in parallel in separate windows](./resources/screenshots/windows.png)
 
-Need more room? Detach as many sessions as you like into windows of their
-own — two, three, or more. Every window keeps streaming independently, and
-notification clicks jump straight back to the session that raised them.
+Need more room? Detach as many sessions as you like into windows of their own — two, three, or more. Every window keeps streaming independently, and notification clicks jump straight back to the session that raised them.
 
 ### Grow capabilities through pi packages
 
