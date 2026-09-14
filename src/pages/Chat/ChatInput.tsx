@@ -34,6 +34,7 @@ import { useFileMentions } from './chat-input/useFileMentions';
 import { useSlashCommands } from './chat-input/useSlashCommands';
 import { useComposerAttachments, extractFilesFromClipboard } from './chat-input/useComposerAttachments';
 import { composerAttachmentsCache } from './chat-input/composer-attachments-cache';
+import { computeModePrefix, hasPlanCommandPrefix } from './chat-input/mode-prefix';
 import { useInputHistory } from './chat-input/useInputHistory';
 import { ContextWarningBar } from './chat-input/ContextWarningBar';
 import { ChatInputAttachments } from './chat-input/ChatInputAttachments';
@@ -711,7 +712,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
         (f) => f === rawMention || f.toLowerCase() === rawMention.toLowerCase() || f.endsWith('/' + rawMention),
       );
       if (!exactFile) {
-        const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+        const modePrefix = computeModePrefix(text, planMode, selectedSkill);
         const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
         setConfirmDialog({
           type: 'mention',
@@ -733,8 +734,15 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
       if (!rawName) return;
 
       if (rawName === 'plan' || rawName === 'plan-mode') {
+        if (!arg) {
+          clearComposerInput();
+          setPlanMode((prev) => !prev);
+          return;
+        }
+        if (!planMode) setPlanMode(true);
+        const promptText = formatOrderedAttachmentPrompt(text, outgoingAttachments);
         clearComposerInput();
-        setPlanMode((prev) => !prev);
+        executePrompt(promptText, outgoing, behavior);
         return;
       }
 
@@ -762,7 +770,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
         commands.some((c) => c.name.toLowerCase() === rawName);
 
       if (isKnownCommand) {
-        const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+        const modePrefix = computeModePrefix(text, planMode, selectedSkill);
         const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
         clearComposerInput();
         executePrompt(promptText, outgoing, behavior);
@@ -770,7 +778,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
       }
 
       // 未知命令：弹出确认对话框，询问用户是否作为提示词直接发送给 AI
-      const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+      const modePrefix = computeModePrefix(text, planMode, selectedSkill);
       const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
       setConfirmDialog({
         type: 'slash',
@@ -782,7 +790,10 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
       return;
     }
 
-    const modePrefix = planMode ? '/plan ' : selectedSkill ? `/skill:${selectedSkill} ` : '';
+    if (hasPlanCommandPrefix(text) && !planMode) {
+      setPlanMode(true);
+    }
+    const modePrefix = computeModePrefix(text, planMode, selectedSkill);
     const promptText = modePrefix + formatOrderedAttachmentPrompt(text, outgoingAttachments);
     clearComposerInput();
     executePrompt(promptText, outgoing, behavior);
