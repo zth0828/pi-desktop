@@ -178,7 +178,7 @@ models · sessions · tools · skills · packages · extensions
 
 ## Requirements
 
-- macOS, Windows, or Linux. Cross-platform packages are built by GitHub Actions;
+- macOS or Windows. Cross-platform packages are built by GitHub Actions;
   the project is still in preview and needs broader real-device validation.
 - Node.js 22.19.0 or newer
 - npm
@@ -202,7 +202,6 @@ Download the package for your platform from [GitHub Releases](https://github.com
 | :--- | :--- | :--- | :--- |
 | **macOS** | `.dmg` | Apple Silicon (arm64) / Intel (x64) | Drag to `/Applications` to install |
 | **Windows** | `.exe` (Setup) | 64-bit (x64) | Standard Windows installer wizard |
-| **Linux** | `.AppImage` / `.deb` | x64 / arm64 | AppImage requires no installation; deb for Debian/Ubuntu |
 
 > [!TIP]
 > **Modern In-Place Auto-Updates**  
@@ -286,11 +285,10 @@ pnpm screenshots:readme
 ## Project Status
 
 The core desktop workflow is implemented and covered by Electron E2E tests.
-CI validates source builds on macOS, Windows, and Linux. Version tags create
+CI validates source builds on macOS and Windows. Version tags create
 Developer ID signed and notarized macOS artifacts when Apple credentials are
-configured, or ad-hoc signed previews with a terminal installer otherwise.
-Windows and Linux preview artifacts remain unsigned. Auto-update and broader
-real-device release validation remain future work.
+configured, or ad-hoc signed previews otherwise. Windows preview artifacts remain
+unsigned. Auto-update and broader real-device release validation remain future work.
 
 ## Contributing
 

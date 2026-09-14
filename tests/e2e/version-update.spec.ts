@@ -23,11 +23,9 @@ test.beforeAll(async () => {
     const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
     const assetName = process.platform === 'darwin'
       ? `Pi.Desktop-9.9.9-${arch}.dmg`
-      : process.platform === 'win32'
-        ? `Pi.Desktop-Setup-9.9.9-${arch}.exe`
-        : `Pi.Desktop-9.9.9-x86_64.AppImage`;
+      : `Pi.Desktop-Setup-9.9.9-${arch}.exe`;
 
-    const platformName = process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux';
+    const platformName = process.platform === 'darwin' ? 'macOS' : 'Windows';
     const sumsName = `SHA256SUMS-${platformName}.txt`;
 
     if (req.url?.startsWith('/releases/latest')) {

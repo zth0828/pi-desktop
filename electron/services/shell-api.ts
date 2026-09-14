@@ -78,15 +78,16 @@ async function discoveredApplications(): Promise<ShellListApplicationsResult> {
     const applications = (await macApplications()).slice(0, 20);
     return { applications: await attachNativeIcons(applications) };
   }
-  const roots = process.platform === 'win32'
-    ? [process.env['ProgramFiles'], process.env['ProgramFiles(x86)']].filter((entry): entry is string => Boolean(entry))
-    : ['/usr/share/applications', path.join(os.homedir(), '.local/share/applications')];
+  if (process.platform !== 'win32') {
+    return { applications: [] };
+  }
+  const roots = [process.env['ProgramFiles'], process.env['ProgramFiles(x86)']].filter((entry): entry is string => Boolean(entry));
   const applications: ShellApplication[] = [];
   for (const root of roots) {
     try {
       for (const name of await readdir(root)) {
-        if (process.platform === 'win32' ? !name.endsWith('.exe') : !name.endsWith('.desktop')) continue;
-        applications.push({ id: path.join(root, name), name: name.replace(/\.(desktop|exe)$/i, ''), path: path.join(root, name) });
+        if (!name.endsWith('.exe')) continue;
+        applications.push({ id: path.join(root, name), name: name.replace(/\.exe$/i, ''), path: path.join(root, name) });
       }
     } catch {
       // Ignore unavailable platform application directories.

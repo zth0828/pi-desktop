@@ -55,9 +55,6 @@ win:
     - target: nsis
       arch:
         - x64
-    - target: portable
-      arch:
-        - x64
 
 nsis:
   oneClick: false
@@ -65,28 +62,3 @@ nsis:
   deleteAppDataOnUninstall: true
   license: LICENSE
   artifactName: ${productName}-Setup-${version}-${arch}.${ext}
-
-portable:
-  artifactName: ${productName}-Portable-${version}-${arch}.${ext}
-
-linux:
-  icon: resources/icon.png
-  category: Development
-  maintainer: zth0828
-  desktop:
-    entry:
-      StartupWMClass: pi-desktop
-  target:
-    - target: AppImage
-      arch:
-        - x64
-    - target: deb
-      arch:
-        - x64
-
-appImage:
-  artifactName: ${productName}-${version}-${arch}.${ext}
-
-deb:
-  afterRemove: resources/linux/after-remove.sh
-  artifactName: ${productName}-${version}-${arch}.${ext}

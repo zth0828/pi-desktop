@@ -56,18 +56,14 @@ export function createTray(): void {
   if (process.platform === 'darwin') return;
   if (tray) return;
   try {
-    // 平台化格式：Windows 托盘用 ico（多尺寸），Linux 用 png（nativeImage 对
-    // ico 支持不保证，png 通用）。
+    // 平台化格式：Windows 托盘用 ico（多尺寸）。
     const iconPath = resolveAppIconPath(windowIconFormat(), {
       isPackaged: app.isPackaged,
       resourcesPath: process.resourcesPath,
       mainDir: __dirname,
     });
-    let image = nativeImage.createFromPath(iconPath);
+    const image = nativeImage.createFromPath(iconPath);
     if (image.isEmpty()) return;
-    if (process.platform === 'linux') {
-      image = image.resize({ width: 24, height: 24 });
-    }
     tray = new Tray(image);
 
     tray.setToolTip('Pi Desktop');

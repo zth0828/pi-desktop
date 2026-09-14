@@ -1250,9 +1250,8 @@
   "versionInstall": {
     "title": "Update Downloaded",
     "bodyMac": "Click \"Install and Quit\" to open the disk image. Drag Pi Desktop to the Applications folder to replace the existing version, then restart.",
-    "bodyWin": "Click \"Install and Quit\" to launch the installer and follow the setup wizard.",
-    "bodyLinux": "The update package has been downloaded. Please view it in folder and replace manually.",
-    "installAndQuit": "Install and Quit",
+    "bodyWin": "Click 'Open Installer & Quit' and follow the setup wizard to complete installation.",
+    "installAndQuit": "Open Installer & Quit",
     "later": "Later",
     "showInFolder": "Show in Folder",
     "runningWarning": "Active sessions are still running. Quitting now will abort ongoing tasks. Are you sure you want to quit and install?",

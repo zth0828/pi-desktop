@@ -14,14 +14,10 @@ const githubUrl = () => process.env.PI_DESKTOP_GITHUB_API_URL ?? 'https://api.gi
 let inFlight: Promise<AppUpdateDownloadResult> | null = null;
 
 export function platformName(platform = process.platform): string {
-  return platform === 'darwin' ? 'macOS' : platform === 'win32' ? 'Windows' : 'Linux';
+  return platform === 'darwin' ? 'macOS' : 'Windows';
 }
 
 export function platformAssetArch(platform = process.platform, arch = process.arch): string[] {
-  if (platform === 'linux') {
-    if (arch === 'x64') return ['x64', 'x86_64', 'amd64'];
-    if (arch === 'arm64') return ['arm64', 'aarch64'];
-  }
   return [arch];
 }
 
@@ -44,9 +40,7 @@ export function selectAsset(
     const asset = candidates.find((candidate) => candidate.name.includes('-Setup-') && candidate.name.endsWith('.exe'));
     return asset ? { name: asset.name, url: asset.browser_download_url } : null;
   }
-  const asset = candidates.find((candidate) => candidate.name.endsWith('.AppImage'))
-    ?? candidates.find((candidate) => candidate.name.endsWith('.deb'));
-  return asset ? { name: asset.name, url: asset.browser_download_url } : null;
+  return null;
 }
 
 export function selectAssetName(
@@ -380,35 +374,6 @@ export const appUpdateApi = {
       setTimeout(() => {
         app.quit();
       }, 500);
-      return { success: true };
-    }
-
-    if (process.platform === 'linux') {
-      if (process.env.APPIMAGE && pathName.endsWith('.AppImage')) {
-        const appImagePath = process.env.APPIMAGE;
-        const script = [
-          'OLD_PID="$1"',
-          'NEW_IMG="$2"',
-          'TARGET_IMG="$3"',
-          'while kill -0 "$OLD_PID" 2>/dev/null; do sleep 0.05; done',
-          'cp -f "$NEW_IMG" "$TARGET_IMG"',
-          'chmod +x "$TARGET_IMG"',
-          'rm -f "$NEW_IMG"',
-          '"$TARGET_IMG" &',
-        ].join('\n');
-
-        const child = spawn('/bin/sh', ['-c', script, '--', String(process.pid), pathName, appImagePath], {
-          detached: true,
-          stdio: 'ignore',
-        });
-        child.unref();
-        setTimeout(() => {
-          app.quit();
-        }, 100);
-        return { success: true };
-      }
-      const error = await shell.openPath(pathName);
-      if (error) return { success: false, error };
       return { success: true };
     }
 

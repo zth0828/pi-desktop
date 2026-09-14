@@ -12,20 +12,8 @@ const assets = [
 ];
 
 describe('app update asset selection', () => {
-  it('maps Linux x64 to x64, x86_64, amd64 aliases and prefers AppImage', () => {
-    expect(platformAssetArch('linux', 'x64')).toEqual(['x64', 'x86_64', 'amd64']);
-    expect(selectAsset(assets, 'linux', 'x64')).toEqual({ name: 'Pi.Desktop-1.1.0-x64.AppImage', url: 'appimage-x64' });
-    expect(selectAssetName(assets, 'linux', 'x64')).toBe('Pi.Desktop-1.1.0-x64.AppImage');
-  });
-
-  it('maps Linux arm64 to arm64 and aarch64', () => {
-    expect(platformAssetArch('linux', 'arm64')).toEqual(['arm64', 'aarch64']);
-    const armLinuxAssets = [{ name: 'Pi.Desktop-1.1.0-aarch64.AppImage', browser_download_url: 'appimage-arm' }];
-    expect(selectAsset(armLinuxAssets, 'linux', 'arm64')).toEqual({ name: 'Pi.Desktop-1.1.0-aarch64.AppImage', url: 'appimage-arm' });
-  });
-
-  it('uses the DEB fallback on Linux', () => {
-    expect(selectAsset(assets.filter((asset) => asset.name.endsWith('.deb')), 'linux', 'x64')).toEqual({ name: 'Pi.Desktop-0.2.2-amd64.deb', url: 'deb' });
+  it('returns null for unsupported platforms', () => {
+    expect(selectAsset(assets, 'linux', 'x64')).toBeNull();
   });
 
   it('prefers Windows Setup over Portable', () => {

@@ -158,7 +158,7 @@ Electron 主进程
 
 ## 环境要求
 
-- 支持 macOS、Windows 和 Linux。GitHub Actions 会构建跨平台安装包；项目仍处于
+- 支持 macOS 和 Windows。GitHub Actions 会构建跨平台安装包；项目仍处于
   预览阶段，需要更多真实设备验证。
 - Node.js 22.19.0 或更高版本
 - npm
@@ -182,7 +182,6 @@ pi --version
 | :--- | :--- | :--- | :--- |
 | **macOS** | `.dmg` | Apple Silicon (arm64) / Intel (x64) | 拖拽至 Applications 即可运行 |
 | **Windows** | `.exe` (Setup) | 64 位 (x64) | 标准 Windows 安装向导 |
-| **Linux** | `.AppImage` / `.deb` | x64 / arm64 | AppImage 免安装即开即用，deb 适用于 Debian/Ubuntu |
 
 > [!TIP]
 > **现代在线就地热更新（In-Place Auto-Update）**  
@@ -264,8 +263,7 @@ pnpm screenshots:readme
 
 ## 项目状态
 
-桌面端核心工作流已经实现，并由 Electron E2E 覆盖。CI 会在 macOS、Windows 和
-Linux 上验证源码构建，版本标签会为三个平台生成未签名预览包。签名与公证、自动
+桌面端核心工作流已经实现，并由 Electron E2E 覆盖。CI 会在 macOS 和 Windows 上验证源码构建，版本标签会为两个平台生成预览包。签名与公证、自动
 更新以及更广泛的真实设备发行验证仍是后续工作。
 
 ## 参与贡献

@@ -40,7 +40,6 @@
     "dist": "pnpm run build:vite && electron-builder --publish never",
     "dist:mac": "pnpm run build:vite && electron-builder --mac --publish never",
     "dist:win": "pnpm run build:vite && electron-builder --win --publish never",
-    "dist:linux": "pnpm run build:vite && electron-builder --linux --publish never",
     "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
     "test": "vitest run",
     "test:watch": "vitest",

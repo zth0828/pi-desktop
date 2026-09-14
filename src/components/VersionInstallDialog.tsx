@@ -161,14 +161,8 @@ export function VersionInstallDialog() {
   }
 
   const fileName = completedPath.split(/[/\\]/).pop() ?? '';
-  const isLinux = platform === 'linux';
   const isMac = platform === 'darwin';
-
-  const bodyText = isMac
-    ? t('versionInstall.bodyMac')
-    : isLinux
-      ? t('versionInstall.bodyLinux')
-      : t('versionInstall.bodyWin');
+  const bodyText = isMac ? t('versionInstall.bodyMac') : t('versionInstall.bodyWin');
 
   return (
     <div className="version-install-overlay" data-testid="version-install-overlay">
