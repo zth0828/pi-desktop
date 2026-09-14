@@ -178,7 +178,7 @@ export type PiSessionTreeNode = {
 };
 
 export type PiBindExtensionsOptions = {
-  mode: 'print';
+  mode: 'rpc' | 'print';
   uiContext: unknown;
   commandContextActions: {
     waitForIdle: () => Promise<void>;

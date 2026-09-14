@@ -777,11 +777,11 @@ function bridgeSessionEvents(runtime: ActiveRuntime): () => void {
 async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
   const session = runtime.adapterRuntime.session;
   // 不调 bindExtensions 扩展收不到 session_start（MCP 等全部失效）。
-  // 沿用 pi 的 print 宿主模式；桌面交互能力由显式 uiContext 提供。
+  // 采用 rpc 宿主模式；桌面交互能力由显式 uiContext 提供。
   // uiContext 桥接 confirm/select/input 到渲染层对话框（electron/services/extension-ui.ts），
   // 不传则 hasUI=false，权限确认/plan mode/question 类扩展无法工作。
   await session.bindExtensions({
-    mode: 'print',
+    mode: 'rpc',
     uiContext: createExtensionUIContext(() => ({
       sessionId: runtime.sessionId,
       generation: runtime.generation,
