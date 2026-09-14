@@ -2,8 +2,9 @@ import { app, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream, existsSync } from 'node:fs';
-import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { unzipSync } from 'fflate';
 import { buildMirrorUrl, DEFAULT_DOWNLOAD_MIRROR, type AppUpdateDownloadResult, type HostSuccess } from '@shared/host-api/contract';
 import { settingsApi } from './settings-api';
 import { sendHostEvent } from '../main/ipc/host-events';
@@ -25,7 +26,12 @@ export function selectAsset(
   assets: Array<{ name: string; browser_download_url: string }>,
   platform = process.platform,
   arch = process.arch,
+  options?: { preferPatch?: boolean },
 ): { name: string; url: string } | null {
+  if (options?.preferPatch !== false) {
+    const patchAsset = assets.find((candidate) => candidate.name.endsWith('-patch.zip'));
+    if (patchAsset) return { name: patchAsset.name, url: patchAsset.browser_download_url };
+  }
   const assetArch = platformAssetArch(platform, arch);
   const candidates = assets.filter((asset) =>
     assetArch.some((suffix) => asset.name.includes(`-${suffix}.`) || asset.name.includes(`-${suffix}-`)),
@@ -47,11 +53,12 @@ export function selectAssetName(
   assets: Array<{ name?: string }>,
   platform = process.platform,
   arch = process.arch,
+  options?: { preferPatch?: boolean },
 ): string | undefined {
   const validAssets = assets
     .filter((a): a is { name: string } => typeof a.name === 'string' && Boolean(a.name))
     .map((a) => ({ name: a.name, browser_download_url: '' }));
-  return selectAsset(validAssets, platform, arch)?.name;
+  return selectAsset(validAssets, platform, arch, options)?.name;
 }
 
 async function getFileSize(filePath: string): Promise<number> {
@@ -251,7 +258,39 @@ export const appUpdateApi = {
         tempPath = undefined;
 
         let stagedAppPath: string | undefined;
-        if (process.platform === 'darwin' && finalPath.endsWith('.zip')) {
+        let stagedPatchPath: string | undefined;
+
+        if (finalPath.endsWith('-patch.zip')) {
+          try {
+            const stagedPatchDir = path.join(app.getPath('userData'), 'updates', 'staged-patch');
+            await rm(stagedPatchDir, { recursive: true, force: true }).catch(() => undefined);
+            await mkdir(stagedPatchDir, { recursive: true });
+            const zipBuffer = await readFile(finalPath);
+            const unzipped = unzipSync(new Uint8Array(zipBuffer));
+            if (unzipped['app.asar']) {
+              const asarBytes = unzipped['app.asar'];
+              if (unzipped['patch-metadata.json']) {
+                const metaText = new TextDecoder().decode(unzipped['patch-metadata.json']);
+                const meta = JSON.parse(metaText) as { sha256?: string };
+                if (meta.sha256) {
+                  const actualHash = createHash('sha256').update(asarBytes).digest('hex');
+                  if (actualHash.toLowerCase() !== meta.sha256.toLowerCase()) {
+                    throw new Error('Patch asar checksum mismatch');
+                  }
+                }
+              }
+              const targetAsar = path.join(stagedPatchDir, 'app.asar');
+              await writeFile(targetAsar, asarBytes);
+              stagedPatchPath = targetAsar;
+              await settingsApi.set({ key: 'appVersionCheckStagedPatchPath', value: stagedPatchPath });
+              await settingsApi.set({ key: 'appVersionCheckStagedAppPath', value: undefined });
+            } else {
+              throw new Error('Patch zip does not contain app.asar');
+            }
+          } catch (extractErr) {
+            console.warn('[appUpdateApi] Failed to stage patch bundle:', extractErr);
+          }
+        } else if (process.platform === 'darwin' && finalPath.endsWith('.zip')) {
           try {
             const stagedDir = path.join(app.getPath('userData'), 'updates', 'staged');
             await rm(stagedDir, { recursive: true, force: true }).catch(() => undefined);
@@ -269,6 +308,7 @@ export const appUpdateApi = {
             if (appEntry) {
               stagedAppPath = path.join(stagedDir, appEntry);
               await settingsApi.set({ key: 'appVersionCheckStagedAppPath', value: stagedAppPath });
+              await settingsApi.set({ key: 'appVersionCheckStagedPatchPath', value: undefined });
             }
           } catch (extractErr) {
             console.warn('[appUpdateApi] Failed to stage .zip bundle:', extractErr);
@@ -279,9 +319,9 @@ export const appUpdateApi = {
         const version = release.tag_name?.replace(/^v/, '');
         const isSilent = payload?.silent === true;
         const releaseNotes = release.body;
-        sendHostEvent('appUpdate', 'progress', { phase: 'completed', path: finalPath, stagedAppPath, version, releaseNotes, silent: isSilent });
-        sendHostEvent('appUpdate', 'progress', { phase: 'ready', path: finalPath, stagedAppPath, version, releaseNotes, silent: isSilent });
-        return { success: true, path: finalPath, assetName: asset.name, stagedAppPath };
+        sendHostEvent('appUpdate', 'progress', { phase: 'completed', path: finalPath, stagedAppPath, stagedPatchPath, version, releaseNotes, silent: isSilent });
+        sendHostEvent('appUpdate', 'progress', { phase: 'ready', path: finalPath, stagedAppPath, stagedPatchPath, version, releaseNotes, silent: isSilent });
+        return { success: true, path: finalPath, assetName: asset.name, stagedAppPath, stagedPatchPath };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendHostEvent('appUpdate', 'progress', { phase: 'failed', error: message });
@@ -315,12 +355,97 @@ export const appUpdateApi = {
       return { success: true };
     }
 
+    const stagedPatchPath = await settingsApi.get({ key: 'appVersionCheckStagedPatchPath' });
+    if (stagedPatchPath && typeof stagedPatchPath === 'string' && existsSync(stagedPatchPath)) {
+      const stagedPatchDir = path.dirname(stagedPatchPath);
+
+      if (process.platform === 'darwin') {
+        const currentExec = process.execPath;
+        const targetAppPath = path.resolve(currentExec, '../../..');
+        const isDev = !app.isPackaged || targetAppPath.includes('.dev') || targetAppPath.includes('node_modules') || !targetAppPath.endsWith('.app');
+
+        if (isDev) {
+          shell.showItemInFolder(stagedPatchPath);
+          return { success: true };
+        }
+
+        const targetAsarPath = path.join(process.resourcesPath, 'app.asar');
+        const script = [
+          'OLD_PID="$1"',
+          'SRC_ASAR="$2"',
+          'DEST_ASAR="$3"',
+          'DEST_APP="$4"',
+          'STAGED_DIR="$5"',
+          'while kill -0 "$OLD_PID" 2>/dev/null; do sleep 0.05; done',
+          'cp -f "$SRC_ASAR" "$DEST_ASAR"',
+          'xattr -dr com.apple.quarantine "$DEST_APP" 2>/dev/null || true',
+          'codesign --force --deep --sign - "$DEST_APP" 2>/dev/null || true',
+          'rm -rf "$STAGED_DIR"',
+          'open -n "$DEST_APP"',
+        ].join('\n');
+
+        const child = spawn('/bin/sh', ['-c', script, '--', String(process.pid), stagedPatchPath, targetAsarPath, targetAppPath, stagedPatchDir], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+
+        setTimeout(() => {
+          app.quit();
+        }, 100);
+        return { success: true };
+      }
+
+      if (process.platform === 'win32') {
+        const isDev = !app.isPackaged;
+        if (isDev) {
+          shell.showItemInFolder(stagedPatchPath);
+          return { success: true };
+        }
+
+        const targetAsarPath = path.join(process.resourcesPath, 'app.asar');
+        const batPath = path.join(app.getPath('temp'), `pi-desktop-patch-${Date.now()}.bat`);
+        const batContent = [
+          '@echo off',
+          'chcp 65001 >nul',
+          'set /a count=0',
+          ':retry',
+          'timeout /t 1 /nobreak >nul',
+          `copy /y "${stagedPatchPath}" "${targetAsarPath}" >nul 2>&1`,
+          'if errorlevel 1 (',
+          '  set /a count+=1',
+          '  if %count% lss 15 goto retry',
+          '  exit /b 1',
+          ')',
+          `rmdir /s /q "${stagedPatchDir}" >nul 2>&1`,
+          `start "" "${process.execPath}"`,
+          `del "%~f0" >nul 2>&1`,
+        ].join('\r\n');
+
+        await writeFile(batPath, batContent, 'utf8');
+        const child = spawn('cmd.exe', ['/c', batPath], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+
+        setTimeout(() => {
+          app.quit();
+        }, 100);
+        return { success: true };
+      }
+    }
+
+    if (pathName.endsWith('-patch.zip')) {
+      return { success: false, error: 'Patch update staging missing or corrupted' };
+    }
+
     if (process.platform === 'darwin') {
       const stagedAppPath = await settingsApi.get({ key: 'appVersionCheckStagedAppPath' });
       if (stagedAppPath && typeof stagedAppPath === 'string' && existsSync(stagedAppPath)) {
         const currentExec = process.execPath;
         const targetAppPath = path.resolve(currentExec, '../../..');
-        const isDev = targetAppPath.includes('.dev') || targetAppPath.includes('node_modules') || !targetAppPath.endsWith('.app');
+        const isDev = !app.isPackaged || targetAppPath.includes('.dev') || targetAppPath.includes('node_modules') || !targetAppPath.endsWith('.app');
 
         if (!isDev && existsSync(targetAppPath)) {
           const script = [
