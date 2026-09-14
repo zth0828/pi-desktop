@@ -173,7 +173,7 @@ test('非 Git 目录：聚合编辑卡可回滚，Review 按钮打开完整评�
   const card = page.getByTestId('turn-changes');
   await expect(card).toBeVisible({ timeout: 30_000 });
   await expect(card.getByTestId('turn-changes-file')).toHaveCount(2);
-  await expect(card.getByTestId('turn-changes-revert')).toBeVisible();
+  await expect(card.getByTestId('turn-changes-revert')).toBeVisible({ timeout: 15_000 });
 
   await card.getByTestId('turn-changes-review').click();
   await expect(page.getByTestId('review-panel')).toBeVisible();

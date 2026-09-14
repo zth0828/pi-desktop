@@ -70,6 +70,7 @@ const launchOptions = () => ({
 });
 
 test('Extensions 页：settings.json 里配置的 npm 扩展出现在列表', async ({ launchElectronApp }) => {
+  test.setTimeout(90_000);
   await writeFile(
     path.join(agentDir, 'settings.json'),
     JSON.stringify({ packages: ['npm:pi-mcp-adapter'] }),

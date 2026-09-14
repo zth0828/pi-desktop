@@ -138,6 +138,7 @@ test.describe('macOS 原生系统菜单栏', () => {
       seedSettings: { workspaceCwd: workspace, language: 'zh' },
     });
     const page = await app.firstWindow();
+    await expect(page.getByTestId('nav-chat')).toBeVisible({ timeout: 15_000 });
 
     // 菜单里必须有全选项：没有 selectAll role 时 macOS 上 Cmd+A 不会落到输入框
     const labels = await app.evaluate(collectMenuLabels());

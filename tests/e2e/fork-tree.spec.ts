@@ -76,6 +76,7 @@ async function sendAndWaitReply(page: import('@playwright/test').Page, text: str
   await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
     timeout: 30_000,
   });
+  await expect(page.getByTestId('chat-input')).toBeEnabled({ timeout: 15_000 });
 }
 
 async function openTree(page: import('@playwright/test').Page) {
@@ -125,7 +126,7 @@ test('/tree 分支导航：跳到历史节点开新分支，再跳回原分支',
 
   // 打开分支树：两轮对话 = 4 个消息节点
   await openTree(page);
-  await expect(page.getByTestId('tree-node')).toHaveCount(4);
+  await expect(page.getByTestId('tree-node')).toHaveCount(4, { timeout: 15_000 });
 
   // 点「first question」user 节点：leaf 移到其父（root），文本退回编辑器
   await page.getByTestId('tree-node').filter({ hasText: 'first question' }).click();

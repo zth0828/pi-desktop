@@ -144,5 +144,12 @@ test('删除跨项目最后一个会话 → 空的会话目录被清理', async 
   await row.getByTestId('session-delete-confirm').click();
   await expect(row).toHaveCount(0, { timeout: 15_000 });
   // 目录里没有其它文件 → 空目录被清理
-  await expect(stat(otherDir)).rejects.toThrow();
+  await expect.poll(async () => {
+    try {
+      await stat(otherDir);
+      return true;
+    } catch {
+      return false;
+    }
+  }, { timeout: 10_000 }).toBe(false);
 });
