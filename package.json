@@ -59,13 +59,26 @@
     "fallback": "0.84.2"
   },
   "dependencies": {
+    "electron-store": "^11.0.2",
+    "ignore": "^7.0.6",
+    "undici": "^8.10.0"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@playwright/test": "^1.62.1",
     "@streamdown/cjk": "^1.0.3",
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",
+    "@types/node": "^26.1.2",
+    "@types/papaparse": "^5.5.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.4",
     "dompurify": "^3.4.13",
-    "electron-store": "^11.0.2",
+    "electron": "40.10.6",
+    "electron-builder": "^26.15.3",
+    "fflate": "^0.8.3",
     "i18next": "^26.3.6",
-    "ignore": "^7.0.6",
     "katex": "^0.18.1",
     "lucide-react": "^1.29.0",
     "mammoth": "^1.12.1",
@@ -76,24 +89,11 @@
     "react-i18next": "^17.0.11",
     "read-excel-file": "^9.3.10",
     "streamdown": "^2.5.0",
-    "undici": "^8.10.0",
-    "zustand": "^5.0.14"
-  },
-  "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.84.2",
-    "@playwright/test": "^1.62.1",
-    "@types/node": "^26.1.2",
-    "@types/papaparse": "^5.5.2",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-react": "^5.1.4",
-    "electron": "40.10.6",
-    "electron-builder": "^26.15.3",
-    "fflate": "^0.8.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "zustand": "^5.0.14"
   }
 }
