@@ -1,258 +1,238 @@
 <div align="center">
-  <img src="./resources/icon.png" width="128" height="128" alt="Pi Desktop logo">
+  <img src="./resources/icon.png" width="128" height="128" alt="Pi Desktop 图标">
   <h1>Pi Desktop</h1>
-  <p><strong>The desktop workbench for agentic coding with pi.</strong></p>
-  <p>Stream the conversation, review every diff, run shell commands, and keep many sessions moving across split panes and separate windows.</p>
+  <p><strong>为 pi coding agent 打造的桌面工作台。</strong></p>
+  <p>流式对话、逐 hunk 评审改动、直接运行 shell 命令，并用分栏与多窗口同时推进多个会话。</p>
   <p>
-    <a href="README.md">English</a> ·
-    <a href="README.zh-CN.md">简体中文</a>
+    <a href="README.md">简体中文</a> ·
+    <a href="README.en.md">English</a>
   </p>
   <p>
     <a href="https://github.com/zth0828/pi-desktop/actions/workflows/ci.yml"><img src="https://github.com/zth0828/pi-desktop/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-    <a href="https://github.com/zth0828/pi-desktop/releases"><img src="https://img.shields.io/github/v/release/zth0828/pi-desktop?include_prereleases&label=preview" alt="Latest preview release"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-personal%20%26%20non--commercial-blue" alt="Personal and non-commercial license"></a>
+    <a href="https://github.com/zth0828/pi-desktop/releases"><img src="https://img.shields.io/github/v/release/zth0828/pi-desktop?include_prereleases&label=preview" alt="最新预览版"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-personal%20%26%20non--commercial-blue" alt="个人及非商业许可证"></a>
   </p>
 </div>
 
-Pi Desktop gives [pi](https://github.com/badlogic/pi-mono) a real home on your
-desktop: a streaming chat with plan mode, skills, and file attachments; a
-side-by-side workbench that previews files, reviews diffs hunk by hunk, and
-keeps a history of every shell command; sessions that behave like project
-work — searchable, forkable, and ready to split into panes or detach into
-their own windows; and a control surface for the whole model stack, from API
-keys and OAuth to local servers.
+Pi Desktop 让 [pi](https://github.com/badlogic/pi-mono) 在桌面上有了一个真正的家：
+带 Plan mode、Skills 和文件附件的流式对话；并排工作台，可预览文件、逐 hunk
+评审改动、记录每一条运行过的 shell 命令；像项目资产一样的会话——可搜索、可
+fork，多任务时可以分栏或拆成独立窗口；以及覆盖整个模型栈的控制界面，从
+API Key、OAuth 到本地服务器。
 
-Everything runs on your globally installed pi runtime. Sessions, credentials,
-skills, packages, and settings stay in pi's native locations and formats, so
-the work you do here remains fully compatible with the pi CLI and ecosystem.
+一切都运行在你全局安装的 pi 之上。会话、凭证、Skills、Packages 和设置都保留在
+pi 原生的位置与格式，你在这里完成的工作与 pi CLI 及整个生态完全兼容。
 
 > [!IMPORTANT]
-> Pi Desktop runs on the pi you already have: it loads your globally installed
-> pi SDK and keeps using pi's native configuration, credentials, and session
-> files — nothing is forked, replaced, or locked in. The project is under
-> active development; current downloads are unsigned preview builds.
+> Pi Desktop 运行在你已有的 pi 之上：加载全局安装的 pi SDK，继续使用 pi 原生的
+> 配置、凭证和会话文件——不 fork、不替换、不锁定。项目仍在积极开发，当前下载
+> 版本为未签名预览包。
 
-![Pi Desktop streaming chat with rich Markdown output](./resources/screenshots/chat.png)
+![Pi Desktop 流式对话与富 Markdown 输出](./resources/screenshots/chat.png)
 
-## Why Pi Desktop
+## 为什么使用 Pi Desktop
 
-### One coding loop, not a collection of panels
+### 一个完整的编码闭环，而不是互不相关的页面
 
-Ask pi to investigate a project, follow its streaming work, inspect tool calls,
-review the resulting files and diffs, then continue the same session. The
-conversation, workspace, and change review stay connected.
+让 pi 调查项目，实时查看它的工作过程和工具调用，在同一窗口检查文件与 diff，
+然后继续当前会话。对话、工作区和改动评审始终相互关联。
 
-### Built for parallel work
+### 为并行工作而生
 
-Split a window into panes, detach sessions into as many separate windows as
-you need, and keep every conversation moving at once. Streaming,
-notifications, and focus follow each session to the right window.
+把窗口拆成分栏，把会话拆成任意多个独立窗口，同时推进所有对话。流式输出、
+通知和焦点都会跟随每个会话去到正确的窗口。
 
-### Pi-native to the core, zero lock-in
+### 完全 pi 原生，零锁定
 
-Every session, setting, and credential the app touches stays in pi's native
-formats and locations. Pi Desktop adapts pi's SDK, events, package manager,
-and extension system directly, so you can move between the CLI and the desktop
-app without losing a thing.
+应用接触的每个会话、每项设置和凭证都保留在 pi 原生的格式与位置。Pi Desktop
+直接适配 pi 的 SDK、事件、包管理器和扩展系统，你可以在 CLI 与桌面端之间自由
+切换，不丢任何东西。
 
-### Bring your own model stack
+### 自由选择模型与供应商
 
-Use pi's built-in providers, API-key or OAuth authentication, custom
-OpenAI-compatible endpoints, local servers such as LM Studio, and providers
-registered by pi extensions. Inspect context limits and pricing, probe custom
-connections, and switch the current model from the UI.
+可以使用 pi 内置供应商、API Key 或 OAuth、自定义 OpenAI 兼容端点、LM Studio 等
+本地服务，以及 pi 扩展注册的 Provider。界面中可查看上下文限制和价格、探测自定义
+连接，并切换当前模型。
 
-### Local-first project control
+### 本地优先的项目控制
 
-Your workspace, pi configuration, credentials, and session history stay in
-their native local locations. Pi Desktop dynamically locates Node.js, npm, and
-pi from your environment instead of bundling another runtime.
+工作区、pi 配置、凭证和会话历史都保留在原生本地位置。Pi Desktop 从用户环境动态
+定位 Node.js、npm 和 pi，不会再捆绑一套隐藏运行时。
 
-### Extensible through the pi ecosystem
+### 直接接入 pi 生态
 
-Skills, prompt templates, themes, extensions, and MCP support remain pi-native.
-Pi Desktop exposes discovery and configuration workflows while delegating the
-actual installation and execution to pi.
+Skills、Prompt 模板、主题、扩展和 MCP 仍然使用 pi 原生机制。Pi Desktop 提供发现
+与配置体验，实际安装和执行继续交给 pi。
 
-## Feature Map
+## 功能全景
 
-| Area | What is available |
+| 领域 | 已实现能力 |
 | --- | --- |
-| **Agent chat** | Streaming text and reasoning, tool-call progress, stop, queue and steer, slash commands, a plan mode toggle, message editing and forking with attachments restored, bash command mode with context control, rich Markdown, task lists, tables, code blocks, copy actions, workspace file references, and image attachments |
-| **Workspace** | Expandable file browser; text, code, image, Markdown, PDF, DOCX, XLSX and CSV previews; open files in native apps; session bash run history; docked side-by-side or overlay layout with optional window expansion |
-| **Change review** | Git and non-Git change detection, staged/unstaged/untracked/conflict states, split or unified diff, per-file and per-hunk revert confirmation, and edited-file summaries after each turn |
-| **Sessions** | Project-grouped history with group expand and collapse, title/message search, rename, live-session indicators, switch, fork, branch tree, archive/restore, delete, context compaction, and standalone HTML export |
-| **Models** | Built-in and extension providers, API keys, OAuth, custom compatible endpoints, protocol probing, model discovery, context/output limits, token pricing, thinking levels, usage and cost details, and a composer picker with provider grouping and per-provider search |
-| **pi ecosystem** | Read active Skills, browse the official package catalog, inspect package metadata and README files, install/update/remove packages, configure global/project MCP servers, and render supported extension dialogs/widgets/notifications |
-| **Desktop experience** | Light/dark/system themes, English/Chinese UI, split panes and detached session windows, session search shortcut, collapsible sidebar, notification policy, send-key and follow-up behavior, prevent-sleep support, version update notifications with mirror-accelerated downloads, and pi environment diagnostics |
+| **Agent 对话** | 流式文本与思考过程、工具调用进度、停止/排队/插队、斜杠命令、Plan mode 开关、消息编辑与 fork（附件自动恢复）、bash 命令模式（可控是否进入上下文）、富 Markdown、任务列表、表格、代码块、复制操作、工作区文件引用和图片附件 |
+| **工作区** | 按需展开的文件浏览器；文本、代码、图片、Markdown、PDF、DOCX、XLSX、CSV 预览；使用本机应用打开；会话 bash 运行记录；停靠并排或覆盖布局，可向右扩展窗口 |
+| **改动评审** | Git 与非 Git 改动检测、staged/unstaged/untracked/conflict 状态、双栏或统一 diff、文件级与 hunk 级确认回滚、每轮结束后的编辑文件汇总 |
+| **会话管理** | 按项目组织历史记录、分组展开/收起、按标题和消息搜索、重命名、运行状态、切换、fork、分支树、归档/恢复、删除、上下文压缩和独立 HTML 导出 |
+| **模型管理** | 内置与扩展 Provider、API Key、OAuth、自定义兼容端点、协议探测、模型发现、上下文与输出限制、Token 价格、思考等级、用量和费用详情、composer 选择器按供应商分组并支持组内搜索 |
+| **pi 生态** | 读取当前 Skills、浏览官方包目录、查看包元数据与 README、安装/更新/卸载包、配置全局或项目 MCP Server、渲染受支持的扩展对话框/Widget/通知 |
+| **桌面体验** | 浅色/深色/跟随系统主题、中英文界面、分栏与独立会话窗口、会话搜索快捷键、可折叠侧栏、通知策略、发送键与后续消息行为、阻止休眠、版本更新通知与镜像加速下载、pi 环境诊断 |
 
-## Product Tour
+## 产品导览
 
-### Chat and review code in the same workspace
+### 一边对话，一边评审代码
 
-![Pi Desktop workspace and Git diff review](./resources/screenshots/review.png)
+![Pi Desktop 工作区与 Git diff 评审](./resources/screenshots/review.png)
 
-The right-hand workbench keeps source files and changes next to the conversation.
-Tool activity folds into a readable turn log, while edited files remain visible
-for review or rollback.
+右侧工作台让源文件和改动始终贴近对话。工具活动会折叠为易读的回合记录，编辑过的
+文件则持续可见，方便检查或回滚。
 
-### Drive the session from the composer toolbar
+### 从输入框工具栏驱动会话
 
-![Pi Desktop composer toolbar with workspace file reference tree](./resources/screenshots/composer.png)
+![Pi Desktop 输入框工具栏与工作区文件引用树](./resources/screenshots/composer.png)
 
-Plan mode, skills, workspace and git branch switching, and the model picker live in a
-persistent toolbar. The @ reference panel browses the workspace as a file tree and
-stages any file — not just images — as an attachment for the next message.
+Plan mode、Skills、工作区与 git 分支切换、模型选择都固定在常驻工具栏上。@ 引用面板
+以文件树浏览整个工作区，可以把任意文件（不只是图片）暂存为下一条消息的附件。
 
-### Run shell commands beside the conversation
+### 在对话旁直接运行 shell 命令
 
-![Pi Desktop command mode and run history](./resources/screenshots/commands.png)
+![Pi Desktop 命令模式与运行记录](./resources/screenshots/commands.png)
 
-Command mode runs bash straight from the composer, with a toggle to keep output out of
-the model context. A run can be stopped independently of the conversation turn, and the
-workspace Commands tab keeps every command with its output and exit code.
+命令模式从输入框直接执行 bash，可一键将输出排除在模型上下文之外。运行可独立于对话
+回合停止，工作区 Commands 标签页保留每条命令的输出与退出码。
 
-### Use the model stack that fits the project
+### 为每个项目选择合适的模型栈
 
-![Pi Desktop providers and models](./resources/screenshots/models.png)
+![Pi Desktop 模型与供应商](./resources/screenshots/models.png)
 
-Credentials remain in pi's native storage. Pi Desktop adds a clear management
-surface for provider status, available models, context windows, output limits,
-and the active model.
+凭证仍保存在 pi 原生存储中。Pi Desktop 为 Provider 状态、可用模型、上下文窗口、
+输出限制和当前模型提供清晰的管理界面。
 
-Switch models mid-session from the composer picker, which groups providers and
-searches within each group:
+会话中可随时从 composer 选择器切换模型，按供应商分组并支持组内搜索：
 
-![Pi Desktop composer model picker with provider groups](./resources/screenshots/model-menu.png)
+![Pi Desktop composer 模型选择器](./resources/screenshots/model-menu.png)
 
-### Treat sessions as durable project work
+### 把会话当作长期项目资产
 
-![Pi Desktop session management](./resources/screenshots/sessions.png)
+![Pi Desktop 会话管理](./resources/screenshots/sessions.png)
 
-Sessions are not disposable chat tabs. Continue earlier work, fork an
-alternative approach, archive completed threads, or export a self-contained
-HTML record.
+会话不是一次性的聊天标签。你可以继续旧工作、fork 另一种实现思路、归档已完成的
+任务，或者导出一份独立 HTML 记录。
 
-### Multitask with split panes and separate windows
+### 用分栏与多窗口并行推进
 
-![Pi Desktop window split into two session panes](./resources/screenshots/panes.png)
+![Pi Desktop 单窗口分栏并行两个会话](./resources/screenshots/panes.png)
 
-Drag a session onto a pane edge to split the window and follow two conversations
-side by side, each with its own streaming state and workspace.
+把会话拖到面板边缘即可分栏，左右并排跟进两段对话，各自保持独立的流式状态
+与工作区。
 
-![Pi Desktop sessions running in parallel in separate windows](./resources/screenshots/windows.png)
+![Pi Desktop 在独立窗口中并行运行会话](./resources/screenshots/windows.png)
 
-Need more room? Detach as many sessions as you like into windows of their
-own — two, three, or more. Every window keeps streaming independently, and
-notification clicks jump straight back to the session that raised them.
+需要更大空间时，可以把任意多个会话拆成独立窗口——两个、三个，甚至更多。
+每个窗口都独立流式工作，点击通知会直接跳回发起它的那个会话。
 
-### Grow capabilities through pi packages
+### 通过 pi Packages 扩展能力
 
-![Pi Desktop package discovery](./resources/screenshots/packages.png)
+![Pi Desktop Packages 发现页](./resources/screenshots/packages.png)
 
-Discover extensions and skills, inspect their source and package details, then
-let pi's native package manager handle installation. The screenshot uses an
-isolated offline demo catalog with representative pi ecosystem package names.
+发现扩展和 Skills、检查源码与包详情，再由 pi 原生包管理器完成安装。截图使用隔离的
+离线演示目录，并采用具有代表性的 pi 生态包名称。
 
-## Architecture
+## 架构原则
 
-The experience layer and capability layer have a strict boundary:
+体验层与能力层保持严格边界：
 
 ```text
-React renderer
-    │  window.pidesktop.hostInvoke (typed contract)
-Electron main process
-    │  service adapters + centralized event mapping
-User-installed pi SDK / CLI
+React 渲染层
+    │  window.pidesktop.hostInvoke（类型化契约）
+Electron 主进程
+    │  服务适配层 + 集中式事件映射
+用户安装的 pi SDK / CLI
     │
-models · sessions · tools · skills · packages · extensions
+模型 · 会话 · 工具 · Skills · Packages · 扩展
 ```
 
-- The renderer never imports pi or reaches directly into Electron IPC.
-- Main-process pi integrations are contained in `electron/services/`.
-- pi events become desktop events in one shared mapper.
-- pi, npm, and binary paths are discovered dynamically and compared using real
-  paths, including macOS symlink normalization.
-- Tests use isolated pi directories and local mock providers, never real model
-  quota or personal session data.
+- 渲染层不直接 import pi，也不直接访问 Electron IPC。
+- 主进程中的 pi 集成集中在 `electron/services/`。
+- pi 事件只在一个共享映射器中转换为桌面事件。
+- pi、npm 和二进制路径均动态发现，并在比较前解析真实路径，包括 macOS 符号链接。
+- 测试使用隔离的 pi 目录和本地 mock provider，不消耗真实 API 配额，也不读取私人会话。
 
-## Requirements
+## 环境要求
 
-- macOS or Windows. Cross-platform packages are built by GitHub Actions;
-  the project is still in preview and needs broader real-device validation.
-- Node.js 22.19.0 or newer
+- 支持 macOS 和 Windows。GitHub Actions 会构建跨平台安装包；项目仍处于
+  预览阶段，需要更多真实设备验证。
+- Node.js 22.19.0 或更高版本
 - npm
-- pnpm 10.32.1 (Corepack recommended)
-- pi 0.83.0 or newer, globally installed through npm (the installer uses npm latest; 0.84.2 is the tested fallback)
+- pnpm 10.32.1（推荐使用 Corepack）
+- pi 0.83.0 或更高版本，并且必须通过 npm 全局安装（安装器使用 npm 最新版；0.84.2 作为已验证 fallback）
 
-Install pi:
+安装 pi：
 
 ```bash
 npm i -g @earendil-works/pi-coding-agent
 pi --version
 ```
 
-## Installation Guide
+## 安装指南 (Installation)
 
-### Option A: Prebuilt Packages (Recommended)
+### 选项 A: 预编译安装包 (推荐)
 
-Download the package for your platform from [GitHub Releases](https://github.com/zth0828/pi-desktop/releases):
+前往 [GitHub Releases](https://github.com/zth0828/pi-desktop/releases) 下载对应操作系统的安装包：
 
-| Operating System | Format | Architectures | Notes |
+| 操作系统 | 安装包格式 | 架构支持 | 说明 |
 | :--- | :--- | :--- | :--- |
-| **macOS** | `.dmg` | Apple Silicon (arm64) / Intel (x64) | Drag to `/Applications` to install |
-| **Windows** | `.exe` (Setup) | 64-bit (x64) | Standard Windows installer wizard |
+| **macOS** | `.dmg` | Apple Silicon (arm64) / Intel (x64) | 拖拽至 Applications 即可运行 |
+| **Windows** | `.exe` (Setup) | 64 位 (x64) | 标准 Windows 安装向导 |
 
 > [!TIP]
-> **Modern In-Place Auto-Updates**  
-> Pi Desktop features a built-in seamless auto-update experience. When a new release is available, the client can download it in the background, preview release notes markdown in the update dialog, and apply updates with one-click restart.
-> - **macOS No-Repeat Terminal Commands**: In-place auto-updates automatically strip the macOS quarantine flag during application swap. Therefore, **you only need to run the quarantine removal command once during initial setup. All subsequent updates can be completed directly within the app without redownloading DMGs or running terminal commands again**.
-> - **Download Acceleration**: Users in regions with restricted access to GitHub can configure a download mirror (e.g. `https://ghproxy.net/`) in Settings for high-speed resume-supported downloads.
+> **现代在线就地热更新（In-Place Auto-Update）**  
+> Pi Desktop 支持完整的应用内热更新体验。检测到新版本时，客户端可在后台下载，弹窗展示 Release Notes 更新日志，并支持一键「立即安装并重启」。
+> - **macOS 免二次命令**：应用内热更新在就地替换新版时会自动去除系统的隔离标记（quarantine）。因此**仅首次下载 DMG 安装时需要执行一次解除隔离命令；后续所有版本升级强烈建议直接在应用内完成，无需再去 GitHub 重新下载 DMG 覆盖，也无需再次打开终端敲命令**。
+> - **镜像加速**：若在国内网络环境下，可在「设置 → 下载镜像加速」中配置 GitHub 镜像前缀（如 `https://ghproxy.net/`）享受高速下载与断点续传。
 
 ---
 
-## 🛠️ Troubleshooting
+## 🛠️ 常见问题排查 (Troubleshooting)
 
-### macOS displays "App is damaged and can't be opened"?
+### macOS 提示“应用已损坏，无法打开”？
 
-Current open-source preview builds are not yet signed with a paid Apple Developer ID certificate. macOS Gatekeeper flags unsigned applications as quarantined. **This does not indicate a corrupt download. You can quickly unblock it:**
+当前开源预览版本尚未接入 Apple 开发者证书签名与公证，macOS Gatekeeper 安全机制会将未签名应用标记为隔离状态（quarantine）并提示“已损坏”。**这并不代表文件损坏，可通过以下任一方式快速修复：**
 
-1. **Terminal one-liner (Recommended)**:
-   Open Terminal and run:
+1. **终端一行命令解除隔离（推荐）**：
+   打开终端（Terminal），执行以下命令：
    ```bash
    sudo xattr -rd com.apple.quarantine "/Applications/Pi Desktop.app"
    ```
-2. **System Settings**:
-   Go to macOS **System Settings → Privacy & Security**, scroll down to "Security", and click **"Open Anyway"** next to Pi Desktop.
+2. **系统设置放行**：
+   前往 macOS **「系统设置」→「隐私与安全性」**，向下滑动找到“安全性”一栏，点击被阻止的 Pi Desktop 旁边的 **「仍要打开」**。
 
-### Windows displays Defender SmartScreen warning?
+### Windows 提示 Defender SmartScreen 拦截？
 
-On unsigned preview builds, Windows Defender SmartScreen may display a blue warning:
-- Click **"More info"**;
-- Click **"Run anyway"**.
+Windows 预览版本可能出现 Microsoft Defender SmartScreen 提示窗口：
+- 点击窗口中的 **「更多信息」**；
+- 点击右下角的 **「仍要运行」** 即可。
 
-### Slow downloads or timeouts in restricted network environments?
+### 国内网络环境下下载或更新卡顿？
 
-If direct GitHub downloads time out or fail:
-- Open Pi Desktop **Settings**;
-- Under **"Download Mirror"**, enter the recommended mirror prefix: `https://ghproxy.net/` to enable accelerated downloads with HTTP Range resumption.
-
----
-
-## Security & Privacy
-
-- **100% Local-First**: Pi Desktop is a native local desktop workbench. It connects directly to your configured model providers with no proprietary cloud backend or data collection.
-- **Data stays on your machine**:
-  - Session history, credentials, and settings remain in your native pi directories (such as `~/.pi`).
-  - Chat logs and code remain strictly local.
-- **Network requests**:
-  - The app only accesses the network when you interact with AI models (direct to provider endpoints), check for updates, or download extensions.
-- **Zero Lock-in**:
-  - Fully native to the pi ecosystem. All work done in Pi Desktop can be resumed seamlessly in the `pi` CLI at any time.
+GitHub 下载在部分国内网络环境下可能出现连通困难：
+- 打开 Pi Desktop **设置**，找到 **「下载镜像加速」**；
+- 输入官方推荐的加速镜像前缀：`https://ghproxy.net/`，即可享受快速下载与断点续传。
 
 ---
 
-## Run from Source
+## 安全性与隐私（简明版）
+
+- **100% 本地优先（Local-First）**：这是一个纯本地桌面客户端，不设任何自建云端中转服务器，不需要注册第三方平台账号。
+- **数据完全保存在本机**：
+  - 会话历史、用户凭据与配置全部保存在用户本地原生目录（如 `~/.pi`）；
+  - 聊天记录与本地代码完全私有，绝不上传到任何非用户授权的第三方服务器。
+- **何时联网**：
+  - 仅在你与 AI 模型对话（直接向你配置的模型供应商发起 API 请求）、检查版本更新或下载扩展包时联网。
+- **零锁定（Zero Lock-in）**：
+  - 100% 遵循 pi 原生 SDK 与规范，你在桌面端的所有会话与资产，均可直接在 `pi` 官方命令行 CLI 中无缝读取与继续。
+
+---
+
+## 从源码运行
 
 ```bash
 git clone https://github.com/zth0828/pi-desktop.git
@@ -262,97 +242,86 @@ pnpm install
 pnpm dev
 ```
 
-Pi Desktop checks Node.js, npm, the pi installation method, and pi version at
-startup. Its onboarding flow can guide or run the supported npm installation
-without taking over pi upgrades.
+Pi Desktop 启动时会检测 Node.js、npm、pi 的安装方式和版本。引导流程可以提示或执行
+受支持的 npm 安装，但不会接管 pi 升级。
 
-## Development
+## 开发与测试
 
 ```bash
-pnpm typecheck       # Main, preload, shared, and renderer TypeScript
-pnpm test            # Unit tests
-pnpm test:contract   # pi SDK contracts against a local SSE provider
-pnpm test:e2e        # Electron end-to-end suite
-pnpm build:vite      # Production renderer/main/preload build
+pnpm typecheck       # Main、preload、shared 和 renderer TypeScript
+pnpm test            # 单元测试
+pnpm test:contract   # 使用本地 SSE provider 验证 pi SDK 契约
+pnpm test:e2e        # Electron 端到端测试
+pnpm build:vite      # 生产环境 renderer/main/preload 构建
 ```
 
-Regenerate every README screenshot from isolated demo data:
+使用隔离演示数据重新生成 README 中的全部截图：
 
 ```bash
 pnpm screenshots:readme
 ```
 
-## Project Status
+## 项目状态
 
-The core desktop workflow is implemented and covered by Electron E2E tests.
-CI validates source builds on macOS and Windows. Version tags create
-Developer ID signed and notarized macOS artifacts when Apple credentials are
-configured, or ad-hoc signed previews otherwise. Windows preview artifacts remain
-unsigned. Auto-update and broader real-device release validation remain future work.
+桌面端核心工作流已经实现，并由 Electron E2E 覆盖。CI 会在 macOS 和 Windows 上验证源码构建，版本标签会为两个平台生成预览包。签名与公证、自动
+更新以及更广泛的真实设备发行验证仍是后续工作。
 
-## Contributing
+## 参与贡献
 
-[Issues](https://github.com/zth0828/pi-desktop/issues), bug reports, product
-feedback, and focused pull requests are welcome.
+欢迎通过 [Issues](https://github.com/zth0828/pi-desktop/issues) 提交 Bug 报告、
+产品建议，以及范围清晰的 Pull Request。
 
-1. Search existing issues and describe the user-facing problem or workflow.
-2. Keep agent capabilities in pi or a pi extension; Pi Desktop should provide
-   the experience and integration layer.
-3. Add tests proportional to risk. Renderer UI changes require Electron
-   Playwright coverage.
-4. Run the relevant checks above before submitting.
-5. Do not include secrets, API keys, or private pi sessions in reports.
+1. 先搜索已有 Issue，并清楚描述面向用户的问题或工作流。
+2. Agent 能力应放在 pi 或 pi 扩展中；Pi Desktop 负责体验和集成层。
+3. 根据改动风险补充测试；渲染层 UI 变更必须提供 Electron Playwright 覆盖。
+4. 提交前运行上面的相关检查。
+5. 报告问题时请勿附带密钥、API Key 或私有 pi 会话。
 
-## Community
+## 社区交流
 
-Join the Pi Desktop community to ask questions, share workflows, and exchange
-feedback with other users.
+欢迎加入 Pi Desktop 社区，交流使用经验、分享工作流、反馈问题，也欢迎提出改进建议。
 
 <table>
   <thead>
     <tr>
-      <th>GitHub Community</th>
-      <th>Feishu Group</th>
+      <th>GitHub 社区</th>
+      <th>飞书交流群</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td valign="top">
-        <p>Use the project repository for public, searchable conversations:</p>
+        <p>公共、可搜索的讨论优先放在项目仓库中：</p>
         <ul>
-          <li><a href="https://github.com/zth0828/pi-desktop/issues">Issues</a> for reproducible bugs and focused feature requests.</li>
-          <li><a href="https://github.com/zth0828/pi-desktop/discussions">Discussions</a> for questions, workflow ideas, and product feedback.</li>
-          <li><a href="https://github.com/zth0828/pi-desktop/pulls">Pull requests</a> for focused contributions.</li>
+          <li><a href="https://github.com/zth0828/pi-desktop/issues">Issues</a>：提交可复现的 Bug 和明确的功能建议。</li>
+          <li><a href="https://github.com/zth0828/pi-desktop/discussions">Discussions</a>：进行问答、工作流分享和产品讨论。</li>
+          <li><a href="https://github.com/zth0828/pi-desktop/pulls">Pull requests</a>：提交范围清晰的贡献。</li>
         </ul>
       </td>
       <td align="center" valign="top">
         <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=e26gbe0e-6133-462d-9192-33c554ed5f47&amp;qr_code=true">
-          <img src="./resources/community/feishu-group.png" width="240" alt="Pi Desktop Feishu community group QR code">
+          <img src="./resources/community/feishu-group.png" width="240" alt="Pi Desktop 飞书交流群二维码">
         </a>
         <br>
-        <sub>Scan or click to join the Chinese-language group.</sub>
+        <sub>扫码或点击二维码加入中文交流群。</sub>
       </td>
     </tr>
   </tbody>
 </table>
 
-More community channels may be added as the project grows. Feishu group
-availability and invite validity are controlled by Feishu and may change over
-time.
+项目发展后会继续增加其他社区入口。群聊是否开放以及邀请链接是否有效由飞书控制，后续可能发生变化。
 
-## License
+## 许可证
 
-Pi Desktop is **free for personal, educational, research, and other
-non-commercial use**. Commercial use requires prior written authorization from
-the copyright holder. See [LICENSE](LICENSE) for the complete terms.
+Pi Desktop **允许个人、教育、研究及其他非商业用途免费使用**。商业使用必须事先
+获得版权所有者的书面授权。完整条款见 [LICENSE](LICENSE)。
 
-This is a source-available project, not an OSI-approved open-source license.
-Third-party components retain their original licenses; see [NOTICE](NOTICE).
+这是一个源码可见项目，并非采用 OSI 认可的开源许可证。第三方组件继续遵循其原始
+许可证，归属信息见 [NOTICE](NOTICE)。
 
-## Acknowledgements
+## 致谢
 
-- [pi](https://github.com/badlogic/pi-mono) provides the coding-agent runtime.
-- A small number of Electron infrastructure files were adapted from ClawX under
-  the MIT License. This is implementation-level reuse, not a product dependency
-  or shared agent runtime. Attribution is recorded in [NOTICE](NOTICE) and the
-  relevant commits.
+- [pi](https://github.com/badlogic/pi-mono) 提供 coding agent 运行时。
+- 少量 Electron 基础设施文件基于 MIT 许可证从 ClawX 调整而来。这属于实现层面的
+  代码复用，不代表产品依赖或共享 agent 运行时。准确范围记录在 [NOTICE](NOTICE) 与
+  对应提交记录中。
