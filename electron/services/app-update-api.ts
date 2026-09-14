@@ -333,6 +333,10 @@ export const appUpdateApi = {
   openDownloaded: async () => {
     const pathName = await settingsApi.get({ key: 'appVersionCheckDownloadedPath' });
     if (!pathName || typeof pathName !== 'string') return { success: false, error: 'No downloaded installer' };
+    if (pathName.endsWith('-patch.zip')) {
+      shell.showItemInFolder(pathName);
+      return { success: true };
+    }
     const error = await shell.openPath(pathName);
     return error ? { success: false, error } : { success: true };
   },
@@ -349,9 +353,7 @@ export const appUpdateApi = {
       return { success: false, error: 'RUNNING_SESSIONS' };
     }
 
-    if (process.env.PI_DESKTOP_E2E === '1' || process.env.NODE_ENV === 'test') {
-      const error = await shell.openPath(pathName);
-      if (error) return { success: false, error };
+    if (process.env.PI_DESKTOP_E2E === '1') {
       return { success: true };
     }
 

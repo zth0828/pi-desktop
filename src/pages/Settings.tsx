@@ -867,13 +867,15 @@ export default function SettingsPage() {
                 >
                   {t('settings.version.showInFolder')}
                 </button>
-                <button
-                  className="pill"
-                  data-testid="settings-app-open"
-                  onClick={() => void hostApi.appUpdate.openDownloaded()}
-                >
-                  {t('settings.version.open')}
-                </button>
+                {!versionStatus?.app.downloadedPath?.endsWith('-patch.zip') && (
+                  <button
+                    className="pill"
+                    data-testid="settings-app-open"
+                    onClick={() => void hostApi.appUpdate.openDownloaded()}
+                  >
+                    {t('settings.version.open')}
+                  </button>
+                )}
                 <button
                   className="pill active"
                   data-testid="settings-app-install"
