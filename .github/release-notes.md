@@ -1,3 +1,14 @@
+### 📥 下载地址 (Download)
+
+#### 🪟 Windows (不支持 Win7)
+- **标准安装版（推荐，支持在线自动静默更新）**：[Windows 64位安装包 (.exe)](https://github.com/zth0828/pi-desktop/releases/download/v1.4.0/Pi.Desktop-Setup-1.4.0-x64.exe)
+
+#### 🍏 macOS (macOS 11.0+)
+- **Apple M芯片（M1 / M2 / M3 / M4 系列）**：[Apple M芯片 DMG 安装镜像](https://github.com/zth0828/pi-desktop/releases/download/v1.4.0/Pi.Desktop-1.4.0-arm64.dmg)
+- **Intel芯片（老款 Intel 处理器 Mac）**：[Intel芯片 DMG 安装镜像](https://github.com/zth0828/pi-desktop/releases/download/v1.4.0/Pi.Desktop-1.4.0-x64.dmg)
+
+---
+
 ## 长会话导航轨折叠、上下文压缩防丢保护、运行态吸顶任务卡与窗格拆分自适应
 
 本版本基于 `v1.3.1`，引入长会话消息导航轨折叠与分组跳转抽屉，彻底解决密集提问下的右侧圆点堆叠；增加上下文压缩期间的消息队列保护与重试机制，杜绝压缩时发消息丢失；新增吸顶运行态任务卡片与命令面板联动，重构多窗格拆分布局与窄屏工具栏自适应，并优化首包等待呼吸光标与轮内重试倒计时。
@@ -46,8 +57,8 @@ Pi Desktop 需要 Node.js 22.19.0 或更新版本，并要求通过 npm 全局�
 npm i -g @earendil-works/pi-coding-agent
 ```
 
-Windows 和 Linux 安装包尚未进行商业代码签名，Windows SmartScreen 可能显示安全提示。请只从本仓库 GitHub Releases 下载，并在运行前核对 SHA-256。
+Windows 安装包尚未进行商业代码签名，Windows SmartScreen 可能显示安全提示。请只从本仓库 GitHub Releases 下载，并在运行前核对 SHA-256。
 
-没有 Apple Developer ID 凭据时，macOS 产物使用完整的 ad-hoc 签名。打开 DMG 后双击 `Install Pi Desktop.command`；如果浏览器 quarantine 阻止双击，请在终端中运行该安装器。安装器只处理 Pi Desktop 自身，不会关闭全局 Gatekeeper。
+macOS 产物使用完整的 ad-hoc 签名。打开 DMG 后将 Pi Desktop 拖入「应用程序」文件夹即可运行。后续版本支持在应用内直接原地自动无感更新，无需重复手动安装。
 
 本软件可免费用于个人和非商业用途；商业使用需事先获得书面授权，详见 LICENSE。

@@ -28,9 +28,6 @@ jobs:
           - platform: Windows
             os: windows-2025
             command: pnpm exec electron-builder --win --publish never
-          - platform: Linux
-            os: ubuntu-24.04
-            command: pnpm exec electron-builder --linux --publish never
     steps:
       - uses: actions/checkout@v7
         with:
@@ -85,20 +82,11 @@ jobs:
       - name: Verify macOS release
         if: matrix.platform == 'macOS'
         run: scripts/verify-macos-release.sh release "${MACOS_RELEASE_SIGNED:-false}"
-      - name: Build unsigned Windows/Linux packages
+      - name: Build unsigned Windows packages
         if: matrix.platform != 'macOS'
         run: ${{ matrix.command }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: Add standalone uninstall helper
-        if: matrix.platform == 'macOS' || matrix.platform == 'Linux'
-        shell: bash
-        run: |
-          if [[ "${{ matrix.platform }}" == "macOS" ]]; then
-            cp "resources/macos/Uninstall Pi Desktop.command" "release/Uninstall Pi Desktop.command"
-          else
-            cp "resources/linux/Uninstall Pi Desktop.sh" "release/Uninstall Pi Desktop.sh"
-          fi
       - name: Create checksums
         shell: bash
         env:
@@ -111,7 +99,7 @@ jobs:
           import { join } from 'node:path';
 
           const outputDir = 'release';
-          const packageExtensions = ['.dmg', '.zip', '.exe', '.AppImage', '.deb', '.command', '.sh'];
+          const packageExtensions = ['.dmg', '.zip', '.exe'];
           const entries = (await readdir(outputDir, { withFileTypes: true }))
             .filter((entry) =>
               entry.isFile()
@@ -146,10 +134,6 @@ jobs:
             release/*.dmg
             release/*.zip
             release/*.exe
-            release/*.AppImage
-            release/*.deb
-            release/*.command
-            release/*.sh
             release/SHA256SUMS-*.txt
           if-no-files-found: error
 
