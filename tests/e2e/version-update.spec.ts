@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { zipSync } from 'fflate';
 import { expect, test } from './fixtures/electron';
 
 let server: http.Server;
@@ -11,6 +12,20 @@ let agentDir: string;
 
 const dummyBinary = Buffer.from('pi-desktop-test-installer-binary');
 const binaryHash = createHash('sha256').update(dummyBinary).digest('hex');
+
+const dummyAsar = Buffer.from('mock-patched-asar-payload');
+const dummyPatchZip = Buffer.from(
+  zipSync({
+    'app.asar': dummyAsar,
+    'patch-metadata.json': Buffer.from(
+      JSON.stringify({
+        version: '9.9.9',
+        sha256: createHash('sha256').update(dummyAsar).digest('hex'),
+      }),
+    ),
+  }),
+);
+const patchZipHash = createHash('sha256').update(dummyPatchZip).digest('hex');
 
 test.beforeAll(async () => {
   agentDir = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-version-update-'));
@@ -27,6 +42,47 @@ test.beforeAll(async () => {
 
     const platformName = process.platform === 'darwin' ? 'macOS' : 'Windows';
     const sumsName = `SHA256SUMS-${platformName}.txt`;
+
+    if (req.url?.startsWith('/releases/patch')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        tag_name: 'v9.9.9',
+        draft: false,
+        prerelease: false,
+        html_url: 'https://github.com/zth0828/pi-desktop/releases/tag/v9.9.9',
+        body: '✨ Incremental patch update\n🚀 Fast lightweight download',
+        assets: [
+          {
+            name: 'Pi.Desktop-9.9.9-patch.zip',
+            browser_download_url: `http://127.0.0.1:${serverPort}/download/patch-asset`,
+          },
+          {
+            name: assetName,
+            browser_download_url: `http://127.0.0.1:${serverPort}/download/asset`,
+          },
+          {
+            name: sumsName,
+            browser_download_url: `http://127.0.0.1:${serverPort}/download/patch-sums`,
+          },
+        ],
+      }));
+      return;
+    }
+
+    if (req.url === '/download/patch-asset') {
+      res.writeHead(200, {
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': String(dummyPatchZip.length),
+      });
+      res.end(dummyPatchZip);
+      return;
+    }
+
+    if (req.url === '/download/patch-sums') {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(`${patchZipHash}  Pi.Desktop-9.9.9-patch.zip\n${binaryHash}  ${assetName}\n`);
+      return;
+    }
 
     if (req.url?.startsWith('/releases/latest')) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -189,4 +245,54 @@ test('设置页：镜像加速配置修改与落盘', async ({
       return undefined;
     }
   }, { timeout: 10_000 }).toBe('https://ghproxy.net/');
+});
+
+test('设置页：增量补丁（*-patch.zip）下载后解压 app.asar 并完成暂存与就绪', async ({
+  launchElectronApp,
+  homeDir,
+}) => {
+  const githubApiUrl = `http://127.0.0.1:${serverPort}/releases/patch`;
+  const app = await launchElectronApp({
+    mockPi: true,
+    agentDir,
+    initialPage: 'settings',
+    githubApiUrl,
+  });
+  const page = await app.firstWindow();
+
+  // 触发版本检查与补丁下载
+  await page.getByTestId('settings-app-check').click();
+  const downloadBtn = page.getByTestId('settings-app-download');
+  await expect(downloadBtn).toBeVisible({ timeout: 15_000 });
+
+  // 验证 Release Notes 展示
+  await expect(page.locator('.settings-changelog-content .markdown')).toContainText('Incremental patch update');
+
+  await downloadBtn.click();
+
+  // 下载完成后弹出全局模态引导对话框
+  const dialog = page.getByTestId('version-install-dialog');
+  await expect(dialog).toBeVisible({ timeout: 15_000 });
+
+  // 验证配置记录了 stagedPatchPath
+  const configPath = path.join(homeDir, 'user-data', 'config.json');
+  let stagedPatchPath: string | undefined;
+  await expect.poll(async () => {
+    try {
+      const config = JSON.parse(await readFile(configPath, 'utf8')) as { appVersionCheckStagedPatchPath?: string };
+      stagedPatchPath = config.appVersionCheckStagedPatchPath;
+      return stagedPatchPath;
+    } catch {
+      return undefined;
+    }
+  }, { timeout: 10_000 }).toBeTruthy();
+
+  // 验证 staged app.asar 文件内容为解压后的补丁内容
+  expect(stagedPatchPath).toBeDefined();
+  const stagedContent = await readFile(stagedPatchPath!, 'utf8');
+  expect(stagedContent).toBe('mock-patched-asar-payload');
+
+  // 点击立即重启安装，验证弹窗关闭且无报错
+  await page.getByTestId('version-install-action').click();
+  await expect(dialog).toHaveCount(0);
 });

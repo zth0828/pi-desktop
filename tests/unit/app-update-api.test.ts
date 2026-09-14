@@ -37,4 +37,37 @@ describe('app update asset selection', () => {
     expect(selectAsset(assetsWithZip, 'darwin', 'x64')).toEqual({ name: 'Pi.Desktop-0.2.2-mac-x64.zip', url: 'zip-x64' });
     expect(selectAssetName(assetsWithZip, 'darwin', 'arm64')).toBe('Pi.Desktop-0.2.2-arm64.zip');
   });
+
+  it('prefers patch.zip on all supported platforms by default', () => {
+    const assetsWithPatch = [
+      ...assets,
+      { name: 'Pi.Desktop-0.2.2-patch.zip', browser_download_url: 'patch-zip' },
+    ];
+    expect(selectAsset(assetsWithPatch, 'darwin', 'arm64')).toEqual({
+      name: 'Pi.Desktop-0.2.2-patch.zip',
+      url: 'patch-zip',
+    });
+    expect(selectAsset(assetsWithPatch, 'win32', 'x64')).toEqual({
+      name: 'Pi.Desktop-0.2.2-patch.zip',
+      url: 'patch-zip',
+    });
+    expect(selectAssetName(assetsWithPatch, 'darwin', 'arm64')).toBe('Pi.Desktop-0.2.2-patch.zip');
+    expect(selectAssetName(assetsWithPatch, 'win32', 'x64')).toBe('Pi.Desktop-0.2.2-patch.zip');
+  });
+
+  it('falls back to full installer when preferPatch is false', () => {
+    const assetsWithPatch = [
+      ...assets,
+      { name: 'Pi.Desktop-0.2.2-arm64.zip', browser_download_url: 'zip-arm' },
+      { name: 'Pi.Desktop-0.2.2-patch.zip', browser_download_url: 'patch-zip' },
+    ];
+    expect(selectAsset(assetsWithPatch, 'darwin', 'arm64', { preferPatch: false })).toEqual({
+      name: 'Pi.Desktop-0.2.2-arm64.zip',
+      url: 'zip-arm',
+    });
+    expect(selectAsset(assetsWithPatch, 'win32', 'x64', { preferPatch: false })).toEqual({
+      name: 'Pi.Desktop-Setup-0.2.2-x64.exe',
+      url: 'setup',
+    });
+  });
 });
