@@ -78,11 +78,11 @@ actual installation and execution to pi.
 
 | Area | What is available |
 | --- | --- |
-| **Agent chat** | Streaming text and reasoning, tool-call progress, stop, queue and steer, slash commands, a plan mode toggle, message editing and forking with attachments restored, bash command mode with context control, rich Markdown, task lists, tables, code blocks, copy actions, workspace file references, and image attachments |
+| **Agent chat** | Streaming text and reasoning, tool-call progress, message navigation rail on the right (prompt hover preview/smart folding panel/independent compaction rail/smooth precise jump), historical turn auto-folding (aggregation of reasoning and tool executions/duration metrics/one-click collapse at bottom), stop, queue and steer, slash commands, a plan mode toggle, message editing and forking with attachments restored, bash command mode with context control, rich Markdown, task lists, tables, code blocks, copy actions, workspace file references, and image attachments |
 | **Workspace** | Expandable file browser; text, code, image, Markdown, PDF, DOCX, XLSX and CSV previews; open files in native apps; session bash run history; docked side-by-side or overlay layout with optional window expansion |
-| **Change review** | Git and non-Git change detection, staged/unstaged/untracked/conflict states, split or unified diff, per-file and per-hunk revert confirmation, and edited-file summaries after each turn |
-| **Sessions** | Project-grouped history with group expand and collapse, title/message search, rename, live-session indicators, switch, fork, branch tree, archive/restore, delete, context compaction, and standalone HTML export |
-| **Models** | Built-in and extension providers, API keys, OAuth, custom compatible endpoints, protocol probing, model discovery, context/output limits, token pricing, thinking levels, usage and cost details, and a composer picker with provider grouping and per-provider search |
+| **Change review** | Git and non-Git change detection, staged/unstaged/untracked/conflict states, split or unified diff, per-file and per-hunk revert confirmation, and edited-file turn summary cards (single-click revert per turn) |
+| **Sessions** | Project-grouped history with group expand and collapse, title/message search, rename, live-session indicators, switch, fork, visual session branch tree (topological node switching/depth inspection), archive/restore, delete, context compaction, and standalone HTML export |
+| **Models** | Built-in and extension providers, API keys, OAuth, custom compatible endpoints, protocol probing, model discovery, context/output limits, token pricing, thinking levels, usage and cost details, provider error diagnostic guidance (401/429/500), and a composer picker with provider grouping and per-provider search |
 | **pi ecosystem** | Read active Skills, browse the official package catalog, inspect package metadata and README files, install/update/remove packages, configure global/project MCP servers, and render supported extension dialogs/widgets/notifications |
 | **Desktop experience** | Light/dark/system themes, English/Chinese UI, split panes and detached session windows, session search shortcut, collapsible sidebar, notification policy, send-key and follow-up behavior, prevent-sleep support, version update notifications with mirror-accelerated downloads, and pi environment diagnostics |
 
@@ -92,9 +92,7 @@ actual installation and execution to pi.
 
 ![Pi Desktop workspace and Git diff review](./resources/screenshots/review.png)
 
-The right-hand workbench keeps source files and changes next to the conversation.
-Tool activity folds into a readable turn log, while edited files remain visible
-for review or rollback.
+The right-hand workbench keeps source files and changes next to the conversation. Historical turns automatically fold verbose reasoning and multi-step tool calls with precise duration stats, while a persistent navigation rail on the right lets you preview prompts and jump smoothly; edited files remain visible for inspection or rollback.
 
 ### Drive the session from the composer toolbar
 
@@ -129,9 +127,7 @@ searches within each group:
 
 ![Pi Desktop session management](./resources/screenshots/sessions.png)
 
-Sessions are not disposable chat tabs. Continue earlier work, fork an
-alternative approach, archive completed threads, or export a self-contained
-HTML record.
+Sessions are not disposable chat tabs. Continue earlier work, fork an alternative approach, explore the visual session branch tree to inspect topological relationships and switch across branches, archive completed threads, or export a self-contained HTML record.
 
 ### Multitask with split panes and separate windows
 
