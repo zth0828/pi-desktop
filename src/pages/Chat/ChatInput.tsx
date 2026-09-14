@@ -88,6 +88,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
   const model = usePaneChatStore((s) => s.model);
   const thinkingLevel = usePaneChatStore((s) => s.thinkingLevel);
   const availableThinkingLevels = usePaneChatStore((s) => s.availableThinkingLevels);
+  const extensionUi = usePaneChatStore((s) => s.extensionUi);
 
   const [models, setModels] = useState<PiModelRow[]>([]);
   const [modelKey, setModelKey] = useState('');
@@ -739,6 +740,13 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
           setPlanMode((prev) => !prev);
           return;
         }
+        if (arg === 'exit' || arg === 'quit') {
+          if (planMode) setPlanMode(false);
+          const promptText = formatOrderedAttachmentPrompt(text, outgoingAttachments);
+          clearComposerInput();
+          executePrompt(promptText, outgoing, behavior);
+          return;
+        }
         if (!planMode) setPlanMode(true);
         const promptText = formatOrderedAttachmentPrompt(text, outgoingAttachments);
         clearComposerInput();
@@ -804,6 +812,22 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
   const prevCommandRef = useRef(commandMode);
   const prevPlanRef = useRef(planMode);
 
+  const isPlanActive = Boolean(
+    extensionUi?.statuses.some((s) => s.key.toLowerCase().includes('plan')) ||
+    extensionUi?.widgets.some((w) => w.key.toLowerCase().includes('plan'))
+  );
+  const prevPlanActiveRef = useRef(isPlanActive);
+  useEffect(() => {
+    if (isPlanActive !== prevPlanActiveRef.current) {
+      if (isPlanActive && !planMode) {
+        setPlanMode(true);
+      } else if (!isPlanActive && planMode) {
+        setPlanMode(false);
+      }
+      prevPlanActiveRef.current = isPlanActive;
+    }
+  }, [isPlanActive, planMode]);
+
   useEffect(() => {
     if (attachments.length > prevAttachmentsRef.current.length) {
       const addedCount = attachments.length - prevAttachmentsRef.current.length;
@@ -860,10 +884,13 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
         ]);
       } else {
         setStagedStack((prev) => prev.filter((it) => it.type !== 'plan'));
+        if (isPlanActive) {
+          void prompt('/plan exit');
+        }
       }
       prevPlanRef.current = planMode;
     }
-  }, [attachments, selectedSkill, commandMode, planMode]);
+  }, [attachments, selectedSkill, commandMode, planMode, isPlanActive, prompt]);
 
   const cancelLastStagedItem = (): boolean => {
     for (let i = stagedStack.length - 1; i >= 0; i--) {

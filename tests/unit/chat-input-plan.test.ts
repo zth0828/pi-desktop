@@ -25,6 +25,8 @@ describe('chat-input-plan (Plan 模式前缀与命令判定)', () => {
     expect(computeModePrefix('/plan 帮我增加登录功能', true, null)).toBe('');
     expect(computeModePrefix('/plan-mode 帮我增加登录功能', true, null)).toBe('');
     expect(computeModePrefix('／plan 帮我增加登录功能', true, null)).toBe('');
+    expect(computeModePrefix('/plan exit', true, null)).toBe('');
+    expect(computeModePrefix('/plan-mode quit', true, null)).toBe('');
   });
 
   it('未开启 planMode 时，不添加 /plan 前缀', () => {
