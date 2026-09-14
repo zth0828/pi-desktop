@@ -82,6 +82,9 @@ jobs:
       - name: Verify macOS release
         if: matrix.platform == 'macOS'
         run: scripts/verify-macos-release.sh release "${MACOS_RELEASE_SIGNED:-false}"
+      - name: Generate patch asset
+        if: matrix.platform == 'macOS'
+        run: node scripts/create-patch-asset.mjs
       - name: Build unsigned Windows packages
         if: matrix.platform != 'macOS'
         run: ${{ matrix.command }}
