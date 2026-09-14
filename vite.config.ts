@@ -72,6 +72,7 @@ function isMainProcessExternal(id: string): boolean {
   if (!id || id.startsWith('\0')) return false;
   if (id.startsWith('.') || id.startsWith('/') || /^[A-Za-z]:[\\/]/.test(id)) return false;
   if (id.startsWith('@/') || id.startsWith('@electron/') || id.startsWith('@shared/')) return false;
+  if (id === 'fflate' || id.startsWith('fflate/')) return false;
   return true;
 }
 
