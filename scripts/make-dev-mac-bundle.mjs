@@ -5,7 +5,7 @@
 // 修改 Info.plist 应用名后必须整体 ad-hoc 重新签名：改 Info.plist 会使原签名失效，
 // helper 子进程会被系统拒绝而崩溃。版本一致时跳过（幂等，启动快）。
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +13,10 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const srcApp = path.join(root, 'node_modules/electron/dist/Electron.app');
 const dstApp = path.join(root, '.dev/Electron.app');
+const iconSrc = path.join(root, 'resources/icon.icns');
 const plistBuddy = '/usr/libexec/PlistBuddy';
+const lsregister = '/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister';
+const devBundleId = 'io.github.zth0828.pidesktop.dev';
 
 function plistGet(plistPath, key) {
   try {
@@ -33,16 +36,36 @@ export async function ensureDevMacBundle() {
   const srcVersion = plistGet(srcPlist, 'CFBundleVersion');
   const dstVersion = existsSync(dstPlist) ? plistGet(dstPlist, 'CFBundleVersion') : '';
   const dstName = existsSync(dstPlist) ? plistGet(dstPlist, 'CFBundleName') : '';
-  if (dstVersion === srcVersion && dstName === 'Pi Desktop') return dstApp;
+  const dstId = existsSync(dstPlist) ? plistGet(dstPlist, 'CFBundleIdentifier') : '';
+  if (dstVersion === srcVersion && dstName === 'Pi Desktop' && dstId === devBundleId) return dstApp;
 
   console.log('[dev-bundle] rebuilding Pi Desktop.app dev bundle…');
   await rm(dstApp, { recursive: true, force: true });
+  mkdirSync(path.dirname(dstApp), { recursive: true });
   // APFS clone（CoW）快速复制，不占双倍磁盘
   execFileSync('cp', ['-cR', srcApp, dstApp], { stdio: 'inherit' });
   for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
     execFileSync(plistBuddy, ['-c', `Set :${key} Pi Desktop`, dstPlist]);
   }
+  execFileSync(plistBuddy, ['-c', `Set :CFBundleIdentifier ${devBundleId}`, dstPlist]);
+
+  // 替换 dev bundle 应用图标为 Pi Desktop 的 icon.icns，使系统通知与 Dock 获得真实 logo
+  const dstIcon = path.join(dstApp, 'Contents/Resources/electron.icns');
+  if (existsSync(iconSrc)) {
+    execFileSync('cp', [iconSrc, dstIcon]);
+  }
+
   execFileSync('codesign', ['--force', '--deep', '--sign', '-', dstApp], { stdio: 'inherit' });
+
+  // 注册至 macOS LaunchServices，避免系统通知中心回退至使用默认 com.github.Electron 的其他已安装应用
+  if (existsSync(lsregister)) {
+    try {
+      execFileSync(lsregister, ['-f', dstApp]);
+    } catch {
+      // 注册失败不阻断启动
+    }
+  }
+
   console.log('[dev-bundle] done:', dstApp);
   return dstApp;
 }
