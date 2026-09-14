@@ -186,6 +186,7 @@ export type AppUpdateDownloadResult = HostSuccess & {
   path?: string;
   assetName?: string;
   stagedAppPath?: string;
+  stagedPatchPath?: string;
 };
 
 export type AppUpdateProgressPhase =
@@ -203,6 +204,7 @@ export type AppUpdateProgressEvent = {
   speedBytesPerSec?: number;
   path?: string;
   stagedAppPath?: string;
+  stagedPatchPath?: string;
   version?: string;
   releaseNotes?: string;
   silent?: boolean;
@@ -586,6 +588,7 @@ export type SettingsSnapshot = {
   appVersionCheckAssetName?: string;
   appVersionCheckDownloadedPath?: string;
   appVersionCheckStagedAppPath?: string;
+  appVersionCheckStagedPatchPath?: string;
   appVersionCheckSkippedVersion?: string;
   appVersionCheckNoticedLatest?: string;
   appVersionCheckNoticedAt?: number;
