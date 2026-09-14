@@ -130,6 +130,12 @@
       "compactButton": "一键压缩会话",
       "dismiss": "临时关闭"
     },
+    "companionHint": {
+      "tip": "开启「智能选项询问」后，Agent 可直接弹出选项卡片供您点击。",
+      "enable": "一键启用",
+      "manage": "前往扩展页",
+      "enabledSuccess": "已成功启用智能选项提问工具"
+    },
     "status": {
       "working": "工作中…",
       "serverRunning": "开发服务正在前台运行；可停止当前任务，或让 pi 在后台启动服务。",
@@ -817,7 +823,19 @@
     "scope": {
       "user": "用户",
       "project": "项目"
-    }
+    },
+    "companionTitle": "内置增强扩展",
+    "companionHint": "桌面端精选工具，一键启停，免 npm 安装与维护。",
+    "companionAskTitle": "智能选项提问 (ask_question)",
+    "companionAskDesc": "为 Agent 注入选项提问工具。当 Agent 需要向您确认决策时，直接弹出卡片供您一键选择，告别手打回复数字。",
+    "companionEnabled": "已启用",
+    "companionNotEnabled": "未启用",
+    "companionEnableBtn": "一键启用",
+    "companionRemoveBtn": "一键移除",
+    "companionEnabling": "正在启用…",
+    "companionRemoving": "正在移除…",
+    "companionEnableSuccess": "已成功启用「智能选项提问」扩展",
+    "companionRemoveSuccess": "已成功移除「智能选项提问」扩展"
   },
   "mcp": {
     "title": "MCP",

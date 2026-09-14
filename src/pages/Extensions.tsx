@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Search,
   ShieldAlert,
+  Sparkles,
 } from 'lucide-react';
 import type {
   PiPackageCatalogFilterType,
@@ -19,7 +20,9 @@ import type {
 } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
+import { onNavigateToPage } from '../lib/app-navigation';
 import { formatRelativeTime } from '../lib/session-format';
+import { useCompanionStore } from '../stores/companion';
 import PackageDetail from './PackageDetail';
 
 type ExtensionsView = 'discover' | 'installed';
@@ -55,6 +58,32 @@ export default function ExtensionsPage() {
   const [packageDetailError, setPackageDetailError] = useState<string>();
   const [packageDetailRefresh, setPackageDetailRefresh] = useState(false);
   const unbindRef = useRef<(() => void) | null>(null);
+
+  const companionInstalled = useCompanionStore((s) => s.askQuestionInstalled);
+  const companionLoading = useCompanionStore((s) => s.loading);
+  const companionError = useCompanionStore((s) => s.error);
+  const fetchCompanionStatus = useCompanionStore((s) => s.fetchStatus);
+  const toggleCompanion = useCompanionStore((s) => s.toggle);
+  const [companionFeedback, setCompanionFeedback] = useState<string>();
+
+  const handleToggleCompanion = async (enable: boolean) => {
+    const success = await toggleCompanion('ask-question', enable);
+    if (success) {
+      setCompanionFeedback(
+        enable ? t('extensions.companionEnableSuccess') : t('extensions.companionRemoveSuccess'),
+      );
+      window.setTimeout(() => setCompanionFeedback(undefined), 3500);
+    }
+  };
+
+  useEffect(() => {
+    void fetchCompanionStatus();
+    return onNavigateToPage((page, targetView) => {
+      if (page === 'extensions' && (targetView === 'discover' || targetView === 'installed')) {
+        setView(targetView);
+      }
+    });
+  }, [fetchCompanionStatus]);
 
   const refresh = useCallback(async () => {
     try {
@@ -434,6 +463,53 @@ export default function ExtensionsPage() {
         </div>
       ) : (
         <div className="installed-packages-view" data-testid="installed-packages">
+          <section className="companion-section" data-testid="companion-section">
+            <div className="companion-section-header">
+              <div className="companion-section-title-wrap">
+                <Sparkles size={15} className="companion-icon" />
+                <h3 className="companion-title">{t('extensions.companionTitle')}</h3>
+              </div>
+              <p className="hint">{t('extensions.companionHint')}</p>
+            </div>
+            <div className="companion-card" data-testid="companion-card-ask-question">
+              <div className="companion-card-info">
+                <div className="companion-name-row">
+                  <span className="companion-name">{t('extensions.companionAskTitle')}</span>
+                  <span
+                    className={`companion-status-badge ${companionInstalled ? 'is-enabled' : 'is-disabled'}`}
+                    data-testid="companion-status-ask-question"
+                  >
+                    {companionInstalled ? t('extensions.companionEnabled') : t('extensions.companionNotEnabled')}
+                  </span>
+                </div>
+                <p className="hint companion-desc">{t('extensions.companionAskDesc')}</p>
+              </div>
+              <div className="package-actions">
+                <button
+                  type="button"
+                  className={companionInstalled ? 'danger-outline' : 'primary'}
+                  data-testid="companion-toggle-ask-question"
+                  disabled={companionLoading}
+                  onClick={() => void handleToggleCompanion(!companionInstalled)}
+                >
+                  {companionLoading
+                    ? (companionInstalled ? t('extensions.companionRemoving') : t('extensions.companionEnabling'))
+                    : (companionInstalled ? t('extensions.companionRemoveBtn') : t('extensions.companionEnableBtn'))}
+                </button>
+              </div>
+            </div>
+            {companionFeedback && (
+              <p className="companion-feedback-msg" data-testid="companion-feedback">
+                {companionFeedback}
+              </p>
+            )}
+            {companionError && (
+              <p className="error-text" data-testid="companion-error">
+                {companionError}
+              </p>
+            )}
+          </section>
+
           <div className="installed-toolbar">
             <input
               className="search-input"

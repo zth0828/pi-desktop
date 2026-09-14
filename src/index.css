@@ -2494,6 +2494,75 @@ button.danger-outline {
   font-variant-numeric: tabular-nums;
 }
 
+.companion-choice-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-raised));
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.companion-choice-hint-content {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.companion-choice-hint-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.companion-choice-hint-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.companion-choice-hint-enable-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.companion-choice-hint-enable-btn:hover {
+  background: var(--accent-hover);
+}
+
+.companion-choice-hint-manage-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 6px;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.companion-choice-hint-manage-btn:hover {
+  color: var(--text);
+}
+
 .cursor-blink {
   display: inline-block;
   color: var(--accent);
@@ -7137,6 +7206,95 @@ button.queue-attachment-file:hover {
 .package-cache-status {
   color: var(--text-tertiary);
   font-size: 11px;
+}
+
+/* 伴生扩展 (Companion Extension) */
+.companion-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+}
+
+.companion-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.companion-section-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.companion-section-title-wrap .companion-icon {
+  color: var(--accent);
+}
+
+.companion-section-title-wrap h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.companion-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.companion-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.companion-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.companion-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.companion-status-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--bg-active);
+  color: var(--text-tertiary);
+}
+
+.companion-status-badge.is-enabled {
+  background: color-mix(in srgb, var(--success, #10b981) 15%, transparent);
+  color: var(--success, #10b981);
+}
+
+.companion-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.companion-feedback-msg {
+  font-size: 12px;
+  color: var(--success, #10b981);
+  margin-top: 2px;
 }
 
 .installed-toolbar {

@@ -9,11 +9,14 @@ import { FileIcon, getFileBadgeText } from '../../components/FileIcon';
 import { CACHE_TTL_MS, formatTokenCount, type CacheMiss } from '../../lib/cache-stats';
 import { formatDuration, tailLines } from '../../lib/tool-display';
 import { hostApi } from '../../lib/host-api';
+import { navigateToPage } from '../../lib/app-navigation';
 import type { ChatMessage, ContentBlock, TurnStats } from '../../stores/chat';
+import { useCompanionStore } from '../../stores/companion';
 import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
 import { renderUserMessageWithChips } from './chat-message/user-mentions';
+import { isPromptingForChoices } from './chat-message/companion-choice';
 
 /**
  * 技能指令折叠块：用户指定技能发送时展开的说明书与规则。
@@ -238,6 +241,20 @@ function MessageItemView({
   const [copied, setCopied] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
   const [bashExpanded, setBashExpanded] = useState(false);
+
+  const askQuestionInstalled = useCompanionStore((s) => s.askQuestionInstalled);
+  const companionLoading = useCompanionStore((s) => s.loading);
+  const toggleCompanion = useCompanionStore((s) => s.toggle);
+  const fetchCompanionStatus = useCompanionStore((s) => s.fetchStatus);
+  const [companionToast, setCompanionToast] = useState(false);
+
+  const handleEnableCompanion = async () => {
+    const ok = await toggleCompanion('ask-question', true);
+    if (ok) {
+      setCompanionToast(true);
+      window.setTimeout(() => setCompanionToast(false), 3000);
+    }
+  };
   if (message.role === 'user') {
     const rawText = message.content
       .filter((b) => b.type === 'text')
@@ -557,6 +574,35 @@ function MessageItemView({
       {showTail && raw?.stopReason === 'length' && (
         <div className="message-notice" data-testid="message-notice">
           {t('chat.stopLength')}
+        </div>
+      )}
+      {showTail && (!askQuestionInstalled || companionToast) && isPromptingForChoices(plainText) && (
+        <div className="companion-choice-hint" data-testid="companion-choice-hint">
+          <div className="companion-choice-hint-content">
+            <Sparkles size={14} className="companion-choice-hint-icon" />
+            <span>{companionToast ? t('chat.companionHint.enabledSuccess') : t('chat.companionHint.tip')}</span>
+          </div>
+          {!companionToast && (
+            <div className="companion-choice-hint-actions">
+              <button
+                type="button"
+                className="companion-choice-hint-enable-btn"
+                data-testid="companion-hint-enable"
+                disabled={companionLoading}
+                onClick={() => void handleEnableCompanion()}
+              >
+                {companionLoading ? t('extensions.companionEnabling') : t('chat.companionHint.enable')}
+              </button>
+              <button
+                type="button"
+                className="companion-choice-hint-manage-btn"
+                data-testid="companion-hint-manage"
+                onClick={() => navigateToPage('extensions', 'installed')}
+              >
+                {t('chat.companionHint.manage')}
+              </button>
+            </div>
+          )}
         </div>
       )}
       {showTail && plainText && (

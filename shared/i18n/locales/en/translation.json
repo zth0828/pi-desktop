@@ -130,6 +130,12 @@
       "compactButton": "Compact Session",
       "dismiss": "Dismiss"
     },
+    "companionHint": {
+      "tip": "Enable \"Smart Choices\" to let Agent show interactive clickable cards instead of text numbers.",
+      "enable": "Enable Now",
+      "manage": "Manage Extensions",
+      "enabledSuccess": "Successfully enabled Smart Choices extension"
+    },
     "status": {
       "working": "Working…",
       "serverRunning": "A development server is running in the foreground. Stop it, or ask pi to start it in the background.",
@@ -817,7 +823,19 @@
     "scope": {
       "user": "user",
       "project": "project"
-    }
+    },
+    "companionTitle": "Companion Extensions",
+    "companionHint": "Curated desktop tools with one-click toggle, without npm dependencies.",
+    "companionAskTitle": "Smart Question & Choices (ask_question)",
+    "companionAskDesc": "Equips Agent with a question tool. When the Agent needs to clarify choices, an interactive option card appears for one-click selection instead of typing numbers.",
+    "companionEnabled": "Enabled",
+    "companionNotEnabled": "Not Enabled",
+    "companionEnableBtn": "Enable",
+    "companionRemoveBtn": "Remove",
+    "companionEnabling": "Enabling…",
+    "companionRemoving": "Removing…",
+    "companionEnableSuccess": "Successfully enabled 'Smart Question & Choices' extension",
+    "companionRemoveSuccess": "Successfully removed 'Smart Question & Choices' extension"
   },
   "mcp": {
     "title": "MCP",

@@ -2,11 +2,11 @@
 // 深层组件（如 ChatInput 的 /settings /login /resume 斜杠命令）经这里请求切页。
 import type { AppPageId } from '@shared/app-page';
 
-type NavigateListener = (page: AppPageId) => void;
+type NavigateListener = (page: AppPageId, view?: string) => void;
 const listeners = new Set<NavigateListener>();
 
-export function navigateToPage(page: AppPageId): void {
-  for (const listener of listeners) listener(page);
+export function navigateToPage(page: AppPageId, view?: string): void {
+  for (const listener of listeners) listener(page, view);
 }
 
 export function onNavigateToPage(listener: NavigateListener): () => void {
