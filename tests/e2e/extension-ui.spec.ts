@@ -154,7 +154,7 @@ test('confirm/select/input 全流程：对话框出现，用户操作回传扩�
   await expect
     .poll(async () => readResult().catch(() => null), { timeout: 30_000 })
     .toEqual({
-      mode: 'print',
+      mode: 'rpc',
       ok: true,
       choice: 'Green',
       text: 'hello from shell',
@@ -188,5 +188,5 @@ test('取消路径：confirm 取消 → false，select/input 取消 → undefine
   await expect(dialog).toHaveCount(0);
   await expect
     .poll(async () => readResult().catch(() => null), { timeout: 30_000 })
-    .toEqual({ mode: 'print', ok: false, choice: null, text: null, edited: null });
+    .toEqual({ mode: 'rpc', ok: false, choice: null, text: null, edited: null });
 });

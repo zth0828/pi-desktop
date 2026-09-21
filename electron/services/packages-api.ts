@@ -90,7 +90,9 @@ async function getPackageManager(ctx?: HostActionContext): Promise<{
 
 export const packagesApi = {
   list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiPackageListResult> => {
-    const { adapter, handle } = await getPackageManager(ctx);
+    const adapter = await loadPiAdapter();
+    adapter.packages.invalidate();
+    const { handle } = await getPackageManager(ctx);
     const packages: PiPackageRow[] = adapter.packages.list(handle).map((p) => ({
       source: p.source,
       scope: p.scope,
