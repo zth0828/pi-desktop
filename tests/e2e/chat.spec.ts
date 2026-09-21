@@ -1,6 +1,6 @@
 // 聊天主链路 E2E（真 pi + mock provider，不烧 API quota）。
 // 覆盖：事件完整性（流式渲染）、工具卡片、中断语义、新会话。
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -73,9 +73,19 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  mock?.kill();
-  await rm(agentDir, { recursive: true, force: true });
-  await rm(workspace, { recursive: true, force: true });
+  if (mock?.pid) {
+    if (process.platform === 'win32') {
+      try {
+        execFileSync('taskkill', ['/pid', String(mock.pid), '/t', '/f'], { stdio: 'ignore' });
+      } catch {
+        // ignore
+      }
+    } else {
+      mock.kill();
+    }
+  }
+  await rm(agentDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }).catch(() => undefined);
+  await rm(workspace, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }).catch(() => undefined);
 });
 
 const launchOptions = () => ({
@@ -603,6 +613,7 @@ test('右侧「命令」tab：bash 历史记录与消息流同源，可点击展
   await page.getByTestId('chat-send').click();
   const card = page.getByTestId('message-bash').last();
   await expect(card.getByTestId('bash-command')).toContainText('echo pi-desktop-command-panel', { timeout: 15_000 });
+  await expect(card.getByTestId('bash-exit-code')).toBeVisible({ timeout: 30_000 });
 
   // 右侧「命令」tab：历史记录与消息流同源，默认折叠，点击展开全文
   await page.getByTestId('workspace-toggle').click();
