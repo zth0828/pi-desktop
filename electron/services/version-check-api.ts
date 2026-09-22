@@ -200,11 +200,15 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
     saved.appVersionCheckReleaseUrl = undefined;
     saved.appVersionCheckReleaseNotes = undefined;
     saved.appVersionCheckDownloadedPath = undefined;
+    saved.appVersionCheckStagedPatchPath = undefined;
+    saved.appVersionCheckStagedAppPath = undefined;
     void settingsApi.set({ key: 'appVersionCheckLatest', value: undefined });
     void settingsApi.set({ key: 'appVersionCheckAssetName', value: undefined });
     void settingsApi.set({ key: 'appVersionCheckReleaseUrl', value: undefined });
     void settingsApi.set({ key: 'appVersionCheckReleaseNotes', value: undefined });
     void settingsApi.set({ key: 'appVersionCheckDownloadedPath', value: undefined });
+    void settingsApi.set({ key: 'appVersionCheckStagedPatchPath', value: undefined });
+    void settingsApi.set({ key: 'appVersionCheckStagedAppPath', value: undefined });
   }
 
   if (saved.piVersionCheckLatest && currentPi && !compare(currentPi, saved.piVersionCheckLatest)) {

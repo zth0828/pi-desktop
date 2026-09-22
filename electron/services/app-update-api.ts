@@ -61,6 +61,55 @@ export function selectAssetName(
   return selectAsset(validAssets, platform, arch, options)?.name;
 }
 
+export function generateWindowsPatchScript(options: {
+  oldPid: number | string;
+  stagedPatchPath: string;
+  targetAsarPath: string;
+  execPath: string;
+  stagedPatchDir: string;
+}): string {
+  const norm = (p: string) => p.replace(/\//g, '\\');
+  const stagedPatchPath = norm(options.stagedPatchPath);
+  const targetAsarPath = norm(options.targetAsarPath);
+  const execPath = norm(options.execPath);
+  const stagedPatchDir = norm(options.stagedPatchDir);
+  const execDir = path.win32.dirname(execPath);
+  const oldPid = options.oldPid;
+  return [
+    '@echo off',
+    'chcp 65001 >nul',
+    `set OLD_PID=${oldPid}`,
+    'set /a wait_count=0',
+    ':wait_proc',
+    `tasklist /FI "PID eq %OLD_PID%" 2>nul | find "%OLD_PID%" >nul`,
+    'if not errorlevel 1 (',
+    '  set /a wait_count+=1',
+    '  if %wait_count% gtr 30 goto force_kill',
+    '  ping 127.0.0.1 -n 2 >nul',
+    '  goto wait_proc',
+    ')',
+    'goto do_copy',
+    ':force_kill',
+    'taskkill /F /PID %OLD_PID% >nul 2>&1',
+    'ping 127.0.0.1 -n 2 >nul',
+    ':do_copy',
+    'set /a count=0',
+    ':retry',
+    `copy /y "${stagedPatchPath}" "${targetAsarPath}" >nul 2>&1`,
+    'if errorlevel 1 (',
+    '  set /a count+=1',
+    '  if %count% lss 15 (',
+    '    ping 127.0.0.1 -n 2 >nul',
+    '    goto retry',
+    '  )',
+    '  exit /b 1',
+    ')',
+    `rmdir /s /q "${stagedPatchDir}" >nul 2>&1`,
+    `start "" /D "${execDir}" "${execPath}"`,
+    `del "%~f0" >nul 2>&1`,
+  ].join('\r\n');
+}
+
 async function getFileSize(filePath: string): Promise<number> {
   try {
     const s = await stat(filePath);
@@ -407,27 +456,19 @@ export const appUpdateApi = {
 
         const targetAsarPath = path.join(process.resourcesPath, 'app.asar');
         const batPath = path.join(app.getPath('temp'), `pi-desktop-patch-${Date.now()}.bat`);
-        const batContent = [
-          '@echo off',
-          'chcp 65001 >nul',
-          'set /a count=0',
-          ':retry',
-          'timeout /t 1 /nobreak >nul',
-          `copy /y "${stagedPatchPath}" "${targetAsarPath}" >nul 2>&1`,
-          'if errorlevel 1 (',
-          '  set /a count+=1',
-          '  if %count% lss 15 goto retry',
-          '  exit /b 1',
-          ')',
-          `rmdir /s /q "${stagedPatchDir}" >nul 2>&1`,
-          `start "" "${process.execPath}"`,
-          `del "%~f0" >nul 2>&1`,
-        ].join('\r\n');
+        const batContent = generateWindowsPatchScript({
+          oldPid: process.pid,
+          stagedPatchPath,
+          targetAsarPath,
+          execPath: process.execPath,
+          stagedPatchDir,
+        });
 
         await writeFile(batPath, batContent, 'utf8');
         const child = spawn('cmd.exe', ['/c', batPath], {
           detached: true,
           stdio: 'ignore',
+          windowsHide: true,
         });
         child.unref();
 
@@ -485,10 +526,11 @@ export const appUpdateApi = {
 
     if (process.platform === 'win32') {
       if (pathName.endsWith('.exe')) {
-        const cmd = `timeout /t 1 /nobreak >nul & "${pathName}" /S & start "" "${process.execPath}"`;
+        const cmd = `ping 127.0.0.1 -n 2 >nul & start "" "${pathName}"`;
         const child = spawn('cmd.exe', ['/c', cmd], {
           detached: true,
           stdio: 'ignore',
+          windowsHide: true,
         });
         child.unref();
         setTimeout(() => {
