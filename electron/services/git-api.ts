@@ -50,6 +50,7 @@ function execGit(repoDir: string, args: string[], timeout = 5000): Promise<{ std
         cwd: repoDir,
         encoding: 'utf8',
         timeout,
+        windowsHide: true,
       },
       (error, stdout, stderr) => {
         if (error) {
@@ -89,6 +90,7 @@ export function getGitBranch(cwd: string): Promise<GitBranchResult> {
     execFile('git', ['--no-optional-locks', 'symbolic-ref', '--quiet', '--short', 'HEAD'], {
       cwd: gitPaths.repoDir,
       encoding: 'utf8',
+      windowsHide: true,
     }, (error, stdout) => {
       if (error) {
         resolvePromise({ branch: 'detached' });

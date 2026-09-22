@@ -51,6 +51,7 @@ function runGit(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; in
     const child = spawn('git', ['-C', cwd, ...args], {
       env: { ...process.env, ...GIT_STABLE_ENV, ...opts.env },
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
     });
     let stdout = '';
     let stderr = '';

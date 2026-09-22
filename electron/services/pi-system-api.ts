@@ -92,9 +92,11 @@ export const piSystemApi = {
           ? spawn(`npm i -g ${PI_PACKAGE_NAME}`, {
               env: envWithUserPath(),
               shell: true,
+              windowsHide: true,
             })
           : spawn('npm', ['i', '-g', PI_PACKAGE_NAME], {
               env: envWithUserPath(),
+              windowsHide: true,
             });
       let stderrTail = '';
       child.stdout.on('data', (chunk: Buffer) => {

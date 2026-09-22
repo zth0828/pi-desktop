@@ -41,7 +41,7 @@ function listWithFd(cwd: string, fdPath: string): Promise<string[] | null> {
         '--exclude', '.git/*',
         '--exclude', '.git/**',
       ],
-      { stdio: ['ignore', 'pipe', 'ignore'] },
+      { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true },
     );
     let stdout = '';
     child.stdout.setEncoding('utf8');

@@ -210,6 +210,7 @@ export const mcpApi = {
       const child = spawn(env.pi.binPath!, ['install', ADAPTER_SOURCE], {
         env: envWithUserPath(),
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
       });
       let output = '';
       child.stdout?.on('data', (d) => (output += String(d)));

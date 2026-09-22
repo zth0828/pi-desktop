@@ -39,6 +39,7 @@ async function run(binPath: string, args: string[]): Promise<string | null> {
       // avoids shell parsing failures for standard paths such as C:\Program Files.
       shell: useShell,
       cwd: useShell ? path.dirname(binPath) : undefined,
+      windowsHide: true,
     });
     return (typeof stdout === 'string' ? stdout : stdout.toString('utf8')).trim();
   } catch (err) {

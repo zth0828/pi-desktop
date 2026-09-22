@@ -21,6 +21,7 @@ function readWindowsRegistryPath(key: string): string[] {
       encoding: 'utf8',
       timeout: 3000,
       stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
     });
     const match = /Path\s+REG_(?:EXPAND_)?SZ\s+(.*)/i.exec(out);
     if (match && match[1]) {
