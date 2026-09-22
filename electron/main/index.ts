@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { HostApiRegistry, registerHostInvokeHandler } from './ipc/host-invoke';
-import { createMainWindow, focusOrCreateMainWindow, setQuitting } from './window-manager';
+import { createMainWindow, focusOrCreateMainWindow, isQuitting, setQuitting } from './window-manager';
 import { createTray } from './tray';
 import { createHostServices } from '../services';
 import { disposeAllRuntimes, hasStreamingRuntimes } from '../services/pi-runtime-api';
@@ -98,6 +98,8 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
+    // 退出流程中不再响应后续实例，避免销毁后重建“幽灵窗口”。
+    if (isQuitting()) return;
     // 事件在持锁实例（首个）触发：聚焦/恢复已 hide 到托盘的主窗口。
     focusOrCreateMainWindow();
   });
