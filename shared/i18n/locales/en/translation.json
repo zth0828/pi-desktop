@@ -1282,6 +1282,8 @@
     "title": "Update Downloaded",
     "bodyMac": "Click \"Install and Quit\" to open the disk image. Drag Pi Desktop to the Applications folder to replace the existing version, then restart.",
     "bodyWin": "Click 'Open Installer & Quit' and follow the setup wizard to complete installation.",
+    "bodyPatch": "Incremental update is ready. Click \"Restart & Apply Update\" to update and restart seamlessly.",
+    "patchBadge": "Incremental Patch",
     "installAndQuit": "Open Installer & Quit",
     "later": "Later",
     "showInFolder": "Show in Folder",

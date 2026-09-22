@@ -1,4 +1,5 @@
 import { buildMirrorUrl, DEFAULT_DOWNLOAD_MIRROR, type VersionCheckSnapshot, type VersionCheckStatus } from '@shared/host-api/contract';
+import { sanitizeReleaseNotes } from '@shared/release-notes';
 import { settingsApi } from './settings-api';
 import { piSystemApi } from './pi-system-api';
 import { appApi } from './app-api';
@@ -405,7 +406,7 @@ export const versionCheckApi = {
         hasJump: true,
         previousVersion: lastRun,
         currentVersion: current,
-        releaseNotes: saved.lastReleaseNotes || saved.appVersionCheckReleaseNotes,
+        releaseNotes: sanitizeReleaseNotes(saved.lastReleaseNotes || saved.appVersionCheckReleaseNotes),
       };
     }
     return { hasJump: false };

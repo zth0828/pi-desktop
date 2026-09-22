@@ -10,6 +10,7 @@ import { setTheme, type Theme } from '../lib/theme';
 import { usePiSystemStore } from '../stores/pi-system';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '../lib/i18n';
 import { Markdown } from '../components/Markdown';
+import { sanitizeReleaseNotes } from '@shared/release-notes';
 
 const THEMES: Array<{ id: Theme; icon: typeof Sun }> = [
   { id: 'light', icon: Sun },
@@ -801,26 +802,30 @@ export default function SettingsPage() {
           </div>
 
           {/* Release Notes 展开/收起预览 */}
-          {versionStatus?.app.updateAvailable && Boolean(versionStatus.app.releaseNotes?.trim()) && (
-            <div className="settings-changelog-box">
-              <div
-                className="settings-changelog-head"
-                onClick={() => setAppReleaseNotesExpanded(!appReleaseNotesExpanded)}
-              >
-                <div className="settings-changelog-title">
-                  {t('settings.version.releaseNotesTitle', { version: versionStatus.app.latest ?? '' })}
+          {(() => {
+            const sanitizedNotes = sanitizeReleaseNotes(versionStatus?.app.releaseNotes);
+            if (!versionStatus?.app.updateAvailable || !sanitizedNotes) return null;
+            return (
+              <div className="settings-changelog-box">
+                <div
+                  className="settings-changelog-head"
+                  onClick={() => setAppReleaseNotesExpanded(!appReleaseNotesExpanded)}
+                >
+                  <div className="settings-changelog-title">
+                    {t('settings.version.releaseNotesTitle', { version: versionStatus.app.latest ?? '' })}
+                  </div>
+                  <span className="settings-changelog-toggle">
+                    {appReleaseNotesExpanded ? t('settings.version.collapse') : t('settings.version.expand')}
+                  </span>
                 </div>
-                <span className="settings-changelog-toggle">
-                  {appReleaseNotesExpanded ? t('settings.version.collapse') : t('settings.version.expand')}
-                </span>
+                {appReleaseNotesExpanded && (
+                  <div className="settings-changelog-content">
+                    <Markdown text={sanitizedNotes} />
+                  </div>
+                )}
               </div>
-              {appReleaseNotesExpanded && (
-                <div className="settings-changelog-content">
-                  <Markdown text={versionStatus.app.releaseNotes!.trim()} />
-                </div>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {/* 下载进行中：动态进度条与指标 */}
           {appDownloading && (

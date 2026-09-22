@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Sparkles, X } from 'lucide-react';
 import { hostApi } from '../lib/host-api';
 import { Markdown } from './Markdown';
+import { sanitizeReleaseNotes } from '@shared/release-notes';
 import type { VersionJumpInfo } from '@shared/host-api/contract';
 
 export function VersionJumpDialog() {
@@ -44,6 +45,8 @@ export function VersionJumpDialog() {
 
   if (!open || !jumpInfo) return null;
 
+  const sanitizedNotes = sanitizeReleaseNotes(jumpInfo.releaseNotes);
+
   return (
     <div className="version-install-overlay" data-testid="version-jump-overlay">
       <div
@@ -76,9 +79,9 @@ export function VersionJumpDialog() {
             })}
           </div>
 
-          {jumpInfo.releaseNotes?.trim() ? (
+          {sanitizedNotes ? (
             <div className="version-jump-notes-scroll" data-testid="version-jump-notes">
-              <Markdown text={jumpInfo.releaseNotes.trim()} />
+              <Markdown text={sanitizedNotes} />
             </div>
           ) : (
             <p className="settings-section-hint">{t('versionJump.noNotes')}</p>
@@ -86,13 +89,15 @@ export function VersionJumpDialog() {
         </div>
 
         <div className="version-install-footer">
-          <button
-            className="pill active"
-            data-testid="version-jump-confirm"
-            onClick={() => void handleDismiss()}
-          >
-            {t('versionJump.confirm')}
-          </button>
+          <div className="version-install-footer-right" style={{ marginLeft: 'auto' }}>
+            <button
+              className="pill active"
+              data-testid="version-jump-confirm"
+              onClick={() => void handleDismiss()}
+            >
+              {t('versionJump.confirm')}
+            </button>
+          </div>
         </div>
       </div>
     </div>

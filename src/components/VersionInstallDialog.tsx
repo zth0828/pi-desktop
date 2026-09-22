@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, CheckCircle, FolderOpen, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, FolderOpen, Package, RefreshCw, X } from 'lucide-react';
 import { onHostEvent } from '../lib/host-events';
 import { hostApi } from '../lib/host-api';
 import { Markdown } from './Markdown';
+import { sanitizeReleaseNotes } from '@shared/release-notes';
 
 export function VersionInstallDialog() {
   const { t } = useTranslation();
@@ -162,7 +163,16 @@ export function VersionInstallDialog() {
 
   const fileName = completedPath.split(/[/\\]/).pop() ?? '';
   const isMac = platform === 'darwin';
-  const bodyText = isMac ? t('versionInstall.bodyMac') : t('versionInstall.bodyWin');
+  const isPatch = fileName.endsWith('-patch.zip');
+  const bodyText = isPatch
+    ? t('versionInstall.bodyPatch')
+    : isMac
+      ? t('versionInstall.bodyMac')
+      : t('versionInstall.bodyWin');
+  const actionButtonText = isPatch
+    ? t('versionInstall.restartToApply')
+    : t('versionInstall.installAndQuit');
+  const sanitizedNotes = sanitizeReleaseNotes(releaseNotes);
 
   return (
     <div className="version-install-overlay" data-testid="version-install-overlay">
@@ -198,17 +208,23 @@ export function VersionInstallDialog() {
             <>
               <p>{bodyText}</p>
               {fileName && (
-                <div className="version-install-file-info">
-                  <span className="version-install-filename">{fileName}</span>
+                <div className="version-install-file-card" data-testid="version-install-file-card">
+                  <div className="version-install-file-main">
+                    <Package size={15} className="text-secondary" />
+                    <span className="version-install-filename">{fileName}</span>
+                  </div>
+                  {isPatch && (
+                    <span className="version-install-badge">{t('versionInstall.patchBadge')}</span>
+                  )}
                 </div>
               )}
-              {releaseNotes?.trim() && (
+              {sanitizedNotes && (
                 <div className="version-install-changelog" data-testid="version-install-changelog">
                   <div className="version-install-changelog-title">
                     {t('settings.version.releaseNotesTitle', { version: targetVersion ?? '' })}
                   </div>
                   <div className="version-install-notes-scroll">
-                    <Markdown text={releaseNotes.trim()} />
+                    <Markdown text={sanitizedNotes} />
                   </div>
                 </div>
               )}
@@ -218,7 +234,7 @@ export function VersionInstallDialog() {
 
         <div className="version-install-footer">
           {showRunningWarning ? (
-            <>
+            <div className="version-install-footer-right" style={{ marginLeft: 'auto' }}>
               <button
                 className="pill"
                 data-testid="version-install-cancel-warning"
@@ -234,41 +250,46 @@ export function VersionInstallDialog() {
               >
                 {t('versionInstall.confirmQuit')}
               </button>
-            </>
+            </div>
           ) : (
             <>
-              {targetVersion && (
+              <div className="version-install-footer-left">
+                {targetVersion && (
+                  <button
+                    className="pill ghost"
+                    data-testid="version-install-skip"
+                    onClick={() => void handleSkip()}
+                  >
+                    {t('versionInstall.skipVersion')}
+                  </button>
+                )}
+              </div>
+              <div className="version-install-footer-right">
                 <button
                   className="pill"
-                  data-testid="version-install-skip"
-                  onClick={() => void handleSkip()}
+                  data-testid="version-install-later"
+                  onClick={handleDismiss}
                 >
-                  {t('versionInstall.skipVersion')}
+                  {t('versionInstall.later')}
                 </button>
-              )}
-              <button
-                className="pill"
-                data-testid="version-install-later"
-                onClick={handleDismiss}
-              >
-                {t('versionInstall.later')}
-              </button>
-              <button
-                className="pill"
-                data-testid="version-install-show"
-                onClick={handleShowInFolder}
-              >
-                <FolderOpen size={14} />
-                {t('versionInstall.showInFolder')}
-              </button>
-              <button
-                className="pill active"
-                data-testid="version-install-action"
-                disabled={installing}
-                onClick={() => void handleInstall(false)}
-              >
-                {t('versionInstall.installAndQuit')}
-              </button>
+                <button
+                  className="pill"
+                  data-testid="version-install-show"
+                  onClick={handleShowInFolder}
+                >
+                  <FolderOpen size={14} />
+                  <span>{t('versionInstall.showInFolder')}</span>
+                </button>
+                <button
+                  className="pill active"
+                  data-testid="version-install-action"
+                  disabled={installing}
+                  onClick={() => void handleInstall(false)}
+                >
+                  {isPatch && <RefreshCw size={13} className={installing ? 'spin' : ''} />}
+                  <span>{actionButtonText}</span>
+                </button>
+              </div>
             </>
           )}
         </div>
