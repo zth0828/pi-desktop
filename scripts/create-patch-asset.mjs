@@ -6,7 +6,7 @@ import { zipSync } from 'fflate';
 
 const root = resolve(import.meta.dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
-const version = pkg.version;
+const version = process.env.PATCH_VERSION || pkg.version;
 
 const candidates = [
   process.argv[2],
