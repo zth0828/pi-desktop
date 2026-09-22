@@ -78,6 +78,8 @@ export function generateWindowsPatchScript(options: {
   return [
     '@echo off',
     'chcp 65001 >nul',
+    'set "LOG_FILE=%TEMP%\\pidesktop-update.log"',
+    `echo [%date% %time%] Update batch started for PID ${oldPid} > "%LOG_FILE%"`,
     `set OLD_PID=${oldPid}`,
     'set /a wait_count=0',
     ':wait_proc',
@@ -88,19 +90,24 @@ export function generateWindowsPatchScript(options: {
     'ping 127.0.0.1 -n 2 >nul',
     'goto wait_proc',
     ':force_kill',
+    'echo [%date% %time%] Force killing process %OLD_PID% >> "%LOG_FILE%"',
     'taskkill /F /PID %OLD_PID% >nul 2>&1',
     'ping 127.0.0.1 -n 2 >nul',
     ':do_copy',
+    'echo [%date% %time%] Copying patch asar to destination >> "%LOG_FILE%"',
     'set /a count=0',
     ':retry',
-    `copy /y "${stagedPatchPath}" "${targetAsarPath}" >nul 2>&1`,
+    `copy /y "${stagedPatchPath}" "${targetAsarPath}" >> "%LOG_FILE%" 2>&1`,
     'if not errorlevel 1 goto copy_success',
     'set /a count+=1',
+    'echo [%date% %time%] Copy attempt %count% failed >> "%LOG_FILE%"',
     'if %count% geq 15 exit /b 1',
     'ping 127.0.0.1 -n 2 >nul',
     'goto retry',
     ':copy_success',
+    'echo [%date% %time%] Copy succeeded, cleaning staged patch dir >> "%LOG_FILE%"',
     `rmdir /s /q "${stagedPatchDir}" >nul 2>&1`,
+    'echo [%date% %time%] Launching new version >> "%LOG_FILE%"',
     `start "" /D "${execDir}" "${execPath}"`,
     '(goto) 2>nul & del "%~f0"',
   ].join('\r\n');
@@ -461,16 +468,33 @@ export const appUpdateApi = {
           stagedPatchDir,
         });
 
+        let needsElevation = false;
+        try {
+          const testFile = path.join(process.resourcesPath, `.write-test-${Date.now()}`);
+          await writeFile(testFile, '');
+          await rm(testFile, { force: true });
+        } catch {
+          needsElevation = true;
+        }
+
         // Windows 11 下默认终端（Windows Terminal）会拦截交互会话中的 cmd.exe 并弹窗。
-        // 通过内置 GUI 子系统的 wscript.exe 以 SW_HIDE (0) 静默调起 cmd，保证全静默执行。
+        // 通过内置 GUI 子系统的 wscript.exe 静默调起 cmd。
+        // 若安装路径（如 C:\Program Files）无写入权限，则通过 Shell.Application 以 runas 申请提权。
         const normBatPath = batPath.replace(/\//g, '\\');
         const normVbsPath = vbsPath.replace(/\//g, '\\');
-        const vbsContent = [
-          'Set ws = CreateObject("WScript.Shell")',
-          `ws.Run "cmd.exe /c """"${normBatPath}""""", 0, False`,
-          'Set ws = Nothing',
-          'CreateObject("Scripting.FileSystemObject").DeleteFile WScript.ScriptFullName, True',
-        ].join('\r\n');
+        const vbsContent = needsElevation
+          ? [
+              'Set sa = CreateObject("Shell.Application")',
+              `sa.ShellExecute "cmd.exe", "/c """"${normBatPath}""""", "", "runas", 0`,
+              'Set sa = Nothing',
+              'CreateObject("Scripting.FileSystemObject").DeleteFile WScript.ScriptFullName, True',
+            ].join('\r\n')
+          : [
+              'Set ws = CreateObject("WScript.Shell")',
+              `ws.Run "cmd.exe /c """"${normBatPath}""""", 0, False`,
+              'Set ws = Nothing',
+              'CreateObject("Scripting.FileSystemObject").DeleteFile WScript.ScriptFullName, True',
+            ].join('\r\n');
 
         await writeFile(batPath, batContent, 'utf8');
         await writeFile(vbsPath, vbsContent, 'utf8');
