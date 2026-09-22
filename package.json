@@ -94,6 +94,6 @@
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6",
     "vitest": "^4.1.10",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.15"
   }
 }
