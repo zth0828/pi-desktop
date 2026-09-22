@@ -452,6 +452,7 @@ export const appUpdateApi = {
 
         const targetAsarPath = path.join(process.resourcesPath, 'app.asar');
         const batPath = path.join(app.getPath('temp'), `pi-desktop-patch-${Date.now()}.bat`);
+        const vbsPath = path.join(app.getPath('temp'), `pi-desktop-patch-${Date.now()}.vbs`);
         const batContent = generateWindowsPatchScript({
           oldPid: process.pid,
           stagedPatchPath,
@@ -460,8 +461,20 @@ export const appUpdateApi = {
           stagedPatchDir,
         });
 
+        // Windows 11 下默认终端（Windows Terminal）会拦截交互会话中的 cmd.exe 并弹窗。
+        // 通过内置 GUI 子系统的 wscript.exe 以 SW_HIDE (0) 静默调起 cmd，保证全静默执行。
+        const normBatPath = batPath.replace(/\//g, '\\');
+        const normVbsPath = vbsPath.replace(/\//g, '\\');
+        const vbsContent = [
+          'Set ws = CreateObject("WScript.Shell")',
+          `ws.Run "cmd.exe /c """"${normBatPath}""""", 0, False`,
+          'Set ws = Nothing',
+          'CreateObject("Scripting.FileSystemObject").DeleteFile WScript.ScriptFullName, True',
+        ].join('\r\n');
+
         await writeFile(batPath, batContent, 'utf8');
-        const child = spawn('cmd.exe', ['/c', batPath], {
+        await writeFile(vbsPath, vbsContent, 'utf8');
+        const child = spawn('wscript.exe', ['//b', normVbsPath], {
           detached: true,
           stdio: 'ignore',
           windowsHide: true,
