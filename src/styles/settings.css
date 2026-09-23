@@ -1,0 +1,518 @@
+/* ---------- Settings ---------- */
+
+/* 页面内容列：整体居中、列内左对齐，随窗口宽度自适应（居中列 900px） */
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  padding-bottom: 40px;
+  padding-inline: max(40px, calc((100% - 900px) / 2));
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  padding: 22px 24px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-raised) 78%, var(--bg) 22%);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.025);
+}
+
+.settings-section > h2 {
+  font-family: inherit;
+  font-weight: 650;
+  font-size: 15.5px;
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.settings-section-hint {
+  margin: 2px 0 14px;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.settings-section-hint:last-child,
+.settings-section-footnote {
+  margin-top: 14px;
+  margin-bottom: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 64px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-row:last-child,
+.settings-section > .settings-row:last-of-type {
+  border-bottom: none;
+}
+
+.settings-row-label {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.settings-row-desc {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.settings-row.settings-row-stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.settings-row.settings-row-stacked .settings-row-label {
+  width: 100%;
+}
+
+.settings-row.settings-row-stacked .settings-tools-group {
+  width: 100%;
+  max-width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.settings-page .page-header {
+  padding: 4px 2px 8px;
+}
+
+.settings-page .pill-group {
+  flex-shrink: 0;
+}
+
+.pill-group-segmented .pill {
+  min-width: 52px;
+  justify-content: center;
+  text-align: center;
+}
+
+.pill.pill-locked,
+.settings-page .pill.active:disabled {
+  opacity: 1;
+  cursor: default;
+  background: color-mix(in srgb, var(--bg-active) 85%, var(--bg) 15%);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.pill-lock-icon {
+  opacity: 0.6;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.settings-row-muted {
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
+/* ============================================================
+   设置页独立更新卡片与 Release Notes 样式
+   ============================================================ */
+
+.settings-version-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+
+.settings-version-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.settings-version-card-meta {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.settings-version-icon-wrap {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.settings-version-icon-img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  border-radius: 7px;
+}
+
+.settings-version-icon-wrap.settings-version-icon-cli {
+  background: var(--bg-sunken);
+  color: var(--text);
+}
+
+.settings-version-cli-icon {
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.settings-version-meta-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-version-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-version-name {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.settings-version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-weight: 500;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+}
+
+.settings-version-badge.settings-badge-mirror {
+  background: var(--success-soft);
+  color: var(--success);
+  border: 1px solid rgba(21, 128, 61, 0.2);
+}
+
+.settings-changelog-box {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-changelog-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-changelog-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-changelog-toggle {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  transition: color 0.15s ease;
+}
+
+.settings-changelog-head:hover .settings-changelog-toggle {
+  color: var(--text);
+}
+
+.settings-changelog-content {
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.settings-changelog-content .markdown {
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.settings-changelog-content .markdown h1,
+.settings-changelog-content .markdown h2 {
+  font-size: 13px;
+  font-weight: 650;
+  margin: 10px 0 5px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.settings-changelog-content .markdown h3,
+.settings-changelog-content .markdown h4 {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin: 8px 0 4px;
+  color: var(--text);
+}
+
+.settings-changelog-content .markdown p {
+  margin: 0 0 6px;
+  color: var(--text-secondary);
+}
+
+.settings-changelog-content .markdown ul,
+.settings-changelog-content .markdown ol {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+  color: var(--text-secondary);
+}
+
+.settings-changelog-content .markdown li {
+  margin: 3px 0;
+}
+
+.settings-changelog-content .markdown strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.settings-changelog-content .markdown code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+}
+
+.settings-download-progress-box {
+  background: var(--bg-sunken);
+  border-radius: 9px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.settings-download-progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.settings-download-status {
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.settings-download-metrics-text {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.settings-download-track {
+  width: 100%;
+  height: 6px;
+  background: var(--border-strong);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.settings-download-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.settings-download-metrics-bottom {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.settings-download-percent {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.settings-ready-banner {
+  background: var(--success-soft);
+  border: 1px solid rgba(21, 128, 61, 0.2);
+  border-radius: 9px;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-ready-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-ready-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--success);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.settings-ready-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-ready-desc {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.settings-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+[data-theme='dark'] .settings-spinner {
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--accent);
+}
+
+.settings-number {
+  width: 96px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  transition: border-color 0.15s, opacity 0.15s;
+}
+
+.settings-number:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.settings-proxy-url {
+  width: 260px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.settings-proxy-error {
+  margin-left: 8px;
+  color: var(--danger, #e5484d);
+}
+
+.settings-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px 16px;
+  margin-top: 6px;
+  margin-bottom: 6px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-raised) 40%, transparent 60%);
+  color: var(--text-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 680px) {
+  .page {
+    padding: 24px 18px;
+  }
+
+  .settings-section {
+    padding: 16px 15px 6px;
+    border-radius: 11px;
+  }
+
+  .settings-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 0;
+  }
+
+  .settings-row > .pill-group,
+  .settings-row > .settings-number,
+  .settings-row > .pill {
+    align-self: stretch;
+  }
+
+  .settings-row > .settings-number {
+    width: 100%;
+    text-align: left;
+  }
+}

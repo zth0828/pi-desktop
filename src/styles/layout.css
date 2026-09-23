@@ -1,0 +1,495 @@
+/* ---------- 布局 ---------- */
+
+:root {
+  --chrome-row1: 36px;
+}
+
+.app-layout {
+  display: flex;
+  height: 100vh;
+  /* 顶部留白 = 标题栏高度：Windows/Linux 是自绘标题栏；macOS 是原生红绿灯
+     悬浮带（红绿灯位于该行内，不额外占高）。全平台统一基线，侧栏与内容对齐。 */
+  padding-top: var(--chrome-row1);
+}
+
+/* macOS 顶部带略高（容纳单面板会话标题条 fixed 到窗口顶部时的可读高度） */
+.app-layout.is-macos {
+  --mac-topbar: 44px;
+  padding-top: var(--mac-topbar);
+}
+
+/* Windows/Linux frameless 自绘顶部（固定悬浮层，不参与文档流）：
+   Row 1 标题栏（logo + 菜单 + 窗口控件，整行拖拽区）。
+   macOS 走原生规范：系统菜单栏 + 原生红绿灯，内部不渲染此层。 */
+.window-chrome {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 130;
+}
+
+.titlebar {
+  height: var(--chrome-row1);
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  background: var(--bg);
+  /* 无底部横线：顶部标题栏与下方内容区之间不加分隔线，保持简洁 */
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar-logo {
+  width: 20px;
+  height: 20px;
+  margin: 0 10px 0 12px;
+  flex: none;
+  border-radius: 5px;
+}
+
+.menu-bar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+}
+
+.menu-wrap { position: relative; flex: none; height: 100%; display: flex; align-items: center; }
+
+.menu-item {
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.menu-item:hover,
+.menu-item.open { background: var(--bg-hover); color: var(--text); }
+
+.titlebar-spacer { flex: 1; min-width: 0; }
+
+/* 菜单下拉：复用 .composer-menu 的浮层样式模式（absolute + 细边框），无新依赖。
+   不加大面积阴影（用户反馈视觉突兀），用边框分层。 */
+.menu-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 220px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  box-shadow: none;
+  z-index: 200;
+  -webkit-app-region: no-drag;
+}
+
+.menu-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 9px;
+  border-radius: 7px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.menu-dropdown-item:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.menu-dropdown-item:disabled { opacity: .45; cursor: default; }
+
+/* 自绘窗口控件（最小化/最大化/关闭），固定在 Row 1 最右侧 */
+.window-controls {
+  display: flex;
+  flex: none;
+  height: 100%;
+  align-items: stretch;
+  -webkit-app-region: no-drag;
+}
+
+.window-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  color: var(--text-secondary);
+}
+
+.window-control:hover { background: var(--bg-hover); color: var(--text); }
+.window-control-close:hover { background: #e81123; color: #fff; }
+
+/* 窗口拖拽条：仅 macOS 渲染（原生红绿灯 + 无自绘标题栏，顶部需要拖拽区域）。
+   高度与顶部留白一致，不覆盖内容区。 */
+.window-drag-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--chrome-row1);
+  z-index: 100;
+  -webkit-app-region: drag;
+}
+
+/* macOS：折叠/搜索常驻红绿灯右侧（顶部带内）。垂直中心与红绿灯对齐
+   （红绿灯 y14 高 12 → 中心 20；44px 顶部带内 30px 按钮 → top 7）；
+   右缘与侧边栏右缘对齐（侧边栏宽 224，按钮组宽 62 → left 162）。
+   z-index 高于 window-drag-strip(100)，按钮可点（自身 no-drag）。 */
+.app-window-controls.is-traffic {
+  position: fixed;
+  top: calc((var(--mac-topbar, var(--chrome-row1)) - 30px) / 2);
+  left: calc(var(--sidebar-width, 224px) - 62px);
+  z-index: 132;
+  display: flex;
+  height: 30px;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+  transition: left 160ms ease;
+}
+
+.app-layout.sidebar-collapsed.is-macos .app-window-controls.is-traffic {
+  left: 80px;
+}
+
+/* Windows/Linux：侧栏收起时悬浮层出现在内容区左上角（顶部留白之下），
+   提供展开入口。z-index 高于 window-chrome(130) 与 session-titlebar(101)。 */
+.app-window-controls.is-native-frame {
+  position: fixed;
+  left: 8px;
+  top: calc(var(--chrome-row1) + 6px);
+  z-index: 132;
+  display: flex;
+  height: 40px;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+/* macOS 单面板：会话标题条 fixed 到窗口顶部（侧边栏右侧起、右缘贴窗口右缘），
+   不再放在内容区；右侧展开按钮随之固定到页面最右。
+   多面板不加 fixed（session-titlebar-top 由 ChatPane 按 onClosePane 判断添加），
+   避免多个标题条叠加。z-index 高于 window-drag-strip(100)，按钮可点。 */
+.app-layout.is-macos .session-titlebar.session-titlebar-top {
+  position: fixed;
+  top: 0;
+  left: var(--sidebar-width, 224px);
+  right: 0;
+  min-height: var(--mac-topbar);
+  padding: 4px 18px;
+  z-index: 131;
+  transition: left 160ms ease;
+}
+
+.app-layout.sidebar-collapsed.is-macos .session-titlebar.session-titlebar-top {
+  left: 152px;
+}
+
+/* Electron 的拖拽层覆盖整个标题高度；交互控件必须明确声明可点击。 */
+.session-titlebar,
+.session-titlebar * {
+  -webkit-app-region: no-drag;
+}
+
+.sidebar {
+  width: var(--sidebar-width, 224px);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* 顶部留白（标题栏/红绿灯带）之下 10px，全平台统一 */
+  padding: 10px 10px 10px;
+  background: var(--bg);
+  position: relative;
+  transition: width 160ms ease, padding 160ms ease;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 120;
+  -webkit-app-region: no-drag;
+  transition: background-color 150ms ease;
+}
+
+.sidebar-resizer:hover,
+.app-layout.sidebar-resizing .sidebar-resizer {
+  background-color: var(--accent);
+}
+
+.app-layout.sidebar-resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+
+.app-layout.sidebar-resizing .sidebar,
+.app-layout.sidebar-resizing .app-window-controls,
+.app-layout.sidebar-resizing .session-titlebar {
+  transition: none !important;
+}
+
+.sidebar-title {
+  font-weight: 700;
+  font-size: 15px;
+  padding: 6px 10px 12px;
+}
+
+/* 侧边栏顶部一行：新会话按钮（与侧边栏同宽，flex:1）+ 折叠/搜索（同行靠右）。
+   整行轻量透明、hover 高亮，视觉统一。全平台共用。
+   折叠时整行随侧栏隐藏。 */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 6px 10px;
+}
+
+.sidebar-head .icon-button {
+  flex: none;
+}
+
+.sidebar-toggle { flex-shrink: 0; }
+
+.app-layout.sidebar-collapsed .sidebar {
+  width: 0;
+  gap: 0;
+  padding-inline: 0;
+  overflow: hidden;
+}
+
+.app-layout.sidebar-collapsed .new-chat { width: 36px; height: 36px; justify-content: center; margin-inline: auto; padding: 0; }
+.app-layout.sidebar-collapsed .new-chat span,
+.app-layout.sidebar-collapsed .nav-item span { display: none; }
+.app-layout.sidebar-collapsed .sidebar-nav { margin-top: auto; padding-top: 8px; }
+.app-layout.sidebar-collapsed .nav-item { width: 36px; height: 36px; justify-content: center; margin-inline: auto; padding: 0; }
+
+.app-layout.sidebar-collapsed .new-chat,
+.app-layout.sidebar-collapsed .sidebar-sessions,
+.app-layout.sidebar-collapsed .sidebar-nav {
+  display: none;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.new-chat {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+  margin: 0;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.new-chat:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.message.search-target {
+  position: relative;
+  z-index: 1;
+  border-radius: 6px;
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 6px;
+  animation: search-target-pulse 700ms ease-out;
+}
+
+.message.rail-jump-focus {
+  position: relative;
+  z-index: 1;
+  border-radius: 8px;
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 4px;
+  animation: rail-jump-pulse 1200ms ease-out forwards;
+}
+
+@keyframes rail-jump-pulse {
+  0% { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+  60% { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  100% { background: transparent; }
+}
+
+@keyframes search-target-pulse {
+  from { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  to { background: transparent; }
+}
+
+.sidebar-sessions {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 2px;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+/* 主内容区顶部的全局错误条（侧栏删除/归档失败等跨区域提示），可逐条关闭 */
+.global-error-stack {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(560px, calc(100% - 48px));
+  pointer-events: none;
+}
+
+.global-error-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--danger, #e5484d);
+  background: color-mix(in srgb, var(--danger, #e5484d) 12%, var(--bg-elevated, #fff));
+  box-shadow: 0 6px 22px rgb(0 0 0 / 22%);
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.global-error-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.global-error-item button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.global-error-item button:hover {
+  background: color-mix(in srgb, var(--danger, #e5484d) 14%, transparent);
+}
+
+.sidebar-session {
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.sidebar-session:hover {
+  background: var(--bg-hover);
+}
+
+.sidebar-session.current {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.sidebar-session-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-session-running {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  animation: session-running-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes session-running-pulse {
+  50% { opacity: 0.45; }
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.nav-item:hover {
+  background: var(--bg-hover);
+}
+
+.nav-item.active {
+  background: var(--bg-active);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.content {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border-radius: 0;
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.page-view {
+  display: none;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.page-view.active {
+  display: flex;
+  flex-direction: column;
+}

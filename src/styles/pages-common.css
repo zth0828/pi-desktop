@@ -1,0 +1,39 @@
+/* ---------- 页面通用 ---------- */
+
+.page {
+  padding: 32px 40px;
+  overflow-y: auto;
+}
+
+/* 功能页大标题统一规格（Settings/Models/Sessions/Skills/Extensions/MCP）：
+   同一套 serif 大标题，避免各页自行覆盖导致字体/字号不一致。 */
+.page-header h1,
+.page > h2,
+.models-header h2,
+.extensions-header h2,
+.sessions-header h2,
+.skills-page > h2,
+.mcp-page > h2,
+.sessions-page > h2,
+.models-page > h2 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 34px;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.page-subtitle {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.search-input {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 99px;
+  padding: 9px 18px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}

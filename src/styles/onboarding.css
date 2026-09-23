@@ -1,0 +1,193 @@
+/* ---------- Onboarding ---------- */
+
+.onboarding {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 72px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.onboarding h1 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 34px;
+}
+
+.onboarding .tagline {
+  color: var(--text-secondary);
+  margin-top: -10px;
+}
+
+.onboarding section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-raised);
+}
+
+.onboarding h2 {
+  font-size: 17px;
+}
+
+.command {
+  display: block;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  user-select: all;
+}
+
+.warning {
+  font-size: 13px;
+  color: var(--warning);
+}
+
+.detect-detail {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.install-log {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--bg-raised);
+}
+
+.install-log-title {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+
+.install-log pre {
+  max-height: 200px;
+  overflow: auto;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.error h2 {
+  color: var(--danger);
+}
+
+.error-detail {
+  font-size: 12px;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.error-banner {
+  margin: 10px auto 0;
+  max-width: 760px;
+  width: calc(100% - 32px);
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* banner 关闭按钮：仅清展示，与重试/选择模型按钮并存 */
+.error-banner .error-banner-dismiss {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.error-banner .error-banner-dismiss:hover {
+  background: color-mix(in srgb, var(--danger, #e5484d) 14%, transparent);
+}
+
+.error-banner button {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border: 1px solid currentColor;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+/* banner 内文本列：主错误 + 切换失败附注（旧会话仍在展示时的说明） */
+.error-banner-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.error-banner-note {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* 运行期错误行内提示（prompt/bash 等操作失败）：消息区与输入区之间，可关闭、不打断对话 */
+.runtime-error-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 24px 6px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.runtime-error-notice .runtime-error-title {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.runtime-error-notice .runtime-error-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.runtime-error-notice button {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border: 1px solid currentColor;
+  border-radius: 7px;
+  font-size: 12px;
+  background: transparent;
+  color: currentColor;
+  cursor: pointer;
+}
+
+/* 会话启动中的占位：放在 message-list 内，布局与正常会话一致 */
+
+.chat-starting {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+}
