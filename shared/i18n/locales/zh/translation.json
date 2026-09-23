@@ -1016,12 +1016,6 @@
       "skippedBadge": "已跳过此版本",
       "unskip": "恢复接收更新"
     },
-    "downloadMirror": {
-      "title": "下载镜像加速",
-      "desc": "GitHub 下载加速镜像前缀，如 https://ghproxy.net",
-      "placeholder": "https://ghproxy.net",
-      "activeBadge": "镜像加速已启用"
-    },
     "exportLocation": "保存位置",
     "themeOptions": {
       "light": "浅色",

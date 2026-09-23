@@ -133,25 +133,19 @@ describe('version-check-api', () => {
     );
   });
 
-  it('falls back to mirror and HTML redirect probe when direct GitHub API fails', async () => {
+  it('falls back to HTML redirect probe when direct GitHub API fails', async () => {
     settingsApiMock.getAll.mockResolvedValue({});
-    settingsApiMock.get.mockImplementation(async ({ key }: { key: string }) => {
-      if (key === 'downloadMirror') return 'https://mirror.example.com/';
-      return undefined;
-    });
+    settingsApiMock.get.mockResolvedValue(undefined);
 
     hostFetchMock.hostFetch.mockImplementation(async (url: string) => {
       if (url === 'https://api.github.com/repos/zth0828/pi-desktop/releases/latest') {
         throw new Error('connect ETIMEDOUT');
       }
-      if (url.includes('mirror.example.com/https://api.github.com')) {
-        return new Response(JSON.stringify({
-          tag_name: 'v1.1.0',
-          draft: false,
-          prerelease: false,
-          html_url: 'https://github.com/zth0828/pi-desktop/releases/tag/v1.1.0',
-          assets: [{ name: 'Pi.Desktop-1.1.0-arm64.dmg' }],
-        }));
+      if (url === 'https://github.com/zth0828/pi-desktop/releases/latest') {
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'https://github.com/zth0828/pi-desktop/releases/tag/v1.1.0' },
+        });
       }
       throw new Error(`Unhandled URL: ${url}`);
     });

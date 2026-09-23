@@ -5,7 +5,7 @@ import { createReadStream, createWriteStream, existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { unzipSync } from 'fflate';
-import { buildMirrorUrl, DEFAULT_DOWNLOAD_MIRROR, type AppUpdateDownloadResult, type HostSuccess } from '@shared/host-api/contract';
+import type { AppUpdateDownloadResult, HostSuccess } from '@shared/host-api/contract';
 import { settingsApi } from './settings-api';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { hostFetch } from '../utils/host-fetch';
@@ -124,112 +124,98 @@ async function getFileSize(filePath: string): Promise<number> {
 
 async function downloadToFile(
   primaryUrl: string,
-  mirrorPrefix: string | undefined,
   destinationPath: string,
   onProgress: (downloaded: number, total: number, speed: number) => void,
 ): Promise<void> {
-  const customMirror = mirrorPrefix?.trim();
-  const mirrorUrl = (prefix: string) => buildMirrorUrl(prefix, primaryUrl);
-  const channels = customMirror
-    ? [mirrorUrl(customMirror), primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)]
-    : [primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)];
   let lastError: unknown;
 
-  for (const channelUrl of channels) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) {
-        sendHostEvent('appUpdate', 'progress', {
-          phase: 'retrying',
-          retryAttempt: attempt + 1,
-          maxRetries: 3,
-          error: lastError instanceof Error ? lastError.message : String(lastError ?? 'Network error'),
-        });
-        await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      sendHostEvent('appUpdate', 'progress', {
+        phase: 'retrying',
+        retryAttempt: attempt + 1,
+        maxRetries: 3,
+        error: lastError instanceof Error ? lastError.message : String(lastError ?? 'Network error'),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
+    }
+    try {
+      const existingBytes = await getFileSize(destinationPath);
+      const headers: Record<string, string> = { 'user-agent': 'Pi-Desktop' };
+      if (existingBytes > 0) {
+        headers['Range'] = `bytes=${existingBytes}-`;
       }
-      try {
-        const existingBytes = await getFileSize(destinationPath);
-        const headers: Record<string, string> = { 'user-agent': 'Pi-Desktop' };
-        if (existingBytes > 0) {
-          headers['Range'] = `bytes=${existingBytes}-`;
-        }
 
-        const response = await hostFetch(channelUrl, {
-          headers,
-          signal: AbortSignal.timeout(120000),
-        });
+      const response = await hostFetch(primaryUrl, {
+        headers,
+        signal: AbortSignal.timeout(120000),
+      });
 
-        if (!response.ok || !response.body) {
-          if (response.status === 416 && existingBytes > 0) {
-            onProgress(existingBytes, existingBytes, 0);
-            return;
-          }
-          throw new Error(`Download failed (${response.status})`);
-        }
-
-        const isPartial = response.status === 206;
-        const contentLength = Number(response.headers.get('content-length') ?? 0);
-        const total = isPartial ? existingBytes + contentLength : (contentLength || existingBytes);
-        let downloaded = isPartial ? existingBytes : 0;
-
-        const writer = createWriteStream(destinationPath, { flags: isPartial ? 'a' : 'w' });
-        let lastSpeedSampleAt = Date.now();
-        let lastSpeedSampleBytes = downloaded;
-        let currentSpeed = 0;
-        let lastProgressEmitAt = 0;
-
-        onProgress(downloaded, total, 0);
-
-        try {
-          for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
-            writer.write(Buffer.from(chunk));
-            downloaded += chunk.byteLength;
-            const now = Date.now();
-            const elapsed = now - lastSpeedSampleAt;
-            if (elapsed >= 500) {
-              currentSpeed = Math.round(((downloaded - lastSpeedSampleBytes) / elapsed) * 1000);
-              lastSpeedSampleAt = now;
-              lastSpeedSampleBytes = downloaded;
-            }
-            if (now - lastProgressEmitAt >= 250 || downloaded === total) {
-              lastProgressEmitAt = now;
-              onProgress(downloaded, total, currentSpeed);
-            }
-          }
-          await new Promise<void>((resolve, reject) => {
-            writer.end((err?: Error | null) => {
-              if (err) reject(err);
-              else resolve();
-            });
-          });
+      if (!response.ok || !response.body) {
+        if (response.status === 416 && existingBytes > 0) {
+          onProgress(existingBytes, existingBytes, 0);
           return;
-        } catch (streamError) {
-          writer.destroy();
-          // 网络断开不删除已下载的部分文件，保留断点用于重试或跨通道接替
-          throw streamError;
         }
-      } catch (err) {
-        lastError = err;
+        throw new Error(`Download failed (${response.status})`);
       }
+
+      const isPartial = response.status === 206;
+      const contentLength = Number(response.headers.get('content-length') ?? 0);
+      const total = isPartial ? existingBytes + contentLength : (contentLength || existingBytes);
+      let downloaded = isPartial ? existingBytes : 0;
+
+      const writer = createWriteStream(destinationPath, { flags: isPartial ? 'a' : 'w' });
+      let lastSpeedSampleAt = Date.now();
+      let lastSpeedSampleBytes = downloaded;
+      let currentSpeed = 0;
+      let lastProgressEmitAt = 0;
+
+      onProgress(downloaded, total, 0);
+
+      try {
+        for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+          writer.write(Buffer.from(chunk));
+          downloaded += chunk.byteLength;
+          const now = Date.now();
+          const elapsed = now - lastSpeedSampleAt;
+          if (elapsed >= 500) {
+            currentSpeed = Math.round(((downloaded - lastSpeedSampleBytes) / elapsed) * 1000);
+            lastSpeedSampleAt = now;
+            lastSpeedSampleBytes = downloaded;
+          }
+          if (now - lastProgressEmitAt >= 250 || downloaded === total) {
+            lastProgressEmitAt = now;
+            onProgress(downloaded, total, currentSpeed);
+          }
+        }
+        await new Promise<void>((resolve, reject) => {
+          writer.end((err?: Error | null) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        return;
+      } catch (streamError) {
+        writer.destroy();
+        // 网络断开不删除已下载的部分文件，保留断点用于重试
+        throw streamError;
+      }
+    } catch (err) {
+      lastError = err;
     }
   }
 
   throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'Download failed'));
 }
 
-async function fetchChecksumText(
-  primaryUrl: string,
-  mirrorPrefix: string | undefined,
-): Promise<string> {
-  const customMirror = mirrorPrefix?.trim();
-  const mirrorUrl = (prefix: string) => buildMirrorUrl(prefix, primaryUrl);
-  const channels = customMirror
-    ? [mirrorUrl(customMirror), primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)]
-    : [primaryUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR)];
+async function fetchChecksumText(primaryUrl: string): Promise<string> {
   let lastError: unknown;
-
-  for (const url of channels) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const res = await hostFetch(url, { signal: AbortSignal.timeout(10000) });
+      const res = await hostFetch(primaryUrl, {
+        headers: { 'user-agent': 'Pi-Desktop' },
+        signal: AbortSignal.timeout(10000),
+      });
       if (res.ok) return await res.text();
     } catch (err) {
       lastError = err;
@@ -244,28 +230,19 @@ export const appUpdateApi = {
     inFlight = (async () => {
       let tempPath: string | undefined;
       try {
-        const mirrorPrefix = (await settingsApi.get({ key: 'downloadMirror' })) as string | undefined;
-        const isCustomUrl = Boolean(process.env.PI_DESKTOP_GITHUB_API_URL);
-        const customMirror = mirrorPrefix?.trim();
-        const releaseUrl = (prefix: string) => buildMirrorUrl(prefix, githubUrl());
-        const releaseChannels = customMirror
-          ? [releaseUrl(customMirror), githubUrl(), ...(isCustomUrl ? [] : [releaseUrl(DEFAULT_DOWNLOAD_MIRROR)])]
-          : (isCustomUrl ? [githubUrl()] : [githubUrl(), releaseUrl(DEFAULT_DOWNLOAD_MIRROR)]);
-        let release: { tag_name?: string; body?: string; assets?: Array<{ name: string; browser_download_url: string }> } | undefined;
-        let lastReleaseError: unknown;
-
-        for (const rUrl of releaseChannels) {
-          try {
-            const res = await hostFetch(rUrl, { signal: AbortSignal.timeout(10000), headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' } });
-            if (res.ok) {
-              release = (await res.json()) as { tag_name?: string; body?: string; assets?: Array<{ name: string; browser_download_url: string }> };
-              break;
-            }
-          } catch (err) {
-            lastReleaseError = err;
-          }
+        const releaseUrl = githubUrl();
+        const res = await hostFetch(releaseUrl, {
+          signal: AbortSignal.timeout(10000),
+          headers: { accept: 'application/vnd.github+json', 'user-agent': 'Pi-Desktop' },
+        });
+        if (!res.ok) {
+          throw new Error(`Release metadata fetch failed (${res.status})`);
         }
-        if (!release) throw lastReleaseError instanceof Error ? lastReleaseError : new Error(String(lastReleaseError ?? 'Release metadata fetch failed'));
+        const release = (await res.json()) as {
+          tag_name?: string;
+          body?: string;
+          assets?: Array<{ name: string; browser_download_url: string }>;
+        };
 
         const asset = selectAsset(release.assets ?? []);
         if (!asset) throw new Error(`No supported ${platformName()} update asset found`);
@@ -276,7 +253,7 @@ export const appUpdateApi = {
         tempPath = path.join(downloadsDir, `${asset.name}.part`);
 
         sendHostEvent('appUpdate', 'progress', { phase: 'started' });
-        await downloadToFile(asset.url, mirrorPrefix, tempPath, (downloaded, total, speed) => {
+        await downloadToFile(asset.url, tempPath, (downloaded, total, speed) => {
           sendHostEvent('appUpdate', 'progress', {
             phase: 'progress',
             downloadedBytes: downloaded,
@@ -287,7 +264,7 @@ export const appUpdateApi = {
 
         if (sums) {
           try {
-            const checksumText = await fetchChecksumText(sums.browser_download_url, mirrorPrefix);
+            const checksumText = await fetchChecksumText(sums.browser_download_url);
             const expected = checksumText.split(/\r?\n/).find((line) => line.endsWith(`  ${asset.name}`))?.split(/\s+/)[0];
             if (expected) {
               const hash = createHash('sha256');

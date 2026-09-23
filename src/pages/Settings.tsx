@@ -88,7 +88,6 @@ export default function SettingsPage() {
   const [proxyUrl, setProxyUrl] = useState(DEFAULT_DESKTOP_PROXY_URL);
   const [proxyStatus, setProxyStatus] = useState<ProxyStatus>();
   const [proxyMessage, setProxyMessage] = useState<string>();
-  const [downloadMirror, setDownloadMirror] = useState('');
   const [autoDownloadUpdate, setAutoDownloadUpdate] = useState(true);
   const env = usePiSystemStore((s) => s.env);
   const detect = usePiSystemStore((s) => s.detect);
@@ -151,9 +150,7 @@ export default function SettingsPage() {
       setProxyUrl(url);
       if (v !== url) void hostApi.settings.set('httpProxyUrl', url);
     }).catch(() => {});
-    void hostApi.settings.get('downloadMirror').then((v) => {
-      if (typeof v === 'string') setDownloadMirror(v);
-    }).catch(() => {});
+
     void hostApi.proxy.detect().then(setProxyStatus).catch(() => {});
     const offTrustChanged = onHostEvent('piTrust', 'changed', (r) => setTrustEntries(r.entries));
     const offUpdateProgress = onHostEvent('appUpdate', 'progress', (event) => {
@@ -248,11 +245,6 @@ export default function SettingsPage() {
     setProxyUrl(url);
     await hostApi.settings.set('httpProxyUrl', url);
     await refreshProxy();
-  };
-
-  const changeDownloadMirror = async (mirror: string): Promise<void> => {
-    setDownloadMirror(mirror);
-    await hostApi.settings.set('downloadMirror', mirror.trim() || undefined);
   };
 
   return (
@@ -752,11 +744,7 @@ export default function SettingsPage() {
                       {t('settings.version.skippedBadge')}
                     </span>
                   )}
-                  {Boolean(downloadMirror?.trim()) && (
-                    <span className="settings-version-badge settings-badge-mirror">
-                      {t('settings.downloadMirror.activeBadge')}
-                    </span>
-                  )}
+
                 </div>
                 <div className="settings-row-desc">
                   {t('settings.version.current', { version: appVersion })}
@@ -900,22 +888,6 @@ export default function SettingsPage() {
               <div className="settings-row-desc">{t('settings.version.checkFailedHint')}</div>
             </div>
           )}
-        </div>
-
-        {/* 镜像加速配置行 */}
-        <div className="settings-row" data-testid="settings-download-mirror-row" id="settings-download-mirror-row">
-          <div className="settings-row-label">
-            <div>{t('settings.downloadMirror.title')}</div>
-            <div className="settings-row-desc">{t('settings.downloadMirror.desc')}</div>
-          </div>
-          <input
-            className="settings-number settings-proxy-url"
-            data-testid="settings-download-mirror"
-            type="text"
-            placeholder={t('settings.downloadMirror.placeholder')}
-            value={downloadMirror}
-            onChange={(e) => void changeDownloadMirror(e.target.value)}
-          />
         </div>
 
         {/* 自动下载更新配置行 */}

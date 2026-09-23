@@ -220,33 +220,6 @@ test('设置页：下载更新后弹出安装引导对话框，稍后关闭后�
   await expect(page.getByTestId('settings-app-show')).toBeVisible();
 });
 
-test('设置页：镜像加速配置修改与落盘', async ({
-  launchElectronApp,
-  homeDir,
-}) => {
-  const app = await launchElectronApp({
-    mockPi: true,
-    agentDir,
-    initialPage: 'settings',
-  });
-  const page = await app.firstWindow();
-
-  const mirrorInput = page.getByTestId('settings-download-mirror');
-  await expect(mirrorInput).toBeVisible({ timeout: 15_000 });
-  await mirrorInput.fill('https://ghproxy.net/');
-  await mirrorInput.evaluate((el) => el.dispatchEvent(new Event('change')));
-
-  const configPath = path.join(homeDir, 'user-data', 'config.json');
-  await expect.poll(async () => {
-    try {
-      const config = JSON.parse(await readFile(configPath, 'utf8')) as { downloadMirror?: string };
-      return config.downloadMirror;
-    } catch {
-      return undefined;
-    }
-  }, { timeout: 10_000 }).toBe('https://ghproxy.net/');
-});
-
 test('设置页：增量补丁（*-patch.zip）下载后解压 app.asar 并完成暂存与就绪', async ({
   launchElectronApp,
   homeDir,

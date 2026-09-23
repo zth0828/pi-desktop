@@ -40,7 +40,6 @@ export const settingsApi = {
       appVersionCheckNoticedAt: store.get('appVersionCheckNoticedAt') as number | undefined,
       piVersionCheckNoticedLatest: store.get('piVersionCheckNoticedLatest') as string | undefined,
       piVersionCheckNoticedAt: store.get('piVersionCheckNoticedAt') as number | undefined,
-      downloadMirror: store.get('downloadMirror') as string | undefined,
       autoDownloadUpdate: (store.get('autoDownloadUpdate') ?? true) as boolean,
       lastRunVersion: store.get('lastRunVersion') as string | undefined,
       lastReleaseNotes: store.get('lastReleaseNotes') as string | undefined,

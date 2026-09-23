@@ -1,4 +1,4 @@
-import { buildMirrorUrl, DEFAULT_DOWNLOAD_MIRROR, type VersionCheckSnapshot, type VersionCheckStatus } from '@shared/host-api/contract';
+import type { VersionCheckSnapshot, VersionCheckStatus } from '@shared/host-api/contract';
 import { sanitizeReleaseNotes } from '@shared/release-notes';
 import { settingsApi } from './settings-api';
 import { piSystemApi } from './pi-system-api';
@@ -84,7 +84,7 @@ async function checkPi(previous: VersionCheckStatus, now: number): Promise<Versi
   }
 }
 
-async function fetchReleaseMetadata(url: string, mirrorPrefix?: string) {
+async function fetchReleaseMetadata(url: string) {
   const isCustomUrl = Boolean(process.env.PI_DESKTOP_GITHUB_API_URL);
   const tryFetch = async (targetUrl: string) => {
     const response = await hostFetch(targetUrl, {
@@ -102,31 +102,14 @@ async function fetchReleaseMetadata(url: string, mirrorPrefix?: string) {
     };
   };
 
-  const customMirror = mirrorPrefix?.trim();
-  const mirrorUrl = (prefix: string, base: string) => buildMirrorUrl(prefix, base);
-  const apiChannels = customMirror
-    ? [mirrorUrl(customMirror, url), url, ...(isCustomUrl ? [] : [mirrorUrl(DEFAULT_DOWNLOAD_MIRROR, url)])]
-    : (isCustomUrl ? [url] : [url, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR, url)]);
-
-  let lastError: unknown;
-  for (const apiUrl of apiChannels) {
-    try {
-      return await tryFetch(apiUrl);
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
-  // 仅在默认官方 GitHub 地址场景下探测 HTML 302 重定向
-  if (!isCustomUrl) {
-    const htmlUrl = 'https://github.com/zth0828/pi-desktop/releases/latest';
-    const htmlChannels = customMirror
-      ? [mirrorUrl(customMirror, htmlUrl), htmlUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR, htmlUrl)]
-      : [htmlUrl, mirrorUrl(DEFAULT_DOWNLOAD_MIRROR, htmlUrl)];
-
-    for (const redirectUrl of htmlChannels) {
+  try {
+    return await tryFetch(url);
+  } catch (err) {
+    // 仅在默认官方 GitHub 地址场景下探测 HTML 302 重定向
+    if (!isCustomUrl) {
+      const htmlUrl = 'https://github.com/zth0828/pi-desktop/releases/latest';
       try {
-        const probeRes = await hostFetch(redirectUrl, {
+        const probeRes = await hostFetch(htmlUrl, {
           method: 'HEAD',
           redirect: 'manual',
           signal: AbortSignal.timeout(5000),
@@ -147,20 +130,18 @@ async function fetchReleaseMetadata(url: string, mirrorPrefix?: string) {
           }
         }
       } catch {
-        // 忽略单个重定向探测错误
+        // 忽略重定向探测错误
       }
     }
+    throw err instanceof Error ? err : new Error(String(err ?? 'Release request failed'));
   }
-
-  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'Release request failed'));
 }
 
 async function checkApp(previous: VersionCheckStatus & { releaseUrl?: string; releaseNotes?: string; assetName?: string }, now: number) {
   const current = appApi.version();
   const url = process.env.PI_DESKTOP_GITHUB_API_URL ?? GITHUB_RELEASE_URL;
   try {
-    const mirrorPrefix = (await settingsApi.get({ key: 'downloadMirror' })) as string | undefined;
-    const release = await fetchReleaseMetadata(url, mirrorPrefix);
+    const release = await fetchReleaseMetadata(url);
     if (release.draft || release.prerelease || !release.tag_name || !parseSemver(release.tag_name)) throw new Error('No stable release found');
     await settingsApi.set({ key: 'appVersionCheckLastSuccessAt', value: now });
     await settingsApi.set({ key: 'appVersionCheckLatest', value: release.tag_name });
