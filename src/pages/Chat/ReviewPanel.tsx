@@ -1,58 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Bot,
-  Check,
-  ChevronDown,
-  ChevronRight,
   Columns2,
-  Copy,
-  CornerDownLeft,
-  AppWindow,
   FileCode2,
   Files,
-  Folder,
-  FolderOpen,
   Layers,
-  List,
-  LoaderCircle,
-  Locate,
-  MapPin,
-  PanelRightClose,
-  RefreshCw,
-  Search,
   Sparkles,
-  Square,
   SquareX,
   Terminal,
-  WrapText,
   X,
 } from 'lucide-react';
-import {
-  collectSessionCommands,
-  type CommandFilter,
-  type SessionCommandItem,
-} from '../../lib/session-commands';
-import type {
-  ReviewFileEntry,
-  ReviewSummaryResult,
-  ShellApplication,
-  WorkspaceEntry,
-  WorkspaceReadResult,
-} from '@shared/host-api/contract';
 import { hostApi } from '../../lib/host-api';
 import { FileIcon } from '../../components/FileIcon';
-import {
-  buildHunkPatch,
-  buildSplitDiffRows,
-  collectFallbackFiles,
-  hunkLineKind,
-  mergeReviewFiles,
-  parseUnifiedDiff,
-  sessionChangeFiles,
-  type ParsedFileDiff,
-} from '../../lib/review-diff';
-import { parseDiffLines } from '../../lib/tool-display';
 import {
   clampPanelWidth,
   getNextModePreference,
@@ -60,1011 +19,18 @@ import {
   resolveEffectiveMode,
   PANEL_WIDTH_STORAGE_KEY,
   WORKSPACE_PANEL_MODE_KEY,
-  type WorkspacePanelEffectiveMode,
   type WorkspacePanelModePreference,
 } from '../../lib/workspace-panel-mode';
-import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
-import { FilePreviewContent } from './FilePreviewContent';
-import type { ChatMessage } from '../../lib/chat-types';
-
-type PendingRevert =
-  | { kind: 'file'; path: string }
-  | { kind: 'hunk'; path: string; patch: string };
-type WorkbenchTab = 'files' | 'review' | 'commands' | `file:${string}`;
-
-function getContainer(panelEl: HTMLElement | null): HTMLElement | null {
-  return panelEl?.closest<HTMLElement>('.chat-page') ?? document.querySelector<HTMLElement>('.chat-page');
-}
-
-function availablePanelSpace(panelEl?: HTMLElement | null): number {
-  return getContainer(panelEl ?? null)?.clientWidth ?? window.innerWidth;
-}
-
-function formatBytes(size: number): string {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(size < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
-const APPLICATION_PRIORITY = [
-  /^cursor$/i,
-  /^finder$/i,
-  /^terminal$/i,
-  /^ghostty$/i,
-  /^visual studio code$/i,
-  /^xcode$/i,
-  /^android studio$/i,
-  /^zed$/i,
-  /sublime text/i,
-  /^textedit$/i,
-];
-
-function rankApplications(applications: ShellApplication[]): ShellApplication[] {
-  const priority = (name: string) => {
-    const index = APPLICATION_PRIORITY.findIndex((pattern) => pattern.test(name));
-    return index < 0 ? APPLICATION_PRIORITY.length : index;
-  };
-  return [...applications].sort((a, b) => priority(a.name) - priority(b.name) || a.name.localeCompare(b.name));
-}
-
-
-function UnifiedDiff({ parsed, onRevert }: { parsed: ParsedFileDiff; onRevert?: (index: number) => void }) {
-  const { t } = useTranslation();
-  return (
-    <div className="review-diff" data-testid="review-diff">
-      {parsed.hunks.map((hunk, index) => (
-        <div className="review-hunk" key={index}>
-          <div className="review-hunk-header"><span className="review-hunk-range">{hunk.header}</span>{onRevert && <button className="review-revert-btn" data-testid="revert-hunk" onClick={() => onRevert(index)}>{t('review.revertHunk')}</button>}</div>
-        <pre className="diff-view review-unified" data-testid="diff-unified">
-          {hunk.lines.map((line, lineIndex) => {
-            const kind = hunkLineKind(line);
-            return (
-              <div key={lineIndex} className={`diff-line diff-${kind}`}>
-                <span className="diff-sign">{kind === 'add' ? '+' : kind === 'del' ? '-' : ' '}</span>
-                <span className="diff-content">{kind === 'marker' ? line : line.slice(1)}</span>
-              </div>
-            );
-          })}
-        </pre></div>
-      ))}
-    </div>
-  );
-}
-
-function SplitDiff({ parsed, onRevert }: { parsed: ParsedFileDiff; onRevert?: (index: number) => void }) {
-  const { t } = useTranslation();
-  return (
-    <div className="review-diff review-split" data-testid="review-diff">
-      {parsed.hunks.map((hunk, index) => (
-        <div className="split-hunk" key={index} data-testid="diff-split">
-          <div className="split-hunk-header"><span>{hunk.header}</span>{onRevert && <button className="review-revert-btn" data-testid="revert-hunk" onClick={() => onRevert(index)}>{t('review.revertHunk')}</button>}</div>
-          {buildSplitDiffRows(hunk).map((row, rowIndex) => (
-            <div className="split-row" key={rowIndex}>
-              {[row.old, row.next].map((cell, side) => (
-                <div className={`split-cell diff-${cell.kind}`} key={side}>
-                  <span className="split-line-number">{cell.lineNumber ?? ''}</span>
-                  <code>{cell.content}</code>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function FileExplorer({ selected, onSelect, onRootCount }: { selected: string | null; onSelect: (path: string) => void; onRootCount: (count: number) => void }) {
-  const { t } = useTranslation();
-  const cwd = usePaneChatStore((state) => state.cwd);
-  const [children, setChildren] = useState<Record<string, WorkspaceEntry[]>>({});
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(['']));
-  const [loading, setLoading] = useState<Set<string>>(new Set());
-  const [filter, setFilter] = useState('');
-  const loadedRef = useRef(new Set<string>());
-  const loadingRef = useRef(new Set<string>());
-  const generationRef = useRef(0);
-
-  const load = useCallback(async (dir: string) => {
-    if (loadedRef.current.has(dir) || loadingRef.current.has(dir)) return;
-    const generation = generationRef.current;
-    loadingRef.current.add(dir);
-    setLoading(new Set(loadingRef.current));
-    const result = await hostApi.workspace.listChildren(dir).catch(() => null);
-    if (generation !== generationRef.current) return;
-    loadingRef.current.delete(dir);
-    setLoading(new Set(loadingRef.current));
-    if (!result) return;
-    loadedRef.current.add(dir);
-    setChildren((current) => ({ ...current, [dir]: result.entries }));
-    if (dir === '') onRootCount(result.entries.length);
-  }, [onRootCount]);
-
-  useEffect(() => {
-    generationRef.current += 1;
-    loadedRef.current.clear();
-    loadingRef.current.clear();
-    setChildren({});
-    setExpanded(new Set(['']));
-    setLoading(new Set());
-    setFilter('');
-    onRootCount(0);
-    void load('');
-  }, [cwd, load, onRootCount]);
-
-  const toggle = (entry: WorkspaceEntry) => {
-    setExpanded((current) => {
-      const next = new Set(current);
-      if (next.has(entry.path)) next.delete(entry.path);
-      else next.add(entry.path);
-      return next;
-    });
-    if (!loadedRef.current.has(entry.path)) void load(entry.path);
-  };
-
-  const renderEntries = (dir: string, depth: number): React.ReactNode =>
-    (children[dir] ?? []).map((entry) => {
-      const open = expanded.has(entry.path);
-      const matches = !filter || entry.path.toLowerCase().includes(filter.toLowerCase());
-      if (filter && entry.kind === 'file' && !matches) return null;
-      return (
-        <div key={entry.path}>
-          <button
-            className={`workspace-tree-row${selected === entry.path ? ' selected' : ''}`}
-            style={{ paddingLeft: 8 + depth * 14 }}
-            data-testid={entry.kind === 'file' ? 'workspace-file' : 'workspace-directory'}
-            title={entry.path}
-            draggable={entry.kind === 'file'}
-            onDragStart={
-              entry.kind === 'file'
-                ? (e) => {
-                    e.dataTransfer.setData('application/x-pi-file-mention', entry.path);
-                    const formatted = entry.path.includes(' ') ? `@"${entry.path}" ` : `@${entry.path} `;
-                    e.dataTransfer.setData('text/plain', formatted);
-                    e.dataTransfer.effectAllowed = 'copy';
-                  }
-                : undefined
-            }
-            onClick={() => entry.kind === 'directory' ? toggle(entry) : onSelect(entry.path)}
-          >
-            {entry.kind === 'directory' ? (
-              <>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{open ? <FolderOpen size={14} /> : <Folder size={14} />}</>
-            ) : <><span className="workspace-tree-indent" /><FileIcon name={entry.name} size={14} /></>}
-            <span>{entry.name}</span>
-          </button>
-          {entry.kind === 'directory' && open && renderEntries(entry.path, depth + 1)}
-          {entry.kind === 'directory' && open && loading.has(entry.path) && (
-            <div className="workspace-tree-loading" style={{ paddingLeft: 29 + (depth + 1) * 14 }}><LoaderCircle size={13} />{t('workspace.loadingFolder')}</div>
-          )}
-        </div>
-      );
-    });
-
-  return (
-    <aside className="workspace-tree" data-testid="workspace-tree">
-      <label className="workspace-filter">
-        <Search size={14} />
-        <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t('workspace.filter')} />
-      </label>
-      <div className="workspace-tree-scroll">
-        {loading.has('') && <div className="workspace-tree-loading"><LoaderCircle size={13} />{t('workspace.loadingFolder')}</div>}
-        {renderEntries('', 0)}
-      </div>
-    </aside>
-  );
-}
-
-function OpenWithMenu({ absolutePath }: { absolutePath: string }) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [applications, setApplications] = useState<ShellApplication[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>();
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', close);
-    return () => document.removeEventListener('pointerdown', close);
-  }, [open]);
-
-  const toggle = async () => {
-    const next = !open;
-    setOpen(next);
-    if (!next || applications.length > 0 || loading) return;
-    setLoading(true);
-    setError(undefined);
-    try {
-      const result = await hostApi.shell.listApplications();
-      // 菜单只展示最相关的少量应用；列表本身仍由 Main 动态发现。
-      setApplications(rankApplications(result.applications).slice(0, 8));
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : String(nextError));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const openApplication = async (application: ShellApplication) => {
-    setOpen(false);
-    const result = await hostApi.shell.openPathWith(absolutePath, application);
-    if (!result.success) setError(result.error ?? t('workspace.openFailed'));
-  };
-
-  return (
-    <div className="workspace-open-menu" ref={menuRef}>
-      <button className="workspace-open-trigger" data-testid="workspace-open-with" aria-expanded={open} onClick={() => void toggle()}>
-        <AppWindow size={14} />
-        <span>{t('workspace.openWith')}</span>
-        <ChevronDown size={13} />
-      </button>
-      {open && (
-        <div className="workspace-open-popover" data-testid="workspace-open-menu">
-          <button onClick={() => { setOpen(false); void hostApi.shell.showInFolder(absolutePath); }}>
-            <MapPin size={15} /><span>{t('workspace.showInFolder')}</span>
-          </button>
-          <button onClick={() => { setOpen(false); void hostApi.shell.openPath(absolutePath); }}>
-            <AppWindow size={15} /><span>{t('workspace.defaultApplication')}</span>
-          </button>
-          <div className="workspace-open-separator" />
-          {loading && <div className="workspace-open-state">{t('workspace.findingApps')}</div>}
-          {!loading && applications.map((application) => (
-            <button key={application.id} data-testid="workspace-open-application" onClick={() => void openApplication(application)}>
-              {application.iconDataUrl
-                ? <img className="workspace-application-icon" src={application.iconDataUrl} alt="" />
-                : <AppWindow size={15} />}
-              <span>{application.name}</span>
-            </button>
-          ))}
-          {!loading && applications.length === 0 && <div className="workspace-open-state">{t('workspace.noApps')}</div>}
-        </div>
-      )}
-      {error && <div className="workspace-open-error" role="status">{error}</div>}
-    </div>
-  );
-}
-
-function FilePreview({ path, onClose }: { path: string; onClose?: () => void }) {
-  const { t } = useTranslation();
-  const [result, setResult] = useState<WorkspaceReadResult | null>(null);
-  const [error, setError] = useState(false);
-  const [wrapLines, setWrapLines] = useState(true);
-  useEffect(() => {
-    let cancelled = false;
-    setResult(null);
-    setError(false);
-    setWrapLines(true);
-    void hostApi.workspace.readFile(path)
-      .then((next) => { if (!cancelled) setResult(next); })
-      .catch(() => { if (!cancelled) setError(true); });
-    return () => { cancelled = true; };
-  }, [path]);
-  if (error) return <div className="workspace-empty">{t('workspace.readFailed')}</div>;
-  if (!result) return <div className="workspace-empty">{t('workspace.loading')}</div>;
-  return (
-    <div className="workspace-file-view">
-      <header className="workspace-file-header">
-        <div className="workspace-file-title">
-          <FileIcon name={result.name} size={16} />
-          <span title={result.path}>{result.name}</span>
-          <small>{formatBytes(result.size)}</small>
-        </div>
-        <div className="workspace-file-actions">
-          {(result.kind === 'text' || result.kind === 'markdown') && (
-            <button className={`icon-button${wrapLines ? ' active' : ''}`} data-testid="workspace-toggle-wrap" aria-pressed={wrapLines} title={wrapLines ? t('workspace.disableWrap') : t('workspace.enableWrap')} onClick={() => setWrapLines((current) => !current)}><WrapText size={15} /></button>
-          )}
-          <OpenWithMenu absolutePath={result.absolutePath} />
-          {onClose && (
-            <button
-              type="button"
-              className="icon-button"
-              data-testid="workspace-preview-close"
-              title={t('workspace.close')}
-              aria-label={t('workspace.close')}
-              onClick={onClose}
-            >
-              <X size={15} />
-            </button>
-          )}
-        </div>
-      </header>
-      <div className="workspace-file-content"><FilePreviewContent result={result} wrapLines={wrapLines} /></div>
-    </div>
-  );
-}
-
-type SelectedReviewItem = {
-  group: 'session' | 'workspace';
-  path: string;
-};
-
-/** 右侧「命令」面板：本会话全量命令与终端流水线（Agent 工具调用 + 用户命令）。 */
-function CommandList() {
-  const { t } = useTranslation();
-  const paneApi = usePaneHostApi();
-  const bashDraft = usePaneChatStore((s) => s.bashDraft);
-  const historyMessages = usePaneChatStore((s) => s.historyMessages);
-  const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
-  const setComposerText = usePaneChatStore((s) => s.setComposerText);
-  const setCommandMode = usePaneChatStore((s) => s.setCommandMode);
-
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<CommandFilter>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState(50);
-
-  useEffect(() => {
-    setVisibleCount(50);
-  }, [filter, searchQuery]);
-
-  const allCommands = useMemo(
-    () => collectSessionCommands(toolExecutions, historyMessages, bashDraft),
-    [toolExecutions, historyMessages, bashDraft],
-  );
-
-  const filteredCommands = useMemo(() => {
-    let list = allCommands;
-    if (filter === 'failed') {
-      list = list.filter((c) => c.status === 'error' || (c.exitCode !== undefined && c.exitCode !== 0));
-    } else if (filter === 'agent') {
-      list = list.filter((c) => c.source === 'agent');
-    } else if (filter === 'user') {
-      list = list.filter((c) => c.source === 'user');
-    }
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        (c) =>
-          c.command.toLowerCase().includes(q) ||
-          c.summary.toLowerCase().includes(q) ||
-          (c.output && c.output.toLowerCase().includes(q)),
-      );
-    }
-    return list;
-  }, [allCommands, filter, searchQuery]);
-
-  const failedCount = useMemo(
-    () => allCommands.filter((c) => c.status === 'error' || (c.exitCode !== undefined && c.exitCode !== 0)).length,
-    [allCommands],
-  );
-
-  const handleJumpToChat = (item: SessionCommandItem, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!item.chatAnchorId) return;
-    const el = document.getElementById(item.chatAnchorId);
-    if (el) {
-      const turnFold = el.closest('.turn-fold');
-      if (turnFold && !turnFold.classList.contains('expanded')) {
-        const toggleBtn = turnFold.querySelector<HTMLButtonElement>('.turn-fold-toggle');
-        toggleBtn?.click();
-      }
-      setTimeout(() => {
-        const target = document.getElementById(item.chatAnchorId!) ?? el;
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        target.classList.add('tool-card-highlight');
-        setTimeout(() => target.classList.remove('tool-card-highlight'), 2000);
-      }, 60);
-    }
-  };
-
-  const handleFillComposer = (item: SessionCommandItem, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCommandMode(true);
-    setComposerText(item.command);
-  };
-
-  const handleCopy = (text: string, key: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (navigator.clipboard?.writeText) {
-      void navigator.clipboard.writeText(text);
-      setCopiedId(key);
-      setTimeout(() => setCopiedId((curr) => (curr === key ? null : curr)), 1500);
-    }
-  };
-
-  if (allCommands.length === 0) {
-    return (
-      <div className="command-list workspace-empty" data-testid="command-list">
-        {t('workspace.commandsEmpty')}
-      </div>
-    );
-  }
-
-  return (
-    <div className="command-panel-container" data-testid="command-list">
-      <div className="command-toolbar">
-        <div className="command-filter-group" role="tablist">
-          <button
-            type="button"
-            className={`command-filter-btn${filter === 'all' ? ' active' : ''}`}
-            onClick={() => setFilter('all')}
-          >
-            {t('workspace.commandsFilterAll')} ({allCommands.length})
-          </button>
-          <button
-            type="button"
-            className={`command-filter-btn${filter === 'failed' ? ' active' : ''}${failedCount > 0 ? ' has-failed' : ''}`}
-            onClick={() => setFilter('failed')}
-          >
-            {t('workspace.commandsFilterFailed')}
-            {failedCount > 0 && <span className="failed-count-dot">{failedCount}</span>}
-          </button>
-          <button
-            type="button"
-            className={`command-filter-btn${filter === 'agent' ? ' active' : ''}`}
-            onClick={() => setFilter('agent')}
-          >
-            {t('workspace.commandsFilterAgent')}
-          </button>
-          <button
-            type="button"
-            className={`command-filter-btn${filter === 'user' ? ' active' : ''}`}
-            onClick={() => setFilter('user')}
-          >
-            {t('workspace.commandsFilterUser')}
-          </button>
-        </div>
-        <div className="command-search-wrap">
-          <Search size={12} className="command-search-icon" />
-          <input
-            type="text"
-            className="command-search-input"
-            placeholder={t('workspace.commandsSearchPlaceholder')}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              className="command-search-clear"
-              onClick={() => setSearchQuery('')}
-              aria-label={t('review.clearSearch')}
-            >
-              <X size={12} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div
-        className="command-list custom-scroll"
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
-            setVisibleCount((prev) => Math.min(prev + 50, filteredCommands.length));
-          }
-        }}
-      >
-        {filteredCommands.length === 0 ? (
-          <div className="command-list-empty-filtered">
-            {t('workspace.commandsEmptyFiltered')}
-          </div>
-        ) : (
-          filteredCommands.slice(0, visibleCount).map((item) => {
-            const isRunning = item.status === 'running';
-            const open = isRunning || expandedId === item.id;
-            return (
-              <div
-                key={item.id}
-                className={`command-run${open ? ' expanded' : ''}${isRunning ? ' running' : ''}`}
-                data-testid="command-run"
-              >
-                <div
-                  className="command-run-header"
-                  data-testid="command-run-toggle"
-                  onClick={() => setExpandedId(open && !isRunning ? null : item.id)}
-                >
-                  <span className="command-run-chevron">
-                    {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                  </span>
-                  <span
-                    className={`command-source-badge ${item.source}`}
-                    title={t(`workspace.commandsSource${item.source === 'agent' ? 'Agent' : 'User'}`)}
-                  >
-                    {item.source === 'agent' ? <Bot size={11} /> : <Terminal size={11} />}
-                    <span>{item.source === 'agent' ? 'Agent' : t('workspace.commandsSourceUser')}</span>
-                  </span>
-                  <span className="command-run-name" title={item.command}>
-                    $ {item.summary}
-                  </span>
-
-                  <div className="command-run-tags">
-                    {isRunning ? (
-                      <span className="bash-badge running">
-                        <span className="tool-terminal-dot tool-terminal-dot-running" />
-                        {t('workspace.commandsRunning')}
-                      </span>
-                    ) : item.status === 'interrupted' ? (
-                      <span className="bash-badge interrupted">{t('workspace.commandsInterrupted')}</span>
-                    ) : item.status === 'error' || (item.exitCode !== undefined && item.exitCode !== 0) ? (
-                      <span className="bash-badge error">
-                        {item.exitCode !== undefined
-                          ? t('chat.bash.exitCode', { code: item.exitCode })
-                          : t('workspace.commandsFailed')}
-                      </span>
-                    ) : (
-                      <span className="bash-badge success">
-                        {item.exitCode !== undefined
-                          ? t('chat.bash.exitCode', { code: item.exitCode })
-                          : t('workspace.commandsSuccess')}
-                      </span>
-                    )}
-
-                    {item.duration && <span className="command-run-duration">{item.duration}</span>}
-                    {item.excludeFromContext && <span className="bash-badge">{t('chat.bash.excluded')}</span>}
-                  </div>
-
-                  <div className="command-run-actions">
-                    {item.source === 'user' && isRunning && (
-                      <button
-                        type="button"
-                        className="command-run-stop"
-                        data-testid="command-run-stop"
-                        title={t('chat.command.stopBash')}
-                        aria-label={t('chat.command.stopBash')}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void paneApi.piRuntime.abortBash();
-                        }}
-                      >
-                        <Square size={11} />
-                      </button>
-                    )}
-                    {item.chatAnchorId && (
-                      <button
-                        type="button"
-                        className="command-item-action-btn"
-                        title={t('workspace.commandsJumpToChat')}
-                        aria-label={t('workspace.commandsJumpToChat')}
-                        onClick={(e) => handleJumpToChat(item, e)}
-                      >
-                        <Locate size={12} />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="command-item-action-btn"
-                      title={t('workspace.commandsFillInput')}
-                      aria-label={t('workspace.commandsFillInput')}
-                      onClick={(e) => handleFillComposer(item, e)}
-                    >
-                      <CornerDownLeft size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      className="command-item-action-btn"
-                      title={
-                        copiedId === `cmd-${item.id}`
-                          ? t('workspace.commandsCopied')
-                          : t('workspace.commandsCopyCommand')
-                      }
-                      aria-label={t('workspace.commandsCopyCommand')}
-                      onClick={(e) => handleCopy(item.command, `cmd-${item.id}`, e)}
-                    >
-                      {copiedId === `cmd-${item.id}` ? <Check size={12} /> : <Copy size={12} />}
-                    </button>
-                  </div>
-                </div>
-
-                {open && (item.output || isRunning) && (
-                  <div className="command-run-body">
-                    <pre className="command-run-output custom-scroll" data-testid="command-run-output">
-                      {item.output || ''}
-                      {isRunning && <span className="cursor-blink">▍</span>}
-                    </pre>
-                    {item.output && (
-                      <div className="command-run-footer">
-                        <button
-                          type="button"
-                          className="command-copy-output-btn"
-                          onClick={(e) => handleCopy(item.output!, `out-${item.id}`, e)}
-                        >
-                          {copiedId === `out-${item.id}` ? <Check size={11} /> : <Copy size={11} />}
-                          <span>
-                            {copiedId === `out-${item.id}`
-                              ? t('workspace.commandsCopied')
-                              : t('workspace.commandsCopyOutput')}
-                          </span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-}
-
-const DEFAULT_REVIEW_LIST_WIDTH = 240;
-const MIN_REVIEW_LIST_WIDTH = 200;
-const MAX_REVIEW_LIST_WIDTH = 450;
-const REVIEW_LIST_WIDTH_STORAGE_KEY = 'pi-desktop.review-tree-width';
-
-function ReviewWorkspace() {
-  const { t } = useTranslation();
-  const paneApi = usePaneHostApi();
-  const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
-  const cwd = usePaneChatStore((s) => s.cwd);
-  const reviewFileRequest = usePaneChatStore((s) => s.reviewFileRequest);
-  const [summary, setSummary] = useState<ReviewSummaryResult | null>(null);
-  const [selected, setSelected] = useState<SelectedReviewItem | null>(null);
-  const [diff, setDiff] = useState<ParsedFileDiff | null>(null);
-  const [toolDiff, setToolDiff] = useState<string | null>(null);
-  const [mode, setMode] = useState<'split' | 'unified'>('split');
-  const [showFiles, setShowFiles] = useState(true);
-  const [sessionOpen, setSessionOpen] = useState(true);
-  const [workspaceOpen, setWorkspaceOpen] = useState(true);
-  const [pendingRevert, setPendingRevert] = useState<PendingRevert | null>(null);
-  const [revertError, setRevertError] = useState<string | null>(null);
-  const [reviewListWidth, setReviewListWidth] = useState<number>(() => {
-    const saved = Number(window.localStorage.getItem(REVIEW_LIST_WIDTH_STORAGE_KEY));
-    return Number.isFinite(saved) && saved >= MIN_REVIEW_LIST_WIDTH && saved <= MAX_REVIEW_LIST_WIDTH
-      ? saved
-      : DEFAULT_REVIEW_LIST_WIDTH;
-  });
-  const [reviewListResizing, setReviewListResizing] = useState(false);
-
-  useEffect(() => {
-    window.localStorage.setItem(REVIEW_LIST_WIDTH_STORAGE_KEY, String(Math.round(reviewListWidth)));
-  }, [reviewListWidth]);
-
-  const onReviewListResizeStart = (e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const resizer = e.currentTarget;
-    resizer.setPointerCapture(e.pointerId);
-    const startX = e.clientX;
-    const startWidth = reviewListWidth;
-    let isDragging = false;
-
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      if (!isDragging && Math.abs(deltaX) >= 2) {
-        isDragging = true;
-        setReviewListResizing(true);
-      }
-      if (isDragging) {
-        const clamped = Math.max(MIN_REVIEW_LIST_WIDTH, Math.min(MAX_REVIEW_LIST_WIDTH, startWidth + deltaX));
-        setReviewListWidth(clamped);
-      }
-    };
-
-    const onPointerUp = (upEvent: PointerEvent) => {
-      if (resizer.hasPointerCapture(upEvent.pointerId)) {
-        resizer.releasePointerCapture(upEvent.pointerId);
-      }
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      setReviewListResizing(false);
-    };
-
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp, { once: true });
-  };
-
-  const sessionFiles = useMemo(() => sessionChangeFiles(toolExecutions, cwd), [toolExecutions, cwd]);
-  const toolFiles = useMemo(() => collectFallbackFiles(toolExecutions), [toolExecutions]);
-  const workspaceFiles = useMemo(() => mergeReviewFiles(
-    cwd,
-    Boolean(summary?.available),
-    summary?.available ? summary.files : [],
-    toolFiles,
-  ), [cwd, summary, toolFiles]);
-
-  const toolFileFor = useCallback((filePath: string) => {
-    const root = cwd?.replace(/\\/g, '/').replace(/\/$/, '');
-    return toolFiles.find((file) => {
-      const normalized = file.path.replace(/\\/g, '/');
-      const displayPath = root && normalized.startsWith(`${root}/`)
-        ? normalized.slice(root.length + 1)
-        : normalized;
-      return displayPath === filePath;
-    });
-  }, [cwd, toolFiles]);
-
-  const isBaselineFile = useCallback(
-    (filePath: string) => Boolean(summary?.available && summary.files.some((file) => file.path === filePath)),
-    [summary],
-  );
-
-  const refreshSummary = useCallback(async () => {
-    const next = await paneApi.review.getSummary().catch(() => null);
-    setSummary(next);
-    return next;
-  }, [paneApi]);
-
-  const loadDiff = useCallback(async (item: SelectedReviewItem) => {
-    if (item.group === 'session') {
-      const sessionFile = sessionFiles.find((f) => f.path === item.path);
-      if (sessionFile?.diff) {
-        setDiff(null);
-        setToolDiff(sessionFile.diff);
-        return;
-      }
-      if (summary?.available && summary.files.some((file) => file.path === item.path)) {
-        const result = await paneApi.review.getFileDiff(item.path).catch(() => null);
-        if (result?.available && result.diff) {
-          setDiff(parseUnifiedDiff(result.diff));
-          setToolDiff(null);
-          return;
-        }
-      }
-      setDiff(null);
-      setToolDiff(sessionFile?.diff ?? null);
-      return;
-    }
-    if (summary?.available && summary.files.some((file) => file.path === item.path)) {
-      const result = await paneApi.review.getFileDiff(item.path).catch(() => null);
-      setDiff(result?.available && result.diff ? parseUnifiedDiff(result.diff) : null);
-      setToolDiff(null);
-    } else {
-      const fallback = toolFileFor(item.path);
-      setDiff(null);
-      setToolDiff(fallback?.diff ?? null);
-    }
-  }, [sessionFiles, summary, paneApi, toolFileFor]);
-
-  useEffect(() => { void refreshSummary(); }, [refreshSummary]);
-
-  useEffect(() => {
-    if (sessionFiles.length === 0 && workspaceFiles.length === 0) {
-      setSelected(null);
-      return;
-    }
-    setSelected((current) => {
-      if (current) {
-        if (current.group === 'session' && sessionFiles.some((f) => f.path === current.path)) {
-          return current;
-        }
-        if (current.group === 'workspace' && workspaceFiles.some((f) => f.path === current.path)) {
-          return current;
-        }
-      }
-      if (sessionFiles.length > 0) {
-        return { group: 'session', path: sessionFiles[0].path };
-      }
-      if (workspaceFiles.length > 0) {
-        return { group: 'workspace', path: workspaceFiles[0].path };
-      }
-      return null;
-    });
-  }, [sessionFiles, workspaceFiles]);
-
-  useEffect(() => {
-    if (!reviewFileRequest?.path) return;
-    const target = reviewFileRequest.path;
-    const sessionMatch = sessionFiles.find((f) => f.path === target);
-    if (sessionMatch) {
-      setSelected({ group: 'session', path: target });
-      setSessionOpen(true);
-      return;
-    }
-    const workspaceMatch = workspaceFiles.find((f) => f.path === target);
-    if (workspaceMatch) {
-      setSelected({ group: 'workspace', path: target });
-      setWorkspaceOpen(true);
-      return;
-    }
-    if (sessionFiles.length > 0) {
-      setSelected({ group: 'session', path: target });
-      setSessionOpen(true);
-    } else {
-      setSelected({ group: 'workspace', path: target });
-      setWorkspaceOpen(true);
-    }
-  }, [reviewFileRequest, sessionFiles, workspaceFiles]);
-
-  useEffect(() => {
-    if (selected) {
-      void loadDiff(selected);
-    } else {
-      setDiff(null);
-      setToolDiff(null);
-    }
-  }, [selected, loadDiff]);
-
-  const confirmRevert = async () => {
-    if (!pendingRevert) return;
-    const target = pendingRevert;
-    setPendingRevert(null);
-    const result = target.kind === 'file'
-      ? await paneApi.review.revertFile(target.path)
-      : await paneApi.review.revertHunk(target.path, target.patch);
-    if (!result.success) {
-      setRevertError(result.error ?? 'unknown');
-      return;
-    }
-    setRevertError(null);
-    await refreshSummary();
-    if (selected) await loadDiff(selected);
-  };
-
-  const selectedIsBaseline = selected?.group === 'workspace' && isBaselineFile(selected.path);
-  const selectedWorkspaceFile = selected?.group === 'workspace'
-    ? workspaceFiles.find((file) => file.path === selected.path)
-    : undefined;
-  const canRevertSelected = Boolean(selectedIsBaseline && selectedWorkspaceFile?.status !== 'conflicted');
-  const selectedSessionFile = selected?.group === 'session'
-    ? sessionFiles.find((file) => file.path === selected.path)
-    : undefined;
-
-  return (
-    <div className="review-workspace">
-      <div className="review-toolbar">
-        <button className="icon-button" data-testid="review-refresh" title={t('review.refresh')} onClick={() => { void refreshSummary(); if (selected) void loadDiff(selected); }}><RefreshCw size={15} /></button>
-        <span className="spacer" />
-        <button className="icon-button" data-testid="review-toggle-mode" title={mode === 'split' ? t('review.unified') : t('review.split')} onClick={() => setMode((current) => current === 'split' ? 'unified' : 'split')}>{mode === 'split' ? <List size={15} /> : <Columns2 size={15} />}</button>
-        <button className={`icon-button${showFiles ? ' active' : ''}`} data-testid="review-toggle-files" title={showFiles ? t('review.hideFiles') : t('review.showFiles')} onClick={() => setShowFiles((current) => !current)}><Files size={15} /></button>
-      </div>
-      {revertError && <div className="review-error" data-testid="review-error">{t('review.revertFailed', { error: revertError })}</div>}
-      <div
-        className={`review-body${reviewListResizing ? ' list-resizing' : ''}`}
-        style={{ '--review-tree-width': `${reviewListWidth}px` } as CSSProperties}
-      >
-        {showFiles && (
-          <>
-            <div className="review-file-list" data-testid="review-file-list">
-              {sessionFiles.length === 0 && workspaceFiles.length === 0 && (
-                <div className="review-empty">{t('review.empty')}</div>
-              )}
-              {sessionFiles.length > 0 && (
-                <div className="review-group" data-testid="review-group-session">
-                  <button
-                    className="review-group-header"
-                    data-testid="review-group-session-toggle"
-                    onClick={() => setSessionOpen((v) => !v)}
-                  >
-                    {sessionOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                    <span className="review-group-title">{t('review.sessionChanges')}</span>
-                    <span className="review-group-count">{sessionFiles.length}</span>
-                  </button>
-                  {sessionOpen && sessionFiles.map((file) => (
-                    <div
-                      className={`review-file${selected?.group === 'session' && selected.path === file.path ? ' selected' : ''}`}
-                      data-testid="review-file"
-                      key={`session:${file.path}`}
-                    >
-                      <button
-                        className="review-file-main"
-                        onClick={() => setSelected({ group: 'session', path: file.path })}
-                      >
-                        <FileIcon name={file.path} size={14} />
-                        <span className="review-file-name" title={file.path}>{file.path}</span>
-                        <span className="review-file-status" data-testid="review-file-scope">{t('review.sessionScope')}</span>
-                        <span className="review-file-stats">
-                          <span className="review-stat-add">+{file.added}</span>
-                          <span className="review-stat-del">-{file.deleted}</span>
-                        </span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {workspaceFiles.length > 0 && (
-                <div className="review-group" data-testid="review-group-workspace">
-                  <button
-                    className="review-group-header"
-                    data-testid="review-group-workspace-toggle"
-                    onClick={() => setWorkspaceOpen((v) => !v)}
-                  >
-                    {workspaceOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                    <span className="review-group-title">{t('review.workspaceChanges')}</span>
-                    <span className="review-group-count">{workspaceFiles.length}</span>
-                  </button>
-                  {workspaceOpen && workspaceFiles.map((file) => {
-                    const baselineFile = isBaselineFile(file.path);
-                    return (
-                      <div
-                        className={`review-file${selected?.group === 'workspace' && selected.path === file.path ? ' selected' : ''}`}
-                        data-testid="review-file"
-                        key={`workspace:${file.path}`}
-                      >
-                        <button
-                          className="review-file-main"
-                          onClick={() => setSelected({ group: 'workspace', path: file.path })}
-                        >
-                          <FileIcon name={file.path} size={14} />
-                          <span className="review-file-name" title={file.path}>{file.path}</span>
-                          {!baselineFile && <span className="review-file-status" data-testid="review-file-status">{t('review.readOnly')}</span>}
-                          {file.status === 'conflicted' && <span className="review-file-status status-conflicted" data-testid="review-file-status">{t('review.status.conflicted')}</span>}
-                          <span className="review-file-stats">
-                            <span className="review-stat-add">+{file.added}</span>
-                            <span className="review-stat-del">-{file.deleted}</span>
-                          </span>
-                        </button>
-                        {baselineFile && file.status !== 'conflicted' && (
-                          <button
-                            className="review-revert-btn"
-                            data-testid="revert-file"
-                            onClick={() => setPendingRevert({ kind: 'file', path: file.path })}
-                          >
-                            {t('review.revertFile')}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <div
-              className="review-tree-resizer"
-              data-testid="review-tree-resizer"
-              role="separator"
-              aria-label={t('review.resizeList')}
-              aria-orientation="vertical"
-              tabIndex={0}
-              onPointerDown={onReviewListResizeStart}
-              onDoubleClick={() => setReviewListWidth(DEFAULT_REVIEW_LIST_WIDTH)}
-              onKeyDown={(e) => {
-                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-                e.preventDefault();
-                e.stopPropagation();
-                const delta = e.key === 'ArrowLeft' ? -16 : 16;
-                setReviewListWidth((w) => Math.max(MIN_REVIEW_LIST_WIDTH, Math.min(MAX_REVIEW_LIST_WIDTH, w + delta)));
-              }}
-            />
-          </>
-        )}
-        <div className="review-diff-pane">
-          {selected && diff && (
-            <>
-              <div className="review-file-heading">
-                <FileCode2 size={15} />
-                <span>{selected.path}</span>
-                <span className="review-file-status">{t('review.workspaceScope')}</span>
-              </div>
-              {mode === 'split'
-                ? <SplitDiff parsed={diff} onRevert={canRevertSelected ? (index) => setPendingRevert({ kind: 'hunk', path: selected.path, patch: buildHunkPatch(diff, index) }) : undefined} />
-                : <UnifiedDiff parsed={diff} onRevert={canRevertSelected ? (index) => setPendingRevert({ kind: 'hunk', path: selected.path, patch: buildHunkPatch(diff, index) }) : undefined} />}
-            </>
-          )}
-          {selected && toolDiff && (
-            <>
-              <div className="review-file-heading">
-                <FileCode2 size={15} />
-                <span>{selected.path}</span>
-                <span className="review-file-status">{t('review.sessionScope')}</span>
-                {selectedSessionFile && selectedSessionFile.editCount > 1 && (
-                  <span className="review-file-status">
-                    {t('review.editCount', { count: selectedSessionFile.editCount })}
-                  </span>
-                )}
-              </div>
-              <pre className="diff-view review-tool-diff" data-testid="review-tool-diff">
-                {parseDiffLines(toolDiff).map((line, index) => (
-                  <div key={index} className={`diff-line diff-${line.kind}`}>
-                    <span className="diff-linenum">{line.lineNum}</span>
-                    <span className="diff-sign">{line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' '}</span>
-                    <span className="diff-content">{line.content}</span>
-                  </div>
-                ))}
-              </pre>
-            </>
-          )}
-          {selected && !diff && !toolDiff && <div className="review-empty">{t('review.noDiff', { path: selected.path })}</div>}
-          {!selected && <div className="review-empty">{t('review.empty')}</div>}
-        </div>
-      </div>
-      {pendingRevert && (
-        <div className="review-confirm-overlay" data-testid="review-confirm">
-          <div className="review-confirm">
-            <div className="review-confirm-text">{pendingRevert.kind === 'file' ? t('review.confirmFile', { path: pendingRevert.path }) : t('review.confirmHunk', { path: pendingRevert.path })}</div>
-            <div className="review-confirm-actions"><button className="chat-toolbar-btn" onClick={() => setPendingRevert(null)}>{t('review.cancel')}</button><button className="chat-toolbar-btn review-confirm-danger" data-testid="review-confirm-ok" onClick={() => void confirmRevert()}>{t('review.confirm')}</button></div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+import { usePaneChatStore } from './chat-store-context';
+import {
+  availablePanelSpace,
+  getContainer,
+  type WorkbenchTab,
+} from './workbench/types';
+import { FileExplorer } from './workbench/FilesTab';
+import { FilePreview } from './workbench/FilePreviewTab';
+import { CommandList } from './workbench/CommandsTab';
+import { ReviewWorkspace } from './workbench/ReviewTab';
 
 const DEFAULT_WORKSPACE_TREE_WIDTH = 240;
 const MIN_WORKSPACE_TREE_WIDTH = 200;
@@ -1222,12 +188,13 @@ export function ReviewPanel() {
 
   const effectiveContainerWidth = containerWidth || availablePanelSpace(panelRef.current);
   const effectiveMode = resolveEffectiveMode(modePreference, effectiveContainerWidth);
-  const expectedPanelWidth = panelWidth ?? pinnedWidth ?? resolveDefaultPanelWidth(effectiveContainerWidth, tab === 'review' ? 'review' : 'files', effectiveMode);
+  const expectedPanelWidth =
+    panelWidth ??
+    pinnedWidth ??
+    resolveDefaultPanelWidth(effectiveContainerWidth, tab === 'review' ? 'review' : 'files', effectiveMode);
 
   const isNarrowPanel = panelClientWidth > 0 && panelClientWidth < 480;
-  const effectiveTreeOpen = isNarrowPanel
-    ? (userToggledInNarrow ?? false)
-    : fileTreeOpen;
+  const effectiveTreeOpen = isNarrowPanel ? (userToggledInNarrow ?? false) : fileTreeOpen;
 
   useEffect(() => {
     if (!isNarrowPanel && userToggledInNarrow !== null) {
@@ -1320,7 +287,12 @@ export function ReviewPanel() {
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
-      if (document.querySelector('.image-lightbox, .extui-overlay, .extui-dock, .plan-install-overlay, .session-search-overlay, .tree-overlay, .skill-view-overlay')) return;
+      if (
+        document.querySelector(
+          '.image-lightbox, .extui-overlay, .extui-dock, .plan-install-overlay, .session-search-overlay, .tree-overlay, .skill-view-overlay',
+        )
+      )
+        return;
       if (effectiveTreeOpen) {
         closeFileTree();
         event.preventDefault();
@@ -1339,13 +311,13 @@ export function ReviewPanel() {
 
   const chooseFile = (path: string) => {
     setSelectedFile(path);
-    setOpenFiles((current) => current.includes(path) ? current : [...current, path]);
+    setOpenFiles((current) => (current.includes(path) ? current : [...current, path]));
     setTab(`file:${path}`);
     setFileTreeOpen(false);
     setUserToggledInNarrow(false);
   };
 
-  const closeFile = (path: string, e?: React.MouseEvent) => {
+  const closeFile = (path: string, e?: MouseEvent) => {
     e?.stopPropagation();
     const index = openFiles.indexOf(path);
     const remaining = openFiles.filter((item) => item !== path);
@@ -1356,11 +328,13 @@ export function ReviewPanel() {
       setTab(next ? `file:${next}` : 'files');
     }
   };
+
   const closeAllFiles = () => {
     setOpenFiles([]);
     setSelectedFile(null);
     if (tab.startsWith('file:')) setTab('files');
   };
+
   const cycleMode = useCallback(() => {
     setModePreference((current) => {
       const next = getNextModePreference(current);
@@ -1372,7 +346,9 @@ export function ReviewPanel() {
   const fileTab = tab.startsWith('file:') ? tab.slice(5) : null;
   const activeFile = fileTab ?? selectedFile;
   const titleFor = (path: string) => path.split('/').pop() ?? path;
+
   if (!open) return null;
+
   return (
     <>
       {effectiveMode === 'overlay' && (
@@ -1390,10 +366,12 @@ export function ReviewPanel() {
         data-testid="review-panel"
         data-mode={effectiveMode}
         data-mode-preference={modePreference}
-        style={{
-          '--workspace-panel-width': `${Math.round(expectedPanelWidth)}px`,
-          '--workspace-tree-width': `${workspaceTreeWidth}px`,
-        } as CSSProperties}
+        style={
+          {
+            '--workspace-panel-width': `${Math.round(expectedPanelWidth)}px`,
+            '--workspace-tree-width': `${workspaceTreeWidth}px`,
+          } as CSSProperties
+        }
       >
         <div
           className="workspace-resize-handle"
@@ -1427,25 +405,103 @@ export function ReviewPanel() {
         />
         <div className="workspace-tabs">
           <div className="workspace-tabs-scroll" role="tablist">
-            <button className={`workspace-tab${tab === 'files' ? ' active' : ''}`} role="tab" aria-selected={tab === 'files'} data-testid="workspace-files-tab" onClick={() => { setWorkspaceOpen(true); setTab('files'); setFileTreeOpen(true); setUserToggledInNarrow(null); }}><Files size={14} />{t('workspace.files')}</button>
+            <button
+              className={`workspace-tab${tab === 'files' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={tab === 'files'}
+              data-testid="workspace-files-tab"
+              onClick={() => {
+                setWorkspaceOpen(true);
+                setTab('files');
+                setFileTreeOpen(true);
+                setUserToggledInNarrow(null);
+              }}
+            >
+              <Files size={14} />
+              {t('workspace.files')}
+            </button>
             {openFiles.map((path) => (
-              <div className={`workspace-file-tab${tab === `file:${path}` ? ' active' : ''}`} data-testid="workspace-file-tab" key={path} title={path}>
+              <div
+                className={`workspace-file-tab${tab === `file:${path}` ? ' active' : ''}`}
+                data-testid="workspace-file-tab"
+                key={path}
+                title={path}
+              >
                 <FileIcon name={path} size={14} />
-                <button className="workspace-file-tab-main" role="tab" aria-selected={tab === `file:${path}`} onClick={() => { setWorkspaceOpen(true); setSelectedFile(path); setTab(`file:${path}`); }}>{titleFor(path)}</button>
-                <button className="workspace-file-tab-close" aria-label={t('workspace.closeFile', { name: titleFor(path) })} onClick={() => closeFile(path)}><X size={12} /></button>
+                <button
+                  className="workspace-file-tab-main"
+                  role="tab"
+                  aria-selected={tab === `file:${path}`}
+                  onClick={() => {
+                    setWorkspaceOpen(true);
+                    setSelectedFile(path);
+                    setTab(`file:${path}`);
+                  }}
+                >
+                  {titleFor(path)}
+                </button>
+                <button
+                  className="workspace-file-tab-close"
+                  aria-label={t('workspace.closeFile', { name: titleFor(path) })}
+                  onClick={(e) => closeFile(path, e)}
+                >
+                  <X size={12} />
+                </button>
               </div>
             ))}
-            <button className={`workspace-tab${tab === 'review' ? ' active' : ''}`} role="tab" aria-selected={tab === 'review'} data-testid="workspace-review-tab" onClick={() => { setReviewOpen(true); setTab('review'); }}><FileCode2 size={14} />{t('review.title')}</button>
-            <button className={`workspace-tab${tab === 'commands' ? ' active' : ''}`} role="tab" aria-selected={tab === 'commands'} data-testid="workspace-commands-tab" onClick={() => { setWorkspaceOpen(true); setTab('commands'); }}><Terminal size={14} />{t('workspace.commands')}</button>
+            <button
+              className={`workspace-tab${tab === 'review' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={tab === 'review'}
+              data-testid="workspace-review-tab"
+              onClick={() => {
+                setReviewOpen(true);
+                setTab('review');
+              }}
+            >
+              <FileCode2 size={14} />
+              {t('review.title')}
+            </button>
+            <button
+              className={`workspace-tab${tab === 'commands' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={tab === 'commands'}
+              data-testid="workspace-commands-tab"
+              onClick={() => {
+                setWorkspaceOpen(true);
+                setTab('commands');
+              }}
+            >
+              <Terminal size={14} />
+              {t('workspace.commands')}
+            </button>
           </div>
           <div className="workspace-tab-actions">
             {tab !== 'review' && tab !== 'commands' && (
-              <button className={`workspace-tree-trigger${effectiveTreeOpen ? ' active' : ''}`} data-testid="workspace-tree-toggle" aria-expanded={effectiveTreeOpen} title={effectiveTreeOpen ? t('workspace.hideFiles') : t('workspace.showFiles')} onClick={toggleFileTree}>
+              <button
+                className={`workspace-tree-trigger${effectiveTreeOpen ? ' active' : ''}`}
+                data-testid="workspace-tree-toggle"
+                aria-expanded={effectiveTreeOpen}
+                title={effectiveTreeOpen ? t('workspace.hideFiles') : t('workspace.showFiles')}
+                onClick={toggleFileTree}
+              >
                 <Files size={15} />
-                {rootItemCount > 0 && <span aria-label={t('workspace.itemCount', { count: rootItemCount })}>{rootItemCount}</span>}
+                {rootItemCount > 0 && (
+                  <span aria-label={t('workspace.itemCount', { count: rootItemCount })}>{rootItemCount}</span>
+                )}
               </button>
             )}
-            {openFiles.length > 0 && <button className="icon-button" data-testid="workspace-close-all" title={t('workspace.closeAll')} aria-label={t('workspace.closeAll')} onClick={closeAllFiles}><SquareX size={16} /></button>}
+            {openFiles.length > 0 && (
+              <button
+                className="icon-button"
+                data-testid="workspace-close-all"
+                title={t('workspace.closeAll')}
+                aria-label={t('workspace.closeAll')}
+                onClick={closeAllFiles}
+              >
+                <SquareX size={16} />
+              </button>
+            )}
             <button
               className="icon-button"
               data-testid="workspace-mode-toggle"
@@ -1453,15 +509,39 @@ export function ReviewPanel() {
               aria-label={t(`workspace.mode.${modePreference}`)}
               onClick={cycleMode}
             >
-              {modePreference === 'auto' ? <Sparkles size={15} /> : modePreference === 'docked' ? <Columns2 size={15} /> : <Layers size={15} />}
+              {modePreference === 'auto' ? (
+                <Sparkles size={15} />
+              ) : modePreference === 'docked' ? (
+                <Columns2 size={15} />
+              ) : (
+                <Layers size={15} />
+              )}
             </button>
-            <button className="icon-button" data-testid="workspace-close" title={t('workspace.close')} aria-label={t('workspace.close')} onClick={close}><X size={16} /></button>
+            <button
+              className="icon-button"
+              data-testid="workspace-close"
+              title={t('workspace.close')}
+              aria-label={t('workspace.close')}
+              onClick={close}
+            >
+              <X size={16} />
+            </button>
           </div>
         </div>
-        {tab === 'review' ? <ReviewWorkspace /> : tab === 'commands' ? <CommandList /> : (
-          <div className={`workspace-browser${effectiveTreeOpen ? ' tree-open' : ''}${workspaceTreeResizing ? ' tree-resizing' : ''}`}>
+        {tab === 'review' ? (
+          <ReviewWorkspace />
+        ) : tab === 'commands' ? (
+          <CommandList />
+        ) : (
+          <div
+            className={`workspace-browser${effectiveTreeOpen ? ' tree-open' : ''}${workspaceTreeResizing ? ' tree-resizing' : ''}`}
+          >
             {effectiveTreeOpen && (
-              <button className="workspace-tree-backdrop" aria-label={t('workspace.hideFiles')} onClick={closeFileTree} />
+              <button
+                className="workspace-tree-backdrop"
+                aria-label={t('workspace.hideFiles')}
+                onClick={closeFileTree}
+              />
             )}
             <FileExplorer selected={activeFile} onSelect={chooseFile} onRootCount={setRootItemCount} />
             {effectiveTreeOpen && (
@@ -1485,7 +565,11 @@ export function ReviewPanel() {
               />
             )}
             <main className="workspace-preview" data-testid="workspace-preview">
-              {activeFile ? <FilePreview path={activeFile} onClose={close} /> : <div className="workspace-empty">{t('workspace.selectFile')}</div>}
+              {activeFile ? (
+                <FilePreview path={activeFile} onClose={close} />
+              ) : (
+                <div className="workspace-empty">{t('workspace.selectFile')}</div>
+              )}
             </main>
           </div>
         )}
