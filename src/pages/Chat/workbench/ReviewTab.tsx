@@ -225,6 +225,15 @@ export function ReviewWorkspace() {
   }, [refreshSummary]);
 
   useEffect(() => {
+    if (summary && !summary.available && summary.reason === 'capturing') {
+      const timer = window.setTimeout(() => {
+        void refreshSummary();
+      }, 1000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [summary, refreshSummary]);
+
+  useEffect(() => {
     if (sessionFiles.length === 0 && workspaceFiles.length === 0) {
       setSelected(null);
       return;
@@ -349,8 +358,26 @@ export function ReviewWorkspace() {
         {showFiles && (
           <>
             <div className="review-file-list" data-testid="review-file-list">
+              {summary && !summary.available && summary.reason === 'directory-too-large' && (
+                <div className="review-status-notice" data-testid="review-directory-too-large">
+                  {t('review.directoryTooLarge')}
+                </div>
+              )}
+              {summary && !summary.available && summary.reason === 'capturing' && (
+                <div className="review-status-notice" data-testid="review-baseline-capturing">
+                  {t('review.baselineCapturing')}
+                </div>
+              )}
               {sessionFiles.length === 0 && workspaceFiles.length === 0 && (
-                <div className="review-empty">{t('review.empty')}</div>
+                <div className="review-empty">
+                  {summary && !summary.available && summary.reason === 'capturing' ? (
+                    t('review.baselineCapturing')
+                  ) : summary && !summary.available && summary.reason === 'directory-too-large' ? (
+                    t('review.directoryTooLarge')
+                  ) : (
+                    t('review.empty')
+                  )}
+                </div>
               )}
               {sessionFiles.length > 0 && (
                 <div className="review-group" data-testid="review-group-session">
@@ -532,7 +559,17 @@ export function ReviewWorkspace() {
           {selected && !diff && !toolDiff && (
             <div className="review-empty">{t('review.noDiff', { path: selected.path })}</div>
           )}
-          {!selected && <div className="review-empty">{t('review.empty')}</div>}
+          {!selected && (
+            <div className="review-empty">
+              {summary && !summary.available && summary.reason === 'capturing' ? (
+                t('review.baselineCapturing')
+              ) : summary && !summary.available && summary.reason === 'directory-too-large' ? (
+                t('review.directoryTooLarge')
+              ) : (
+                t('review.empty')
+              )}
+            </div>
+          )}
         </div>
       </div>
       {pendingRevert && (

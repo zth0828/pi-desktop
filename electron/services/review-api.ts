@@ -2,10 +2,9 @@
 //
 // 当前磁盘始终由隔离的临时 index 快照，因此 staged、unstaged、untracked 都能形成
 // 同一份 tree diff，又不会触碰真实 index/工作区。真实 index 只用于补充 unmerged 状态；
-// 临时 index 会把冲突文件展平成普通工作区内容，不能单独承担冲突识别。
 import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -98,6 +97,65 @@ async function headRef(cwd: string, gitEnv?: NodeJS.ProcessEnv): Promise<string 
   return r.code === 0 ? r.stdout.trim() : null;
 }
 
+const MAX_REVIEW_FILES = 20_000;
+const MAX_REVIEW_BYTES = 2 * 1024 * 1024 * 1024;
+
+async function scanDirectoryStats(
+  dir: string,
+  maxFiles = MAX_REVIEW_FILES,
+  maxBytes = MAX_REVIEW_BYTES,
+): Promise<{ oversized: boolean; fileCount: number; byteCount: number }> {
+  let fileCount = 0;
+  let byteCount = 0;
+  const queue = [dir];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = await readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.name === '.git') continue;
+      const fullPath = join(current, entry.name);
+      if (entry.isDirectory() && !entry.isSymbolicLink()) {
+        queue.push(fullPath);
+      } else if (entry.isFile() && !entry.isSymbolicLink()) {
+        fileCount += 1;
+        try {
+          const s = await stat(fullPath);
+          byteCount += s.size;
+        } catch {
+          // ignore
+        }
+        if (fileCount > maxFiles || byteCount > maxBytes) {
+          return { oversized: true, fileCount, byteCount };
+        }
+      }
+    }
+  }
+  return { oversized: false, fileCount, byteCount };
+}
+
+async function checkGitRepoOversized(cwd: string, maxFiles = MAX_REVIEW_FILES): Promise<boolean> {
+  try {
+    const r = await runGit(cwd, ['status', '--porcelain=v1', '-uall', '--no-renames']);
+    if (r.code === 0) {
+      let count = 0;
+      for (const line of r.stdout.split('\n')) {
+        if (line.trim()) {
+          count += 1;
+          if (count > maxFiles) return true;
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 /**
  * 用临时 index 把当前磁盘状态（含 untracked、排除 ignored）写成一个 tree 对象。
  * 不碰真实 index/工作区；返回 tree oid。
@@ -107,6 +165,13 @@ async function snapshotTree(
   gitEnv?: NodeJS.ProcessEnv,
   seedRef?: string | null,
 ): Promise<string> {
+  if (gitEnv) {
+    const stats = await scanDirectoryStats(cwd);
+    if (stats.oversized) throw new Error('directory-too-large');
+  } else {
+    const isOver = await checkGitRepoOversized(cwd);
+    if (isOver) throw new Error('directory-too-large');
+  }
   const dir = mkdtempSync(join(tmpdir(), 'pi-desktop-review-'));
   const env = { ...GHOST_IDENTITY_ENV, ...gitEnv, GIT_INDEX_FILE: join(dir, 'index') };
   try {
@@ -133,7 +198,13 @@ type Baseline = {
   ownedDir?: string;
 };
 const baselines = new Map<string, Baseline>();
-/** capture 失败原因（git-error:…），供 getSummary 降级展示 */
+const capturingCwds = new Set<string>();
+
+export function isCapturingReviewBaseline(cwd: string): boolean {
+  return capturingCwds.has(cwd);
+}
+
+/** capture 失败原因（git-error:… 或 directory-too-large），供 getSummary 降级展示 */
 let baselineFailure: string | null = null;
 
 function disposeBaseline(): void {
@@ -148,7 +219,8 @@ function disposeBaseline(): void {
  * 非 Git 目录使用临时 bare object store，项目目录本身不会出现 .git。
  */
 export async function captureReviewBaseline(cwd: string): Promise<void> {
-  if (baselines.has(cwd)) return;
+  if (baselines.has(cwd) || capturingCwds.has(cwd)) return;
+  capturingCwds.add(cwd);
   baselineFailure = null;
   let ownedDir: string | undefined;
   try {
@@ -160,7 +232,17 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
         baselines.set(cwd, { cwd, ref: parent, kind: 'git-head' });
         return;
       }
+      const isOver = await checkGitRepoOversized(cwd);
+      if (isOver) {
+        baselineFailure = 'directory-too-large';
+        return;
+      }
     } else {
+      const stats = await scanDirectoryStats(cwd);
+      if (stats.oversized) {
+        baselineFailure = 'directory-too-large';
+        return;
+      }
       ownedDir = mkdtempSync(join(tmpdir(), 'pi-desktop-review-repo-'));
       const gitDir = join(ownedDir, 'objects.git');
       const init = await runGit(cwd, ['init', '--bare', gitDir]);
@@ -182,13 +264,21 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
     baselines.set(cwd, { cwd, ref: commit.stdout.trim(), kind: gitEnv ? 'session-snapshot' : 'git-head', gitEnv, ownedDir });
   } catch (err) {
     if (ownedDir) await removeDirBestEffort(ownedDir);
-    baselineFailure = `git-error:${err instanceof Error ? err.message : String(err)}`;
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('directory-too-large')) {
+      baselineFailure = 'directory-too-large';
+    } else {
+      baselineFailure = `git-error:${msg}`;
+    }
+  } finally {
+    capturingCwds.delete(cwd);
   }
 }
 
 /** runtime 销毁（cwd 切换）时清掉旧 baseline，避免串项目。 */
 export function clearReviewBaseline(): void {
   disposeBaseline();
+  capturingCwds.clear();
   baselineFailure = null;
 }
 
@@ -252,6 +342,9 @@ export const reviewApi = {
   getSummary: async (_payload?: unknown, ctx?: HostActionContext): Promise<ReviewSummaryResult> => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return unavailable('not-started');
+    if (capturingCwds.has(active.cwd)) {
+      return unavailable('capturing');
+    }
     const base = currentBaseline(active);
     if (!base) return unavailable(baselineFailure ?? 'not-a-git-repo');
     try {
@@ -270,14 +363,24 @@ export const reviewApi = {
       files.sort((a, b) => a.path.localeCompare(b.path));
       return { available: true, files };
     } catch (err) {
-      return unavailable(`git-error:${err instanceof Error ? err.message : String(err)}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('directory-too-large')) {
+        return unavailable('directory-too-large');
+      }
+      return unavailable(`git-error:${msg}`);
     }
   },
 
   getFileDiff: async (payload: ReviewFileDiffPayload, ctx?: HostActionContext): Promise<ReviewFileDiffResult> => {
     const active = resolveRuntimeForContext(ctx);
-    const base = active ? currentBaseline(active) : null;
-    if (!active || !base) {
+    if (!active) {
+      return { available: false, reason: 'not-started', path: payload.path, diff: '' };
+    }
+    if (capturingCwds.has(active.cwd)) {
+      return { available: false, reason: 'capturing', path: payload.path, diff: '' };
+    }
+    const base = currentBaseline(active);
+    if (!base) {
       return { available: false, reason: baselineFailure ?? 'not-started', path: payload.path, diff: '' };
     }
     try {
@@ -286,9 +389,13 @@ export const reviewApi = {
       if (r.code !== 0) throw new Error(r.stderr.trim() || 'git diff failed');
       return { available: true, path: payload.path, diff: r.stdout };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('directory-too-large')) {
+        return { available: false, reason: 'directory-too-large', path: payload.path, diff: '' };
+      }
       return {
         available: false,
-        reason: `git-error:${err instanceof Error ? err.message : String(err)}`,
+        reason: `git-error:${msg}`,
         path: payload.path,
         diff: '',
       };
@@ -298,8 +405,12 @@ export const reviewApi = {
   /** 文件级回滚：baseline→当前 的整文件 diff 反向 apply（新增文件被删、删除文件被还原）。 */
   revertFile: async (payload: ReviewRevertFilePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const active = resolveRuntimeForContext(ctx);
-    const base = active ? currentBaseline(active) : null;
-    if (!active || !base) return { success: false, error: baselineFailure ?? 'not-started' };
+    if (!active) return { success: false, error: 'not-started' };
+    if (capturingCwds.has(active.cwd)) {
+      return { success: false, error: 'baseline is capturing' };
+    }
+    const base = currentBaseline(active);
+    if (!base) return { success: false, error: baselineFailure ?? 'not-started' };
     try {
       if ((await conflictPaths(active.cwd, base)).has(payload.path)) {
         return { success: false, error: 'conflicted files cannot be reverted from Review' };
@@ -319,8 +430,12 @@ export const reviewApi = {
   /** hunk 级回滚：渲染层重建的单 hunk patch，直接 git apply -R（失败原文返回给 UI）。 */
   revertHunk: async (payload: ReviewRevertHunkPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const active = resolveRuntimeForContext(ctx);
-    const base = active ? currentBaseline(active) : null;
-    if (!active || !base) return { success: false, error: baselineFailure ?? 'not-started' };
+    if (!active) return { success: false, error: 'not-started' };
+    if (capturingCwds.has(active.cwd)) {
+      return { success: false, error: 'baseline is capturing' };
+    }
+    const base = currentBaseline(active);
+    if (!base) return { success: false, error: baselineFailure ?? 'not-started' };
     if (!payload.patch.trim()) return { success: false, error: 'empty patch' };
     try {
       if ((await conflictPaths(active.cwd, base)).has(payload.path)) {

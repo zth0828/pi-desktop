@@ -510,9 +510,25 @@ test('git 仓库：agent 新建文件（untracked）纳入清单，回滚后文�
 });
 
 test('非 Git 目录：新增/修改/删除进入评审并可回滚', async ({ launchElectronApp }) => {
+  await writeFile(path.join(plainWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
+  await writeFile(path.join(plainWorkspace, 'delete-me.txt'), 'remove me\n');
+  await rm(path.join(plainWorkspace, 'plain-new.txt'), { force: true });
+
   const app = await launchElectronApp(launchOptions(plainWorkspace));
   const page = await app.firstWindow();
   await waitSessionReady(page);
+
+  // 等待非 Git 目录在后台完成会话初始基线建立，确保基线捕获的是会话初始磁盘状态
+  await expect.poll(async () => {
+    return page.evaluate(async () => {
+      const res = await (window as any).pidesktop.hostInvoke({
+        id: 'poll-baseline-ready',
+        module: 'review',
+        action: 'getSummary',
+      });
+      return res?.data?.available === true;
+    });
+  }, { timeout: 15_000 }).toBe(true);
 
   await runTool(page, 'USE_TOOL_EDIT now');
   await writeFile(path.join(plainWorkspace, 'plain-new.txt'), 'new file\n');
@@ -713,4 +729,24 @@ test('文件区内部排版：目录树与预览并排无遮挡 + 空态可见 +
   await expect(tree).toBeVisible();
   await treeToggle.click();
   await expect(tree).toBeHidden();
+});
+
+test('启动性能：非 Git 临时目录启动会话不被基线捕获阻塞，聊天输入框迅速就绪', async ({ launchElectronApp }) => {
+  const plainDir = await mkdtemp(path.join(tmpdir(), 'pi-desktop-e2e-fast-plain-'));
+  await writeFile(path.join(plainDir, 'dummy.txt'), 'hello');
+  try {
+    const startTime = Date.now();
+    const app = await launchElectronApp(launchOptions(plainDir));
+    const page = await app.firstWindow();
+    await waitSessionReady(page);
+    const elapsed = Date.now() - startTime;
+    expect(elapsed).toBeLessThan(15_000);
+    const input = page.getByTestId('chat-input');
+    await expect(input).toBeVisible();
+    await expect(input).toBeEditable();
+
+    await app.close();
+  } finally {
+    await rm(plainDir, { recursive: true, force: true });
+  }
 });

@@ -306,15 +306,21 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
   useEffect(() => {
     let disposed = false;
     const refresh = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       void hostApi.git.getBranch(cwd)
         .then((result) => { if (!disposed) setGitBranch(result.branch ?? null); })
         .catch(() => { if (!disposed) setGitBranch(null); });
     };
     refresh();
-    const timer = window.setInterval(refresh, 5000);
+    const timer = window.setInterval(refresh, 30_000);
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) refresh();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [cwd]);
 

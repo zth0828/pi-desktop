@@ -1158,6 +1158,8 @@
     "resizeList": "Resize review list",
     "refresh": "Refresh",
     "empty": "No changes yet",
+    "baselineCapturing": "Establishing baseline…",
+    "directoryTooLarge": "Directory too large, Review disabled",
     "emptySession": "No changes in this session",
     "sessionChanges": "Session changes",
     "workspaceChanges": "Workspace changes",

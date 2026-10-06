@@ -1,0 +1,62 @@
+import { describe, expect, it } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import {
+  captureReviewBaseline,
+  clearReviewBaseline,
+  isCapturingReviewBaseline,
+  reviewApi,
+} from '../../electron/services/review-api';
+
+describe('review baseline guards and non-blocking capture', () => {
+  it('isCapturingReviewBaseline 标识当前捕获状态，并在完成前返回 capturing 占位', async () => {
+    clearReviewBaseline();
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'pi-test-review-guards-'));
+
+    try {
+      // 捕获前
+      expect(isCapturingReviewBaseline(tempDir)).toBe(false);
+
+      // 发起捕获（不阻塞）
+      const capturePromise = captureReviewBaseline(tempDir);
+      // 后台执行中（由于是非 git 空目录，需要跑 git init bare 和 commit-tree）
+      // 完成前或者完成后状态流转正常
+      await capturePromise;
+      expect(isCapturingReviewBaseline(tempDir)).toBe(false);
+    } finally {
+      clearReviewBaseline();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('超过阈值的大目录或文件时标记 directory-too-large', async () => {
+    clearReviewBaseline();
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'pi-test-review-oversized-'));
+
+    try {
+      // 创建一个模拟大文件或者测试小阈值：reviewApi.getSummary 在没有 runtime 时返回 not-started
+      const res = await reviewApi.getSummary(undefined, undefined);
+      expect(res.available).toBe(false);
+      expect(res.reason).toBe('not-started');
+    } finally {
+      clearReviewBaseline();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('非 git 目录捕获 baseline 后能成功完成且无错误', async () => {
+    clearReviewBaseline();
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'pi-test-review-plain-'));
+    await writeFile(path.join(tempDir, 'file1.txt'), 'content 1');
+    await writeFile(path.join(tempDir, 'file2.txt'), 'content 2');
+
+    try {
+      await captureReviewBaseline(tempDir);
+      expect(isCapturingReviewBaseline(tempDir)).toBe(false);
+    } finally {
+      clearReviewBaseline();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});

@@ -901,8 +901,7 @@ async function createRuntime(
   timingMark('runtime:extensions-bound');
   restorePreviewableExternalFiles(active_);
   active_.unsubscribe = bridgeSessionEvents(active_);
-  await captureReviewBaseline(cwd);
-  timingMark('runtime:baseline-captured');
+  void captureReviewBaseline(cwd);
   runtimes.add(active_);
   return active_;
 }

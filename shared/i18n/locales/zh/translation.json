@@ -1157,6 +1157,8 @@
     "resizeList": "调整审查列表宽度",
     "refresh": "刷新",
     "empty": "还没有改动",
+    "baselineCapturing": "正在建立基线…",
+    "directoryTooLarge": "目录过大，Review 已停用",
     "emptySession": "本会话暂无文件改动",
     "sessionChanges": "本会话改动",
     "workspaceChanges": "工作区改动",
