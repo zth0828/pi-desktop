@@ -25,6 +25,7 @@ import { MessageNavRail, truncateRailText, type RailAnchor } from './MessageNavR
 import { StatusBar } from './StatusBar';
 import { ReviewPanel } from './ReviewPanel';
 import { TreeDialog } from './TreeDialog';
+import { SessionCwdMissingDialog } from './SessionCwdMissingDialog';
 import { TurnChangesCard } from './TurnChangesCard';
 
 function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
@@ -1231,6 +1232,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
         <ExtensionWidgets placement="belowEditor" />
       </div>
       <TreeDialog />
+      <SessionCwdMissingDialog />
       <ReviewPanel />
     </div>
   );

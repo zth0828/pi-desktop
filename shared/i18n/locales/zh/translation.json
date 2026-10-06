@@ -492,6 +492,12 @@
       "chooseModel": "选择模型",
       "retrySwitch": "重试打开会话"
     },
+    "sessionCwdMissing": {
+      "title": "工作目录不存在",
+      "message": "该会话记录的工作目录已不存在：{{sessionCwd}}。是否在当前工作目录 {{fallbackCwd}} 中继续？",
+      "confirm": "继续",
+      "cancel": "取消"
+    },
     "modelMenu": {
       "model": "模型",
       "empty": "暂无可用模型",

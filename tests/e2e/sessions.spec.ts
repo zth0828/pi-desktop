@@ -938,3 +938,60 @@ test('Sessions 页：项目折叠与全部收起展开，以及直达底部功�
   await expect(rows).toHaveCount(2);
 });
 
+test('项目目录删除/移动后：打开旧会话弹出恢复对话框，确认后在当前工作区正常继续对话', async ({
+  launchElectronApp,
+}) => {
+  const dirA = await realpath(await mkdtemp(path.join(tmpdir(), 'pi-e2e-cwda-')));
+  const dirB = await realpath(await mkdtemp(path.join(tmpdir(), 'pi-e2e-cwdb-')));
+
+  try {
+    // 1. 在临时目录 A 建会话并聊天
+    const app1 = await launchElectronApp({
+      withPi: true,
+      agentDir,
+      seedSettings: { workspaceCwd: dirA },
+    });
+    const page1 = await app1.firstWindow();
+    await waitSessionReady(page1);
+    await sendAndWaitReply(page1, 'PING SESSION TO BE MOVED');
+    await app1.close();
+
+    // 2. 删除目录 A
+    await rm(dirA, { recursive: true, force: true });
+
+    // 3. 在目录 B 启动应用并尝试打开刚刚目录 A 的会话
+    const app2 = await launchElectronApp({
+      withPi: true,
+      agentDir,
+      seedSettings: { workspaceCwd: dirB },
+    });
+    const page2 = await app2.firstWindow();
+    await waitSessionReady(page2);
+
+    await page2.getByTestId('nav-sessions').click();
+    const row = sessionRows(page2).filter({ hasText: 'PING SESSION TO BE MOVED' });
+    await expect(row).toHaveCount(1, { timeout: 15_000 });
+    await row.locator('.session-row-main').click();
+
+    // 4. 断言弹出恢复对话框，包含旧路径
+    const dialog = page2.getByTestId('session-cwd-missing-dialog');
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await expect(page2.getByTestId('session-cwd-missing-message')).toContainText(dirA);
+
+    // 5. 点击继续恢复
+    await page2.getByTestId('session-cwd-missing-confirm').click();
+    await expect(dialog).toHaveCount(0);
+
+    // 6. 确认原会话历史出现且可正常继续对话
+    await expect(page2.getByTestId('message-user').last()).toContainText('PING SESSION TO BE MOVED', {
+      timeout: 15_000,
+    });
+    await sendAndWaitReply(page2, 'PING IN RECOVERED CWD');
+
+    await app2.close();
+  } finally {
+    await rm(dirB, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+

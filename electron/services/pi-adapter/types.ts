@@ -201,6 +201,7 @@ export type PiRuntimePort = {
 export type PiCreateRuntimeInput = {
   cwd: string;
   sessionPath?: string;
+  cwdOverride?: string;
   eventBus?: PiEventBusHandle;
   resolveTrust?: (input: { cwd: string; trustStore: unknown; defaultProjectTrust: unknown; extensionsResult: unknown; onExtensionError: (message: string) => void }) => Promise<boolean>;
   trustSelection?: (cwd: string, title: string, options: string[]) => Promise<string | undefined>;

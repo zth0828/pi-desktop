@@ -824,7 +824,11 @@ async function bindCurrentSession(runtime: ActiveRuntime): Promise<void> {
 // 同一进程内同一 cwd 只询问一次（含 switchSession 触发的 factory 重跑）。
 const projectTrustByCwd = new Map<string, boolean>();
 
-async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveRuntime> {
+async function createRuntime(
+  cwd: string,
+  sessionPath?: string,
+  options?: { cwdOverride?: string },
+): Promise<ActiveRuntime> {
   // 工作区安全：主目录/盘符根不建 runtime（覆盖会话列表点击 home 组会话等入口）
   const risky = riskyWorkspaceReason(cwd);
   if (risky) throw new Error(`risky-workspace-${risky}`);
@@ -846,6 +850,7 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
   const adapterRuntime = await adapter.createRuntime({
     cwd,
     sessionPath,
+    cwdOverride: options?.cwdOverride,
     eventBus: eventBusHandle,
     workspaceBoundary: true,
     appendSystemPrompt: (base) => [...base, desktopWorkspaceInstructions(cwd)],
@@ -905,9 +910,9 @@ async function createRuntime(cwd: string, sessionPath?: string): Promise<ActiveR
 export async function createSessionRuntime(
   cwd: string,
   sessionPath?: string,
-  options?: { activate?: boolean },
+  options?: { activate?: boolean; cwdOverride?: string },
 ): Promise<PiRuntimeStateResult> {
-  const runtime = await createRuntime(cwd, sessionPath);
+  const runtime = await createRuntime(cwd, sessionPath, options);
   // activate=false：独立窗口 attach 的保活 runtime 不挤占全局 active。
   // 全局 active 代表主窗口当前会话（isCurrent 语义、未绑定窗口的回退都依赖它），
   // 被独立窗口抢走会导致主窗口会话串台/列表 isCurrent 误判。
@@ -923,9 +928,10 @@ export async function createSessionRuntimeForWindow(
   cwd: string,
   sessionPath: string,
   target: HostActionContext,
+  options?: { cwdOverride?: string },
 ): Promise<PiRuntimeStateResult> {
   const previousActive = active;
-  const runtime = await createRuntime(cwd, sessionPath);
+  const runtime = await createRuntime(cwd, sessionPath, options);
   const nextFile = runtime.adapterRuntime.session.sessionFile;
   if (target.sessionPath && nextFile && !samePath(target.sessionPath, nextFile)) {
     rebindWindowSessionForWindow(target.sender.id, target.sessionPath, nextFile);

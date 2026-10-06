@@ -118,6 +118,7 @@ async function invokeHostImpl<
     );
     // main 侧 HostError 的 code 原样透传（普通错误为 'INTERNAL'），调用方按 code 分支。
     error.code = response.error?.code;
+    error.details = response.error?.details;
     throw error;
   }
 

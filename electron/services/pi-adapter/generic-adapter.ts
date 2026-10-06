@@ -657,7 +657,9 @@ export function createGenericPiAdapter(input: AdapterInput): PiRuntimeAdapter {
       const raw = await sdk.createAgentSessionRuntime(createFactory, {
         cwd: runtimeInput.cwd,
         agentDir,
-        sessionManager: runtimeInput.sessionPath ? sdk.SessionManager.open(runtimeInput.sessionPath) : sdk.SessionManager.create(runtimeInput.cwd),
+        sessionManager: runtimeInput.sessionPath
+          ? sdk.SessionManager.open(runtimeInput.sessionPath, undefined, runtimeInput.cwdOverride)
+          : sdk.SessionManager.create(runtimeInput.cwd),
       });
       validateSessionCapabilities(adapter.compatibility, raw.session as unknown as Record<string, unknown>);
       if (adapter.compatibility.status === 'incompatible') {

@@ -6,7 +6,7 @@
 // （如 { providerId, modelId }）。
 
 /** 内置协议错误码；`(string & {})` 保住字面量自动补全，同时允许各服务扩展业务码。 */
-export type HostErrorCode = 'VALIDATION' | 'UNSUPPORTED' | 'INTERNAL' | (string & {});
+export type HostErrorCode = 'VALIDATION' | 'UNSUPPORTED' | 'INTERNAL' | 'SESSION_CWD_MISSING' | (string & {});
 
 /**
  * 服务实现抛出的可分类错误：dispatcher 将其 code/detail 透传给渲染层，
@@ -29,4 +29,4 @@ export class HostError extends Error {
  * code 为 main 侧 HostError 的 code（普通错误为 'INTERNAL'），
  * 或 client 本地的 'host-invoke-timeout'（IPC 超时）。
  */
-export type HostInvokeError = Error & { code?: HostErrorCode };
+export type HostInvokeError = Error & { code?: HostErrorCode; details?: unknown };

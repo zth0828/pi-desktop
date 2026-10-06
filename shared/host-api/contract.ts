@@ -849,9 +849,25 @@ export type PiSessionSearchRow = PiSessionRow & {
 };
 export type PiSessionSearchPayload = { query: string; limit?: number };
 export type PiSessionSearchResult = { sessions: PiSessionSearchRow[] };
-export type PiSessionPathPayload = { path: string; cwd?: string; title?: string; id?: string };
+export type PiSessionPathPayload = {
+  path: string;
+  cwd?: string;
+  title?: string;
+  id?: string;
+  cwdOverride?: string;
+};
 export type PiSessionPinPayload = PiSessionPathPayload & { pinned: boolean };
 export type PiSessionArchivePayload = PiSessionPathPayload & { archived: boolean };
+
+export type PiSessionCwdMissingDetail = {
+  sessionCwd: string;
+  fallbackCwd: string;
+};
+
+export type PiSessionSwitchResult = HostSuccess & {
+  errorCode?: 'SESSION_CWD_MISSING' | string;
+  detail?: PiSessionCwdMissingDetail;
+};
 
 export type PiSessionProjectArchivePayload = { cwd: string; archived: boolean };
 export type PiSessionRenamePayload = { path: string; name: string };
@@ -1248,7 +1264,7 @@ export type HostApiContract = {
     /** 搜索全部项目（含归档）的名称、首条消息和 pi SDK 提供的完整消息文本。 */
     search: (payload: PiSessionSearchPayload) => PiSessionSearchResult;
     /** 切换活动会话；成功后经 piRuntime.sessionReplaced 推全量状态。 */
-    switch: (payload: PiSessionPathPayload) => HostSuccess;
+    switch: (payload: PiSessionPathPayload) => PiSessionSwitchResult;
     rename: (payload: PiSessionRenamePayload) => HostSuccess;
     /** 分叉到当前 cwd 并切过去；返回新会话文件路径。 */
     fork: (payload: PiSessionPathPayload) => PiSessionForkResult;

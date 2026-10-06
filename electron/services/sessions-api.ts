@@ -3,7 +3,7 @@
 // 删除 pi 无 SDK API（已确认），对齐 pi `/resume`：优先移入系统废纸篓。
 // 会话替换后必须 afterSessionReplaced（重订阅 + 重绑扩展 + 推 sessionReplaced）。
 import { existsSync, statSync } from 'node:fs';
-import { readFile, rm, rmdir, stat } from 'node:fs/promises';
+import { readFile, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { shell } from 'electron';
 import { sendHostEvent } from '../main/ipc/host-events';
@@ -23,6 +23,7 @@ import type {
   PiSessionSearchPayload,
   PiSessionSearchResult,
   PiSessionSearchRow,
+  PiSessionSwitchResult,
 } from '@shared/host-api/contract';
 
 import {
@@ -74,15 +75,91 @@ function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function toSessionCwdMissingResult(
+  err: unknown,
+  fallbackCwd?: string,
+): { sessionCwd: string; fallbackCwd: string } | null {
+  const name = (err as { name?: string })?.name;
+  const message = toError(err);
+  const isMissingCwd =
+    name === 'MissingSessionCwdError' ||
+    message.startsWith('Stored session working directory does not exist');
+  if (!isMissingCwd) return null;
+
+  const issue = (err as { issue?: { sessionCwd?: string; fallbackCwd?: string } })?.issue;
+  let sessionCwd = issue?.sessionCwd;
+  let detectedFallback = issue?.fallbackCwd ?? fallbackCwd;
+
+  if (!sessionCwd) {
+    const match = /Stored session working directory does not exist:\s*(.+?)(?:\r?\n|$)/.exec(message);
+    if (match) sessionCwd = match[1].trim();
+  }
+  if (!detectedFallback) {
+    const match = /Current working directory:\s*(.+?)(?:\r?\n|$)/.exec(message);
+    if (match) detectedFallback = match[1].trim();
+  }
+
+  return {
+    sessionCwd: sessionCwd ?? '',
+    fallbackCwd: detectedFallback ?? fallbackCwd ?? '',
+  };
+}
+
 /**
- * switch 失败的统一出口：模型不可用（wrong-model 文本分类）时抛
- * MODEL_UNAVAILABLE HostError，让渲染层拿到 code 提供换模型自救入口；
- * 其余错误维持 success:false 返回（旧会话仍可用的语义不变）。
+ * 当带 cwdOverride 成功打开/切换会话时，安全改写 jsonl header 的 cwd，
+ * 避免后续再次打开该会话时反复提示工作目录丢失。
  */
-function switchFailure(err: unknown): HostSuccess {
+export async function updateSessionHeaderCwd(sessionPath: string, newCwd: string): Promise<void> {
+  try {
+    const content = await readFile(sessionPath, 'utf8');
+    const firstNewline = content.indexOf('\n');
+    const firstLine = firstNewline === -1 ? content : content.slice(0, firstNewline);
+    if (!firstLine.trim()) return;
+    const header = JSON.parse(firstLine) as { type?: string; cwd?: string; [key: string]: unknown };
+    if (header.type !== 'session' || header.cwd === newCwd) return;
+
+    header.cwd = newCwd;
+    const newFirstLine = JSON.stringify(header);
+    const updatedContent =
+      firstNewline === -1
+        ? `${newFirstLine}\n`
+        : `${newFirstLine}\n${content.slice(firstNewline + 1)}`;
+    const tempFile = `${sessionPath}.${process.pid}.${Date.now()}.tmp`;
+    await writeFile(tempFile, updatedContent, 'utf8');
+    await rename(tempFile, sessionPath);
+    sessionMetadataCache.delete(sessionPath);
+  } catch (err) {
+    writePiDiagnostic({
+      level: 'warning',
+      event: 'session.header-cwd-update-failed',
+      module: 'sessions',
+      action: 'updateSessionHeaderCwd',
+      sessionPathHash: hashSessionPath(sessionPath),
+      ...safeErrorFields(err),
+    });
+  }
+}
+
+/**
+ * switch 失败的统一出口：模型不可用时抛 MODEL_UNAVAILABLE HostError；
+ * 会话记录的工作目录不存在时返回 SESSION_CWD_MISSING 结构化错误供前端确认恢复；
+ * 其余错误维持 success:false 返回。
+ */
+function switchFailure(err: unknown, fallbackCwd?: string): PiSessionSwitchResult {
   const message = toError(err);
   const modelError = toModelUnavailableError(message);
   if (modelError) throw modelError;
+
+  const cwdMissing = toSessionCwdMissingResult(err, fallbackCwd);
+  if (cwdMissing) {
+    return {
+      success: false,
+      error: message,
+      errorCode: 'SESSION_CWD_MISSING',
+      detail: cwdMissing,
+    };
+  }
+
   return { success: false, error: message };
 }
 
@@ -352,7 +429,25 @@ async function commitWorkspaceCwd(cwd: string | undefined): Promise<void> {
 async function switchSessionImpl(
   payload: PiSessionPathPayload,
   ctx: HostActionContext | undefined,
-): Promise<HostSuccess> {
+): Promise<PiSessionSwitchResult> {
+  const storedCwd = payload.cwd ?? (await sessionHeaderCwd(payload.path));
+  const currentRuntime = getActiveRuntime();
+  const fallbackCwd = currentRuntime?.cwd ?? process.cwd();
+
+  // 若没有提供 cwdOverride，且会话记录的 cwd 不存在，直接返回 SESSION_CWD_MISSING
+  if (!payload.cwdOverride && storedCwd && !existsSync(storedCwd)) {
+    return {
+      success: false,
+      error: `Stored session working directory does not exist: ${storedCwd}`,
+      errorCode: 'SESSION_CWD_MISSING',
+      detail: {
+        sessionCwd: storedCwd,
+        fallbackCwd,
+      },
+    };
+  }
+
+  const targetCwd = payload.cwdOverride ?? payload.cwd;
   const activeForCheck = getActiveRuntime();
   const boundToActive = Boolean(
     ctx?.sessionPath
@@ -361,10 +456,11 @@ async function switchSessionImpl(
   );
   // 独立窗口 attach：优先消费 openDetached 的预热产物（在途等完成），
   // 按 attach 语义绑定（activate=false 建出来的，不挤占全局 active）
-  if (ctx?.sessionPath && !boundToActive && payload.cwd
+  if (ctx?.sessionPath && !boundToActive && targetCwd
     && await consumePrewarmedSessionRuntime(payload.path)) {
     timingMark('switch:prewarm-hit');
     bindSenderWindow(ctx, payload.path);
+    if (payload.cwdOverride) await updateSessionHeaderCwd(payload.path, payload.cwdOverride);
     return { success: true };
   }
   // 非 attach 调用方撞上在途预热（罕见竞态）：等其完成再按 live 复用，避免重复建 runtime
@@ -378,20 +474,25 @@ async function switchSessionImpl(
     bindSenderWindow(ctx, payload.path);
     if (ctx && !isMainWindow(ctx.sender.id)) sendRuntimeStateToWindow(live, ctx);
     else activateSessionRuntime(live);
-    await commitWorkspaceCwd(payload.cwd);
+    if (payload.cwdOverride) await updateSessionHeaderCwd(payload.path, payload.cwdOverride);
+    await commitWorkspaceCwd(targetCwd);
     return { success: true };
   }
   // 调用方窗口绑定着非活动会话（独立窗口 attach/切会话）时，
   // 为目标会话单独建保活 runtime，不挤占全局 active（主窗口）的运行时。
-  if (ctx?.sessionPath && !boundToActive && payload.cwd) {
+  if (ctx?.sessionPath && !boundToActive && targetCwd) {
     try {
       timingMark('switch:create-runtime:start');
-      await createSessionRuntime(payload.cwd, payload.path, { activate: false });
+      await createSessionRuntime(targetCwd, payload.path, {
+        activate: false,
+        cwdOverride: payload.cwdOverride,
+      });
       timingMark('switch:create-runtime:done');
       bindSenderWindow(ctx, payload.path);
+      if (payload.cwdOverride) await updateSessionHeaderCwd(payload.path, payload.cwdOverride);
       return { success: true };
     } catch (err) {
-      return switchFailure(err);
+      return switchFailure(err, targetCwd);
     }
   }
   // 当前 runtime 还被其他窗口查看时，不能在它上面原地 switch，也不能走
@@ -405,45 +506,60 @@ async function switchSessionImpl(
     && hasSessionInOtherWindow(currentPath, ctx.sender.id)
   ) {
     try {
-      await createSessionRuntimeForWindow(payload.cwd ?? current.cwd, payload.path, ctx);
-      await commitWorkspaceCwd(payload.cwd);
+      await createSessionRuntimeForWindow(targetCwd ?? current.cwd, payload.path, ctx, {
+        cwdOverride: payload.cwdOverride,
+      });
+      if (payload.cwdOverride) await updateSessionHeaderCwd(payload.path, payload.cwdOverride);
+      await commitWorkspaceCwd(targetCwd);
       return { success: true };
     } catch (err) {
-      return switchFailure(err);
+      return switchFailure(err, targetCwd ?? current.cwd);
     }
   }
   // 跨项目切换：目标会话的 cwd 与当前 runtime 不同时先重建 runtime
-  let before = getActiveRuntime();
-  if (!before && payload.cwd) {
-    const { piRuntimeApi } = await import('./pi-runtime-api');
-    await piRuntimeApi.start({ cwd: payload.cwd });
-    await commitWorkspaceCwd(payload.cwd);
-    before = getActiveRuntime();
-  }
-  if (payload.cwd && before && !samePath(payload.cwd, before.cwd)) {
-    const { piRuntimeApi } = await import('./pi-runtime-api');
-    await piRuntimeApi.start({ cwd: payload.cwd });
-    await commitWorkspaceCwd(payload.cwd);
+  try {
+    let before = getActiveRuntime();
+    if (!before && targetCwd) {
+      const { piRuntimeApi } = await import('./pi-runtime-api');
+      await piRuntimeApi.start({ cwd: targetCwd });
+      await commitWorkspaceCwd(targetCwd);
+      before = getActiveRuntime();
+    }
+    if (targetCwd && before && !samePath(targetCwd, before.cwd)) {
+      const { piRuntimeApi } = await import('./pi-runtime-api');
+      await piRuntimeApi.start({ cwd: targetCwd });
+      await commitWorkspaceCwd(targetCwd);
+    }
+  } catch (err) {
+    return switchFailure(err, fallbackCwd);
   }
   const active = getActiveRuntime();
   if (!active) return { success: false, error: 'session not started' };
   if (samePath(payload.path, currentSessionFile())) {
     bindSenderWindow(ctx, payload.path);
+    if (payload.cwdOverride) await updateSessionHeaderCwd(payload.path, payload.cwdOverride);
     return { success: true };
   }
   try {
     if (active.adapterRuntime.session.view.isStreaming) {
-      await createSessionRuntime(payload.cwd ?? active.cwd, payload.path);
+      await createSessionRuntime(targetCwd ?? active.cwd, payload.path, {
+        cwdOverride: payload.cwdOverride,
+      });
       bindSenderWindow(ctx, payload.path);
+      if (payload.cwdOverride) await updateSessionHeaderCwd(payload.path, payload.cwdOverride);
       return { success: true };
     }
-    const result = await active.adapterRuntime.switchSession(payload.path);
+    const result = await active.adapterRuntime.switchSession(
+      payload.path,
+      payload.cwdOverride ? { cwdOverride: payload.cwdOverride } : undefined,
+    );
     if (result.cancelled) return { success: false, error: 'cancelled' };
     await afterSessionReplaced(active, ctx);
     bindSenderWindow(ctx, payload.path);
+    if (payload.cwdOverride) await updateSessionHeaderCwd(payload.path, payload.cwdOverride);
     return { success: true };
   } catch (err) {
-    return switchFailure(err);
+    return switchFailure(err, targetCwd ?? active.cwd);
   }
 }
 
@@ -531,7 +647,7 @@ export const sessionsApi = {
     return { sessions };
   },
 
-  switch: (payload: PiSessionPathPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+  switch: (payload: PiSessionPathPayload, ctx?: HostActionContext): Promise<PiSessionSwitchResult> => {
     timingMark('switch:recv');
     // 以目标 sessionPath 为锁键串行：switch 有多个 await 点，并发调用会交叉
     // 改写全局 active 与窗口绑定（两个窗口同时 switch 时归属由执行顺序决定）

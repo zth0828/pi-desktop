@@ -90,6 +90,8 @@ export type ChatState = {
   runtimeError?: string;
   /** switchSession 失败的目标：重试按钮据此重发切换，而不是 start 新会话 */
   lastFailedSwitch: { path: string; cwd?: string } | null;
+  /** 会话记录的工作目录不存在时待确认的恢复信息 */
+  sessionCwdMissing?: { sessionPath: string; sessionCwd: string; fallbackCwd: string } | null;
   cwd?: string;
   sessionId?: string;
   /**
@@ -165,7 +167,8 @@ export type ChatState = {
 
   start: (cwd: string) => Promise<void>;
   /** 切换本面板绑定的会话：main 侧同步改绑，成功后按本面板上下文重取全量状态 */
-  switchSession: (path: string, cwd?: string) => Promise<HostSuccess>;
+  switchSession: (path: string, cwd?: string, options?: { cwdOverride?: string }) => Promise<HostSuccess>;
+  dismissSessionCwdMissing: () => void;
   /** behavior：流式中提交的排队方式（默认 followUp 排队；'steer' 当前轮插入） */
   prompt: (text: string, images?: unknown[], behavior?: 'steer' | 'followUp') => Promise<void>;
   /** `!cmd` bash 执行（pi executeBash；excludeFromContext 对应 `!!` 前缀） */
@@ -523,7 +526,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         }
       },
 
-      switchSession: async (path, cwd) => {
+      switchSession: async (path, cwd, options) => {
         // 切走时当前会话仍在运行（或刚提交/排队中）：登记后台 run，其 run.ended
         // 到来自行上报完成通知（本面板改绑后事件不会再走主链路）。
         // 目标是当前会话（早退路径）时不登记，避免把仍绑定中的会话误判为后台。
@@ -542,19 +545,36 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             summary: summarizeText(lastAssistant?.content) || leaving.cwd || '',
           });
         }
-        set({ starting: true, startError: undefined, startErrorCode: undefined, pendingEditEntryId: null });
+        set({
+          starting: true,
+          startError: undefined,
+          startErrorCode: undefined,
+          pendingEditEntryId: null,
+          sessionCwdMissing: null,
+        });
         try {
           // 用切换前的绑定寻址本面板 runtime（main 侧据此决定复用/新建/改绑）；
           // 尚未绑定（新面板 attach）时按目标路径寻址：窗口级调用会把
           // 全局 active runtime 切走，抢走别的面板正在用的会话。
           const fromPath = get().boundSessionPath;
           const result = await (fromPath ? scopedHostApi(fromPath) : scopedHostApi(path))
-            .piSessions.switch(path, cwd);
+            .piSessions.switch(path, cwd, options?.cwdOverride ? { cwdOverride: options.cwdOverride } : undefined);
           if (!result.success) {
             // 旧会话 runtime 仍可用：保留 started 现值与消息展示（面板此前无会话时
             // started 本来就是 false），仅记录失败目标供重试按钮重发切换。
-            // success:false 返回值不携带错误码（main 侧模型类失败已改为抛 HostError）
-            set({ starting: false, startError: result.error, startErrorCode: undefined, lastFailedSwitch: { path, cwd } });
+            const isMissingCwd = result.errorCode === 'SESSION_CWD_MISSING';
+            const detail = result.detail;
+            set({
+              starting: false,
+              startError: result.error,
+              startErrorCode: result.errorCode,
+              lastFailedSwitch: { path, cwd },
+              sessionCwdMissing: isMissingCwd && detail ? {
+                sessionPath: path,
+                sessionCwd: detail.sessionCwd,
+                fallbackCwd: detail.fallbackCwd || cwd || get().cwd || '',
+              } : null,
+            });
             return result;
           }
           // 目标即当前会话的早退路径不推事件，统一重取状态（事件晚到时 sessionId 已匹配，幂等）。
@@ -566,18 +586,38 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             // 成功切换即建立新绑定：撤销尚未到账的替换等待，
             // 避免迟到的旧替换事件（动作 id 仍匹配）把面板劫持回旧目标
             endReplacementWait();
-            set({ started: true, starting: false, boundSessionId: state.sessionId, lastFailedSwitch: null, startErrorCode: undefined });
+            set({
+              started: true,
+              starting: false,
+              boundSessionId: state.sessionId,
+              lastFailedSwitch: null,
+              startErrorCode: undefined,
+              sessionCwdMissing: null,
+            });
           } else {
             // 取不到状态时放行下一次 sessionReplaced 兜底
             // （switch 事件不带发起动作 id，等待同样不记录，凭此区分并发的新建/分叉）
-            set({ starting: false, lastFailedSwitch: null });
+            set({ starting: false, lastFailedSwitch: null, sessionCwdMissing: null });
             beginReplacementWait(null);
           }
           return { success: true };
         } catch (err) {
           const error = err instanceof Error ? err.message : String(err);
-          set({ starting: false, startError: error, startErrorCode: (err as HostInvokeError).code, lastFailedSwitch: { path, cwd } });
-          return { success: false, error };
+          const invokeErr = err as HostInvokeError;
+          const isMissingCwd = invokeErr.code === 'SESSION_CWD_MISSING';
+          const detail = invokeErr.details as { sessionCwd?: string; fallbackCwd?: string } | undefined;
+          set({
+            starting: false,
+            startError: error,
+            startErrorCode: invokeErr.code,
+            lastFailedSwitch: { path, cwd },
+            sessionCwdMissing: isMissingCwd && detail ? {
+              sessionPath: path,
+              sessionCwd: detail.sessionCwd ?? '',
+              fallbackCwd: detail.fallbackCwd || cwd || get().cwd || '',
+            } : null,
+          });
+          return { success: false, error, errorCode: invokeErr.code };
         }
       },
 
@@ -681,6 +721,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       /** 关闭启动/切换失败 banner：仅清展示（旧会话若仍可用不受影响），
        * 后续 start/switch 失败会重新置位 startError */
       dismissStartError: () => set({ startError: undefined, startErrorCode: undefined }),
+      dismissSessionCwdMissing: () => set({ sessionCwdMissing: null }),
 
       openWorkspaceFile: (rawPath) => {
         const cwd = get().cwd?.replace(/\/$/, '');

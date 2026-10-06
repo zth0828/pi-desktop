@@ -492,6 +492,12 @@
       "chooseModel": "Choose model",
       "retrySwitch": "Retry opening session"
     },
+    "sessionCwdMissing": {
+      "title": "Working Directory Missing",
+      "message": "The working directory recorded for this session does not exist: {{sessionCwd}}. Continue in the current working directory {{fallbackCwd}}?",
+      "confirm": "Continue",
+      "cancel": "Cancel"
+    },
     "modelMenu": {
       "model": "Model",
       "empty": "No models available",

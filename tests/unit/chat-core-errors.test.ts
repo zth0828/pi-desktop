@@ -178,7 +178,7 @@ describe('start/switchSession 失败错误码记录（MODEL_UNAVAILABLE 自救�
 
     const result = await store.getState().switchSession('/tmp/new.jsonl', '/tmp/ws2');
 
-    expect(result).toEqual({ success: false, error: 'model not found: x/y' });
+    expect(result).toEqual({ success: false, error: 'model not found: x/y', errorCode: 'MODEL_UNAVAILABLE' });
     const s = store.getState();
     expect(s.startError).toBe('model not found: x/y');
     expect(s.startErrorCode).toBe('MODEL_UNAVAILABLE');

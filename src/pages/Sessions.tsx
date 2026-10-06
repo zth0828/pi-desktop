@@ -66,8 +66,13 @@ function SessionRow({
     setBusy(true);
     try {
       const result = await action();
-      if (!result.success) onError(result.error ?? 'unknown');
-      else {
+      if (!result.success) {
+        if ((result as { errorCode?: string }).errorCode === 'SESSION_CWD_MISSING') {
+          if (openChatOnSuccess) onOpenChat();
+        } else {
+          onError(result.error ?? 'unknown');
+        }
+      } else {
         onChanged();
         if (openChatOnSuccess) onOpenChat();
       }

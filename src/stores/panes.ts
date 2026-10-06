@@ -191,7 +191,7 @@ export function createPanesStore(deps: PanesDeps, initial: { paneId: string }): 
         // 复用实例改绑；失败回滚叶子目标，避免"已打开"标记指向未绑定的会话
         const result = store.getState().switchSession(session.sessionPath, session.cwd);
         void result.then((r) => {
-          if (!r.success && previous) {
+          if (!r.success && (r as any).errorCode !== 'SESSION_CWD_MISSING' && previous) {
             set({ root: updateLeaf(get().root, paneId, { sessionPath: previous.sessionPath, sessionCwd: previous.cwd }) });
           }
         });

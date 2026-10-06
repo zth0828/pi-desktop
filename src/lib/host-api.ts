@@ -154,7 +154,8 @@ function createHostApi(sessionPath?: string) {
     list: () => invoke('piSessions', 'list'),
     listAll: () => invoke('piSessions', 'listAll'),
     search: (query: string, limit?: number) => invoke('piSessions', 'search', { query, limit }),
-    switch: (path: string, cwd?: string) => invoke('piSessions', 'switch', { path, cwd }),
+    switch: (path: string, cwd?: string, options?: { cwdOverride?: string }) =>
+      invoke('piSessions', 'switch', { path, cwd, cwdOverride: options?.cwdOverride }),
     rename: (path: string, name: string) => invoke('piSessions', 'rename', { path, name }),
     fork: (path: string) => invoke('piSessions', 'fork', { path }),
     archive: (path: string, archived: boolean) =>
