@@ -10,6 +10,8 @@ import type {
 import { formatOrderedAttachmentPrompt, stripAttachmentEnvelope } from '@shared/message-attachments';
 import { restoreToComposer } from '../../lib/message-restore';
 import { hostApi } from '../../lib/host-api';
+import { onHostEvent } from '../../lib/host-events';
+import { formatModelRefreshSummary } from '@shared/provider-catalog';
 import { cacheHitRate, formatCost } from '../../lib/usage-stats';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
 import { FileIcon } from '../../components/FileIcon';
@@ -166,6 +168,9 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
   const noticeTimerRef = useRef<number | null>(null);
   const composerScrollTimerRef = useRef<number | null>(null);
   const composerResizeFrameRef = useRef<number | null>(null);
+  const [refreshingModels, setRefreshingModels] = useState(false);
+  const [modelRefreshToast, setModelRefreshToast] = useState<{ message: string; isError: boolean } | null>(null);
+  const refreshToastTimerRef = useRef<number | null>(null);
 
   const setValue = (next: string | ((current: string) => string)) => {
     const nextValue = typeof next === 'function' ? next(chatStore.getState().composerText) : next;
@@ -292,6 +297,36 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
       .then((v) => setFollowupBehavior(v === 'steer' ? 'steer' : 'queue'));
     void hostApi.settings.get('sendWith').then((v) => setSendWith(v === 'cmdEnter' ? 'cmdEnter' : 'enter'));
   }, []);
+
+  useEffect(() => {
+    return onHostEvent('providers', 'catalogRefreshed', () => {
+      void hostApi.providers.listModels().then((r) => setModels(r.models)).catch(() => {});
+    });
+  }, []);
+
+  const handleRefreshModels = async () => {
+    if (refreshingModels) return;
+    setRefreshingModels(true);
+    if (refreshToastTimerRef.current) window.clearTimeout(refreshToastTimerRef.current);
+    try {
+      const res = await hostApi.providers.refresh();
+      const modelsRes = await hostApi.providers.listModels();
+      setModels(modelsRes.models);
+      const summary = formatModelRefreshSummary(res, t);
+      setModelRefreshToast({ message: summary.summary, isError: summary.isError });
+      refreshToastTimerRef.current = window.setTimeout(() => {
+        setModelRefreshToast(null);
+      }, 4000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setModelRefreshToast({ message: t('chat.modelMenu.refreshFailed', { error: msg }), isError: true });
+      refreshToastTimerRef.current = window.setTimeout(() => {
+        setModelRefreshToast(null);
+      }, 4000);
+    } finally {
+      setRefreshingModels(false);
+    }
+  };
 
   useEffect(() => {
     if (model) setModelKey(`${model.provider}/${model.id}`);
@@ -1680,6 +1715,9 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
           onSend={send}
           onAbort={() => void abort()}
           onFocusTextarea={focusComposer}
+          refreshingModels={refreshingModels}
+          onRefreshModels={handleRefreshModels}
+          modelRefreshToast={modelRefreshToast}
         />
       </div>
       <PlanInstallDialog

@@ -5,6 +5,8 @@ import type { PiDefaultModel, PiModelRow, PiProviderProbeResult, PiProviderRow }
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { getActiveChatStore } from '../stores/chat-registry';
+import { navigateToPage } from '../lib/app-navigation';
+import { usePiSystemStore } from '../stores/pi-system';
 
 const CUSTOM_API_TYPES = [
   'openai-completions',
@@ -40,6 +42,7 @@ type ProviderRowProps = {
   defaultModel: PiDefaultModel | null;
   onChanged: () => void;
   onDefaultChanged: (model: PiDefaultModel) => void;
+  currentPiVersion?: string;
 };
 
 function modelDisplayName(model: PiModelRow, provider: PiProviderRow): string {
@@ -79,7 +82,7 @@ function uniqueProviderId(name: string, existingIds: string[]): string {
   return `${base}-${n}`;
 }
 
-function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChanged }: ProviderRowProps) {
+function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChanged, currentPiVersion }: ProviderRowProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [key, setKey] = useState('');
@@ -264,7 +267,14 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
         />
         <span className="provider-name">{provider.name}</span>
         <span className="hint">{provider.id}</span>
-        <span className="provider-source">{t(`models.source.${provider.source}`)}</span>
+        <span className="provider-source" data-testid={`catalog-source-${provider.id}`}>
+          {t(`models.catalogSource.${provider.catalogSource ?? provider.source}`)}
+        </span>
+        {provider.lastRefreshedAt && (
+          <span className="hint" data-testid={`provider-refreshed-${provider.id}`}>
+            {t('models.lastRefreshed', { time: new Date(provider.lastRefreshedAt).toLocaleTimeString() })}
+          </span>
+        )}
         <span className="spacer" />
         <span
           className={provider.configured ? 'provider-state configured' : 'provider-state'}
@@ -276,6 +286,19 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
       </button>
       {expanded && (
         <div className="provider-row-body">
+          {provider.catalogSource === 'builtin-static' && (
+            <div className="provider-catalog-notice" data-testid={`catalog-notice-${provider.id}`}>
+              <span>{t('models.builtinStaticNotice', { version: currentPiVersion ?? '?' })}</span>
+              <button
+                type="button"
+                className="pill"
+                data-testid={`upgrade-pi-link-${provider.id}`}
+                onClick={() => navigateToPage('settings', 'settings-pi-status')}
+              >
+                {t('models.upgradePiAction')}
+              </button>
+            </div>
+          )}
           {provider.baseUrl && (
             <div className="provider-endpoints">
               <div className="provider-base-url" data-testid={`provider-base-url-${provider.id}`}>
@@ -938,6 +961,7 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
 
 export default function ModelsPage() {
   const { t } = useTranslation();
+  const currentPiVersion = usePiSystemStore((s) => s.env?.pi.version);
   const [providers, setProviders] = useState<PiProviderRow[]>([]);
   const [models, setModels] = useState<PiModelRow[]>([]);
   const [defaultModel, setDefaultModel] = useState<PiDefaultModel | null>(null);
@@ -947,13 +971,17 @@ export default function ModelsPage() {
   const [oauthMessages, setOauthMessages] = useState<string[]>([]);
   const [refreshingCatalog, setRefreshingCatalog] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string>();
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | undefined>();
 
   const refresh = () => {
     setLoading(true);
     setError(undefined);
     void hostApi.providers
       .list()
-      .then((r) => setProviders(r.providers))
+      .then((r) => {
+        setProviders(r.providers);
+        setLastRefreshedAt(r.lastRefreshedAt);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
     void hostApi.providers.listModels().then((r) => setModels(r.models)).catch(() => {});
@@ -962,13 +990,21 @@ export default function ModelsPage() {
 
   useEffect(() => {
     refresh();
-    return onHostEvent('providers', 'oauthProgress', ({ event }) => {
+    const unbindRefresh = onHostEvent('providers', 'catalogRefreshed', (payload) => {
+      setLastRefreshedAt(payload.lastRefreshedAt);
+      refresh();
+    });
+    const unbindOauth = onHostEvent('providers', 'oauthProgress', ({ event }) => {
       const url = (event as { url?: string }).url;
       if (url) {
         setOauthMessages((prev) => [...prev, url]);
         void hostApi.shell.openExternal(url);
       }
     });
+    return () => {
+      unbindRefresh();
+      unbindOauth();
+    };
   }, []);
 
   const refreshCatalog = async () => {
@@ -995,7 +1031,14 @@ export default function ModelsPage() {
   return (
     <div className="models-page">
       <div className="models-header">
-        <h2>{t('models.title')}</h2>
+        <div className="models-header-title-group">
+          <h2>{t('models.title')}</h2>
+          {lastRefreshedAt && (
+            <span className="hint" data-testid="models-last-refreshed">
+              {t('models.lastRefreshedAt', { time: new Date(lastRefreshedAt).toLocaleTimeString() })}
+            </span>
+          )}
+        </div>
         <button
           className="icon-button"
           data-testid="refresh-models"
@@ -1047,6 +1090,7 @@ export default function ModelsPage() {
             provider={p}
             models={models.filter((m) => m.provider === p.id)}
             defaultModel={defaultModel}
+            currentPiVersion={currentPiVersion}
             onChanged={refresh}
             onDefaultChanged={setDefaultModel}
           />

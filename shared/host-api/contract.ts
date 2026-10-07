@@ -590,6 +590,7 @@ export type SettingsSnapshot = {
   lastReleaseNotes?: string;
   /** 关闭主窗口时的行为：minimize=最小化/隐藏到托盘或后台（默认），quit=直接退出应用 */
   closeAction?: 'minimize' | 'quit';
+  providersLastRefreshedAt?: number;
 };
 
 export type SettingsGetPayload = { key: keyof SettingsSnapshot };
@@ -665,6 +666,8 @@ export type NotifyDispatchPayload = {
 
 // —— providers：模型/供应商管理 ——
 
+export type PiProviderCatalogSource = 'builtin-static' | 'dynamic-discovery' | 'custom-models-json';
+
 export type PiProviderRow = {
   id: string;
   name: string;
@@ -673,11 +676,16 @@ export type PiProviderRow = {
   /** 请求协议（自定义供应商来自 models.json api；内置供应商缺省）。 */
   api?: string;
   source: 'builtin' | 'config' | 'extension';
+  catalogSource?: PiProviderCatalogSource;
+  lastRefreshedAt?: number;
   authMethods: string[];
   configured: boolean;
   modelCount: number;
 };
-export type PiProviderListResult = { providers: PiProviderRow[] };
+export type PiProviderListResult = {
+  providers: PiProviderRow[];
+  lastRefreshedAt?: number;
+};
 export type PiProviderSetKeyPayload = { providerId: string; apiKey: string };
 export type PiProviderSetKeyResult = HostSuccess & {
   discoveredModels?: number;

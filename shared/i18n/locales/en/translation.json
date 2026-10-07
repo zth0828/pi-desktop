@@ -510,7 +510,15 @@
       "resetMax": "Reset to max",
       "usedTokens": "Currently used",
       "compactionWarning": "Below current usage; compaction will trigger automatically on the next turn",
-      "maxSupported": "Model native max: {{max}}"
+      "maxSupported": "Model native max: {{max}}",
+      "refresh": "Refresh model list",
+      "refreshing": "Refreshing models…",
+      "refreshToast": "Model list refreshed",
+      "refreshUpToDate": "Model list is up to date",
+      "refreshWithDiscovery": "Model list refreshed: discovered {{count}}, added {{added}}",
+      "refreshWithFailures": "Provider errors: {{errors}}",
+      "refreshFailed": "Failed to refresh model list: {{error}}",
+      "refreshTimedOut": "Model list refresh timed out"
     },
     "bash": {
       "excluded": "excluded from context",
@@ -617,6 +625,18 @@
       "config": "models.json",
       "extension": "Extension"
     },
+    "catalogSource": {
+      "builtin-static": "Built-in Static",
+      "dynamic-discovery": "Dynamic Discovery",
+      "custom-models-json": "Custom models.json",
+      "builtin": "Built-in Static",
+      "config": "Custom",
+      "extension": "Extension"
+    },
+    "lastRefreshed": "Last refreshed: {{time}}",
+    "lastRefreshedAt": "Last refreshed: {{time}}",
+    "builtinStaticNotice": "Updated with pi engine releases (current pi {{version}}). To use newer models, upgrade pi or configure a custom provider.",
+    "upgradePiAction": "Upgrade pi",
     "metaContext": "context {{context}}",
     "metaOutput": "max output {{output}}",
     "fieldName": "Provider name",

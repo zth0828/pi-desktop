@@ -448,6 +448,27 @@
   border-top: 1px solid var(--border);
 }
 
+.provider-catalog-notice {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.provider-catalog-notice button {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
 .provider-state {
   font-size: 12px;
   color: var(--text-tertiary);

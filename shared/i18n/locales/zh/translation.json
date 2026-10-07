@@ -510,7 +510,15 @@
       "resetMax": "恢复最大默认",
       "usedTokens": "当前已用",
       "compactionWarning": "低于当前已用量，将在下一轮对话时自动触发会话压缩 (Compaction)",
-      "maxSupported": "模型原生支持上限 {{max}}"
+      "maxSupported": "模型原生支持上限 {{max}}",
+      "refresh": "刷新模型列表",
+      "refreshing": "正在刷新模型…",
+      "refreshToast": "已刷新模型列表",
+      "refreshUpToDate": "模型列表已是最新",
+      "refreshWithDiscovery": "已刷新模型列表：发现 {{count}} 个，新增 {{added}} 个",
+      "refreshWithFailures": "部分供应商失败：{{errors}}",
+      "refreshFailed": "刷新模型列表失败：{{error}}",
+      "refreshTimedOut": "刷新模型列表超时"
     },
     "bash": {
       "excluded": "不入上下文",
@@ -617,6 +625,18 @@
       "config": "models.json",
       "extension": "扩展"
     },
+    "catalogSource": {
+      "builtin-static": "内置静态",
+      "dynamic-discovery": "动态发现",
+      "custom-models-json": "自定义 models.json",
+      "builtin": "内置静态",
+      "config": "自定义",
+      "extension": "扩展"
+    },
+    "lastRefreshed": "上次刷新：{{time}}",
+    "lastRefreshedAt": "上次刷新：{{time}}",
+    "builtinStaticNotice": "随 pi 引擎版本更新（当前 pi {{version}}），如需新模型请升级 pi 或配置自定义 provider",
+    "upgradePiAction": "前往升级 pi",
     "metaContext": "上下文 {{context}}",
     "metaOutput": "最大输出 {{output}}",
     "fieldName": "供应商名称",

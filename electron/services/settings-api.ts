@@ -44,6 +44,7 @@ export const settingsApi = {
       lastRunVersion: store.get('lastRunVersion') as string | undefined,
       lastReleaseNotes: store.get('lastReleaseNotes') as string | undefined,
       closeAction: store.get('closeAction') as SettingsSnapshot['closeAction'],
+      providersLastRefreshedAt: store.get('providersLastRefreshedAt') as number | undefined,
     };
   },
   get: async <K extends keyof SettingsSnapshot>(

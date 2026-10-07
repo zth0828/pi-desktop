@@ -1261,3 +1261,67 @@ test('思考深度档位：逐模型可用档支持 xhigh/max 且在模型切换
   await expect(page.locator('[data-testid="thinking-option"][data-value="max"]')).toHaveCount(0);
 });
 
+test('Chat 模型菜单刷新 → toast 出现、列表可用；Models 页展示目录来源与刷新时间', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  const selector = page.getByTestId('model-select');
+  await expect(selector).toBeVisible({ timeout: 30_000 });
+
+  // 1. 打开模型选择菜单，点击刷新
+  await selector.click();
+  const refreshBtn = page.getByTestId('model-menu-refresh');
+  await expect(refreshBtn).toBeVisible();
+  await refreshBtn.click();
+
+  // 2. 断言 toast 出现，菜单与列表保持可用
+  const toast = page.getByTestId('model-refresh-toast');
+  await expect(toast).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('model-menu-models')).toBeVisible();
+
+  // 3. 在 models.json 中为 mock 增加一个新模型，验证刷新后即时出现在 Chat 菜单中
+  const modelsPath = path.join(agentDir, 'models.json');
+  const currentDoc = JSON.parse(await readFile(modelsPath, 'utf8')) as {
+    providers: Record<string, { models: Array<Record<string, unknown>> }>;
+  };
+  currentDoc.providers.mock.models.push({
+    id: 'mock-discovered-live',
+    name: 'Mock Discovered Live',
+    reasoning: false,
+    input: ['text'],
+    contextWindow: 64000,
+    maxTokens: 4096,
+  });
+  await writeFile(modelsPath, JSON.stringify(currentDoc));
+
+  // 再次刷新
+  await refreshBtn.click();
+  await expect(toast).toBeVisible({ timeout: 10_000 });
+
+  // 展开 models 子菜单，断言新模型即时出现
+  await page.getByTestId('model-menu-models').click();
+  await expect(page.locator('[data-testid="model-option"][data-value="mock/mock-discovered-live"]')).toBeVisible({
+    timeout: 10_000,
+  });
+
+  // 4. 切到 Models 设置页验证目录来源与静态内置提示
+  await page.getByTestId('nav-models').click();
+  const mockRow = page.getByTestId('provider-mock');
+  await expect(mockRow).toBeVisible({ timeout: 15_000 });
+  // mock provider 具有 baseUrl -> 动态发现
+  await expect(page.getByTestId('catalog-source-mock')).toContainText('Dynamic Discovery');
+
+  // anthropic provider 为内置 -> Built-in Static
+  const anthropicRow = page.getByTestId('provider-anthropic');
+  await expect(anthropicRow).toBeVisible();
+  await expect(page.getByTestId('catalog-source-anthropic')).toContainText('Built-in Static');
+
+  // 展开 anthropic 行，验证版本说明与升级按钮
+  await anthropicRow.locator('.provider-row-header').click();
+  const notice = page.getByTestId('catalog-notice-anthropic');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('current pi');
+  await expect(page.getByTestId('upgrade-pi-link-anthropic')).toBeVisible();
+});
+
+

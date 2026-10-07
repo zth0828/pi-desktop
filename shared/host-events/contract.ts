@@ -59,6 +59,8 @@ export type HostEventContract = {
   providers: {
     /** OAuth 授权进度（授权 URL 等），由 pi provider-owned 流程发出 */
     oauthProgress: (payload: PiOAuthProgressEvent) => void;
+    /** 模型目录刷新完成（通知所有打开的 Chat 窗口/面板即时拉取最新模型列表） */
+    catalogRefreshed: (payload: { lastRefreshedAt: number }) => void;
   };
   piPackages: {
     /** 包安装/卸载/更新进度（PackageManager.setProgressCallback 转发） */
@@ -120,6 +122,7 @@ export const HOST_EVENT_CHANNELS = {
   },
   providers: {
     oauthProgress: 'providers:oauth-progress',
+    catalogRefreshed: 'providers:catalog-refreshed',
   },
   piPackages: {
     progress: 'pi-packages:progress',

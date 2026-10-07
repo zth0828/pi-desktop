@@ -40,6 +40,7 @@ import {
 } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
+import { determineCatalogSource } from '@shared/provider-catalog';
 
 type ModelRuntime = PiModelRuntimeHandle;
 
@@ -281,6 +282,9 @@ export const providersApi = {
     const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
     const configuredProvidersById = configuredProviders(agentDir);
     const extensionProviderIds = new Set(adapter.providers.getRegisteredProviderIds(runtime));
+    const lastRefreshedAt = await settingsApi
+      .get({ key: 'providersLastRefreshedAt' })
+      .catch(() => undefined);
     const rows: PiProviderRow[] = [];
     for (const provider of adapter.providers.listProviders(runtime)) {
       let configured = false;
@@ -290,16 +294,29 @@ export const providersApi = {
         configured = false;
       }
       const auth = provider.auth as { apiKey?: unknown; oauth?: unknown };
+      const source = extensionProviderIds.has(provider.id)
+        ? 'extension'
+        : configuredProvidersById[provider.id]
+          ? 'config'
+          : 'builtin';
+      const baseUrl = configuredProvidersById[provider.id]?.baseUrl ?? provider.baseUrl;
+      const isLmStudio = isLmStudioProvider(
+        provider.id,
+        (configuredProvidersById[provider.id] ?? {}) as Record<string, unknown>,
+      );
+      const catalogSource = determineCatalogSource({
+        source,
+        baseUrl,
+        isLmStudio,
+      });
       rows.push({
         id: provider.id,
         name: customProviderLabel(provider.id, provider.name, configuredProvidersById),
-        baseUrl: configuredProvidersById[provider.id]?.baseUrl ?? provider.baseUrl,
+        baseUrl,
         api: configuredProvidersById[provider.id]?.api,
-        source: extensionProviderIds.has(provider.id)
-          ? 'extension'
-          : configuredProvidersById[provider.id]
-            ? 'config'
-            : 'builtin',
+        source,
+        catalogSource,
+        lastRefreshedAt,
         authMethods: [auth.apiKey ? 'api_key' : null, auth.oauth ? 'oauth' : null].filter(
           (m): m is string => m !== null,
         ),
@@ -307,7 +324,7 @@ export const providersApi = {
         modelCount: adapter.providers.getModels(runtime, provider.id).length,
       });
     }
-    return { providers: rows };
+    return { providers: rows, lastRefreshedAt };
   },
 
   listModels: async (_payload?: unknown, ctx?: HostActionContext) => {
@@ -370,6 +387,9 @@ export const providersApi = {
         ...configured.errors,
         ...[...result.errors].map(([providerId, error]) => `${providerId}: ${error.message}`),
       ];
+      const refreshedAt = Date.now();
+      await settingsApi.set({ key: 'providersLastRefreshedAt', value: refreshedAt }).catch(() => {});
+      sendHostEvent('providers', 'catalogRefreshed', { lastRefreshedAt: refreshedAt });
       return {
         success: errors.length === 0 && !result.aborted,
         discoveredModels: configured.discovered,

@@ -13,6 +13,7 @@ import {
   GitBranch,
   Paperclip,
   Plus,
+  RefreshCw,
   Square,
   Sparkles,
   Terminal,
@@ -100,6 +101,9 @@ export interface ChatInputControlsProps {
   onSend: (behavior?: 'steer' | 'followUp') => void;
   onAbort: () => void;
   onFocusTextarea: () => void;
+  refreshingModels?: boolean;
+  onRefreshModels?: () => void;
+  modelRefreshToast?: { message: string; isError: boolean } | null;
 }
 
 export function ChatInputControls({
@@ -173,6 +177,9 @@ export function ChatInputControls({
   onSend,
   onAbort,
   onFocusTextarea,
+  refreshingModels = false,
+  onRefreshModels,
+  modelRefreshToast,
 }: ChatInputControlsProps) {
   const { t } = useTranslation();
 
@@ -475,6 +482,18 @@ export function ChatInputControls({
                           </div>
                         );
                       })}
+                  <div className="model-submenu-footer">
+                    <button
+                      type="button"
+                      className="model-refresh-btn"
+                      data-testid="refresh-model-list"
+                      disabled={refreshingModels}
+                      onClick={() => onRefreshModels?.()}
+                    >
+                      <RefreshCw size={13} className={refreshingModels ? 'spin' : ''} />
+                      <span>{refreshingModels ? t('chat.modelMenu.refreshing') : t('chat.modelMenu.refresh')}</span>
+                    </button>
+                  </div>
                 </div>
               )}
               {modelMenuSection === 'thinking' && (
@@ -614,7 +633,26 @@ export function ChatInputControls({
                   <span className="model-menu-value">{formatTokenK(contextWindow)}</span>
                   <ChevronLeft size={13} />
                 </button>
+                <div className="model-menu-divider" />
+                <button
+                  type="button"
+                  className="model-menu-action"
+                  data-testid="model-menu-refresh"
+                  disabled={refreshingModels}
+                  onClick={() => onRefreshModels?.()}
+                >
+                  <RefreshCw size={13} className={refreshingModels ? 'spin' : ''} />
+                  <span>{refreshingModels ? t('chat.modelMenu.refreshing') : t('chat.modelMenu.refresh')}</span>
+                </button>
               </div>
+            </div>
+          )}
+          {modelRefreshToast && (
+            <div
+              className={`model-refresh-toast${modelRefreshToast.isError ? ' error' : ''}`}
+              data-testid="model-refresh-toast"
+            >
+              <span>{modelRefreshToast.message}</span>
             </div>
           )}
         </div>
