@@ -666,7 +666,7 @@ export type NotifyDispatchPayload = {
 
 // —— providers：模型/供应商管理 ——
 
-export type PiProviderCatalogSource = 'builtin-static' | 'dynamic-discovery' | 'custom-models-json';
+export type PiProviderCatalogSource = 'builtin-static' | 'dynamic-discovery' | 'custom-models-json' | 'extension';
 
 export type PiProviderRow = {
   id: string;

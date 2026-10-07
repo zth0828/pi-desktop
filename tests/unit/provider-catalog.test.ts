@@ -7,8 +7,8 @@ describe('determineCatalogSource', () => {
     expect(determineCatalogSource({ source: 'builtin', baseUrl: 'https://api.openai.com/v1' })).toBe('builtin-static');
   });
 
-  it('identifies extension providers as builtin-static', () => {
-    expect(determineCatalogSource({ source: 'extension' })).toBe('builtin-static');
+  it('identifies extension providers as extension', () => {
+    expect(determineCatalogSource({ source: 'extension' })).toBe('extension');
   });
 
   it('identifies configured providers with baseUrl as dynamic-discovery', () => {

@@ -5,7 +5,10 @@ export function determineCatalogSource(options: {
   baseUrl?: string;
   isLmStudio?: boolean;
 }): PiProviderCatalogSource {
-  if (options.source === 'builtin' || options.source === 'extension') {
+  if (options.source === 'extension') {
+    return 'extension';
+  }
+  if (options.source === 'builtin') {
     return 'builtin-static';
   }
   if (options.isLmStudio || (options.baseUrl && options.baseUrl.trim().length > 0)) {
