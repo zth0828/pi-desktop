@@ -6,7 +6,7 @@ export const MIN_PI_VERSION = '0.83.0';
 export const FALLBACK_PI_VERSION = '0.84.2';
 /** Kept as an alias for callers that still use the old name. */
 export const RECOMMENDED_PI_VERSION = FALLBACK_PI_VERSION;
-export const TESTED_PI_RANGES = ['0.83.x', '0.84.x'] as const;
+export const TESTED_PI_RANGES = ['0.83.x', '0.84.x', '1.0.x'] as const;
 
 export function isPiVersionTested(version: string): boolean {
   const [major, minor] = version.split('.');
