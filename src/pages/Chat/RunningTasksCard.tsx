@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Bot,
   Check,
   ChevronDown,
   ExternalLink,
@@ -10,6 +11,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import { cleanBashCommand, toolSummary } from '../../lib/tool-display';
+import { isSubagentTool } from '../../lib/subagent-tool';
 import { usePaneChatStore } from './chat-store-context';
 
 export interface RunningTaskItem {
@@ -19,6 +21,9 @@ export interface RunningTaskItem {
 }
 
 function getTaskIcon(toolName: string) {
+  if (isSubagentTool(toolName)) {
+    return <Bot size={12} className="running-task-icon" />;
+  }
   switch (toolName) {
     case 'bash':
       return <Terminal size={12} className="running-task-icon" />;
@@ -144,9 +149,15 @@ export function RunningTasksCard() {
     ? recentCompleted
     : runningTasks[0];
 
-  const handleOpenCommands = (e: React.MouseEvent) => {
+  const handleOpenPanel = (e: React.MouseEvent) => {
     e.stopPropagation();
-    openWorkbenchTab('commands');
+    const allSubagents = runningTasks.length > 0 && runningTasks.every((t) => isSubagentTool(t.toolName));
+    openWorkbenchTab(allSubagents ? 'subagents' : 'commands');
+  };
+
+  const handleOpenTask = (task: { toolName: string }, e: React.MouseEvent) => {
+    e.stopPropagation();
+    openWorkbenchTab(isSubagentTool(task.toolName) ? 'subagents' : 'commands');
   };
 
   const toggleCollapsed = () => {
@@ -185,7 +196,7 @@ export function RunningTasksCard() {
             type="button"
             className="running-tasks-view-btn"
             data-testid="running-tasks-view-btn"
-            onClick={handleOpenCommands}
+            onClick={handleOpenPanel}
             title={t('chat.tasks.viewInPanel')}
           >
             <ExternalLink size={12} />
@@ -220,7 +231,7 @@ export function RunningTasksCard() {
                 <div
                   key={task.id}
                   className="running-task-line"
-                  onClick={handleOpenCommands}
+                  onClick={(e) => handleOpenTask(task, e)}
                   title={task.summary}
                 >
                   {getTaskIcon(task.toolName)}
@@ -232,7 +243,7 @@ export function RunningTasksCard() {
             primaryItem && (
               <div
                 className="running-task-line"
-                onClick={handleOpenCommands}
+                onClick={(e) => handleOpenTask(primaryItem, e)}
                 title={primaryItem.summary}
               >
                 {getTaskIcon(primaryItem.toolName)}

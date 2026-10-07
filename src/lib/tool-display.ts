@@ -51,7 +51,10 @@ export function toolSummary(toolName: string, args: unknown): string | null {
       if (agent) return agent;
       if (Array.isArray(a.chain)) return `chain ×${a.chain.length}`;
       if (Array.isArray(a.tasks)) return `parallel ×${a.tasks.length}`;
-      return null;
+      return str(a.task) ?? str(a.description) ?? str(a.prompt);
+    }
+    case 'task': {
+      return str(a.task) ?? str(a.description) ?? str(a.prompt) ?? str(a.name) ?? str(a.title);
     }
     case 'mcp': {
       // pi-mcp-adapter 代理工具：{tool: "<server>_<name>", args} 或搜索模式 {search: query}
@@ -67,7 +70,19 @@ export function toolSummary(toolName: string, args: unknown): string | null {
     default:
       // 扩展/MCP 等上游工具的通用兜底：不识别工具名，只按常见参数字段猜摘要，
       // 保证任何插件工具都有可读 header（壳只做展示，能力全来自 pi/插件）。
-      return str(a.path) ?? str(a.file) ?? str(a.command) ?? str(a.query) ?? str(a.url);
+      return (
+        str(a.task) ??
+        str(a.description) ??
+        str(a.prompt) ??
+        str(a.name) ??
+        str(a.title) ??
+        str(a.agent) ??
+        str(a.path) ??
+        str(a.file) ??
+        str(a.command) ??
+        str(a.query) ??
+        str(a.url)
+      );
   }
 }
 

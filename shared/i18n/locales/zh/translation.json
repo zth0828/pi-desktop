@@ -194,6 +194,8 @@
       "expand": "展开",
       "previewFile": "预览文件",
       "interrupted": "已中断",
+      "parameters": "参数",
+      "partialOutput": "流式输出",
       "line": {
         "inDuration": "，用时 {{duration}}",
         "bash": {
@@ -230,6 +232,16 @@
           "running": "正在列出 {{summary}}…",
           "done": "已列出 {{summary}}{{durationPart}}",
           "stopped": "已停止列出"
+        },
+        "subagent": {
+          "running": "正在执行子任务 {{summary}}…",
+          "done": "已完成子任务 {{summary}}{{durationPart}}",
+          "stopped": "已停止子任务"
+        },
+        "task": {
+          "running": "正在执行任务 {{summary}}…",
+          "done": "已完成任务 {{summary}}{{durationPart}}",
+          "stopped": "已停止任务"
         },
         "default": {
           "running": "正在运行 {{tool}}…",
@@ -1240,6 +1252,20 @@
     "commandsInterrupted": "已中断",
     "commandsSuccess": "成功",
     "commandsFailed": "失败",
+    "subagents": "子任务",
+    "subagentCount": "{{count}} 个子任务",
+    "subagentFilterAll": "全部",
+    "subagentFilterRunning": "执行中",
+    "subagentFilterCompleted": "已完成",
+    "subagentFilterFailed": "失败/中断",
+    "subagentRunning": "执行中",
+    "subagentSuccess": "已完成",
+    "subagentInterrupted": "已中断",
+    "subagentError": "执行失败",
+    "stopSubagent": "中断",
+    "subagentAbortTooltip": "pi 暂不支持单工具独立中断；可点击主界面停止按钮中断当前回合",
+    "noSubagents": "暂无子任务记录",
+    "noSubagentsDesc": "当前会话尚未调用 subagent 或 task 类后台子任务",
     "itemCount": "{{count}} 个根目录项目",
     "filter": "筛选文件…",
     "loadingFolder": "正在加载…",

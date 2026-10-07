@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Bot,
   Columns2,
   FileCode2,
   Files,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import { hostApi } from '../../lib/host-api';
 import { FileIcon } from '../../components/FileIcon';
+import { isSubagentTool } from '../../lib/subagent-tool';
 import {
   clampPanelWidth,
   getNextModePreference,
@@ -31,6 +33,7 @@ import { FileExplorer } from './workbench/FilesTab';
 import { FilePreview } from './workbench/FilePreviewTab';
 import { CommandList } from './workbench/CommandsTab';
 import { ReviewWorkspace } from './workbench/ReviewTab';
+import { SubagentsTab } from './workbench/SubagentsTab';
 
 const DEFAULT_WORKSPACE_TREE_WIDTH = 240;
 const MIN_WORKSPACE_TREE_WIDTH = 200;
@@ -46,7 +49,11 @@ export function ReviewPanel() {
   const workspaceFileRequest = usePaneChatStore((s) => s.workspaceFileRequest);
   const reviewFileRequest = usePaneChatStore((s) => s.reviewFileRequest);
   const workbenchTabRequest = usePaneChatStore((s) => s.workbenchTabRequest);
+  const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
   const cwd = usePaneChatStore((s) => s.cwd);
+  const runningSubagentsCount = Object.values(toolExecutions).filter(
+    (ex) => isSubagentTool(ex.toolName) && ex.status === 'running',
+  ).length;
   const [tab, setTab] = useState<WorkbenchTab>('files');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
@@ -475,9 +482,27 @@ export function ReviewPanel() {
               <Terminal size={14} />
               {t('workspace.commands')}
             </button>
+            <button
+              className={`workspace-tab${tab === 'subagents' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={tab === 'subagents'}
+              data-testid="workspace-subagents-tab"
+              onClick={() => {
+                setWorkspaceOpen(true);
+                setTab('subagents');
+              }}
+            >
+              <Bot size={14} />
+              {t('workspace.subagents')}
+              {runningSubagentsCount > 0 && (
+                <span className="workspace-tab-badge" data-testid="workspace-subagents-running-badge">
+                  {runningSubagentsCount}
+                </span>
+              )}
+            </button>
           </div>
           <div className="workspace-tab-actions">
-            {tab !== 'review' && tab !== 'commands' && (
+            {tab !== 'review' && tab !== 'commands' && tab !== 'subagents' && (
               <button
                 className={`workspace-tree-trigger${effectiveTreeOpen ? ' active' : ''}`}
                 data-testid="workspace-tree-toggle"
@@ -532,6 +557,8 @@ export function ReviewPanel() {
           <ReviewWorkspace />
         ) : tab === 'commands' ? (
           <CommandList />
+        ) : tab === 'subagents' ? (
+          <SubagentsTab />
         ) : (
           <div
             className={`workspace-browser${effectiveTreeOpen ? ' tree-open' : ''}${workspaceTreeResizing ? ' tree-resizing' : ''}`}

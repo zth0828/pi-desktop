@@ -14,6 +14,7 @@ import {
   toolSummary,
   type ToolWarning,
 } from '../../lib/tool-display';
+import { extractSubagentText, formatToolArgs, isSubagentTool } from '../../lib/subagent-tool';
 import type { ToolExecution } from '../../stores/chat';
 import { FileIcon } from '../../components/FileIcon';
 import { usePaneChatStore } from './chat-store-context';
@@ -137,9 +138,11 @@ export function ToolCallCard({
     : t(`chat.tool.${execution.status}`);
 
   const lineState = execution.interrupted ? 'stopped' : execution.status === 'running' ? 'running' : 'done';
-  const verbTool = ['bash', 'edit', 'write', 'read', 'grep', 'find', 'ls'].includes(execution.toolName)
+  const verbTool = ['bash', 'edit', 'write', 'read', 'grep', 'find', 'ls', 'subagent', 'task'].includes(execution.toolName)
     ? execution.toolName
-    : 'default';
+    : isSubagentTool(execution.toolName)
+      ? 'subagent'
+      : 'default';
   const line = t(`chat.tool.line.${verbTool}.${lineState}`, {
     tool: execution.toolName,
     summary: summary ?? execution.toolName,
@@ -148,8 +151,8 @@ export function ToolCallCard({
 
   const outputText =
     execution.status === 'running' && execution.partialResult !== undefined
-      ? extractResultText(execution.partialResult)
-      : extractResultText(execution.result);
+      ? extractSubagentText(execution.partialResult)
+      : extractSubagentText(execution.result);
   const writeTail = !expanded && !diff && writeContent !== null
     ? tailLines(writeContent.trimEnd(), PREVIEW_LINES)
     : null;
@@ -178,7 +181,11 @@ export function ToolCallCard({
   // 文件修改类工具：采用复合式文件条目头（支持点击文件名、点击数字、点击整行）
   if (isMutation && previewPath) {
     return (
-      <div className={`tool-card tool-mutation tool-${execution.status}`} data-testid="tool-card">
+      <div
+        id={`tool-call-${execution.toolCallId}`}
+        className={`tool-card tool-mutation tool-${execution.status}`}
+        data-testid="tool-card"
+      >
         <div
           className="tool-card-file-row"
           data-testid="tool-file-row"
@@ -375,9 +382,18 @@ export function ToolCallCard({
             </div>
           )}
 
+          {Boolean(!isBash && !isMutation && execution.args && typeof execution.args === 'object' && Object.keys(execution.args).length > 0) && (
+            <div className="tool-parameters-section" data-testid="tool-parameters">
+              <div className="tool-section-title">{t('chat.tool.parameters')}</div>
+              <pre className="tool-terminal-output custom-scroll">{formatToolArgs(execution.args)}</pre>
+            </div>
+          )}
+
           {!isBash && (realDiff || writeContent !== null || outputText) && (
-            <>
-              <div className="tool-section-title">{t('chat.tool.result')}</div>
+            <div className="tool-result-section" data-testid="tool-result">
+              <div className="tool-section-title">
+                {isRunning ? t('chat.tool.partialOutput') : t('chat.tool.result')}
+              </div>
               {realDiff ? (
                 <DiffView diff={realDiff} />
               ) : writeContent !== null ? (
@@ -385,7 +401,7 @@ export function ToolCallCard({
               ) : (
                 <pre>{outputText}</pre>
               )}
-            </>
+            </div>
           )}
 
           <ToolWarnings warnings={warnings} />

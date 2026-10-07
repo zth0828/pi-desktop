@@ -4,7 +4,7 @@ export type PendingRevert =
   | { kind: 'file'; path: string }
   | { kind: 'hunk'; path: string; patch: string };
 
-export type WorkbenchTab = 'files' | 'review' | 'commands' | `file:${string}`;
+export type WorkbenchTab = 'files' | 'review' | 'commands' | 'subagents' | `file:${string}`;
 
 export function getContainer(panelEl: HTMLElement | null): HTMLElement | null {
   return panelEl?.closest<HTMLElement>('.chat-page') ?? document.querySelector<HTMLElement>('.chat-page');

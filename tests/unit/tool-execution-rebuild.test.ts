@@ -44,4 +44,43 @@ describe('rebuildToolExecutionsFromMessages', () => {
     expect(executions.c1.status).toBe('error');
     expect(executions.c1.interrupted).toBe(true);
   });
+
+  it('toolResult 带有 abort 错误文本时标记为 interrupted', () => {
+    const abortMessage: ChatMessage = {
+      role: 'toolResult',
+      content: [{ type: 'text', text: 'Subagent was aborted' }],
+      timestamp: 1_700_000_001_000,
+      raw: {
+        toolCallId: 'c1',
+        isError: true,
+        content: [{ type: 'text', text: 'Error: Subagent was aborted' }],
+      },
+    };
+    const executions = rebuildToolExecutionsFromMessages([
+      assistant([{ type: 'toolCall', id: 'c1', name: 'subagent' }]),
+      abortMessage,
+    ]);
+    expect(executions.c1.status).toBe('error');
+    expect(executions.c1.interrupted).toBe(true);
+  });
+
+  it('传入 prevExecutions 时保留已记录的 interrupted 与 partialResult', () => {
+    const executions = rebuildToolExecutionsFromMessages(
+      [
+        assistant([{ type: 'toolCall', id: 'c1', name: 'subagent' }]),
+        toolResult('c1', true),
+      ],
+      {
+        c1: {
+          toolCallId: 'c1',
+          toolName: 'subagent',
+          status: 'error',
+          interrupted: true,
+          partialResult: 'partial text',
+        },
+      },
+    );
+    expect(executions.c1.status).toBe('error');
+    expect(executions.c1.interrupted).toBe(true);
+  });
 });

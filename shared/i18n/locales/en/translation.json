@@ -194,6 +194,8 @@
       "expand": "Expand",
       "previewFile": "Preview file",
       "interrupted": "interrupted",
+      "parameters": "Parameters",
+      "partialOutput": "Streaming Output",
       "line": {
         "inDuration": " in {{duration}}",
         "bash": {
@@ -230,6 +232,16 @@
           "running": "Listing {{summary}}…",
           "done": "Listed {{summary}}{{durationPart}}",
           "stopped": "Stopped listing"
+        },
+        "subagent": {
+          "running": "Running subagent {{summary}}…",
+          "done": "Completed subagent {{summary}}{{durationPart}}",
+          "stopped": "Stopped subagent"
+        },
+        "task": {
+          "running": "Running task {{summary}}…",
+          "done": "Completed task {{summary}}{{durationPart}}",
+          "stopped": "Stopped task"
         },
         "default": {
           "running": "Running {{tool}}…",
@@ -1241,6 +1253,20 @@
     "commandsInterrupted": "Interrupted",
     "commandsSuccess": "Success",
     "commandsFailed": "Failed",
+    "subagents": "Subagents",
+    "subagentCount": "{{count}} subagent tasks",
+    "subagentFilterAll": "All",
+    "subagentFilterRunning": "Running",
+    "subagentFilterCompleted": "Completed",
+    "subagentFilterFailed": "Failed/Interrupted",
+    "subagentRunning": "Running",
+    "subagentSuccess": "Completed",
+    "subagentInterrupted": "Interrupted",
+    "subagentError": "Failed",
+    "stopSubagent": "Abort",
+    "subagentAbortTooltip": "pi does not support single-tool abort; use turn abort to stop",
+    "noSubagents": "No subagent tasks",
+    "noSubagentsDesc": "No subagent or task tools have been executed in this session",
     "itemCount": "{{count}} root items",
     "filter": "Filter files…",
     "loadingFolder": "Loading…",

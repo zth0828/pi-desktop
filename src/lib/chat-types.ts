@@ -47,18 +47,22 @@ export type ToolExecution = {
  */
 export function rebuildToolExecutionsFromMessages(
   messages: ChatMessage[],
+  prevExecutions?: Record<string, ToolExecution>,
 ): Record<string, ToolExecution> {
   const executions: Record<string, ToolExecution> = {};
   for (const m of messages) {
     if (m.role === 'assistant') {
       for (const b of m.content) {
         if (b.type === 'toolCall' && b.id) {
+          const prev = prevExecutions?.[b.id];
           executions[b.id] = {
             toolCallId: b.id,
             toolName: b.name ?? 'unknown',
             args: b.arguments,
             status: 'running',
-            startedAt: m.timestamp,
+            startedAt: prev?.startedAt ?? m.timestamp,
+            ...(prev?.interrupted ? { interrupted: true } : {}),
+            ...(prev?.partialResult ? { partialResult: prev.partialResult } : {}),
           };
         }
       }
@@ -74,18 +78,26 @@ export function rebuildToolExecutionsFromMessages(
       const id = raw?.toolCallId;
       const ex = id ? executions[id] : undefined;
       if (!id || !ex) continue;
+      const prev = prevExecutions?.[id];
+      const contentStr =
+        typeof raw?.content === 'string'
+          ? raw.content
+          : JSON.stringify(raw?.content ?? '');
+      const isAbortMessage = raw?.isError === true && /abort/i.test(contentStr);
+      const isInterrupted = prev?.interrupted === true || isAbortMessage;
       executions[id] = {
         ...ex,
         status: raw?.isError ? 'error' : 'success',
         result: { content: raw?.content ?? [], details: raw?.details },
-        endedAt: m.timestamp,
+        endedAt: prev?.endedAt ?? m.timestamp,
+        ...(isInterrupted ? { interrupted: true } : {}),
       };
     }
   }
   for (const id of Object.keys(executions)) {
     const ex = executions[id];
     if (ex.status === 'running') {
-      executions[id] = { ...ex, status: 'error', interrupted: true, endedAt: ex.startedAt };
+      executions[id] = { ...ex, status: 'error', interrupted: true, endedAt: ex.endedAt ?? ex.startedAt };
     }
   }
   return executions;

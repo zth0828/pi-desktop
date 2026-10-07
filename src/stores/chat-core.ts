@@ -148,8 +148,8 @@ export type ChatState = {
   workspaceOpen: boolean;
   /** 工具卡请求打开工作区文件（nonce 保证重复点击同一路径也能激活）。 */
   workspaceFileRequest: { path: string; nonce: number } | null;
-  /** 请求打开特定 Workbench 标签页（如 commands 命令行抽屉）。 */
-  workbenchTabRequest: { tab: 'files' | 'review' | 'commands'; nonce: number } | null;
+  /** 请求打开特定 Workbench 标签页（如 commands 命令行抽屉、subagents 子任务）。 */
+  workbenchTabRequest: { tab: 'files' | 'review' | 'commands' | 'subagents'; nonce: number } | null;
   /** 评审面板请求打开/选中特定文件的 Diff（nonce 保证重复点击同一路径也能激活）。 */
   reviewFileRequest: { path?: string; nonce: number } | null;
   /** fork/跳分支后回填输入框的文本与附件（nonce 保证同文本也触发） */
@@ -186,7 +186,7 @@ export type ChatState = {
   openReviewFile: (path?: string) => void;
   setWorkspaceOpen: (open: boolean) => void;
   openWorkspaceFile: (path: string) => void;
-  openWorkbenchTab: (tab: 'files' | 'review' | 'commands') => void;
+  openWorkbenchTab: (tab: 'files' | 'review' | 'commands' | 'subagents') => void;
   setComposerText: (text: string) => void;
   setComposerAttachments: (attachments: ComposerAttachment[]) => void;
   setCommandMode: (mode: boolean) => void;
@@ -647,6 +647,19 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       abort: async () => {
+        const now = Date.now();
+        const s = get();
+        const runningEntries = Object.entries(s.toolExecutions).filter(([, ex]) => ex.status === 'running');
+        if (runningEntries.length > 0) {
+          const toolExecutions = Object.fromEntries(
+            Object.entries(s.toolExecutions).map(([id, ex]) =>
+              ex.status === 'running'
+                ? [id, { ...ex, status: 'error' as const, interrupted: true, endedAt: ex.endedAt ?? now }]
+                : [id, ex],
+            ),
+          );
+          set({ toolExecutions });
+        }
         const result = await api().piRuntime.abort();
         if (result.success && result.restoredMessages?.length) {
           const restoredList = result.restoredMessages.map((msg) =>
@@ -865,8 +878,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           turnStats: null,
           messages,
           historyMessages,
-          // 恢复/切换会话：事件累积的执行表为空，从完整展示历史重建（结果 + 中断标记）
-          toolExecutions: rebuildToolExecutionsFromMessages(historyMessages),
+          // 恢复/切换会话：从完整展示历史重建，保留已捕获的运行期/中断状态
+          toolExecutions: rebuildToolExecutionsFromMessages(historyMessages, get().toolExecutions),
           compaction: null,
           lastCompaction: null,
           retry: null,
@@ -912,7 +925,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             m.entryId === (ids[i] ?? undefined) ? m : { ...m, entryId: ids[i] ?? undefined },
           ),
           historyMessages,
-          toolExecutions: rebuildToolExecutionsFromMessages(historyMessages),
+          toolExecutions: rebuildToolExecutionsFromMessages(historyMessages, current.toolExecutions),
         });
       },
 
@@ -936,7 +949,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         set({
           messages,
           historyMessages,
-          toolExecutions: rebuildToolExecutionsFromMessages(historyMessages),
+          toolExecutions: rebuildToolExecutionsFromMessages(historyMessages, get().toolExecutions),
           contextUsage: state.contextUsage ?? null,
           transcriptSyncing: false,
         });
@@ -1054,6 +1067,11 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           case 'tool.execution.completed': {
             const prev = s.toolExecutions[event.toolCallId];
             if (!prev) break;
+            const contentStr =
+              typeof event.result === 'string'
+                ? event.result
+                : JSON.stringify(event.result ?? '');
+            const isAbortMessage = event.isError && /abort/i.test(contentStr);
             set({
               toolExecutions: {
                 ...s.toolExecutions,
@@ -1062,6 +1080,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
                   status: event.isError ? 'error' : 'success',
                   result: event.result,
                   endedAt: Date.now(),
+                  ...(prev.interrupted || isAbortMessage ? { interrupted: true } : {}),
                 },
               },
             });

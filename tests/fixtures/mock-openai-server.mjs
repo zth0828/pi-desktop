@@ -120,7 +120,8 @@ const server = http.createServer((req, res) => {
       lastUser.includes("USE_TOOL_LONG") || lastUser.includes("USE_TOOL_LINES") ||
       lastUser.includes("USE_TOOL_WRITE") || lastUser.includes("USE_TOOL_GREP") || lastUser.includes("USE_TOOL_READ_IMAGE") || lastUser.includes("USE_TOOL_READ_EXTERNAL_HISTORY") || lastUser.includes("USE_TOOL_EDIT_WRITE") || lastUser.includes("USE_TOOL_WRITE_SIX") ||
       lastUser.includes("USE_TOOL_FOREGROUND_SERVER") ||
-      lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH")
+      lastUser.includes("MCP_CALL") || lastUser.includes("MCP_SEARCH") ||
+      lastUser.includes("USE_TOOL_SUBAGENT") || lastUser.includes("USE_TOOL_SUBAGENT_SLOW")
     );
 
     // FLAKE_429_ALWAYS 恒 429：驱动 pi 持续自动重试，供「重试等待中可中断」场景
@@ -343,6 +344,12 @@ const server = http.createServer((req, res) => {
       } else if (lastUser.includes("MCP_SEARCH")) {
         toolName = "mcp";
         args = JSON.stringify({ search: "ping" });
+      } else if (lastUser.includes("USE_TOOL_SUBAGENT_SLOW")) {
+        toolName = "subagent_slow";
+        args = JSON.stringify({ agent: "crawler", task: "fetching web pages" });
+      } else if (lastUser.includes("USE_TOOL_SUBAGENT")) {
+        toolName = "subagent";
+        args = JSON.stringify({ agent: "researcher", task: "indexing codebase" });
       }
       send({ role: "assistant", content: `PROCESS: running ${toolName}`, tool_calls: [{ index: 0, id: `call_mock_${++callSeq}`, type: "function", function: { name: toolName, arguments: "" } }] });
       send({ tool_calls: [{ index: 0, function: { arguments: args.slice(0, 5) } }] });
