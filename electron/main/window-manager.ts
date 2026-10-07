@@ -36,6 +36,12 @@ export function isQuitting(): boolean {
   return quitting;
 }
 
+let windowClosedListener: ((webContentsId: number) => void) | null = null;
+
+export function setWindowClosedListener(listener: (webContentsId: number) => void): void {
+  windowClosedListener = listener;
+}
+
 /** 注册窗口（webContentsId 为键）；窗口 destroyed 时自动清除。 */
 export function registerWindow(
   win: BrowserWindow,
@@ -52,6 +58,7 @@ export function registerWindow(
   });
   win.on('closed', () => {
     windows.delete(id);
+    windowClosedListener?.(id);
   });
 }
 
@@ -417,3 +424,5 @@ export function createSessionWindowAtPoint(
   const bounds = centerBoundsAtPoint(point, resolveWindowSize(), display.workArea);
   return createSessionWindow(sessionPath, cwd, { x: bounds.x, y: bounds.y });
 }
+
+(globalThis as unknown as { __piCreateAppWindow?: typeof createAppWindow }).__piCreateAppWindow = createAppWindow;

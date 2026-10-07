@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   resolveWindowSize: vi.fn(),
   writePiDiagnostic: vi.fn(),
   hashSessionPath: vi.fn(() => 'hashed'),
+  setWindowClosedListener: vi.fn(),
 }));
 
 vi.mock('@electron/main/window-manager', () => ({
@@ -31,6 +32,7 @@ vi.mock('@electron/main/window-manager', () => ({
   activateAndFocusWindow: mocks.activateAndFocusWindow,
   getWindowBounds: mocks.getWindowBounds,
   resolveWindowSize: mocks.resolveWindowSize,
+  setWindowClosedListener: mocks.setWindowClosedListener,
 }));
 
 vi.mock('@electron/main/ipc/host-events', () => ({

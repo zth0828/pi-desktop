@@ -320,3 +320,71 @@ test('关闭独立窗口 → runtime 保活，主窗口切回该会话历史完�
   await sendAndWaitReply(page, 'Say PONG reopen FOLLOWUP');
   await expect(page.getByTestId('message-user')).toHaveCount(2);
 });
+
+test('多窗口隔离：主窗口会话 A + 独立窗口挂会话 B，左窗发消息只进会话 A，右窗 UI 无该消息', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const mainPage = await app.firstWindow();
+  await waitSessionReady(mainPage);
+
+  // 主窗口：创建会话 A
+  await sendAndWaitReply(mainPage, 'Say PONG main session A');
+
+  // 创建会话 B
+  await mainPage.getByTestId('new-chat').click();
+  await sendAndWaitReply(mainPage, 'Say PONG detached session B');
+
+  // 切回会话 A，使会话 B 不再是主窗口当前查看的会话
+  const sessionARow = mainPage.locator('.sidebar-session-row').filter({ hasText: 'main session A' });
+  await sessionARow.locator('[data-testid^="sidebar-session-"]').first().click();
+  await expect(mainPage.getByTestId('message-user').last()).toContainText('main session A');
+
+  // 此时以独立窗口打开会话 B
+  const detachedPage = await openDetachedWindow(app, mainPage, 'detached session B');
+  await waitSessionReady(detachedPage);
+
+  // 主窗口发送消息
+  await mainPage.getByTestId('chat-input').fill('Say PONG prompt for session A ONLY');
+  await mainPage.getByTestId('chat-send').click();
+
+  // 断言：主窗口能收到回复
+  await expect(mainPage.getByTestId('message-user').filter({ hasText: 'prompt for session A ONLY' })).toHaveCount(1, { timeout: 30_000 });
+  await expect(mainPage.getByTestId('message-assistant').last()).toContainText('PONG');
+
+  // 断言：独立窗口 B 绝对不能出现 session A 的消息
+  await expect(detachedPage.locator('body')).not.toContainText('prompt for session A ONLY');
+  await expect(detachedPage.getByTestId('message-user').filter({ hasText: 'session A' })).toHaveCount(0);
+});
+
+test('新窗口触发 workspaceCwd 恢复不会挤掉主窗口 runtime，主窗口发消息不串台', async ({
+  launchElectronApp,
+}) => {
+  const app = await launchElectronApp(launchOptions());
+  const mainPage = await app.firstWindow();
+  await waitSessionReady(mainPage);
+
+  // 主窗口开会话 A
+  await sendAndWaitReply(mainPage, 'Say PONG main window prompt 1');
+
+  // 打开一个无 ?session= 的新辅助窗口（触发 ChatPane primary 的 workspaceCwd 恢复流程）
+  const windowPromise = app.waitForEvent('window');
+  await app.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).__piCreateAppWindow?.({ isMain: false });
+  });
+  const newWin = await windowPromise;
+  await newWin.waitForLoadState('domcontentloaded');
+  await waitSessionReady(newWin);
+
+  // 主窗口继续发消息
+  await mainPage.getByTestId('chat-input').fill('Say PONG main window prompt 2');
+  await mainPage.getByTestId('chat-send').click();
+
+  // 主窗口收到 prompt 2 回复
+  await expect(mainPage.getByTestId('message-user').filter({ hasText: 'main window prompt 2' })).toHaveCount(1, { timeout: 30_000 });
+  await expect(mainPage.getByTestId('message-assistant').last()).toContainText('PONG');
+
+  // 新窗口没有主窗口的消息
+  await expect(newWin.locator('body')).not.toContainText('main window prompt 2');
+});

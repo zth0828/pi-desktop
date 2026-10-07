@@ -57,6 +57,7 @@ import {
   isMainWindow,
   rebindWindowSession,
   rebindWindowSessionForWindow,
+  setWindowClosedListener,
   unbindWindowSession,
   unbindWindowSessionForWindow,
 } from '../main/window-manager';
@@ -141,6 +142,20 @@ function emitPromptLifecycle(runtime: ActiveRuntime, phase: PiPromptLifecyclePha
 
 let active: ActiveRuntime | null = null;
 const runtimes = new Set<ActiveRuntime>();
+const windowRuntimes = new Map<number, ActiveRuntime>();
+
+export function unbindWindowRuntime(webContentsId: number): void {
+  const runtime = windowRuntimes.get(webContentsId);
+  windowRuntimes.delete(webContentsId);
+  if (runtime && runtime !== active) {
+    maybeDisposeRuntime(runtime);
+  }
+}
+
+setWindowClosedListener((webContentsId) => {
+  unbindWindowRuntime(webContentsId);
+});
+
 /** 因运行中而暂缓回收的孤儿 runtime，等 run.ended / 窗口销毁清扫兜底。 */
 const pendingDisposeRuntimes = new Set<ActiveRuntime>();
 const pendingDisposeTimers = new Map<ActiveRuntime, NodeJS.Timeout>();
@@ -190,13 +205,32 @@ export function resolveRuntimeForContext(
   if (ctx?.sessionPath) {
     const found = getRuntimeForSession(ctx.sessionPath);
     if (found) return found;
-    if (active && (!active.adapterRuntime.session.view.sessionFile || samePath(active.adapterRuntime.session.view.sessionFile, ctx.sessionPath))) {
-      return active;
+    if (ctx.sender) {
+      const winRuntime = windowRuntimes.get(ctx.sender.id);
+      if (
+        winRuntime &&
+        (!winRuntime.adapterRuntime.session.view.sessionFile ||
+          samePath(winRuntime.adapterRuntime.session.view.sessionFile, ctx.sessionPath))
+      ) {
+        return winRuntime;
+      }
     }
-    if (ctx.sender && isMainWindow(ctx.sender.id) && active) {
-      return active;
+    if (
+      active &&
+      (!active.adapterRuntime.session.view.sessionFile ||
+        samePath(active.adapterRuntime.session.view.sessionFile, ctx.sessionPath))
+    ) {
+      if (!ctx.sender || isMainWindow(ctx.sender.id)) {
+        return active;
+      }
     }
     return null;
+  }
+  if (ctx?.sender) {
+    if (!isMainWindow(ctx.sender.id)) {
+      return windowRuntimes.get(ctx.sender.id) ?? null;
+    }
+    return active;
   }
   return active;
 }
@@ -208,12 +242,32 @@ export async function resolveRuntimeForContextReady(
   if (ctx?.sessionPath) {
     const found = getRuntimeForSession(ctx.sessionPath);
     if (found) return found;
-    if (active && (!active.adapterRuntime.session.view.sessionFile || samePath(active.adapterRuntime.session.view.sessionFile, ctx.sessionPath))) {
-      return active;
+    if (ctx.sender) {
+      const winRuntime = windowRuntimes.get(ctx.sender.id);
+      if (
+        winRuntime &&
+        (!winRuntime.adapterRuntime.session.view.sessionFile ||
+          samePath(winRuntime.adapterRuntime.session.view.sessionFile, ctx.sessionPath))
+      ) {
+        return winRuntime;
+      }
     }
-    if (ctx.sender && isMainWindow(ctx.sender.id) && active) {
-      return active;
+    if (
+      active &&
+      (!active.adapterRuntime.session.view.sessionFile ||
+        samePath(active.adapterRuntime.session.view.sessionFile, ctx.sessionPath))
+    ) {
+      if (!ctx.sender || isMainWindow(ctx.sender.id)) {
+        return active;
+      }
     }
+    return null;
+  }
+  if (ctx?.sender) {
+    if (!isMainWindow(ctx.sender.id)) {
+      return windowRuntimes.get(ctx.sender.id) ?? null;
+    }
+    return getActiveRuntimeReady();
   }
   return getActiveRuntimeReady();
 }
@@ -925,12 +979,13 @@ export async function createSessionRuntime(
  */
 export async function createSessionRuntimeForWindow(
   cwd: string,
-  sessionPath: string,
+  sessionPath: string | undefined,
   target: HostActionContext,
   options?: { cwdOverride?: string },
 ): Promise<PiRuntimeStateResult> {
   const previousActive = active;
   const runtime = await createRuntime(cwd, sessionPath, options);
+  windowRuntimes.set(target.sender.id, runtime);
   const nextFile = runtime.adapterRuntime.session.sessionFile;
   if (target.sessionPath && nextFile && !samePath(target.sessionPath, nextFile)) {
     rebindWindowSessionForWindow(target.sender.id, target.sessionPath, nextFile);
@@ -944,7 +999,9 @@ export async function createSessionRuntimeForWindow(
   }
   sendRuntimeStateToWindow(runtime, target);
 
-  if (previousActive && previousActive !== runtime) maybeDisposeRuntime(previousActive);
+  if (isMainWindow(target.sender.id) && previousActive && previousActive !== runtime) {
+    maybeDisposeRuntime(previousActive);
+  }
   return snapshotState(runtime);
 }
 
@@ -1064,8 +1121,9 @@ export async function afterSessionReplaced(
     if (target) rebindWindowSessionForWindow(target.sender.id, previousFile, nextFile);
     else rebindWindowSession(previousFile, nextFile);
   }
-  // 主窗口发起的隔离替换要更新全局 active（侧栏 isCurrent / 无 scope 回退）；
-  // 独立窗口发起时则保持主窗口 active 不变。
+  if (target) {
+    windowRuntimes.set(target.sender.id, runtime);
+  }
   if (!target || isMainWindow(target.sender.id)) {
     active = runtime;
     latestMcpStatus = runtime.mcpStatus;
@@ -1079,7 +1137,9 @@ export async function afterSessionReplaced(
   if (target) sendHostEventToWebContents(target.sender, 'piRuntime', 'sessionReplaced', state);
   else sendHostEvent('piRuntime', 'sessionReplaced', state);
 
-  if (previousActive && previousActive !== runtime) maybeDisposeRuntime(previousActive);
+  if (previousActive && previousActive !== runtime && (!target || isMainWindow(target.sender.id))) {
+    maybeDisposeRuntime(previousActive);
+  }
   return state;
 }
 
@@ -1209,15 +1269,27 @@ export const piRuntimeApi = {
     // 抛出的错误码由渲染层翻译成用户可见文案。
     const risky = riskyWorkspaceReason(payload.cwd);
     if (risky) throw new Error(`risky-workspace-${risky}`);
+
+    // 非主窗口调用方禁止改全局 active / 销毁 active；为该窗口创建并绑定独立 runtime
+    if (ctx && !isMainWindow(ctx.sender.id)) {
+      const existing = windowRuntimes.get(ctx.sender.id);
+      if (existing && samePath(existing.cwd, payload.cwd)) {
+        return snapshotState(existing);
+      }
+      return createSessionRuntimeForWindow(payload.cwd, undefined, ctx);
+    }
+
     // samePath：/tmp ↔ /private/tmp 等形式差异不应触发无谓的 runtime 重建
     if (active && samePath(active.cwd, payload.cwd)) {
       bindSenderToRuntime(ctx, active);
+      if (ctx) windowRuntimes.set(ctx.sender.id, active);
       return snapshotState(active);
     }
     if (startInFlight) await startInFlight.catch(() => {});
     // 等完上一个构建后复看：可能恰好就是目标 cwd（如超时后的重试）
     if (active && samePath(active.cwd, payload.cwd)) {
       bindSenderToRuntime(ctx, active);
+      if (ctx) windowRuntimes.set(ctx.sender.id, active);
       return snapshotState(active);
     }
     if (active && !samePath(active.cwd, payload.cwd) && !active.adapterRuntime.session.isStreaming) {
@@ -1226,6 +1298,7 @@ export const piRuntimeApi = {
     const flight = (async () => {
       const runtime = await createRuntime(payload.cwd);
       active = runtime;
+      if (ctx) windowRuntimes.set(ctx.sender.id, runtime);
       latestMcpStatus = runtime.mcpStatus;
       return snapshotState(runtime);
     })();
@@ -1242,7 +1315,10 @@ export const piRuntimeApi = {
           timer = setTimeout(() => reject(new Error('start-timeout')), START_TIMEOUT_MS);
         }),
       ]);
-      if (active) bindSenderToRuntime(ctx, active);
+      if (active) {
+        bindSenderToRuntime(ctx, active);
+        if (ctx) windowRuntimes.set(ctx.sender.id, active);
+      }
       return state;
     } catch (err) {
       // 会话构建失败里的模型不可用文本（含恢复会话场景）转结构化错误码，
