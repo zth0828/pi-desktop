@@ -347,7 +347,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
         .catch(() => { if (!disposed) setGitBranch(null); });
     };
     refresh();
-    const timer = window.setInterval(refresh, 30_000);
+    const timer = window.setInterval(refresh, 5_000);
     const onVisibilityChange = () => {
       if (typeof document !== 'undefined' && !document.hidden) refresh();
     };
