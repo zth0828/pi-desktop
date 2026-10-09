@@ -6,6 +6,7 @@ import {
   captureReviewBaseline,
   clearReviewBaseline,
   isCapturingReviewBaseline,
+  normalizeGitRelPath,
   reviewApi,
 } from '../../electron/services/review-api';
 
@@ -91,4 +92,24 @@ describe('review baseline guards and non-blocking capture', () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  describe('normalizeGitRelPath', () => {
+    it('处理相对路径与带反斜杠/冗余前缀的路径', () => {
+      expect(normalizeGitRelPath('/workspace', 'src/app.ts')).toBe('src/app.ts');
+      expect(normalizeGitRelPath('/workspace', 'src\\components\\Button.tsx')).toBe('src/components/Button.tsx');
+      expect(normalizeGitRelPath('/workspace', './src/index.ts')).toBe('src/index.ts');
+    });
+
+    it('支持 Windows 盘符绝对路径且大小写不敏感', () => {
+      expect(normalizeGitRelPath('C:/workspace', 'c:/workspace/src/app.ts')).toBe('src/app.ts');
+      expect(normalizeGitRelPath('c:\\workspace', 'C:\\workspace\\src\\app.ts')).toBe('src/app.ts');
+      expect(normalizeGitRelPath('C:/workspace', 'D:/other/external.ts')).toBe('D:/other/external.ts');
+    });
+
+    it('支持 macOS /private 前缀拉齐', () => {
+      expect(normalizeGitRelPath('/tmp/repo', '/private/tmp/repo/src/app.ts')).toBe('src/app.ts');
+      expect(normalizeGitRelPath('/private/tmp/repo', '/tmp/repo/src/app.ts')).toBe('src/app.ts');
+    });
+  });
 });
+

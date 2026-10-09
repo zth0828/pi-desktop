@@ -151,8 +151,9 @@ export function collectTurnChanges(
   for (const id of toolCallIds) {
     const ex = toolExecutions[id];
     if (!ex || ex.status !== 'success') continue;
-    const path = argsPath(ex.args);
-    if (!path) continue;
+    const rawPath = argsPath(ex.args);
+    if (!rawPath) continue;
+    const path = rawPath.replace(/\\/g, '/').replace(/^\.\//, '');
     if (ex.toolName === 'edit') {
       const details = resultDetails(ex.result);
       const diff = typeof details?.diff === 'string' ? details.diff : undefined;

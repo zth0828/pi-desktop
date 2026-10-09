@@ -3,10 +3,10 @@
 // 当前磁盘始终由隔离的临时 index 快照，因此 staged、unstaged、untracked 都能形成
 // 同一份 tree diff，又不会触碰真实 index/工作区。真实 index 只用于补充 unmerged 状态；
 import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, realpathSync } from 'node:fs';
 import { readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import path, { join } from 'node:path';
 import type {
   HostSuccess,
   ReviewFileDiffPayload,
@@ -352,6 +352,38 @@ async function diffNumstat(cwd: string, base: string, cur: string, env?: NodeJS.
 
 const CONFLICT_CODES = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']);
 
+/**
+ * 将任意平台路径（Windows 反斜杠、绝对路径、macOS /private 别名）转换为相对于 cwd 的 Git POSIX 路径。
+ */
+export function normalizeGitRelPath(cwd: string, rawPath: string): string {
+  const normalized = rawPath.replace(/\\/g, '/').replace(/^\.\//, '');
+  if (!rawPath.startsWith('/') && !/^[a-zA-Z]:/.test(normalized)) {
+    return normalized;
+  }
+  try {
+    const realCwd = realpathSync(cwd);
+    const realTarget = realpathSync(rawPath);
+    const rel = path.relative(realCwd, realTarget).replace(/\\/g, '/');
+    if (!rel.startsWith('..') && !rel.startsWith('/') && !/^[a-zA-Z]:/.test(rel)) {
+      return rel;
+    }
+  } catch {
+    // 目标文件可能已被删除（如被删文件的 revert），回退到字符串前缀判定
+  }
+  const root = cwd.replace(/\\/g, '/').replace(/\/$/, '');
+  const isWindows = /^[a-zA-Z]:/.test(normalized) || /^[a-zA-Z]:/.test(root);
+  const a = isWindows ? normalized.toLowerCase() : normalized;
+  const b = isWindows ? root.toLowerCase() : root;
+  if (a.startsWith(`${b}/`)) {
+    return normalized.slice(root.length + 1);
+  }
+  const privateRoot = b.startsWith('/private/') ? b.slice(8) : `/private${b}`;
+  if (a.startsWith(`${privateRoot}/`)) {
+    return normalized.slice(privateRoot.length + 1);
+  }
+  return normalized;
+}
+
 /** Read the real index because temporary snapshot indexes intentionally flatten conflicts. */
 async function conflictPaths(cwd: string, base: Baseline): Promise<Set<string>> {
   if (base.kind !== 'git-head') return new Set();
@@ -360,7 +392,7 @@ async function conflictPaths(cwd: string, base: Baseline): Promise<Set<string>> 
   const paths = new Set<string>();
   for (const entry of result.stdout.split('\0')) {
     if (entry.length < 4 || !CONFLICT_CODES.has(entry.slice(0, 2))) continue;
-    paths.add(entry.slice(3));
+    paths.add(entry.slice(3).replace(/\\/g, '/'));
   }
   return paths;
 }
@@ -412,9 +444,10 @@ export const reviewApi = {
     if (!base) {
       return { available: false, reason: failure ?? 'not-started', path: payload.path, diff: '' };
     }
+    const targetPath = normalizeGitRelPath(active.cwd, payload.path);
     try {
       const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
-      const r = await runGit(active.cwd, ['diff', '--no-renames', base.ref, cur, '--', payload.path], { env: base.gitEnv });
+      const r = await runGit(active.cwd, ['diff', '--no-renames', base.ref, cur, '--', targetPath], { env: base.gitEnv });
       if (r.code !== 0) throw new Error(r.stderr.trim() || 'git diff failed');
       return { available: true, path: payload.path, diff: r.stdout };
     } catch (err) {
@@ -441,15 +474,19 @@ export const reviewApi = {
     const base = currentBaseline(active);
     const failure = findBaselineFailure(active.cwd);
     if (!base) return { success: false, error: failure ?? 'not-started' };
+    const targetPath = normalizeGitRelPath(active.cwd, payload.path);
     try {
-      if ((await conflictPaths(active.cwd, base)).has(payload.path)) {
+      if ((await conflictPaths(active.cwd, base)).has(targetPath)) {
         return { success: false, error: 'conflicted files cannot be reverted from Review' };
       }
       const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
-      const diff = await runGit(active.cwd, ['diff', '--no-renames', base.ref, cur, '--', payload.path], { env: base.gitEnv });
+      const diff = await runGit(active.cwd, ['diff', '--no-renames', base.ref, cur, '--', targetPath], { env: base.gitEnv });
       if (diff.code !== 0) throw new Error(diff.stderr.trim() || 'git diff failed');
       if (!diff.stdout.trim()) return { success: false, error: 'no changes to revert' };
-      const apply = await runGit(active.cwd, ['apply', '-R'], { env: base.gitEnv, input: diff.stdout });
+      let apply = await runGit(active.cwd, ['apply', '-R'], { env: base.gitEnv, input: diff.stdout });
+      if (apply.code !== 0) {
+        apply = await runGit(active.cwd, ['apply', '-R', '--ignore-space-change'], { env: base.gitEnv, input: diff.stdout });
+      }
       if (apply.code !== 0) return { success: false, error: apply.stderr.trim() || 'git apply failed' };
       return { success: true };
     } catch (err) {
@@ -468,11 +505,15 @@ export const reviewApi = {
     const failure = findBaselineFailure(active.cwd);
     if (!base) return { success: false, error: failure ?? 'not-started' };
     if (!payload.patch.trim()) return { success: false, error: 'empty patch' };
+    const targetPath = normalizeGitRelPath(active.cwd, payload.path);
     try {
-      if ((await conflictPaths(active.cwd, base)).has(payload.path)) {
+      if ((await conflictPaths(active.cwd, base)).has(targetPath)) {
         return { success: false, error: 'conflicted files cannot be reverted from Review' };
       }
-      const apply = await runGit(active.cwd, ['apply', '-R'], { env: base.gitEnv, input: payload.patch });
+      let apply = await runGit(active.cwd, ['apply', '-R'], { env: base.gitEnv, input: payload.patch });
+      if (apply.code !== 0) {
+        apply = await runGit(active.cwd, ['apply', '-R', '--ignore-space-change'], { env: base.gitEnv, input: payload.patch });
+      }
       if (apply.code !== 0) return { success: false, error: apply.stderr.trim() || 'git apply failed' };
       return { success: true };
     } catch (err) {
@@ -480,3 +521,4 @@ export const reviewApi = {
     }
   },
 };
+

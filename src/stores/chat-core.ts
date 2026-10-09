@@ -32,6 +32,7 @@ import {
   type ContentBlock,
   type ToolExecution,
 } from '../lib/chat-types';
+import { normalizeDisplayPath } from '../lib/review-diff';
 
 /** 自动重试状态（auto_retry_start；startedAt 用于按 delayMs 本地倒计时） */
 export type RetryState = {
@@ -766,14 +767,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       openReviewFile: (rawPath) => {
-        let path: string | undefined;
-        if (rawPath) {
-          const cwd = get().cwd?.replace(/\/$/, '');
-          const normalized = rawPath.replace(/\\/g, '/');
-          path = cwd && normalized.startsWith(`${cwd}/`)
-            ? normalized.slice(cwd.length + 1)
-            : normalized;
-        }
+        const path = rawPath ? normalizeDisplayPath(rawPath, get().cwd) : undefined;
         set({
           reviewOpen: true,
           workspaceOpen: false,

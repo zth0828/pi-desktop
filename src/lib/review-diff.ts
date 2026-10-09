@@ -29,8 +29,9 @@ export type ParsedFileDiff = {
 
 /** 解析单文件标准 unified diff；没有 hunk（空 diff / 纯 mode 变更）返回 null。 */
 export function parseUnifiedDiff(diff: string): ParsedFileDiff | null {
-  const lines = diff.split('\n');
-  // split  artifact：diff 以 \n 结尾时末尾多一个空串，先去掉
+  const normalized = diff.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+  // split artifact：diff 以 \n 结尾时末尾多一个空串，先去掉
   if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
   const headerLines: string[] = [];
   const hunks: ReviewHunk[] = [];

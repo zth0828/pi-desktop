@@ -55,6 +55,15 @@ describe('parseUnifiedDiff', () => {
     expect(parseUnifiedDiff('diff --git a/f b/f\nold mode 100644\nnew mode 100755\n')).toBeNull();
   });
 
+  it('支持 Windows CRLF (\\r\\n) 换行符的 diff 且行内容不含 \\r', () => {
+    const crlfDiff = SAMPLE_DIFF.replace(/\n/g, '\r\n');
+    const parsed = parseUnifiedDiff(crlfDiff);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.headerLines[0]).toBe('diff --git a/foo.txt b/foo.txt');
+    expect(parsed!.hunks[0].lines[0]).toBe(' a');
+    expect(parsed!.hunks[0].lines.every((l) => !l.includes('\r'))).toBe(true);
+  });
+
   it('保留 \\ No newline at end of file 标记行', () => {
     const diff = `diff --git a/f b/f
 --- a/f

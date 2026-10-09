@@ -73,6 +73,25 @@ describe('collectTurnChanges', () => {
     expect(changes.deleted).toBe(1);
   });
 
+  it('跨平台路径归一化：反斜杠与 ./ 路径能够合并至同一文件', () => {
+    const executions: Record<string, ToolExecution> = {
+      call1: exec({
+        toolCallId: 'call1',
+        args: { path: 'src\\components\\Button.tsx' },
+        result: { content: [], details: { diff: '+1 a' } },
+      }),
+      call2: exec({
+        toolCallId: 'call2',
+        args: { path: './src/components/Button.tsx' },
+        result: { content: [], details: { diff: '+2 b\n-2 c' } },
+      }),
+    };
+    const changes = collectTurnChanges(executions, ['call1', 'call2']);
+    expect(changes.files).toEqual([
+      { path: 'src/components/Button.tsx', added: 2, deleted: 1, toolCallId: 'call2' },
+    ]);
+  });
+
   it('跳过失败/中断/无 diff 的执行与非 edit/write 工具', () => {
     const executions: Record<string, ToolExecution> = {
       call1: exec({ toolCallId: 'call1', status: 'error', args: { path: 'a.ts' } }),
