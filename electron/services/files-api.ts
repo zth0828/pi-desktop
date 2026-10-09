@@ -54,7 +54,13 @@ function listWithFd(cwd: string, fdPath: string): Promise<string[] | null> {
         resolve(code === 0 ? [] : null);
         return;
       }
-      resolve(stdout.trim().split('\n').filter(Boolean).slice(0, MAX_FILES));
+      resolve(
+        stdout
+          .split(/\r?\n/)
+          .map((line) => line.trim().replace(/\\/g, '/'))
+          .filter(Boolean)
+          .slice(0, MAX_FILES),
+      );
     });
   });
 }
@@ -82,10 +88,19 @@ export const filesApi = {
   /** 逐层列目录：手动文件面板的树形浏览（不烧 pi quota，纯文件系统浏览）。 */
   listDir: async (payload: PiFileListDirPayload): Promise<PiFileListDirResult> => {
     const base = payload.cwd;
-    const rel = payload.dir ?? '';
+    const rel = (payload.dir ?? '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
     const dirPath = path.join(base, rel);
-    const level = await readIgnoreLevel(base, rel, rel);
-    const levels: IgnoreLevel[] = level ? [level] : [];
+    const levels: IgnoreLevel[] = [];
+    const rootLevel = await readIgnoreLevel(base, '', '');
+    if (rootLevel) levels.push(rootLevel);
+    if (rel) {
+      let currentSeg = '';
+      for (const seg of rel.split('/')) {
+        currentSeg = currentSeg ? `${currentSeg}/${seg}` : seg;
+        const subLevel = await readIgnoreLevel(base, currentSeg, currentSeg);
+        if (subLevel) levels.push(subLevel);
+      }
+    }
     const entries = await readdir(dirPath, { withFileTypes: true }).catch(() => [] as Dirent[]);
     const dirs: string[] = [];
     const files: string[] = [];

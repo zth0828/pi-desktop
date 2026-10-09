@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readIgnoreLevel, walkGitignoreAware } from '../../electron/utils/gitignore-walk';
+import { filesApi } from '../../electron/services/files-api';
 
 let root: string;
 
@@ -112,5 +113,14 @@ describe('walkGitignoreAware（fd 不可用时的 @ 补全回退）', () => {
     write('.gitignore', 'build/\n');
     const files = await collect();
     expect(files).toEqual(['.gitignore']);
+  });
+
+  it('filesApi.listDir 正确处理 Windows 反斜杠路径与首尾斜杠', async () => {
+    write('src/nested/file.txt', 'hello');
+    write('src/nested/ignore.log', 'skip');
+    write('.gitignore', '*.log\n');
+    const result = await filesApi.listDir({ cwd: root, dir: 'src\\nested\\' });
+    expect(result.dir).toBe('src/nested');
+    expect(result.files).toEqual(['file.txt']);
   });
 });
