@@ -64,6 +64,7 @@ import {
 import { expandFileReferences } from '../utils/file-expand';
 import { samePath } from '../utils/same-path';
 import {
+  isInsideWorkspace,
   normalizePreviewablePath,
   previewableExternalFilesFromMessages,
 } from '../utils/previewable-files';
@@ -701,10 +702,7 @@ function desktopWorkspaceInstructions(cwd: string): string {
   ].join('\n');
 }
 
-function isInsideWorkspace(root: string, candidate: string): boolean {
-  const relative = path.relative(root, candidate);
-  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
-}
+export { isInsideWorkspace };
 
 /**
  * pi 的官方扩展拦截点：只限制直接文件写工具，模型若需另一个项目必须让用户先在 GUI

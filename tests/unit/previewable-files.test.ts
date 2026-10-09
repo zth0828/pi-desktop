@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  isInsideWorkspace,
   normalizePreviewablePath,
   previewableExternalFilesFromMessages,
 } from '../../electron/utils/previewable-files';
@@ -107,6 +108,28 @@ describe('previewableExternalFilesFromMessages', () => {
     const result = previewableExternalFilesFromMessages(messages, root);
     expect(result.has(normalizePreviewablePath(attachedFile))).toBe(true);
     expect(result.has(normalizePreviewablePath(expandedFile))).toBe(true);
+  });
+});
+
+describe('isInsideWorkspace', () => {
+  it('正确识别工作区内外的路径，且放行相对路径', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'pi-ws-check-'));
+    roots.push(root);
+    expect(isInsideWorkspace(root, 'src/index.ts')).toBe(true);
+    expect(isInsideWorkspace(root, path.join(root, 'src', 'index.ts'))).toBe(true);
+    expect(isInsideWorkspace(root, path.join(tmpdir(), 'other', 'index.ts'))).toBe(false);
+  });
+
+  it('跨平台 symlink：拉齐 macOS /tmp 与 /private/tmp 等价路径', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'pi-ws-symlink-'));
+    roots.push(root);
+    const subFile = path.join(root, 'test.txt');
+    expect(isInsideWorkspace(root, subFile)).toBe(true);
+    if (root.startsWith('/private/tmp/')) {
+      const publicTmpRoot = root.replace('/private/tmp/', '/tmp/');
+      expect(isInsideWorkspace(publicTmpRoot, subFile)).toBe(true);
+      expect(isInsideWorkspace(root, subFile.replace('/private/tmp/', '/tmp/'))).toBe(true);
+    }
   });
 });
 

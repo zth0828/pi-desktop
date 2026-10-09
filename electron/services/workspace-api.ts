@@ -9,6 +9,7 @@ import type {
 } from '@shared/host-api/contract';
 import { resolveWorkspacePath } from '../utils/workspace-path';
 import { normalizePreviewablePath } from '../utils/previewable-files';
+import { samePath } from '../utils/same-path';
 import { resolveRuntimeForContext } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
 
@@ -39,6 +40,14 @@ function activeRoot(ctx?: HostActionContext): string {
   return runtime.cwd;
 }
 
+function hasPreviewableExternalFile(set: Set<string>, candidate: string): boolean {
+  if (set.has(candidate)) return true;
+  for (const item of set) {
+    if (samePath(item, candidate)) return true;
+  }
+  return false;
+}
+
 /**
  * 相对路径始终限制在当前工作区。绝对路径只有在 pi 本次 runtime 的 read/edit/write
  * 工具调用里真实出现过时才允许预览，避免 Renderer 通过 IPC 任意读取本机文件。
@@ -49,7 +58,7 @@ async function resolvePreviewFile(pathValue: string, ctx?: HostActionContext): P
   const root = await realpath(runtime.cwd);
   if (!path.isAbsolute(pathValue)) return resolveWorkspacePath(root, pathValue);
   const candidate = normalizePreviewablePath(pathValue);
-  if (!runtime.previewableExternalFiles.has(candidate)) {
+  if (!hasPreviewableExternalFile(runtime.previewableExternalFiles, candidate)) {
     throw new Error('file is outside the active workspace and was not produced by this session');
   }
   return realpath(candidate);

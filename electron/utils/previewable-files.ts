@@ -27,6 +27,23 @@ export function normalizePreviewablePath(filePath: string): string {
   }
 }
 
+/**
+ * 判定目标路径是否位于工作区内（处理 macOS /tmp 与 /private/tmp symlink 等跨平台等价形式）。
+ */
+export function isInsideWorkspace(root: string, candidate: string): boolean {
+  try {
+    const resolvedCandidate = path.isAbsolute(candidate) ? candidate : path.resolve(root, candidate);
+    const realRoot = normalizePreviewablePath(root);
+    const realCandidate = normalizePreviewablePath(resolvedCandidate);
+    const relative = path.relative(realRoot, realCandidate);
+    return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  } catch {
+    const resolvedCandidate = path.isAbsolute(candidate) ? candidate : path.resolve(root, candidate);
+    const relative = path.relative(root, resolvedCandidate);
+    return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  }
+}
+
 /** Rebuild the external-file preview grant from pi's native historical messages (scoped to the last maxTurns turns). */
 export function previewableExternalFilesFromMessages(
   messages: unknown[],

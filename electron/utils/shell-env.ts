@@ -126,7 +126,12 @@ export function refreshUserPath(): string {
 }
 
 export function envWithUserPath(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return { ...process.env, ...extra, PATH: resolveUserPath() };
+  const userPath = resolveUserPath();
+  const env: NodeJS.ProcessEnv = { ...process.env, ...extra, PATH: userPath };
+  if (process.platform === 'win32') {
+    env.Path = userPath;
+  }
+  return env;
 }
 
 /** 测试专用：清缓存。 */
