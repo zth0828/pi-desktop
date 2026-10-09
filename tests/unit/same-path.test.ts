@@ -1,7 +1,7 @@
 // samePath / pathsEqual（electron/utils/same-path.ts）：
 // - posix：symlink 形式差异经 realpath 拉齐（macOS /tmp → /private/tmp）
 // - win32：大小写不敏感、/ 与 \ 混用归一（NTFS 语义，mac 上注入 platform 参数验证）
-import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -25,6 +25,13 @@ describe('pathsEqual', () => {
     // posix 语义下同样的大小写差异不得判等（mac 行为不变）
     expect(pathsEqual('C:\\Users\\X\\file.json', 'c:\\users\\x\\FILE.json', 'darwin')).toBe(false);
   });
+
+  it('ignores trailing slashes on all platforms', () => {
+    expect(pathsEqual('/a/b/', '/a/b', 'darwin')).toBe(true);
+    expect(pathsEqual('/a/b///', '/a/b', 'linux')).toBe(true);
+    expect(pathsEqual('C:\\Users\\X\\', 'c:\\users\\x', 'win32')).toBe(true);
+    expect(pathsEqual('C:/Users/X/', 'c:\\users\\x\\', 'win32')).toBe(true);
+  });
 });
 
 describe('samePath', () => {
@@ -46,6 +53,17 @@ describe('samePath', () => {
     if (process.platform !== 'win32') {
       expect(samePath(link, await realpath(target))).toBe(true);
     }
+  });
+
+  it('matches non-existent files inside symlinked directory hierarchies', async () => {
+    const realDir = path.join(parent, 'real-dir');
+    const linkDir = path.join(parent, 'link-dir');
+    await mkdir(realDir);
+    await symlink(realDir, linkDir);
+    // 两个目标文件均未在磁盘创建
+    const targetNotYetCreated = path.join(realDir, 'pending-new-file.json');
+    const linkNotYetCreated = path.join(linkDir, 'pending-new-file.json');
+    expect(samePath(targetNotYetCreated, linkNotYetCreated)).toBe(true);
   });
 
   it('returns false for different or missing paths', async () => {
