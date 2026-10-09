@@ -26,12 +26,15 @@ const GIT_TIMEOUT_MS = 30_000;
 
 // Review 的 diff/apply 必须按字节保真：用户全局 git 可能配了 core.autocrlf=true
 // （Windows 常见），回写时会将 LF 转成 CRLF，导致还原结果与预期不符。
+// 同时禁用 core.quotepath，防止中文或非 ASCII 文件名被 Git 转义为八进制双引号字符串破坏路径映射。
 // 环境变量配置优先级最高，只影响壳内部的 git 管道，不改用户仓库配置。
 const GIT_STABLE_ENV: NodeJS.ProcessEnv = {
   GIT_CONFIG_NOSYSTEM: '1',
-  GIT_CONFIG_COUNT: '1',
+  GIT_CONFIG_COUNT: '2',
   GIT_CONFIG_KEY_0: 'core.autocrlf',
   GIT_CONFIG_VALUE_0: 'false',
+  GIT_CONFIG_KEY_1: 'core.quotepath',
+  GIT_CONFIG_VALUE_1: 'false',
 };
 
 /**

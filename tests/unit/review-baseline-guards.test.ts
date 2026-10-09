@@ -76,4 +76,19 @@ describe('review baseline guards and non-blocking capture', () => {
       await rm(dirB, { recursive: true, force: true });
     }
   });
+
+  it('包含中文与非 ASCII 文件名的目录能够正常建立 baseline 并成功完成', async () => {
+    clearReviewBaseline();
+    const tempDir = await mkdtemp(path.join(tmpdir(), 'pi-test-review-utf8-'));
+    await writeFile(path.join(tempDir, '功能测试.txt'), '初始内容');
+    await writeFile(path.join(tempDir, '🚀emoji.md'), '# 标题');
+
+    try {
+      await captureReviewBaseline(tempDir);
+      expect(isCapturingReviewBaseline(tempDir)).toBe(false);
+    } finally {
+      clearReviewBaseline();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });
