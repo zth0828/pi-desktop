@@ -59,4 +59,21 @@ describe('review baseline guards and non-blocking capture', () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('不同工作区的 baseline 状态相互隔离，互不污染', async () => {
+    clearReviewBaseline();
+    const dirA = await mkdtemp(path.join(tmpdir(), 'pi-test-review-iso-a-'));
+    const dirB = await mkdtemp(path.join(tmpdir(), 'pi-test-review-iso-b-'));
+
+    try {
+      await captureReviewBaseline(dirA);
+      // dirA 捕获成功，dirB 尚未捕获
+      expect(isCapturingReviewBaseline(dirA)).toBe(false);
+      expect(isCapturingReviewBaseline(dirB)).toBe(false);
+    } finally {
+      clearReviewBaseline();
+      await rm(dirA, { recursive: true, force: true });
+      await rm(dirB, { recursive: true, force: true });
+    }
+  });
 });

@@ -18,6 +18,7 @@ import type {
 } from '@shared/host-api/contract';
 import { resolveRuntimeForContext, type ActiveRuntime } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
+import { samePath } from '../utils/same-path';
 
 type GitResult = { code: number; stdout: string; stderr: string };
 
@@ -199,13 +200,32 @@ type Baseline = {
 };
 const baselines = new Map<string, Baseline>();
 const capturingCwds = new Set<string>();
+const baselineFailures = new Map<string, string>();
 
-export function isCapturingReviewBaseline(cwd: string): boolean {
-  return capturingCwds.has(cwd);
+function findBaseline(cwd: string): Baseline | null {
+  for (const [key, base] of baselines.entries()) {
+    if (samePath(key, cwd)) return base;
+  }
+  return null;
 }
 
-/** capture 失败原因（git-error:… 或 directory-too-large），供 getSummary 降级展示 */
-let baselineFailure: string | null = null;
+function findBaselineFailure(cwd: string): string | null {
+  for (const [key, failure] of baselineFailures.entries()) {
+    if (samePath(key, cwd)) return failure;
+  }
+  return null;
+}
+
+function hasCapturingCwd(cwd: string): boolean {
+  for (const key of capturingCwds) {
+    if (samePath(key, cwd)) return true;
+  }
+  return false;
+}
+
+export function isCapturingReviewBaseline(cwd: string): boolean {
+  return hasCapturingCwd(cwd);
+}
 
 function disposeBaseline(): void {
   for (const entry of baselines.values()) {
@@ -219,9 +239,11 @@ function disposeBaseline(): void {
  * 非 Git 目录使用临时 bare object store，项目目录本身不会出现 .git。
  */
 export async function captureReviewBaseline(cwd: string): Promise<void> {
-  if (baselines.has(cwd) || capturingCwds.has(cwd)) return;
+  if (findBaseline(cwd) || hasCapturingCwd(cwd)) return;
   capturingCwds.add(cwd);
-  baselineFailure = null;
+  for (const key of [...baselineFailures.keys()]) {
+    if (samePath(key, cwd)) baselineFailures.delete(key);
+  }
   let ownedDir: string | undefined;
   try {
     let gitEnv: NodeJS.ProcessEnv | undefined;
@@ -234,13 +256,13 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
       }
       const isOver = await checkGitRepoOversized(cwd);
       if (isOver) {
-        baselineFailure = 'directory-too-large';
+        baselineFailures.set(cwd, 'directory-too-large');
         return;
       }
     } else {
       const stats = await scanDirectoryStats(cwd);
       if (stats.oversized) {
-        baselineFailure = 'directory-too-large';
+        baselineFailures.set(cwd, 'directory-too-large');
         return;
       }
       ownedDir = mkdtempSync(join(tmpdir(), 'pi-desktop-review-repo-'));
@@ -266,12 +288,14 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
     if (ownedDir) await removeDirBestEffort(ownedDir);
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('directory-too-large')) {
-      baselineFailure = 'directory-too-large';
+      baselineFailures.set(cwd, 'directory-too-large');
     } else {
-      baselineFailure = `git-error:${msg}`;
+      baselineFailures.set(cwd, `git-error:${msg}`);
     }
   } finally {
-    capturingCwds.delete(cwd);
+    for (const key of [...capturingCwds]) {
+      if (samePath(key, cwd)) capturingCwds.delete(key);
+    }
   }
 }
 
@@ -279,12 +303,12 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
 export function clearReviewBaseline(): void {
   disposeBaseline();
   capturingCwds.clear();
-  baselineFailure = null;
+  baselineFailures.clear();
 }
 
 /** 调用方 runtime 的 baseline（cwd 不一致视为没有）。 */
 function currentBaseline(active: ActiveRuntime): Baseline | null {
-  return baselines.get(active.cwd) ?? null;
+  return findBaseline(active.cwd);
 }
 
 function unavailable(reason: string): ReviewSummaryResult {
@@ -342,11 +366,12 @@ export const reviewApi = {
   getSummary: async (_payload?: unknown, ctx?: HostActionContext): Promise<ReviewSummaryResult> => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return unavailable('not-started');
-    if (capturingCwds.has(active.cwd)) {
+    if (hasCapturingCwd(active.cwd)) {
       return unavailable('capturing');
     }
     const base = currentBaseline(active);
-    if (!base) return unavailable(baselineFailure ?? 'not-a-git-repo');
+    const failure = findBaselineFailure(active.cwd);
+    if (!base) return unavailable(failure ?? 'not-a-git-repo');
     try {
       const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
       const [statuses, stats, conflicts] = await Promise.all([
@@ -376,12 +401,13 @@ export const reviewApi = {
     if (!active) {
       return { available: false, reason: 'not-started', path: payload.path, diff: '' };
     }
-    if (capturingCwds.has(active.cwd)) {
+    if (hasCapturingCwd(active.cwd)) {
       return { available: false, reason: 'capturing', path: payload.path, diff: '' };
     }
     const base = currentBaseline(active);
+    const failure = findBaselineFailure(active.cwd);
     if (!base) {
-      return { available: false, reason: baselineFailure ?? 'not-started', path: payload.path, diff: '' };
+      return { available: false, reason: failure ?? 'not-started', path: payload.path, diff: '' };
     }
     try {
       const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
@@ -406,11 +432,12 @@ export const reviewApi = {
   revertFile: async (payload: ReviewRevertFilePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'not-started' };
-    if (capturingCwds.has(active.cwd)) {
+    if (hasCapturingCwd(active.cwd)) {
       return { success: false, error: 'baseline is capturing' };
     }
     const base = currentBaseline(active);
-    if (!base) return { success: false, error: baselineFailure ?? 'not-started' };
+    const failure = findBaselineFailure(active.cwd);
+    if (!base) return { success: false, error: failure ?? 'not-started' };
     try {
       if ((await conflictPaths(active.cwd, base)).has(payload.path)) {
         return { success: false, error: 'conflicted files cannot be reverted from Review' };
@@ -431,11 +458,12 @@ export const reviewApi = {
   revertHunk: async (payload: ReviewRevertHunkPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'not-started' };
-    if (capturingCwds.has(active.cwd)) {
+    if (hasCapturingCwd(active.cwd)) {
       return { success: false, error: 'baseline is capturing' };
     }
     const base = currentBaseline(active);
-    if (!base) return { success: false, error: baselineFailure ?? 'not-started' };
+    const failure = findBaselineFailure(active.cwd);
+    if (!base) return { success: false, error: failure ?? 'not-started' };
     if (!payload.patch.trim()) return { success: false, error: 'empty patch' };
     try {
       if ((await conflictPaths(active.cwd, base)).has(payload.path)) {
