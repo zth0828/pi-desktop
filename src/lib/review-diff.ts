@@ -147,6 +147,25 @@ type ReviewListEntry = {
   deleted: number;
 };
 
+export function isAbsolutePath(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, '/');
+  return normalized.startsWith('/') || /^[a-zA-Z]:\//.test(normalized);
+}
+
+export function isPathInside(childPath: string, parentDir?: string): boolean {
+  if (!parentDir) return false;
+  const child = childPath.replace(/\\/g, '/').replace(/\/$/, '');
+  const parent = parentDir.replace(/\\/g, '/').replace(/\/$/, '');
+  const isWindows = /^[a-zA-Z]:/.test(child) || /^[a-zA-Z]:/.test(parent);
+  const a = isWindows ? child.toLowerCase() : child;
+  const b = isWindows ? parent.toLowerCase() : parent;
+  if (a === b || a.startsWith(`${b}/`)) return true;
+  const privateParent = b.startsWith('/private/')
+    ? b.slice('/private'.length)
+    : `/private${b}`;
+  return a === privateParent || a.startsWith(`${privateParent}/`);
+}
+
 /** 规范化文件展示路径：相对 cwd 的文件去除前缀，外部绝对路径保持原样。 */
 export function normalizeDisplayPath(filePath: string, cwd?: string): string {
   let normalized = filePath.replace(/\\/g, '/');
@@ -155,9 +174,19 @@ export function normalizeDisplayPath(filePath: string, cwd?: string): string {
   }
   if (!cwd) return normalized;
   const root = cwd.replace(/\\/g, '/').replace(/\/$/, '');
-  if (normalized === root) return '.';
-  if (normalized.startsWith(`${root}/`)) {
+  const isWindows = /^[a-zA-Z]:/.test(normalized) || /^[a-zA-Z]:/.test(root);
+  const a = isWindows ? normalized.toLowerCase() : normalized;
+  const b = isWindows ? root.toLowerCase() : root;
+  if (a === b) return '.';
+  if (a.startsWith(`${b}/`)) {
     return normalized.slice(root.length + 1);
+  }
+  const privateRoot = b.startsWith('/private/')
+    ? b.slice('/private'.length)
+    : `/private${b}`;
+  if (a === privateRoot) return '.';
+  if (a.startsWith(`${privateRoot}/`)) {
+    return normalized.slice(privateRoot.length + 1);
   }
   return normalized;
 }
@@ -233,16 +262,13 @@ export function mergeReviewFiles(
   baselineFiles: ReviewListEntry[],
   toolFiles: (ReviewFallbackFile | ReviewSessionFile)[],
 ): ReviewListEntry[] {
-  const root = cwd?.replace(/\\/g, '/').replace(/\/$/, '');
   const byPath = new Map<string, ReviewListEntry>();
   for (const file of baselineFiles) byPath.set(file.path, file);
   for (const file of toolFiles) {
-    const normalized = file.path.replace(/\\/g, '/');
-    const insideWorkspace = Boolean(root && (
-      normalized === root || normalized.startsWith(`${root}/`) || !normalized.startsWith('/')
-    ));
+    const isAbs = isAbsolutePath(file.path);
+    const insideWorkspace = isAbs ? isPathInside(file.path, cwd) : true;
     if (baselineAvailable && insideWorkspace) continue;
-    const displayPath = root && normalized.startsWith(`${root}/`) ? normalized.slice(root.length + 1) : normalized;
+    const displayPath = normalizeDisplayPath(file.path, cwd);
     if (!byPath.has(displayPath)) {
       byPath.set(displayPath, {
         path: displayPath,

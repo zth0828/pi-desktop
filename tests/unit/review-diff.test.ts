@@ -9,6 +9,8 @@ import {
   buildHunkPatch,
   buildSplitDiffRows,
   collectFallbackFiles,
+  isAbsolutePath,
+  isPathInside,
   mergeReviewFiles,
   normalizeDisplayPath,
   sessionChangeFiles,
@@ -319,4 +321,38 @@ describe('mergeReviewFiles', () => {
       { path: '/other/b.ts', status: 'modified', added: 2, deleted: 1 },
     ]);
   });
+
+  it('Windows 盘符路径：大小写不敏感归一化并正确区分工作区内外', () => {
+    const files = mergeReviewFiles('C:/workspace', true, [
+      { path: 'inside.ts', status: 'modified', added: 1, deleted: 0 },
+    ], [
+      { path: 'c:/workspace/src/app.ts', added: 2, deleted: 1 },
+      { path: 'D:/external/other.ts', added: 3, deleted: 0 },
+      { path: 'relative.ts', added: 1, deleted: 0 },
+    ]);
+    expect(files).toEqual([
+      { path: 'inside.ts', status: 'modified', added: 1, deleted: 0 },
+      { path: 'D:/external/other.ts', status: 'modified', added: 3, deleted: 0 },
+    ]);
+  });
 });
+
+describe('isAbsolutePath & isPathInside', () => {
+  it('正确识别 POSIX 与 Windows 绝对路径及相对路径', () => {
+    expect(isAbsolutePath('/usr/bin')).toBe(true);
+    expect(isAbsolutePath('C:/Users/test')).toBe(true);
+    expect(isAbsolutePath('d:\\projects\\repo')).toBe(true);
+    expect(isAbsolutePath('src/index.ts')).toBe(false);
+    expect(isAbsolutePath('./src/index.ts')).toBe(false);
+  });
+
+  it('isPathInside 支持 Windows 盘符大小写不敏感与 macOS /private 映射', () => {
+    expect(isPathInside('C:/workspace/src/a.ts', 'c:/workspace')).toBe(true);
+    expect(isPathInside('c:\\workspace\\src\\a.ts', 'C:/workspace')).toBe(true);
+    expect(isPathInside('D:/workspace/src/a.ts', 'C:/workspace')).toBe(false);
+    expect(isPathInside('/private/tmp/a.txt', '/tmp')).toBe(true);
+    expect(isPathInside('/tmp/a.txt', '/private/tmp')).toBe(true);
+    expect(isPathInside('/other/a.txt', '/tmp')).toBe(false);
+  });
+});
+

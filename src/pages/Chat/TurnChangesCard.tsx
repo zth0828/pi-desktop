@@ -9,6 +9,7 @@ import {
   resultDetails,
   type ToolWarning,
 } from '../../lib/tool-display';
+import { isAbsolutePath, isPathInside, normalizeDisplayPath } from '../../lib/review-diff';
 import { FileIcon } from '../../components/FileIcon';
 import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 
@@ -74,20 +75,12 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
   const changes = collectTurnChanges(toolExecutions, toolCallIds);
   const visibleFiles = showAllFiles ? changes.files : changes.files.slice(0, 5);
   const hiddenCount = changes.files.length - visibleFiles.length;
-  const normalizedCwd = cwd?.replace(/\\/g, '/').replace(/\/$/, '');
   const allFilesInWorkspace = changes.files.every((file) => {
-    const normalized = file.path.replace(/\\/g, '/');
-    return !normalized.startsWith('/') || Boolean(normalizedCwd && (
-      normalized === normalizedCwd || normalized.startsWith(`${normalizedCwd}/`)
-    ));
+    const isAbs = isAbsolutePath(file.path);
+    return isAbs ? isPathInside(file.path, cwd) : true;
   });
 
-  const displayPath = (filePath: string) => {
-    const normalized = filePath.replace(/\\/g, '/');
-    return normalizedCwd && normalized.startsWith(`${normalizedCwd}/`)
-      ? normalized.slice(normalizedCwd.length + 1)
-      : normalized;
-  };
+  const displayPath = (filePath: string) => normalizeDisplayPath(filePath, cwd);
 
   useEffect(() => {
     let alive = true;

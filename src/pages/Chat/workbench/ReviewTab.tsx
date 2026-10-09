@@ -9,6 +9,7 @@ import {
   collectFallbackFiles,
   hunkLineKind,
   mergeReviewFiles,
+  normalizeDisplayPath,
   parseUnifiedDiff,
   sessionChangeFiles,
   type ParsedFileDiff,
@@ -165,12 +166,7 @@ export function ReviewWorkspace() {
 
   const toolFileFor = useCallback(
     (filePath: string) => {
-      const root = cwd?.replace(/\\/g, '/').replace(/\/$/, '');
-      return toolFiles.find((file) => {
-        const normalized = file.path.replace(/\\/g, '/');
-        const displayPath = root && normalized.startsWith(`${root}/`) ? normalized.slice(root.length + 1) : normalized;
-        return displayPath === filePath;
-      });
+      return toolFiles.find((file) => normalizeDisplayPath(file.path, cwd) === filePath);
     },
     [cwd, toolFiles],
   );
