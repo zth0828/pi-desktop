@@ -91,14 +91,26 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
 
   useEffect(() => {
     let alive = true;
-    paneApi.review
-      .getSummary()
-      .then((summary) => {
-        if (alive) setGitAvailable(summary.available);
-      })
-      .catch(() => {});
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const checkSummary = () => {
+      paneApi.review
+        .getSummary()
+        .then((summary) => {
+          if (!alive) return;
+          setGitAvailable(summary.available);
+          if (!summary.available && summary.reason === 'capturing') {
+            timer = setTimeout(checkSummary, 500);
+          }
+        })
+        .catch(() => {});
+    };
+
+    checkSummary();
+
     return () => {
       alive = false;
+      if (timer) clearTimeout(timer);
     };
   }, [paneApi]);
 
