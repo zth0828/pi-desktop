@@ -1,5 +1,5 @@
 // shell 模块：打开外部链接与工作区文件等系统交互。
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { readdir, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,7 +24,7 @@ const RELEVANT_APP_PATTERNS = [
   /codeedit/i, /windsurf/i, /trae/i, /emacs/i, /^vim/i,
 ];
 
-function isRelevantApplication(name: string): boolean {
+export function isRelevantApplication(name: string): boolean {
   return RELEVANT_APP_PATTERNS.some((pattern) => pattern.test(name));
 }
 
@@ -73,6 +73,57 @@ async function macApplications(): Promise<ShellApplication[]> {
   return [...found.values()].filter((application) => isRelevantApplication(application.name)).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+async function windowsApplications(): Promise<ShellApplication[]> {
+  const roots = [
+    process.env['ProgramFiles'],
+    process.env['ProgramFiles(x86)'],
+    process.env['LOCALAPPDATA'] ? path.join(process.env['LOCALAPPDATA'], 'Programs') : undefined,
+  ].filter((entry): entry is string => Boolean(entry));
+  const applications: ShellApplication[] = [];
+  const seenPaths = new Set<string>();
+
+  const addApp = (exePath: string, exeName: string) => {
+    const norm = exePath.toLowerCase();
+    if (seenPaths.has(norm)) return;
+    seenPaths.add(norm);
+    applications.push({
+      id: exePath,
+      name: exeName.replace(/\.exe$/i, ''),
+      path: exePath,
+    });
+  };
+
+  for (const root of roots) {
+    try {
+      const entries = await readdir(root, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.toLowerCase().endsWith('.exe')) {
+          addApp(path.join(root, entry.name), entry.name);
+        } else if (entry.isDirectory()) {
+          const subDir = path.join(root, entry.name);
+          try {
+            const subEntries = await readdir(subDir, { withFileTypes: true });
+            for (const sub of subEntries) {
+              if (sub.isFile() && sub.name.toLowerCase().endsWith('.exe')) {
+                addApp(path.join(subDir, sub.name), sub.name);
+              }
+            }
+          } catch {
+            // ignore unreadable subdirectory
+          }
+        }
+      }
+    } catch {
+      // Ignore unavailable platform application directories.
+    }
+  }
+
+  return applications
+    .filter((application) => isRelevantApplication(application.name))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 20);
+}
+
 async function discoveredApplications(): Promise<ShellListApplicationsResult> {
   if (process.platform === 'darwin') {
     const applications = (await macApplications()).slice(0, 20);
@@ -81,23 +132,8 @@ async function discoveredApplications(): Promise<ShellListApplicationsResult> {
   if (process.platform !== 'win32') {
     return { applications: [] };
   }
-  const roots = [process.env['ProgramFiles'], process.env['ProgramFiles(x86)']].filter((entry): entry is string => Boolean(entry));
-  const applications: ShellApplication[] = [];
-  for (const root of roots) {
-    try {
-      for (const name of await readdir(root)) {
-        if (!name.endsWith('.exe')) continue;
-        applications.push({ id: path.join(root, name), name: name.replace(/\.exe$/i, ''), path: path.join(root, name) });
-      }
-    } catch {
-      // Ignore unavailable platform application directories.
-    }
-  }
-  const relevant = applications
-    .filter((application) => isRelevantApplication(application.name))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(0, 20);
-  return { applications: await attachNativeIcons(relevant) };
+  const applications = await windowsApplications();
+  return { applications: await attachNativeIcons(applications) };
 }
 
 async function openPath(payload: { path: string }): Promise<HostSuccess> {
@@ -125,6 +161,13 @@ async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSucc
     }
     if (process.platform === 'darwin' && payload.application.path.endsWith('.app')) {
       await execFileAsync('open', ['-a', payload.application.path, target], { timeout: 15_000 });
+    } else if (payload.application?.path) {
+      const child = spawn(payload.application.path, [target], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      child.unref();
     } else {
       const result = await openPath({ path: target });
       if (!result.success) throw new Error(result.error);
