@@ -104,5 +104,20 @@ describe('workspaceApi.readFile', () => {
       'file is outside the active workspace and was not produced by this session',
     );
   });
+
+  it('对空路径或非字符串路径抛出 empty path 错误', async () => {
+    // @ts-expect-error testing invalid payload
+    await expect(workspaceApi.readFile({})).rejects.toThrow('empty path');
+    await expect(workspaceApi.readFile({ path: '' })).rejects.toThrow('empty path');
+    await expect(workspaceApi.readFile({ path: '   ' })).rejects.toThrow('empty path');
+    // @ts-expect-error testing null path
+    await expect(workspaceApi.readFile({ path: null })).rejects.toThrow('empty path');
+  });
+
+  it('listChildren 在 payload 为空时默认列出根目录', async () => {
+    // @ts-expect-error testing undefined payload
+    const res = await workspaceApi.listChildren(undefined);
+    expect(res.entries.some((e) => e.name === 'inside.txt')).toBe(true);
+  });
 });
 

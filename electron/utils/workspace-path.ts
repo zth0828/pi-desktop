@@ -21,11 +21,12 @@ function isInside(root: string, candidate: string): boolean {
 }
 
 /** Resolve an existing path without permitting lexical or symlink escapes. */
-export async function resolveWorkspacePath(root: string, relativePath = ''): Promise<string> {
-  if (isWindowsDevicePath(relativePath)) throw new Error('device paths are not allowed');
-  if (path.isAbsolute(relativePath) || /^[a-zA-Z]:/.test(relativePath)) throw new Error('absolute paths are not allowed');
+export async function resolveWorkspacePath(root: string, relativePath: string = ''): Promise<string> {
+  const rel = typeof relativePath === 'string' ? relativePath : '';
+  if (isWindowsDevicePath(rel)) throw new Error('device paths are not allowed');
+  if (path.isAbsolute(rel) || /^[a-zA-Z]:/.test(rel)) throw new Error('absolute paths are not allowed');
   const rootReal = await realpath(root);
-  const lexical = path.resolve(rootReal, relativePath || '.');
+  const lexical = path.resolve(rootReal, rel || '.');
   if (!isInside(rootReal, lexical)) throw new Error('path escapes workspace');
   const resolved = await realpath(lexical);
   if (!isInside(rootReal, resolved)) throw new Error('path escapes workspace');

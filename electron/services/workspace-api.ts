@@ -53,6 +53,9 @@ function hasPreviewableExternalFile(set: Set<string>, candidate: string): boolea
  * 工具调用里真实出现过时才允许预览，避免 Renderer 通过 IPC 任意读取本机文件。
  */
 async function resolvePreviewFile(pathValue: string, ctx?: HostActionContext): Promise<string> {
+  if (!pathValue || typeof pathValue !== 'string' || !pathValue.trim()) {
+    throw new Error('empty path');
+  }
   const runtime = resolveRuntimeForContext(ctx);
   if (!runtime) throw new Error('session not started');
   const root = await realpath(runtime.cwd);
@@ -81,7 +84,7 @@ function looksBinary(buffer: Buffer): boolean {
 export const workspaceApi = {
   listChildren: async (payload: WorkspaceListPayload, ctx?: HostActionContext): Promise<WorkspaceListResult> => {
     const root = await realpath(activeRoot(ctx));
-    const dir = await resolveWorkspacePath(root, payload.path ?? '');
+    const dir = await resolveWorkspacePath(root, payload?.path ?? '');
     if (!(await lstat(dir)).isDirectory()) throw new Error('path is not a directory');
     const children = await readdir(dir, { withFileTypes: true });
     const entries: WorkspaceEntry[] = [];
@@ -103,6 +106,9 @@ export const workspaceApi = {
   },
 
   readFile: async (payload: WorkspaceReadPayload, ctx?: HostActionContext): Promise<WorkspaceReadResult> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      throw new Error('empty path');
+    }
     const file = await resolvePreviewFile(payload.path, ctx);
     const stat = await lstat(file);
     if (!stat.isFile()) throw new Error('path is not a file');
