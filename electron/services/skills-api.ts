@@ -136,6 +136,15 @@ export function updateDisableModelInvocation(content: string, disable: boolean):
   return `---\n${newYaml.trim()}\n---${rest}`;
 }
 
+const INVALID_SKILL_NAME = /[<>:"/\\|?*]|^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i;
+
+export function isValidSkillName(name: string): boolean {
+  if (!name || name === '..' || name === '.' || name.endsWith('.') || name.endsWith(' ')) {
+    return false;
+  }
+  return !INVALID_SKILL_NAME.test(name);
+}
+
 export const skillsApi = {
   list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiSkillListResult> => {
     const active = resolveRuntimeForContext(ctx);
@@ -242,7 +251,7 @@ export const skillsApi = {
     const results: PiSkillImportResult['results'] = [];
     for (const item of payload.skills) {
       try {
-        if (!item.name || item.name.includes('/') || item.name.includes('\\') || item.name === '..' || item.name === '.') {
+        if (!isValidSkillName(item.name)) {
           results.push({ name: item.name, ok: false, action: 'error', error: 'invalid name' });
           continue;
         }
