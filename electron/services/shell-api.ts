@@ -163,11 +163,17 @@ async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSucc
       await execFileAsync('open', ['-a', payload.application.path, target], { timeout: 15_000 });
     } else if (payload.application?.path) {
       const useShell = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(payload.application.path);
-      const child = spawn(payload.application.path, [target], {
+      const appBin = useShell ? path.win32.basename(payload.application.path) : payload.application.path;
+      const appCwd = useShell ? path.win32.dirname(payload.application.path) : undefined;
+      const child = spawn(appBin, [target], {
         detached: true,
         stdio: 'ignore',
         windowsHide: true,
         shell: useShell,
+        cwd: appCwd,
+      });
+      child.on('error', () => {
+        // 防止启动失败抛出未捕获异常崩溃主进程
       });
       child.unref();
     } else {

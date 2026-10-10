@@ -41,4 +41,12 @@ describe('shell-api', () => {
     expect(res.success).toBe(false);
     expect(res.error).toBe('file-not-found');
   });
+
+  it('openPathWith 对存在的文件启动应用程序并容忍子进程启动异常', async () => {
+    const res = await shellApi.openPathWith({
+      path: __filename,
+      application: { id: 'app', name: 'NonExistent', path: '/non/existent/bin/code.cmd' },
+    });
+    expect(res.success).toBe(true);
+  });
 });
