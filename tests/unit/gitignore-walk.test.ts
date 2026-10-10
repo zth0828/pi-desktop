@@ -123,4 +123,15 @@ describe('walkGitignoreAware（fd 不可用时的 @ 补全回退）', () => {
     expect(result.dir).toBe('src/nested');
     expect(result.files).toEqual(['file.txt']);
   });
+
+  it('filesApi.listDir 拦截上卷逃逸路径并支持 Windows 扩展前缀', async () => {
+    write('src/nested/file.txt', 'hello');
+    const escapedResult = await filesApi.listDir({ cwd: root, dir: 'src/../../outside' });
+    expect(escapedResult.dirs).toEqual([]);
+    expect(escapedResult.files).toEqual([]);
+
+    const extResult = await filesApi.listDir({ cwd: `\\\\?\\${root}`, dir: 'src' });
+    expect(extResult.dir).toBe('src');
+    expect(extResult.dirs).toEqual(['nested']);
+  });
 });

@@ -10,6 +10,8 @@ import path from 'node:path';
 import type { PiFileListDirPayload, PiFileListDirResult, PiFileListPayload, PiFileListResult } from '@shared/host-api/contract';
 import { loadPiAdapter } from './pi-adapter';
 import { readIgnoreLevel, isIgnored, walkGitignoreAware, DEFAULT_EXCLUDED_DIRS, type IgnoreLevel } from '../utils/gitignore-walk';
+import { stripWindowsExtendedPrefix } from '../utils/same-path';
+import { isInsideWorkspace } from '../utils/previewable-files';
 
 const MAX_FILES = 200;
 
@@ -28,11 +30,12 @@ function resolveFd(): Promise<string | null> {
 
 /** pi TUI autocomplete 的 fd 参数（walkDirectoryWithFd），只取文件（目录候选壳不需要）。 */
 function listWithFd(cwd: string, fdPath: string): Promise<string[] | null> {
+  const cleanCwd = stripWindowsExtendedPrefix(cwd);
   return new Promise((resolve) => {
     const child = spawn(
       fdPath,
       [
-        '--base-directory', cwd,
+        '--base-directory', cleanCwd,
         '--max-results', String(MAX_FILES),
         '--type', 'f',
         '--follow',
@@ -75,21 +78,25 @@ async function walk(root: string, out: string[]): Promise<void> {
 
 export const filesApi = {
   list: async (payload: PiFileListPayload): Promise<PiFileListResult> => {
+    const cleanCwd = stripWindowsExtendedPrefix(payload.cwd);
     const fd = await resolveFd();
     if (fd) {
-      const files = await listWithFd(payload.cwd, fd);
+      const files = await listWithFd(cleanCwd, fd);
       if (files) return { files };
     }
     const files: string[] = [];
-    await walk(payload.cwd, files);
+    await walk(cleanCwd, files);
     return { files };
   },
 
   /** 逐层列目录：手动文件面板的树形浏览（不烧 pi quota，纯文件系统浏览）。 */
   listDir: async (payload: PiFileListDirPayload): Promise<PiFileListDirResult> => {
-    const base = payload.cwd;
+    const base = stripWindowsExtendedPrefix(payload.cwd);
     const rel = (payload.dir ?? '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
     const dirPath = path.join(base, rel);
+    if (!isInsideWorkspace(base, dirPath)) {
+      return { dir: rel, dirs: [], files: [] };
+    }
     const levels: IgnoreLevel[] = [];
     const rootLevel = await readIgnoreLevel(base, '', '');
     if (rootLevel) levels.push(rootLevel);
