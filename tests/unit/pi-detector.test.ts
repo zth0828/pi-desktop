@@ -121,6 +121,8 @@ describe('pi-detector 路径逻辑', () => {
     expect(isUnderDir(pkgDir, npmRoot)).toBe(true);
     expect(isUnderDir('/usr/local/lib/node_modules/other', npmRoot)).toBe(false);
     expect(isUnderDir(npmRoot, npmRoot)).toBe(false); // 自身不算「之下」
+    expect(isUnderDir(`\\\\?\\${pkgDir}`, npmRoot)).toBe(true);
+    expect(isUnderDir(pkgDir, `\\\\?\\${npmRoot}`)).toBe(true);
   });
 
   it('显式 package root 保留真实安装类型并标记 dev override', () => {

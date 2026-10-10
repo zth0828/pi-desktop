@@ -14,6 +14,7 @@ import type {
 import { gte } from './semver';
 import { safeErrorFields, writePiDiagnostic } from './pi-diagnostic-log';
 import { envWithUserPath, resolveUserPath } from './shell-env';
+import { pathsEqual, stripWindowsExtendedPrefix } from './same-path';
 
 export type { NodeDetectResult, NpmDetectResult, PiDetectResult, PiEnvironment, PiInstallKind };
 
@@ -145,13 +146,13 @@ export function locatePackageRoot(realBinPath: string): { packageRoot: string; v
 }
 
 export function isUnderDir(child: string, parent: string): boolean {
-  // Windows 路径大小写不敏感；realpath 可能返回不同的 case（如用户目录），
-  // 比较前统一小写，避免 npm 归属误判为 non-npm。
-  if (process.platform === 'win32') {
-    child = child.toLowerCase();
-    parent = parent.toLowerCase();
-  }
-  const rel = path.relative(parent, child);
+  // Windows 路径大小写不敏感；realpath 可能返回带 \\?\ 前缀或不同的 case（如用户目录），
+  // 比较前剥离前缀并统一小写，避免 npm 归属误判为 non-npm。
+  const cleanChild = stripWindowsExtendedPrefix(child);
+  const cleanParent = stripWindowsExtendedPrefix(parent);
+  const c = process.platform === 'win32' ? cleanChild.toLowerCase() : cleanChild;
+  const p = process.platform === 'win32' ? cleanParent.toLowerCase() : cleanParent;
+  const rel = path.relative(p, c);
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
@@ -229,9 +230,7 @@ function sameDirectory(
   try {
     const realLeft = realpathSync(left);
     const realRight = realpathSync(right);
-    return platform === 'win32'
-      ? realLeft.toLowerCase() === realRight.toLowerCase()
-      : realLeft === realRight;
+    return pathsEqual(realLeft, realRight, platform);
   } catch {
     return false;
   }
