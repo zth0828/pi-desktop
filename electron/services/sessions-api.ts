@@ -750,14 +750,15 @@ export const sessionsApi = {
       // 对齐 pi `/resume` 的删除语义：真实应用优先移到系统废纸篓；
       // E2E 隔离目录直接删除，避免把测试会话灌进用户废纸篓。
       let method: 'trash' | 'rm' = 'trash';
-      if (!existsSync(payload.path)) {
+      const targetFile = path.resolve(payload.path);
+      if (!existsSync(targetFile)) {
         method = 'rm';
       } else if (process.env.PI_DESKTOP_USER_DATA_DIR) {
-        await rm(payload.path, { force: true });
+        await rm(targetFile, { force: true });
         method = 'rm';
       } else {
         try {
-          await shell.trashItem(payload.path);
+          await shell.trashItem(targetFile);
         } catch (err) {
           // trashItem 失败 fallback 到永久删除：必须留痕，否则用户无从追溯
           method = 'rm';
@@ -770,7 +771,7 @@ export const sessionsApi = {
             detail: 'trashItem failed, permanently deleted instead',
             errorMessage: toError(err),
           });
-          await rm(payload.path, { force: true });
+          await rm(targetFile, { force: true });
         }
       }
       writePiDiagnostic({
