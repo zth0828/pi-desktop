@@ -34,6 +34,17 @@ describe('user-mentions (用户消息内联文件引用解析)', () => {
     ]);
   });
 
+  it('正确解析包含下划线与反斜杠路径的 Pi 展开 <file> 块', () => {
+    const raw = '查看 <file name="/Users/bingking_project/src/my_utils.ts">\ncode\n</file>\n 与 <file name="C:\\repo_dir\\sub_folder\\app.tsx">\ncode\n</file>';
+    const tokens = parseUserMessageTokens(raw);
+    expect(tokens).toEqual([
+      { type: 'text', text: '查看 ' },
+      { type: 'file', path: '/Users/bingking_project/src/my_utils.ts', name: 'my_utils.ts', raw: '__PI_MENTION__:/Users/bingking_project/src/my_utils.ts__' },
+      { type: 'text', text: ' 与 ' },
+      { type: 'file', path: 'C:\\repo_dir\\sub_folder\\app.tsx', name: 'app.tsx', raw: '__PI_MENTION__:C:\\repo_dir\\sub_folder\\app.tsx__' },
+    ]);
+  });
+
   it('正确解析带空格的双引号引用 @"path with space/note.txt"', () => {
     const raw = '前面是文字 @"docs/test plan.md" 后面是文字';
     const tokens = parseUserMessageTokens(raw);
