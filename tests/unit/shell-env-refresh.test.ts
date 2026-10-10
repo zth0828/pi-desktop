@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { _resetUserPathCache, refreshUserPath, resolveUserPath } from '../../electron/utils/shell-env';
+import { _resetUserPathCache, probeWindowsNodePaths, refreshUserPath, resolveUserPath } from '../../electron/utils/shell-env';
 
 describe('shell-env refresh', () => {
   const originalEnvPath = process.env.PATH;
@@ -32,5 +32,11 @@ describe('shell-env refresh', () => {
     expect(resolveUserPath()).toBe('/initial/path');
 
     expect(refreshUserPath()).toBe('/updated/path');
+  });
+
+  it('probeWindowsNodePaths 不将当前目录 "." 或空串混入 PATH 探测列表', () => {
+    const paths = probeWindowsNodePaths();
+    expect(paths).not.toContain('.');
+    expect(paths.every((p) => p !== '' && p !== '.')).toBe(true);
   });
 });

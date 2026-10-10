@@ -37,18 +37,19 @@ function readWindowsRegistryPath(key: string): string[] {
   return [];
 }
 
-function probeWindowsNodePaths(): string[] {
-  const candidates: string[] = [
-    path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'nodejs'),
-    path.join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'nodejs'),
-    path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'nodejs'),
-    path.join(process.env.APPDATA ?? '', 'npm'),
-    path.join(process.env.LOCALAPPDATA ?? '', 'Volta', 'bin'),
-    path.join(process.env.NVM_HOME ?? ''),
-    path.join(process.env.NVM_SYMLINK ?? ''),
-  ].filter(Boolean);
+export function probeWindowsNodePaths(): string[] {
+  const candidates: (string | undefined)[] = [
+    process.env.ProgramFiles ? path.join(process.env.ProgramFiles, 'nodejs') : 'C:\\Program Files\\nodejs',
+    process.env['ProgramFiles(x86)'] ? path.join(process.env['ProgramFiles(x86)'], 'nodejs') : 'C:\\Program Files (x86)\\nodejs',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs', 'nodejs') : undefined,
+    process.env.APPDATA ? path.join(process.env.APPDATA, 'npm') : undefined,
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Volta', 'bin') : undefined,
+    process.env.NVM_HOME,
+    process.env.NVM_SYMLINK,
+  ];
 
-  return candidates.filter((dir) => {
+  return candidates.filter((dir): dir is string => {
+    if (!dir || dir.trim() === '' || dir === '.') return false;
     try {
       return existsSync(dir);
     } catch {
