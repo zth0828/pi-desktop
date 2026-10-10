@@ -36,6 +36,9 @@ export function normalizePreviewablePath(filePath: string): string {
  * 判定目标路径是否位于工作区内（处理 macOS /tmp 与 /private/tmp symlink 等跨平台等价形式）。
  */
 export function isInsideWorkspace(root: string, candidate: string): boolean {
+  if (!root || typeof root !== 'string' || !root.trim() || !candidate || typeof candidate !== 'string' || !candidate.trim()) {
+    return false;
+  }
   const cleanRoot = stripWindowsExtendedPrefix(root);
   const cleanCandidate = stripWindowsExtendedPrefix(candidate);
   try {

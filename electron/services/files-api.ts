@@ -79,7 +79,13 @@ async function walk(root: string, out: string[]): Promise<void> {
 
 export const filesApi = {
   list: async (payload: PiFileListPayload): Promise<PiFileListResult> => {
+    if (!payload?.cwd || typeof payload.cwd !== 'string' || !payload.cwd.trim()) {
+      return { files: [] };
+    }
     const cleanCwd = stripWindowsExtendedPrefix(payload.cwd);
+    if (isWindowsDevicePath(cleanCwd)) {
+      return { files: [] };
+    }
     const fd = await resolveFd();
     if (fd) {
       const files = await listWithFd(cleanCwd, fd);
@@ -92,7 +98,13 @@ export const filesApi = {
 
   /** 逐层列目录：手动文件面板的树形浏览（不烧 pi quota，纯文件系统浏览）。 */
   listDir: async (payload: PiFileListDirPayload): Promise<PiFileListDirResult> => {
+    if (!payload?.cwd || typeof payload.cwd !== 'string' || !payload.cwd.trim()) {
+      return { dir: payload?.dir ?? '', dirs: [], files: [] };
+    }
     const base = stripWindowsExtendedPrefix(payload.cwd);
+    if (isWindowsDevicePath(base)) {
+      return { dir: payload?.dir ?? '', dirs: [], files: [] };
+    }
     const rel = (payload.dir ?? '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
     if (isWindowsDevicePath(rel)) {
       return { dir: rel, dirs: [], files: [] };

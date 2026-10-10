@@ -140,6 +140,13 @@ describe('isInsideWorkspace', () => {
     expect(isInsideWorkspace(prefixedRoot, subFile)).toBe(true);
     expect(isInsideWorkspace(root, `\\\\?\\${subFile}`)).toBe(true);
   });
+
+  it('对空串或纯空白 root 与 candidate 拒绝判定为在工作区内', () => {
+    expect(isInsideWorkspace('', 'package.json')).toBe(false);
+    expect(isInsideWorkspace('   ', 'package.json')).toBe(false);
+    expect(isInsideWorkspace('/tmp/workspace', '')).toBe(false);
+    expect(isInsideWorkspace('/tmp/workspace', '   ')).toBe(false);
+  });
 });
 
 function nameFor(file: string): string {

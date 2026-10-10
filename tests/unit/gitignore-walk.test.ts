@@ -138,4 +138,14 @@ describe('walkGitignoreAware（fd 不可用时的 @ 补全回退）', () => {
     expect(devResult.dirs).toEqual([]);
     expect(devResult.files).toEqual([]);
   });
+
+  it('filesApi.list 与 listDir 对空串、纯空白或设备 cwd 安全返回空结果', async () => {
+    expect(await filesApi.list({ cwd: '' })).toEqual({ files: [] });
+    expect(await filesApi.list({ cwd: '   ' })).toEqual({ files: [] });
+    expect(await filesApi.list({ cwd: 'CON' })).toEqual({ files: [] });
+
+    expect(await filesApi.listDir({ cwd: '', dir: 'src' })).toEqual({ dir: 'src', dirs: [], files: [] });
+    expect(await filesApi.listDir({ cwd: '   ', dir: 'src' })).toEqual({ dir: 'src', dirs: [], files: [] });
+    expect(await filesApi.listDir({ cwd: 'CON', dir: 'src' })).toEqual({ dir: 'src', dirs: [], files: [] });
+  });
 });
