@@ -39,8 +39,11 @@ describe('session-export utilities', () => {
       expect(sanitizePathSegment('com1')).toBe('com1_');
       expect(sanitizePathSegment('CONIN$')).toBe('CONIN$_');
       expect(sanitizePathSegment('conout$')).toBe('conout$_');
+      expect(sanitizePathSegment('CON.txt')).toBe('CON.txt_');
+      expect(sanitizePathSegment('aux.log')).toBe('aux.log_');
     });
   });
+
 
   describe('projectFolderName', () => {
     it('从 Unix 路径提取项目名', () => {
