@@ -10,17 +10,27 @@ import type { HostActionContext } from '../main/ipc/host-contract';
 import { getMainWindow } from '../main/window-manager';
 import { stripWindowsExtendedPrefix } from '../utils/same-path';
 
+function resolveDialogWindow(ctx?: HostActionContext): BrowserWindow | null {
+  try {
+    if (ctx?.sender && !ctx.sender.isDestroyed()) {
+      const win = BrowserWindow.fromWebContents(ctx.sender);
+      if (win && !win.isDestroyed()) return win;
+    }
+  } catch {
+    // ignore
+  }
+  const main = getMainWindow();
+  return main && !main.isDestroyed() ? main : null;
+}
+
 export const dialogApi = {
   open: async (payload: DialogOpenPayload, ctx?: HostActionContext): Promise<DialogOpenResult> => {
-    // 对话框挂在发起调用的窗口上；取不到（旧调用/窗口已销毁）回退主窗口。
-    // 主窗口隐藏到托盘后仍是 getMainWindow() 的返回值，挂到隐藏窗口上对话框
-    // 不会显示，先 show 再挂。
-    const win = (ctx && BrowserWindow.fromWebContents(ctx.sender)) || getMainWindow();
+    const win = resolveDialogWindow(ctx);
     if (win && !win.isVisible()) win.show();
     const options = {
-      title: payload.title,
-      defaultPath: payload.defaultPath ? stripWindowsExtendedPrefix(payload.defaultPath) : undefined,
-      properties: payload.properties ?? ['openDirectory' as const],
+      title: payload?.title,
+      defaultPath: payload?.defaultPath ? stripWindowsExtendedPrefix(payload.defaultPath) : undefined,
+      properties: payload?.properties ?? ['openDirectory' as const],
     };
     const result = win
       ? await dialog.showOpenDialog(win, options)
@@ -28,12 +38,12 @@ export const dialogApi = {
     return { canceled: result.canceled, filePaths: result.filePaths };
   },
   save: async (payload: DialogSavePayload, ctx?: HostActionContext): Promise<DialogSaveResult> => {
-    const win = (ctx && BrowserWindow.fromWebContents(ctx.sender)) || getMainWindow();
+    const win = resolveDialogWindow(ctx);
     if (win && !win.isVisible()) win.show();
     const options = {
-      title: payload.title,
-      defaultPath: payload.defaultPath ? stripWindowsExtendedPrefix(payload.defaultPath) : undefined,
-      filters: payload.filters,
+      title: payload?.title,
+      defaultPath: payload?.defaultPath ? stripWindowsExtendedPrefix(payload.defaultPath) : undefined,
+      filters: payload?.filters,
     };
     const result = win
       ? await dialog.showSaveDialog(win, options)
