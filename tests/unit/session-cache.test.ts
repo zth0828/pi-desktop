@@ -63,4 +63,18 @@ describe('sessionsApi metadata cache', () => {
     expect(await sessionsApi.pin({ path: '', pinned: true })).toEqual({ success: false, error: 'invalid session path' });
     expect(await sessionsApi.exportHtml({ path: '' })).toEqual({ success: false, error: 'invalid session path' });
   });
+
+  it('archiveProject 拦截非法工作区路径', async () => {
+    // @ts-expect-error testing empty payload
+    expect(await sessionsApi.archiveProject({})).toEqual({ success: false, error: 'invalid workspace path' });
+    expect(await sessionsApi.archiveProject({ cwd: '', archived: true })).toEqual({ success: false, error: 'invalid workspace path' });
+    expect(await sessionsApi.archiveProject({ cwd: '   ', archived: true })).toEqual({ success: false, error: 'invalid workspace path' });
+    expect(await sessionsApi.archiveProject({ cwd: 'CON', archived: true })).toEqual({ success: false, error: 'device paths are not allowed' });
+  });
+
+  it('search 对空 query 返回空数组', async () => {
+    // @ts-expect-error testing empty payload
+    expect(await sessionsApi.search({})).toEqual({ sessions: [] });
+    expect(await sessionsApi.search({ query: '   ' })).toEqual({ sessions: [] });
+  });
 });

@@ -58,4 +58,15 @@ describe('searchSessions', () => {
     expect(result.match).toBe('firstMessage');
     expect(result.messageIndex).toBe(1);
   });
+
+  it('handles invalid queries or non-array sessions gracefully', () => {
+    // @ts-expect-error testing invalid query
+    expect(searchSessions([], null)).toEqual([]);
+    // @ts-expect-error testing undefined query
+    expect(searchSessions([], undefined)).toEqual([]);
+    // @ts-expect-error testing non-array sessions
+    expect(searchSessions(null, 'test')).toEqual([]);
+    // @ts-expect-error testing undefined sessions
+    expect(searchSessions(undefined, 'test')).toEqual([]);
+  });
 });

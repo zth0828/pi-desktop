@@ -612,7 +612,7 @@ export const sessionsApi = {
   },
 
   search: async (payload: PiSessionSearchPayload, ctx?: HostActionContext): Promise<PiSessionSearchResult> => {
-    const query = payload.query.trim();
+    const query = (payload?.query ?? '').trim();
     if (!query) return { sessions: [] };
     const adapter = await loadPiAdapter();
     const rawInfos = await adapter.sessions.listAll();
@@ -750,9 +750,16 @@ export const sessionsApi = {
   },
 
   archiveProject: async (payload: PiSessionProjectArchivePayload): Promise<HostSuccess> => {
+    if (!payload?.cwd || typeof payload.cwd !== 'string' || !payload.cwd.trim()) {
+      return { success: false, error: 'invalid workspace path' };
+    }
+    const cleanCwd = stripWindowsExtendedPrefix(payload.cwd.trim());
+    if (isWindowsDevicePath(cleanCwd)) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
     try {
       const adapter = await loadPiAdapter();
-      const rawSessions = await adapter.sessions.list(payload.cwd);
+      const rawSessions = await adapter.sessions.list(cleanCwd);
       const projectSessions = rawSessions.filter((session) => session.messageCount > 0);
       if (projectSessions.some((session) => isSessionRunning(session.path))) {
         return { success: false, error: 'project has a running session' };

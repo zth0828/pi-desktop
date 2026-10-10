@@ -44,7 +44,8 @@ export function searchSessions<T extends SearchableSession>(
   rawQuery: string,
   limit = 50,
 ): Array<SessionSearchHit<T>> {
-  const query = rawQuery.trim().toLocaleLowerCase();
+  if (!Array.isArray(sessions)) return [];
+  const query = (typeof rawQuery === 'string' ? rawQuery : '').trim().toLocaleLowerCase();
   if (!query) return [];
 
   const hits = sessions.flatMap((session): Array<SessionSearchHit<T>> => {
