@@ -115,7 +115,6 @@ describe('appApi', () => {
   });
 
   it('rejects invalid path or device path in writeBinaryFile', async () => {
-    // @ts-expect-error testing empty path
     const emptyRes = await appApi.writeBinaryFile({ path: '', data: 'abc' });
     expect(emptyRes.success).toBe(false);
     expect(emptyRes.error).toBe('path is required');

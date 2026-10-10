@@ -64,7 +64,7 @@ describe('companion-package (内置伴生扩展路径与打包解析)', () => {
 
     expect(await packagesApi.install({ source: '' })).toEqual({ success: false, error: 'empty source' });
     expect(await packagesApi.install({ source: '   ' })).toEqual({ success: false, error: 'empty source' });
-    expect(await packagesApi.remove({ source: '' })).toEqual({ success: false, error: 'empty source' });
+    expect(await packagesApi.remove({ source: '', scope: 'user' })).toEqual({ success: false, error: 'empty source' });
     expect(await packagesApi.update({ source: '' })).toEqual({ success: false, error: 'empty source' });
   });
 });

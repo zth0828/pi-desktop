@@ -44,11 +44,8 @@ describe('session-export utilities', () => {
     });
 
     it('对非字符串输入安全返回 fallback', () => {
-      // @ts-expect-error testing undefined input
       expect(sanitizePathSegment(undefined)).toBe('default');
-      // @ts-expect-error testing null input
-      expect(sanitizePathSegment(null, 'custom')).toBe('custom');
-      // @ts-expect-error testing number input
+      expect(sanitizePathSegment(null as unknown as string, 'custom')).toBe('custom');
       expect(sanitizePathSegment(123 as unknown as string, 'num')).toBe('num');
     });
   });
@@ -66,7 +63,6 @@ describe('session-export utilities', () => {
     it('缺省 cwd 或非字符串返回 default', () => {
       expect(projectFolderName(undefined)).toBe('default');
       expect(projectFolderName('')).toBe('default');
-      // @ts-expect-error testing non-string cwd
       expect(projectFolderName(123 as unknown as string)).toBe('default');
     });
   });
