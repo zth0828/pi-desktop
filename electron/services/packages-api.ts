@@ -107,7 +107,7 @@ export const packagesApi = {
   },
 
   install: async (payload: PiPackageInstallPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
-    const source = payload.source.trim();
+    const source = (payload?.source ?? '').trim();
     if (!source) return { success: false, error: 'empty source' };
     try {
       const { adapter, handle } = await getPackageManager(ctx);
@@ -121,13 +121,15 @@ export const packagesApi = {
   },
 
   remove: async (payload: PiPackageRemovePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    const source = (payload?.source ?? '').trim();
+    if (!source) return { success: false, error: 'empty source' };
     try {
       const { adapter, handle } = await getPackageManager(ctx);
       const off = adapter.packages.onProgress(handle, (event) => sendHostEvent('piPackages', 'progress', event));
       let removed = false;
       const local = payload.scope === 'project';
       try {
-        removed = await adapter.packages.remove(handle, payload.source, local);
+        removed = await adapter.packages.remove(handle, source, local);
       } finally { off(); }
       adapter.packages.invalidate();
 
@@ -138,10 +140,12 @@ export const packagesApi = {
   },
 
   update: async (payload: PiPackageUpdatePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    const source = (payload?.source ?? '').trim();
+    if (!source) return { success: false, error: 'empty source' };
     try {
       const { adapter, handle } = await getPackageManager(ctx);
       const off = adapter.packages.onProgress(handle, (event) => sendHostEvent('piPackages', 'progress', event));
-      try { await adapter.packages.update(handle, payload.source); } finally { off(); }
+      try { await adapter.packages.update(handle, source); } finally { off(); }
       adapter.packages.invalidate();
       return { success: true };
     } catch (err) {
@@ -159,8 +163,8 @@ export const packagesApi = {
   detail: async (payload: PiPackageDetailQuery): Promise<PiPackageDetailResult> => fetchPackageDetail(payload),
 
   getCompanionStatus: async (payload: PiCompanionExtensionQuery, ctx?: HostActionContext): Promise<PiCompanionExtensionStatus> => {
-    if (!VALID_COMPANION_ID.test(payload.id)) {
-      return { id: payload.id, installed: false };
+    if (!payload?.id || typeof payload.id !== 'string' || !VALID_COMPANION_ID.test(payload.id)) {
+      return { id: payload?.id ?? '', installed: false };
     }
     const { agentDir } = await getPackageManager(ctx);
     const targetPath = getCompanionTargetPath(agentDir, payload.id);
@@ -172,7 +176,7 @@ export const packagesApi = {
     payload: PiCompanionExtensionTogglePayload,
     ctx?: HostActionContext,
   ): Promise<PiCompanionExtensionToggleResult> => {
-    if (!VALID_COMPANION_ID.test(payload.id)) {
+    if (!payload?.id || typeof payload.id !== 'string' || !VALID_COMPANION_ID.test(payload.id)) {
       return { success: false, installed: false, error: 'invalid companion extension id' };
     }
     const { agentDir } = await getPackageManager(ctx);

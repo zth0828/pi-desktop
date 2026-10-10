@@ -51,9 +51,21 @@ describe('companion-package (内置伴生扩展路径与打包解析)', () => {
     const status = await packagesApi.getCompanionStatus({ id: '../evil' });
     expect(status.installed).toBe(false);
 
+    const undefStatus = await packagesApi.getCompanionStatus({ id: undefined as unknown as string });
+    expect(undefStatus.installed).toBe(false);
+
     const toggle = await packagesApi.toggleCompanion({ id: '../../evil', enable: true });
     expect(toggle.success).toBe(false);
     expect(toggle.error).toBe('invalid companion extension id');
+
+    const undefToggle = await packagesApi.toggleCompanion({ id: undefined as unknown as string, enable: true });
+    expect(undefToggle.success).toBe(false);
+    expect(undefToggle.error).toBe('invalid companion extension id');
+
+    expect(await packagesApi.install({ source: '' })).toEqual({ success: false, error: 'empty source' });
+    expect(await packagesApi.install({ source: '   ' })).toEqual({ success: false, error: 'empty source' });
+    expect(await packagesApi.remove({ source: '' })).toEqual({ success: false, error: 'empty source' });
+    expect(await packagesApi.update({ source: '' })).toEqual({ success: false, error: 'empty source' });
   });
 });
 
