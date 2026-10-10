@@ -4,6 +4,7 @@ import { app } from 'electron';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
 
 const EXPORT_FOLDER_SEGMENTS = ['Pi Desktop', 'Exports'] as const;
+const WINDOWS_RESERVED_NAMES = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
 
 export function sanitizePathSegment(segment: string, fallback = 'default'): string {
   const sanitized = segment
@@ -11,7 +12,11 @@ export function sanitizePathSegment(segment: string, fallback = 'default'): stri
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/[. ]+$/, '');
-  return sanitized || fallback;
+  if (!sanitized) return fallback;
+  if (WINDOWS_RESERVED_NAMES.test(sanitized)) {
+    return `${sanitized}_`;
+  }
+  return sanitized;
 }
 
 export function projectFolderName(cwd?: string): string {

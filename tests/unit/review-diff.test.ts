@@ -363,5 +363,16 @@ describe('isAbsolutePath & isPathInside', () => {
     expect(isPathInside('/tmp/a.txt', '/private/tmp')).toBe(true);
     expect(isPathInside('/other/a.txt', '/tmp')).toBe(false);
   });
+
+  it('isPathInside 正确放行工作区相对路径并拦截上卷逃逸路径', () => {
+    expect(isPathInside('src/app.ts', 'C:/workspace')).toBe(true);
+    expect(isPathInside('./src/app.ts', 'C:/workspace')).toBe(true);
+    expect(isPathInside('../escaped.ts', 'C:/workspace')).toBe(false);
+  });
+
+  it('isPathInside 与 normalizeDisplayPath 支持 Windows 扩展前缀 (\\\\?\\)', () => {
+    expect(isPathInside('\\\\?\\C:\\workspace\\src\\a.ts', 'C:/workspace')).toBe(true);
+    expect(normalizeDisplayPath('\\\\?\\C:\\workspace\\src\\a.ts', 'C:/workspace')).toBe('src/a.ts');
+  });
 });
 

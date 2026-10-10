@@ -148,15 +148,24 @@ type ReviewListEntry = {
   deleted: number;
 };
 
+function stripWinPrefix(p: string): string {
+  if (p.startsWith('\\\\?\\UNC\\') || p.startsWith('//?/UNC/')) return `//${p.slice(8)}`;
+  if (p.startsWith('\\\\?\\') || p.startsWith('//?/')) return p.slice(4);
+  return p;
+}
+
 export function isAbsolutePath(filePath: string): boolean {
-  const normalized = filePath.replace(/\\/g, '/');
+  const normalized = stripWinPrefix(filePath).replace(/\\/g, '/');
   return normalized.startsWith('/') || /^[a-zA-Z]:\//.test(normalized);
 }
 
 export function isPathInside(childPath: string, parentDir?: string): boolean {
   if (!parentDir) return false;
-  const child = childPath.replace(/\\/g, '/').replace(/\/$/, '');
-  const parent = parentDir.replace(/\\/g, '/').replace(/\/$/, '');
+  const child = stripWinPrefix(childPath).replace(/\\/g, '/').replace(/\/$/, '');
+  const parent = stripWinPrefix(parentDir).replace(/\\/g, '/').replace(/\/$/, '');
+  if (!isAbsolutePath(child)) {
+    return !child.startsWith('../') && child !== '..';
+  }
   const isWindows = /^[a-zA-Z]:/.test(child) || /^[a-zA-Z]:/.test(parent);
   const a = isWindows ? child.toLowerCase() : child;
   const b = isWindows ? parent.toLowerCase() : parent;
@@ -169,12 +178,12 @@ export function isPathInside(childPath: string, parentDir?: string): boolean {
 
 /** 规范化文件展示路径：相对 cwd 的文件去除前缀，外部绝对路径保持原样。 */
 export function normalizeDisplayPath(filePath: string, cwd?: string): string {
-  let normalized = filePath.replace(/\\/g, '/');
+  let normalized = stripWinPrefix(filePath).replace(/\\/g, '/');
   if (normalized.startsWith('./')) {
     normalized = normalized.slice(2);
   }
   if (!cwd) return normalized;
-  const root = cwd.replace(/\\/g, '/').replace(/\/$/, '');
+  const root = stripWinPrefix(cwd).replace(/\\/g, '/').replace(/\/$/, '');
   const isWindows = /^[a-zA-Z]:/.test(normalized) || /^[a-zA-Z]:/.test(root);
   const a = isWindows ? normalized.toLowerCase() : normalized;
   const b = isWindows ? root.toLowerCase() : root;
