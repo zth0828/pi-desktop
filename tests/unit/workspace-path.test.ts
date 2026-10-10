@@ -39,6 +39,8 @@ describe('resolveWorkspacePath', () => {
     await expect(resolveWorkspacePath(root, 'CON')).rejects.toThrow('device paths are not allowed');
     await expect(resolveWorkspacePath(root, 'NUL')).rejects.toThrow('device paths are not allowed');
     await expect(resolveWorkspacePath(root, 'COM1')).rejects.toThrow('device paths are not allowed');
+    await expect(resolveWorkspacePath(root, 'sub/CON')).rejects.toThrow('device paths are not allowed');
+    await expect(resolveWorkspacePath(root, 'dir/aux.txt')).rejects.toThrow('device paths are not allowed');
     await expect(resolveWorkspacePath(root, '\\\\.\\pipe\\foo')).rejects.toThrow('device paths are not allowed');
   });
 });
