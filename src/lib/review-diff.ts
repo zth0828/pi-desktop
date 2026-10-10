@@ -154,9 +154,27 @@ function stripWinPrefix(p: string): string {
   return p;
 }
 
+function normalizePathSegments(p: string): string {
+  const parts = p.split('/');
+  const stack: string[] = [];
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (stack.length > 0 && stack[stack.length - 1] !== '..') {
+        stack.pop();
+      } else {
+        stack.push('..');
+      }
+    } else {
+      stack.push(part);
+    }
+  }
+  return stack.join('/');
+}
+
 export function isAbsolutePath(filePath: string): boolean {
   const normalized = stripWinPrefix(filePath).replace(/\\/g, '/');
-  return normalized.startsWith('/') || /^[a-zA-Z]:\//.test(normalized);
+  return normalized.startsWith('/') || /^[a-zA-Z]:(?:\/|$)/.test(normalized);
 }
 
 export function isPathInside(childPath: string, parentDir?: string): boolean {
@@ -164,7 +182,8 @@ export function isPathInside(childPath: string, parentDir?: string): boolean {
   const child = stripWinPrefix(childPath).replace(/\\/g, '/').replace(/\/$/, '');
   const parent = stripWinPrefix(parentDir).replace(/\\/g, '/').replace(/\/$/, '');
   if (!isAbsolutePath(child)) {
-    return !child.startsWith('../') && child !== '..';
+    const norm = normalizePathSegments(child);
+    return !norm.startsWith('../') && norm !== '..';
   }
   const isWindows = /^[a-zA-Z]:/.test(child) || /^[a-zA-Z]:/.test(parent) || child.startsWith('//') || parent.startsWith('//');
   const a = isWindows ? child.toLowerCase() : child;

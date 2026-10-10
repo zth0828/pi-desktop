@@ -351,6 +351,8 @@ describe('isAbsolutePath & isPathInside', () => {
     expect(isAbsolutePath('/usr/bin')).toBe(true);
     expect(isAbsolutePath('C:/Users/test')).toBe(true);
     expect(isAbsolutePath('d:\\projects\\repo')).toBe(true);
+    expect(isAbsolutePath('C:')).toBe(true);
+    expect(isAbsolutePath('c:\\')).toBe(true);
     expect(isAbsolutePath('src/index.ts')).toBe(false);
     expect(isAbsolutePath('./src/index.ts')).toBe(false);
   });
@@ -367,7 +369,10 @@ describe('isAbsolutePath & isPathInside', () => {
   it('isPathInside 正确放行工作区相对路径并拦截上卷逃逸路径', () => {
     expect(isPathInside('src/app.ts', 'C:/workspace')).toBe(true);
     expect(isPathInside('./src/app.ts', 'C:/workspace')).toBe(true);
+    expect(isPathInside('src/../src/app.ts', 'C:/workspace')).toBe(true);
     expect(isPathInside('../escaped.ts', 'C:/workspace')).toBe(false);
+    expect(isPathInside('src/../../escaped.ts', 'C:/workspace')).toBe(false);
+    expect(isPathInside('a/b/../../../escaped.ts', 'C:/workspace')).toBe(false);
   });
 
   it('isPathInside 与 normalizeDisplayPath 支持 Windows 扩展前缀 (\\\\?\\) 及 UNC 路径', () => {
