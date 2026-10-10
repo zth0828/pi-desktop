@@ -31,7 +31,7 @@ export function parseUserMessageTokens(rawText: string): InlineFileToken[] {
   // - @"quoted path"
   // - @filename.ext 或 @dir/file.ext（支持紧随中文字符或行首，排除邮箱如 user@example.com）
   const mentionRegex =
-    /(__PI_MENTION__:(.+?)__)|@\[([^\]]+)\]|(?:^|[^a-zA-Z0-9_])@("([^"\n]+)"|([a-zA-Z0-9_./\\-]+(?:\.[a-zA-Z0-9_-]+)+|[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_./\\-]+))/g;
+    /(__PI_MENTION__:(.+?)__)|@\[([^\]]+)\]|(?:^|[^a-zA-Z0-9_])@("([^"\n]+)"|((?:[a-zA-Z]:[/\\])?(?:[a-zA-Z0-9_./\\-]+(?:\.[a-zA-Z0-9_-]+)+|[a-zA-Z0-9_.-]+[/\\][a-zA-Z0-9_./\\-]+)))/g;
 
   const tokens: InlineFileToken[] = [];
   let lastIndex = 0;

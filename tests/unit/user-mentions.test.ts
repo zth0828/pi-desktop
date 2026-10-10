@@ -65,6 +65,20 @@ describe('user-mentions (用户消息内联文件引用解析)', () => {
     ]);
   });
 
+  it('正确解析 Windows 盘符路径与反斜杠目录路径引用', () => {
+    const raw = '请查看 @C:\\repo\\src\\main.rs 与 @D:/code/app.tsx 以及 @src\\components\\Button 目录';
+    const tokens = parseUserMessageTokens(raw);
+    expect(tokens).toEqual([
+      { type: 'text', text: '请查看 ' },
+      { type: 'file', path: 'C:\\repo\\src\\main.rs', name: 'main.rs', raw: '@C:\\repo\\src\\main.rs' },
+      { type: 'text', text: ' 与 ' },
+      { type: 'file', path: 'D:/code/app.tsx', name: 'app.tsx', raw: '@D:/code/app.tsx' },
+      { type: 'text', text: ' 以及 ' },
+      { type: 'file', path: 'src\\components\\Button', name: 'Button', raw: '@src\\components\\Button' },
+      { type: 'text', text: ' 目录' },
+    ]);
+  });
+
   it('纯文本且无文件引用时，不产生额外文件 token', () => {
     const raw = '普通的讨论内容，没有包含任何文件引用。';
     const tokens = parseUserMessageTokens(raw);
@@ -73,3 +87,4 @@ describe('user-mentions (用户消息内联文件引用解析)', () => {
     ]);
   });
 });
+
