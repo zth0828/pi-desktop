@@ -143,7 +143,7 @@ export async function checkoutGitBranch(
   cwd: string,
   branch: string,
 ): Promise<GitCheckoutResult> {
-  const targetBranch = (branch ?? '').trim();
+  const targetBranch = typeof branch === 'string' ? branch.trim() : '';
   if (!targetBranch) {
     return { success: false, error: 'invalid branch name' };
   }
@@ -173,8 +173,8 @@ export async function checkoutGitBranch(
 }
 
 export const gitApi = {
-  getBranch: (payload: { cwd: string }): Promise<GitBranchResult> => getGitBranch(payload.cwd),
-  listBranches: (payload: { cwd: string }): Promise<GitBranchListResult> => listGitBranches(payload.cwd),
+  getBranch: (payload: { cwd: string }): Promise<GitBranchResult> => getGitBranch(payload?.cwd),
+  listBranches: (payload: { cwd: string }): Promise<GitBranchListResult> => listGitBranches(payload?.cwd),
   checkout: (payload: { cwd: string; branch: string }): Promise<GitCheckoutResult> =>
-    checkoutGitBranch(payload.cwd, payload.branch),
+    checkoutGitBranch(payload?.cwd, payload?.branch),
 };

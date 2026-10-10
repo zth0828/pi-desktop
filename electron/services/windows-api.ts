@@ -137,7 +137,8 @@ export const windowsApi = {
   },
   setSessions: (payload: WindowsSetSessionsPayload, ctx?: HostActionContext): void => {
     if (!ctx) return;
-    setWindowSessions(ctx.sender.id, payload.sessionPaths, payload.activeSessionPath);
+    const paths = Array.isArray(payload?.sessionPaths) ? payload.sessionPaths : [];
+    setWindowSessions(ctx.sender.id, paths, typeof payload?.activeSessionPath === 'string' ? payload.activeSessionPath : undefined);
   },
   list: (): WindowListEntry[] => listWindows(),
 

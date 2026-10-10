@@ -364,6 +364,7 @@ export const versionCheckApi = {
     return null;
   },
   dismissNotice: async (payload: { kind: 'app' | 'pi'; latest: string }) => {
+    if (!payload?.latest || typeof payload.latest !== 'string') return { success: false, error: 'invalid-latest' };
     const now = Date.now();
     if (payload.kind === 'app') {
       await settingsApi.set({ key: 'appVersionCheckNoticedLatest', value: payload.latest });
@@ -398,6 +399,7 @@ export const versionCheckApi = {
     return { success: true };
   },
   skipVersion: async (payload: { version: string }) => {
+    if (!payload?.version || typeof payload.version !== 'string') return { success: false, error: 'invalid-version' };
     await settingsApi.set({ key: 'appVersionCheckSkippedVersion', value: payload.version });
     return { success: true };
   },

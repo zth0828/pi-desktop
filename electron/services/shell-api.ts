@@ -175,12 +175,16 @@ async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSucc
     } catch {
       return { success: false, error: 'file-not-found' };
     }
-    if (process.platform === 'darwin' && payload.application.path.endsWith('.app')) {
-      await execFileAsync('open', ['-a', payload.application.path, target], { timeout: 15_000 });
-    } else if (payload.application?.path) {
-      const useShell = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(payload.application.path);
-      const appBin = useShell ? path.win32.basename(payload.application.path) : payload.application.path;
-      const appCwd = useShell ? path.win32.dirname(payload.application.path) : undefined;
+    const appPath = typeof payload?.application?.path === 'string' ? payload.application.path.trim() : '';
+    if (appPath && isWindowsDevicePath(appPath)) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
+    if (process.platform === 'darwin' && appPath.endsWith('.app')) {
+      await execFileAsync('open', ['-a', appPath, target], { timeout: 15_000 });
+    } else if (appPath) {
+      const useShell = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(appPath);
+      const appBin = useShell ? path.win32.basename(appPath) : appPath;
+      const appCwd = useShell ? path.win32.dirname(appPath) : undefined;
       const child = spawn(appBin, [target], {
         detached: true,
         stdio: 'ignore',
@@ -204,6 +208,7 @@ async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSucc
 
 export const shellApi = {
   openExternal: async (payload: ShellOpenExternalPayload) => {
+    if (!payload?.url || typeof payload.url !== 'string') return;
     try {
       const parsed = new URL(payload.url);
       if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {

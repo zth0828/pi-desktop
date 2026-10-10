@@ -82,6 +82,9 @@ export const projectTrustApi = {
   listPending: (): PiTrustRequestPayload[] => [...pending.values()].map((entry) => entry.payload),
 
   respond: (payload: PiTrustRespondPayload): HostSuccess => {
+    if (!payload?.requestId || typeof payload.requestId !== 'string') {
+      return { success: false, error: 'invalid-request-id' };
+    }
     settle(payload.requestId, payload.label);
     return { success: true };
   },
@@ -89,6 +92,9 @@ export const projectTrustApi = {
   list: async (): Promise<PiTrustListResult> => ({ entries: await listEntries() }),
 
   set: async (payload: PiTrustSetPayload): Promise<HostSuccess> => {
+    if (!payload?.path || typeof payload.path !== 'string') {
+      return { success: false, error: 'invalid-path' };
+    }
     const adapter = await loadPiAdapter();
     await adapter.trust.set(payload.path, payload.decision);
     sendHostEvent('piTrust', 'changed', { entries: await listEntries() });

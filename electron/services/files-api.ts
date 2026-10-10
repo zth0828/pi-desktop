@@ -98,14 +98,15 @@ export const filesApi = {
 
   /** 逐层列目录：手动文件面板的树形浏览（不烧 pi quota，纯文件系统浏览）。 */
   listDir: async (payload: PiFileListDirPayload): Promise<PiFileListDirResult> => {
+    const rawDir = typeof payload?.dir === 'string' ? payload.dir : '';
     if (!payload?.cwd || typeof payload.cwd !== 'string' || !payload.cwd.trim()) {
-      return { dir: payload?.dir ?? '', dirs: [], files: [] };
+      return { dir: rawDir, dirs: [], files: [] };
     }
     const base = stripWindowsExtendedPrefix(payload.cwd);
     if (isWindowsDevicePath(base)) {
-      return { dir: payload?.dir ?? '', dirs: [], files: [] };
+      return { dir: rawDir, dirs: [], files: [] };
     }
-    const rel = (payload.dir ?? '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+    const rel = rawDir.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
     if (isWindowsDevicePath(rel)) {
       return { dir: rel, dirs: [], files: [] };
     }

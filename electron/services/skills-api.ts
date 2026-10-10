@@ -237,8 +237,10 @@ export const skillsApi = {
       { id: 'claude', dir: path.join(homedir(), '.claude', 'skills') },
       { id: 'codex', dir: path.join(homedir(), '.codex', 'skills') },
       ...(payload?.extraDirs ?? []).flatMap((dir) => {
+        if (!dir || typeof dir !== 'string') return [];
         try {
           const resolved = safeRealpath(dir);
+          if (isWindowsDevicePath(resolved)) return [];
           return existsSync(resolved) ? [{ id: 'manual', dir: resolved }] : [];
         } catch {
           return [];

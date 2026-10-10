@@ -107,7 +107,7 @@ export const packagesApi = {
   },
 
   install: async (payload: PiPackageInstallPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
-    const source = (payload?.source ?? '').trim();
+    const source = typeof payload?.source === 'string' ? payload.source.trim() : '';
     if (!source) return { success: false, error: 'empty source' };
     try {
       const { adapter, handle } = await getPackageManager(ctx);
@@ -121,13 +121,13 @@ export const packagesApi = {
   },
 
   remove: async (payload: PiPackageRemovePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
-    const source = (payload?.source ?? '').trim();
+    const source = typeof payload?.source === 'string' ? payload.source.trim() : '';
     if (!source) return { success: false, error: 'empty source' };
     try {
       const { adapter, handle } = await getPackageManager(ctx);
       const off = adapter.packages.onProgress(handle, (event) => sendHostEvent('piPackages', 'progress', event));
       let removed = false;
-      const local = payload.scope === 'project';
+      const local = payload?.scope === 'project';
       try {
         removed = await adapter.packages.remove(handle, source, local);
       } finally { off(); }
@@ -140,7 +140,7 @@ export const packagesApi = {
   },
 
   update: async (payload: PiPackageUpdatePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
-    const source = (payload?.source ?? '').trim();
+    const source = typeof payload?.source === 'string' ? payload.source.trim() : '';
     if (!source) return { success: false, error: 'empty source' };
     try {
       const { adapter, handle } = await getPackageManager(ctx);

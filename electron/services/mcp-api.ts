@@ -133,7 +133,7 @@ export const mcpApi = {
   },
 
   upsert: async (payload: PiMcpUpsertPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
-    const name = (payload?.name ?? '').trim();
+    const name = typeof payload?.name === 'string' ? payload.name.trim() : '';
     if (!name) return { success: false, error: 'empty name' };
     if (!payload?.config || (!payload.config.command && !payload.config.url)) {
       return { success: false, error: 'command or url required' };
@@ -161,7 +161,7 @@ export const mcpApi = {
   },
 
   remove: async (payload: PiMcpServerRefPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
-    const name = (payload?.name ?? '').trim();
+    const name = typeof payload?.name === 'string' ? payload.name.trim() : '';
     if (!name) return { success: false, error: 'empty name' };
     try {
       const { agentDir, cwd } = await resolvePaths(ctx);
@@ -182,7 +182,7 @@ export const mcpApi = {
   },
 
   setDisabled: async (payload: PiMcpSetDisabledPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
-    const name = (payload?.name ?? '').trim();
+    const name = typeof payload?.name === 'string' ? payload.name.trim() : '';
     if (!name) return { success: false, error: 'empty name' };
     try {
       const { agentDir, cwd } = await resolvePaths(ctx);

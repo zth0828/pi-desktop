@@ -304,13 +304,14 @@ export function parsePackageDetailHtml(html: string, detailsUrl: string, request
   };
 }
 
-export async function fetchPackageCatalog(query: PiPackageCatalogQuery): Promise<PiPackageCatalogResult> {
+export async function fetchPackageCatalog(query?: PiPackageCatalogQuery): Promise<PiPackageCatalogResult> {
+  const safeQuery = query ?? {};
   const baseUrl = process.env.PI_PACKAGE_CATALOG_URL ?? DEFAULT_CATALOG_URL;
   const url = new URL(baseUrl);
-  const name = query.name?.trim();
-  const type = query.type && VALID_TYPES.has(query.type) ? query.type : '';
-  const sort = query.sort && VALID_SORTS.has(query.sort) ? query.sort : 'downloads';
-  const page = Number.isFinite(query.page) ? Math.max(1, Math.floor(query.page ?? 1)) : 1;
+  const name = typeof safeQuery.name === 'string' ? safeQuery.name.trim() : '';
+  const type = safeQuery.type && VALID_TYPES.has(safeQuery.type) ? safeQuery.type : '';
+  const sort = safeQuery.sort && VALID_SORTS.has(safeQuery.sort) ? safeQuery.sort : 'downloads';
+  const page = Number.isFinite(safeQuery.page) ? Math.max(1, Math.floor(safeQuery.page ?? 1)) : 1;
   if (name) url.searchParams.set('name', name);
   if (type) url.searchParams.set('type', type);
   if (sort !== 'downloads') url.searchParams.set('sort', sort);
@@ -319,7 +320,7 @@ export async function fetchPackageCatalog(query: PiPackageCatalogQuery): Promise
   const cacheKey = url.toString();
   const cached = await readCache<PiPackageCatalogResult>('catalog', cacheKey);
   const now = Date.now();
-  if (cached && !query.refresh && now - cached.fetchedAt < CATALOG_CACHE_TTL_MS) {
+  if (cached && !safeQuery.refresh && now - cached.fetchedAt < CATALOG_CACHE_TTL_MS) {
     return { ...cached.value, fetchedAt: cached.fetchedAt, cacheState: 'fresh' };
   }
 
@@ -342,6 +343,7 @@ export async function fetchPackageCatalog(query: PiPackageCatalogQuery): Promise
 }
 
 export async function fetchPackageDetail(query: PiPackageDetailQuery): Promise<PiPackageDetailResult> {
+  if (!query?.name || typeof query.name !== 'string') throw new Error('Invalid package name');
   const name = query.name.trim();
   if (!safePackageName(name)) throw new Error('Invalid package name');
   const detailsUrl = detailUrlForName(name);

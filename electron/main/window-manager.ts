@@ -403,8 +403,7 @@ export function createSessionWindow(
 ): BrowserWindow {
   const existing = findWindowBySession(sessionPath);
   if (existing) {
-    if (existing.isMinimized()) existing.restore();
-    existing.focus();
+    activateAndFocusWindow(existing);
     return existing;
   }
   return createAppWindow({ sessionPath, cwd, position });

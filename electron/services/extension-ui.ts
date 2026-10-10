@@ -81,6 +81,9 @@ function requestUi(
 
 /** 渲染层用户响应：按 requestId 配对；未知 id（迟到/已取消）幂等忽略。 */
 export function resolveUiResponse(payload: PiUiResponsePayload): HostSuccess {
+  if (!payload?.requestId || typeof payload.requestId !== 'string') {
+    return { success: false, error: 'invalid-request-id' };
+  }
   const entry = pending.get(payload.requestId);
   if (!entry) return { success: true };
   entry.finish(payload.cancelled ? entry.cancelValue : payload.value, false);

@@ -51,10 +51,12 @@ export const settingsApi = {
   get: async <K extends keyof SettingsSnapshot>(
     payload: { key: K },
   ): Promise<SettingsSnapshot[K]> => {
+    if (!payload?.key) return undefined as unknown as SettingsSnapshot[K];
     const store = await getElectronStore();
     return store.get(payload.key) as SettingsSnapshot[K];
   },
   set: async (payload: SettingsSetPayload) => {
+    if (!payload?.key) return { success: false, error: 'invalid-key' };
     const store = await getElectronStore();
     // 工作区安全：主目录 / 盘符根不能作为持久化工作区（agent 会扫描个人全部文件）。
     // 这里拒绝写入，两个 UI 入口（Chat 空态选择 / 设置页）都会拿到失败并提示。
