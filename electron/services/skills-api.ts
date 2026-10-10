@@ -22,18 +22,23 @@ import type {
 } from '@shared/host-api/contract';
 import { resolveRuntimeForContext } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
+import { stripWindowsExtendedPrefix } from '../utils/same-path';
 
-/** macOS /tmp → /private/tmp symlink：路径比较前两边 realpath。 */
+/** macOS /tmp → /private/tmp symlink：路径比较前两边 realpath；剥离 Windows 扩展前缀。 */
 function safeRealpath(p: string): string {
   try {
-    return realpathSync(p);
+    return stripWindowsExtendedPrefix(realpathSync(p));
   } catch {
-    return p;
+    return stripWindowsExtendedPrefix(p);
   }
 }
 
 function isUnderDir(child: string, parent: string): boolean {
-  const rel = path.relative(safeRealpath(parent), safeRealpath(child));
+  const p = safeRealpath(parent);
+  const c = safeRealpath(child);
+  const normParent = process.platform === 'win32' ? p.toLowerCase() : p;
+  const normChild = process.platform === 'win32' ? c.toLowerCase() : c;
+  const rel = path.relative(normParent, normChild);
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
