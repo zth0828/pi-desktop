@@ -118,6 +118,13 @@ describe('review baseline guards and non-blocking capture', () => {
       expect(normalizeGitRelPath('\\\\server\\share\\repo', '\\\\server\\share\\repo\\src\\app.ts')).toBe('src/app.ts');
       expect(normalizeGitRelPath('\\\\server\\share\\repo', '\\\\?\\UNC\\server\\share\\repo\\src\\app.ts')).toBe('src/app.ts');
     });
+
+    it('支持点段与双点父目录规整化，并阻止跨工作区逃逸假阳性', () => {
+      expect(normalizeGitRelPath('C:/workspace', 'c:/workspace/src/../src/app.ts')).toBe('src/app.ts');
+      expect(normalizeGitRelPath('C:/workspace', 'c:/workspace/../outside/a.ts')).toBe('c:/outside/a.ts');
+      expect(normalizeGitRelPath('/tmp/project', '/tmp/project/nested/../../outside.txt')).toBe('/tmp/outside.txt');
+    });
   });
 });
+
 

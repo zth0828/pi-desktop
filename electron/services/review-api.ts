@@ -20,6 +20,7 @@ import { resolveRuntimeForContext, type ActiveRuntime } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { samePath, stripWindowsExtendedPrefix } from '../utils/same-path';
 import { envWithUserPath } from '../utils/shell-env';
+import { normalizeLexicalPath } from '@shared/message-attachments';
 
 type GitResult = { code: number; stdout: string; stderr: string };
 
@@ -358,11 +359,10 @@ const CONFLICT_CODES = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']);
  * 将任意平台路径（Windows 反斜杠、绝对路径、macOS /private 别名）转换为相对于 cwd 的 Git POSIX 路径。
  */
 export function normalizeGitRelPath(cwd: string, rawPath: string): string {
-  const cleanPath = stripWindowsExtendedPrefix(rawPath);
-  const cleanCwd = stripWindowsExtendedPrefix(cwd);
-  const normalized = cleanPath.replace(/\\/g, '/').replace(/^\.\//, '');
-  if (!normalized.startsWith('/') && !/^[a-zA-Z]:/.test(normalized)) {
-    return normalized;
+  const cleanPath = normalizeLexicalPath(rawPath);
+  const cleanCwd = normalizeLexicalPath(cwd);
+  if (!cleanPath.startsWith('/') && !/^[a-zA-Z]:/.test(cleanPath)) {
+    return cleanPath;
   }
   try {
     const realCwd = stripWindowsExtendedPrefix(realpathSync(cleanCwd));
@@ -374,18 +374,18 @@ export function normalizeGitRelPath(cwd: string, rawPath: string): string {
   } catch {
     // 目标文件可能已被删除（如被删文件的 revert），回退到字符串前缀判定
   }
-  const root = cleanCwd.replace(/\\/g, '/').replace(/\/$/, '');
-  const isWindows = /^[a-zA-Z]:/.test(normalized) || /^[a-zA-Z]:/.test(root) || normalized.startsWith('//') || root.startsWith('//');
-  const a = isWindows ? normalized.toLowerCase() : normalized;
+  const root = cleanCwd.replace(/\/$/, '');
+  const isWindows = /^[a-zA-Z]:/.test(cleanPath) || /^[a-zA-Z]:/.test(root) || cleanPath.startsWith('//') || root.startsWith('//');
+  const a = isWindows ? cleanPath.toLowerCase() : cleanPath;
   const b = isWindows ? root.toLowerCase() : root;
   if (a.startsWith(`${b}/`)) {
-    return normalized.slice(root.length + 1);
+    return cleanPath.slice(root.length + 1);
   }
   const privateRoot = b.startsWith('/private/') ? b.slice(8) : `/private${b}`;
   if (a.startsWith(`${privateRoot}/`)) {
-    return normalized.slice(privateRoot.length + 1);
+    return cleanPath.slice(privateRoot.length + 1);
   }
-  return normalized;
+  return cleanPath;
 }
 
 /** Read the real index because temporary snapshot indexes intentionally flatten conflicts. */
