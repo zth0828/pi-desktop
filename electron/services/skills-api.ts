@@ -263,13 +263,20 @@ export const skillsApi = {
     const results: PiSkillImportResult['results'] = [];
     for (const item of payload.skills) {
       try {
-        if (!isValidSkillName(item.name)) {
+        if (!isValidSkillName(item.name) || isWindowsDevicePath(item.dir)) {
           results.push({ name: item.name, ok: false, action: 'error', error: 'invalid name' });
           continue;
         }
+        const rawDir = stripWindowsExtendedPrefix(item.dir);
+        let isSymlinkDir = false;
+        try {
+          isSymlinkDir = lstatSync(rawDir).isSymbolicLink();
+        } catch {
+          // ignore
+        }
         const sourceDir = safeRealpath(item.dir);
         const sourceFile = path.join(sourceDir, 'SKILL.md');
-        if (!existsSync(sourceFile) || !isUnderDir(sourceFile, sourceDir) || lstatSync(sourceDir).isSymbolicLink() || lstatSync(sourceFile).isSymbolicLink()) {
+        if (!existsSync(sourceFile) || isSymlinkDir || !isUnderDir(sourceFile, sourceDir) || lstatSync(sourceFile).isSymbolicLink()) {
           results.push({ name: item.name, ok: false, action: 'error', error: 'skill source is unavailable or unsafe' });
           continue;
         }
