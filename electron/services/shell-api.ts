@@ -12,6 +12,7 @@ import type {
   ShellOpenExternalPayload,
   ShellOpenPathWithPayload,
 } from '@shared/host-api/contract';
+import { stripWindowsExtendedPrefix } from '../utils/same-path';
 
 const execFileAsync = promisify(execFile);
 
@@ -138,7 +139,7 @@ async function discoveredApplications(): Promise<ShellListApplicationsResult> {
 
 async function openPath(payload: { path: string }): Promise<HostSuccess> {
   try {
-    const target = path.resolve(payload.path);
+    const target = path.resolve(stripWindowsExtendedPrefix(payload.path));
     try {
       await stat(target);
     } catch {
@@ -152,7 +153,7 @@ async function openPath(payload: { path: string }): Promise<HostSuccess> {
 }
 
 async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSuccess> {
-  const target = path.resolve(payload.path);
+  const target = path.resolve(stripWindowsExtendedPrefix(payload.path));
   try {
     try {
       await stat(target);
@@ -195,7 +196,7 @@ export const shellApi = {
   openPathWith,
   showInFolder: async (payload: { path: string }): Promise<HostSuccess> => {
     try {
-      const target = path.resolve(payload.path);
+      const target = path.resolve(stripWindowsExtendedPrefix(payload.path));
       try {
         await stat(target);
         shell.showItemInFolder(target);

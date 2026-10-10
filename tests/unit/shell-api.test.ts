@@ -49,4 +49,16 @@ describe('shell-api', () => {
     });
     expect(res.success).toBe(true);
   });
+
+  it('openPath 与 showInFolder 剥离 Windows 扩展前缀 (\\\\?\\)', async () => {
+    const { shell } = await import('electron');
+    const prefixed = `\\\\?\\${__filename}`;
+    const openRes = await shellApi.openPath({ path: prefixed });
+    expect(openRes.success).toBe(true);
+    expect(shell.openPath).toHaveBeenCalledWith(__filename);
+
+    const showRes = await shellApi.showInFolder({ path: prefixed });
+    expect(showRes.success).toBe(true);
+    expect(shell.showItemInFolder).toHaveBeenCalledWith(__filename);
+  });
 });
