@@ -11,6 +11,7 @@ import {
   mergeReviewFiles,
   normalizeDisplayPath,
   parseUnifiedDiff,
+  pathMapKey,
   sessionChangeFiles,
   type ParsedFileDiff,
 } from '../../../lib/review-diff';
@@ -166,13 +167,17 @@ export function ReviewWorkspace() {
 
   const toolFileFor = useCallback(
     (filePath: string) => {
-      return toolFiles.find((file) => normalizeDisplayPath(file.path, cwd) === filePath);
+      const key = pathMapKey(filePath);
+      return toolFiles.find((file) => pathMapKey(normalizeDisplayPath(file.path, cwd)) === key);
     },
     [cwd, toolFiles],
   );
 
   const isBaselineFile = useCallback(
-    (filePath: string) => Boolean(summary?.available && summary.files.some((file) => file.path === filePath)),
+    (filePath: string) => {
+      const key = pathMapKey(filePath);
+      return Boolean(summary?.available && summary.files.some((file) => pathMapKey(file.path) === key));
+    },
     [summary],
   );
 
@@ -184,14 +189,15 @@ export function ReviewWorkspace() {
 
   const loadDiff = useCallback(
     async (item: SelectedReviewItem) => {
+      const itemKey = pathMapKey(item.path);
       if (item.group === 'session') {
-        const sessionFile = sessionFiles.find((f) => f.path === item.path);
+        const sessionFile = sessionFiles.find((f) => pathMapKey(f.path) === itemKey);
         if (sessionFile?.diff) {
           setDiff(null);
           setToolDiff(sessionFile.diff);
           return;
         }
-        if (summary?.available && summary.files.some((file) => file.path === item.path)) {
+        if (summary?.available && summary.files.some((file) => pathMapKey(file.path) === itemKey)) {
           const result = await paneApi.review.getFileDiff(item.path).catch(() => null);
           if (result?.available && result.diff) {
             setDiff(parseUnifiedDiff(result.diff));
@@ -203,7 +209,7 @@ export function ReviewWorkspace() {
         setToolDiff(sessionFile?.diff ?? null);
         return;
       }
-      if (summary?.available && summary.files.some((file) => file.path === item.path)) {
+      if (summary?.available && summary.files.some((file) => pathMapKey(file.path) === itemKey)) {
         const result = await paneApi.review.getFileDiff(item.path).catch(() => null);
         setDiff(result?.available && result.diff ? parseUnifiedDiff(result.diff) : null);
         setToolDiff(null);
@@ -236,10 +242,11 @@ export function ReviewWorkspace() {
     }
     setSelected((current) => {
       if (current) {
-        if (current.group === 'session' && sessionFiles.some((f) => f.path === current.path)) {
+        const curKey = pathMapKey(current.path);
+        if (current.group === 'session' && sessionFiles.some((f) => pathMapKey(f.path) === curKey)) {
           return current;
         }
-        if (current.group === 'workspace' && workspaceFiles.some((f) => f.path === current.path)) {
+        if (current.group === 'workspace' && workspaceFiles.some((f) => pathMapKey(f.path) === curKey)) {
           return current;
         }
       }
@@ -256,13 +263,14 @@ export function ReviewWorkspace() {
   useEffect(() => {
     if (!reviewFileRequest?.path) return;
     const target = reviewFileRequest.path;
-    const sessionMatch = sessionFiles.find((f) => f.path === target);
+    const targetKey = pathMapKey(target);
+    const sessionMatch = sessionFiles.find((f) => pathMapKey(f.path) === targetKey);
     if (sessionMatch) {
       setSelected({ group: 'session', path: target });
       setSessionOpen(true);
       return;
     }
-    const workspaceMatch = workspaceFiles.find((f) => f.path === target);
+    const workspaceMatch = workspaceFiles.find((f) => pathMapKey(f.path) === targetKey);
     if (workspaceMatch) {
       setSelected({ group: 'workspace', path: target });
       setWorkspaceOpen(true);
@@ -304,11 +312,12 @@ export function ReviewWorkspace() {
   };
 
   const selectedIsBaseline = selected?.group === 'workspace' && isBaselineFile(selected.path);
+  const selectedKey = selected ? pathMapKey(selected.path) : '';
   const selectedWorkspaceFile =
-    selected?.group === 'workspace' ? workspaceFiles.find((file) => file.path === selected.path) : undefined;
+    selected?.group === 'workspace' ? workspaceFiles.find((file) => pathMapKey(file.path) === selectedKey) : undefined;
   const canRevertSelected = Boolean(selectedIsBaseline && selectedWorkspaceFile?.status !== 'conflicted');
   const selectedSessionFile =
-    selected?.group === 'session' ? sessionFiles.find((file) => file.path === selected.path) : undefined;
+    selected?.group === 'session' ? sessionFiles.find((file) => pathMapKey(file.path) === selectedKey) : undefined;
 
   return (
     <div className="review-workspace">
