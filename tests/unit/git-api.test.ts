@@ -83,6 +83,9 @@ describe('git-api', () => {
 
     const wsBranch = await getGitBranch('   ');
     expect(wsBranch.branch).toBeNull();
+
+    const devBranch = await getGitBranch('CON');
+    expect(devBranch.branch).toBeNull();
   });
 });
 

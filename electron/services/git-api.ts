@@ -9,13 +9,16 @@ import type { GitBranchListResult, GitBranchResult, GitCheckoutResult } from '@s
 import { isCwdRunning } from './pi-runtime-api';
 import { envWithUserPath } from '../utils/shell-env';
 import { stripWindowsExtendedPrefix } from '../utils/same-path';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 type GitPaths = { repoDir: string; headPath: string };
 
 /** 从 cwd 向上找 .git（目录或 worktree 的 gitdir 文件）。 */
 export function findGitPaths(cwd: string): GitPaths | null {
   if (!cwd || typeof cwd !== 'string' || !cwd.trim()) return null;
-  let dir = cwd;
+  const cleanCwd = stripWindowsExtendedPrefix(cwd.trim());
+  if (isWindowsDevicePath(cleanCwd)) return null;
+  let dir = cleanCwd;
   for (;;) {
     const gitPath = join(dir, '.git');
     if (existsSync(gitPath)) {
