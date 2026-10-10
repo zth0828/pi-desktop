@@ -23,6 +23,7 @@ import type {
 import { resolveRuntimeForContext } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { stripWindowsExtendedPrefix } from '../utils/same-path';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 /** macOS /tmp → /private/tmp symlink：路径比较前两边 realpath；剥离 Windows 扩展前缀。 */
 function safeRealpath(p: string): string {
@@ -187,8 +188,11 @@ export const skillsApi = {
     ctx?: HostActionContext,
   ): Promise<PiSkillSetModeResult> => {
     try {
+      if (isWindowsDevicePath(payload.filePath)) {
+        return { ok: false, error: 'Skill file does not exist' };
+      }
       const resolved = safeRealpath(payload.filePath);
-      if (!existsSync(resolved)) {
+      if (isWindowsDevicePath(resolved) || !existsSync(resolved)) {
         return { ok: false, error: 'Skill file does not exist' };
       }
       try {
@@ -215,9 +219,13 @@ export const skillsApi = {
 
   read: async (payload: PiSkillReadPayload): Promise<PiSkillReadResult> => {
     // 查看用：只读 SKILL.md 原文，截断兜底（正常 skill 文件远低于此）
+    if (isWindowsDevicePath(payload.filePath)) {
+      return { content: '' };
+    }
     const content = await readFile(payload.filePath, 'utf8');
     return { content: content.length > 512 * 1024 ? `${content.slice(0, 512 * 1024)}\n…` : content };
   },
+
 
   scanExternal: async (payload?: PiSkillScanExternalPayload, ctx?: HostActionContext): Promise<PiSkillScanExternalResult> => {
     const targetDir = path.join(resolveAgentDir(ctx), 'skills');

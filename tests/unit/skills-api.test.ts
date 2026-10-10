@@ -91,4 +91,15 @@ describe('isValidSkillName', () => {
     expect(isValidSkillName('skill ')).toBe(false);
     expect(isValidSkillName('')).toBe(false);
   });
+
+  it('skillsApi.read 与 setInvocationMode 拦截 Windows 设备路径', async () => {
+    const { skillsApi } = await import('../../electron/services/skills-api');
+    const readRes = await skillsApi.read({ filePath: 'CON' });
+    expect(readRes.content).toBe('');
+
+    const modeRes = await skillsApi.setInvocationMode({ filePath: 'AUX', disableModelInvocation: true });
+    expect(modeRes.ok).toBe(false);
+    expect(modeRes.error).toBe('Skill file does not exist');
+  });
 });
+
