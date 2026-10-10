@@ -197,7 +197,11 @@ export const shellApi = {
     } catch {
       return;
     }
-    await shell.openExternal(payload.url);
+    try {
+      await shell.openExternal(payload.url);
+    } catch {
+      // 容忍外部打开失败
+    }
   },
   listApplications: discoveredApplications,
   openPath,
