@@ -85,7 +85,7 @@ function resolveNearestReal(target: string): string {
 }
 
 export function samePath(a?: string, b?: string): boolean {
-  if (!a || !b) return false;
+  if (!a || !b || typeof a !== 'string' || typeof b !== 'string') return false;
   if (pathsEqual(a, b)) return true;
   try {
     return pathsEqual(realpathSync(a), realpathSync(b));

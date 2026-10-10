@@ -65,6 +65,12 @@ describe('resolveWorkspacePath', () => {
     expect(isWindowsDevicePath(null as unknown as string)).toBe(false);
     expect(isWindowsDevicePath(123 as unknown as string)).toBe(false);
   });
+
+  it('rejects invalid or device roots in resolveWorkspacePath', async () => {
+    await expect(resolveWorkspacePath('', 'inside.txt')).rejects.toThrow('invalid workspace root');
+    await expect(resolveWorkspacePath(undefined as unknown as string, 'inside.txt')).rejects.toThrow('invalid workspace root');
+    await expect(resolveWorkspacePath('CON', 'inside.txt')).rejects.toThrow('device paths are not allowed');
+  });
 });
 
 describe('workspaceApi.readFile', () => {

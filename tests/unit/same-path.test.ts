@@ -90,5 +90,7 @@ describe('samePath', () => {
     expect(samePath(a, path.join(parent, 'b.txt'))).toBe(false);
     expect(samePath(undefined, a)).toBe(false);
     expect(samePath(a, '')).toBe(false);
+    expect(samePath({} as unknown as string, a)).toBe(false);
+    expect(samePath(123 as unknown as string, a)).toBe(false);
   });
 });
