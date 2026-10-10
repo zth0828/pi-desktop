@@ -7,6 +7,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { GitBranchListResult, GitBranchResult, GitCheckoutResult } from '@shared/host-api/contract';
 import { isCwdRunning } from './pi-runtime-api';
+import { envWithUserPath } from '../utils/shell-env';
 
 type GitPaths = { repoDir: string; headPath: string };
 
@@ -49,6 +50,7 @@ function execGit(repoDir: string, args: string[], timeout = 5000): Promise<{ std
       {
         cwd: repoDir,
         encoding: 'utf8',
+        env: envWithUserPath(),
         timeout,
         windowsHide: true,
       },
@@ -90,6 +92,7 @@ export function getGitBranch(cwd: string): Promise<GitBranchResult> {
     execFile('git', ['--no-optional-locks', 'symbolic-ref', '--quiet', '--short', 'HEAD'], {
       cwd: gitPaths.repoDir,
       encoding: 'utf8',
+      env: envWithUserPath(),
       windowsHide: true,
     }, (error, stdout) => {
       if (error) {

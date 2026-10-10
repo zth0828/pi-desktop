@@ -18,7 +18,8 @@ import type {
 } from '@shared/host-api/contract';
 import { resolveRuntimeForContext, type ActiveRuntime } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
-import { samePath } from '../utils/same-path';
+import { samePath, stripWindowsExtendedPrefix } from '../utils/same-path';
+import { envWithUserPath } from '../utils/shell-env';
 
 type GitResult = { code: number; stdout: string; stderr: string };
 
@@ -52,7 +53,7 @@ async function removeDirBestEffort(dir: string): Promise<void> {
 function runGit(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; input?: string } = {}): Promise<GitResult> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn('git', ['-C', cwd, ...args], {
-      env: { ...process.env, ...GIT_STABLE_ENV, ...opts.env },
+      env: envWithUserPath({ ...GIT_STABLE_ENV, ...opts.env }),
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -356,13 +357,15 @@ const CONFLICT_CODES = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']);
  * 将任意平台路径（Windows 反斜杠、绝对路径、macOS /private 别名）转换为相对于 cwd 的 Git POSIX 路径。
  */
 export function normalizeGitRelPath(cwd: string, rawPath: string): string {
-  const normalized = rawPath.replace(/\\/g, '/').replace(/^\.\//, '');
-  if (!rawPath.startsWith('/') && !/^[a-zA-Z]:/.test(normalized)) {
+  const cleanPath = stripWindowsExtendedPrefix(rawPath);
+  const cleanCwd = stripWindowsExtendedPrefix(cwd);
+  const normalized = cleanPath.replace(/\\/g, '/').replace(/^\.\//, '');
+  if (!cleanPath.startsWith('/') && !/^[a-zA-Z]:/.test(normalized)) {
     return normalized;
   }
   try {
-    const realCwd = realpathSync(cwd);
-    const realTarget = realpathSync(rawPath);
+    const realCwd = stripWindowsExtendedPrefix(realpathSync(cleanCwd));
+    const realTarget = stripWindowsExtendedPrefix(realpathSync(cleanPath));
     const rel = path.relative(realCwd, realTarget).replace(/\\/g, '/');
     if (!rel.startsWith('..') && !rel.startsWith('/') && !/^[a-zA-Z]:/.test(rel)) {
       return rel;
@@ -370,7 +373,7 @@ export function normalizeGitRelPath(cwd: string, rawPath: string): string {
   } catch {
     // 目标文件可能已被删除（如被删文件的 revert），回退到字符串前缀判定
   }
-  const root = cwd.replace(/\\/g, '/').replace(/\/$/, '');
+  const root = cleanCwd.replace(/\\/g, '/').replace(/\/$/, '');
   const isWindows = /^[a-zA-Z]:/.test(normalized) || /^[a-zA-Z]:/.test(root);
   const a = isWindows ? normalized.toLowerCase() : normalized;
   const b = isWindows ? root.toLowerCase() : root;

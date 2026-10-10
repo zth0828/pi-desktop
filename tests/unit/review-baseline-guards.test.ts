@@ -110,6 +110,12 @@ describe('review baseline guards and non-blocking capture', () => {
       expect(normalizeGitRelPath('/tmp/repo', '/private/tmp/repo/src/app.ts')).toBe('src/app.ts');
       expect(normalizeGitRelPath('/private/tmp/repo', '/tmp/repo/src/app.ts')).toBe('src/app.ts');
     });
+
+    it('支持 Windows 扩展前缀 (\\\\?\\) 绝对路径归一化', () => {
+      expect(normalizeGitRelPath('C:/workspace', '\\\\?\\C:\\workspace\\src\\app.ts')).toBe('src/app.ts');
+      expect(normalizeGitRelPath('\\\\?\\C:\\workspace', 'C:/workspace/src/app.ts')).toBe('src/app.ts');
+      expect(normalizeGitRelPath('\\\\?\\C:\\workspace', '\\\\?\\C:\\workspace\\src\\app.ts')).toBe('src/app.ts');
+    });
   });
 });
 
