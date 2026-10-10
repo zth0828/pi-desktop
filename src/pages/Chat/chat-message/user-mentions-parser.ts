@@ -21,22 +21,27 @@ export function parseUserMessageTokens(rawText: string): InlineFileToken[] {
 
   // 2. 将 <file name="path"> 替换为标准化占位标记，保留其在句子中的相对位置
   const embeddedFiles: string[] = [];
+  const nonce = Math.random().toString(36).slice(2, 10);
+  const startTag = `\uE000PI_MENTION_${nonce}_`;
+  const endTag = `\uE001`;
   const withPlaceholders = clean.replace(
     /<file name="([^"]*)">\n?[\s\S]*?\n?<\/file>\n?/g,
     (_match, filePath) => {
       const idx = embeddedFiles.length;
       embeddedFiles.push(filePath);
-      return `__PI_MENTION_START__${idx}__PI_MENTION_END__`;
+      return `${startTag}${idx}${endTag}`;
     },
   );
 
   // 3. 正则匹配：
-  // - __PI_MENTION_START__idx__PI_MENTION_END__
+  // - 内部占位标记
   // - @[path]
   // - @"quoted path"
   // - @filename.ext 或 @dir/file.ext（支持紧随中文字符或行首，排除邮箱如 user@example.com）
-  const mentionRegex =
-    /(__PI_MENTION_START__(\d+)__PI_MENTION_END__)|@\[([^\]]+)\]|(?:^|[^a-zA-Z0-9_])@("([^"\n]+)"|((?:[a-zA-Z]:[/\\])?(?:[a-zA-Z0-9_./\\-]+(?:\.[a-zA-Z0-9_-]+)+|[a-zA-Z0-9_.-]+[/\\][a-zA-Z0-9_./\\-]+)))/g;
+  const mentionRegex = new RegExp(
+    `(${startTag}(\\d+)${endTag})|@\\[([^\\]]+)\\]|(?:^|[^a-zA-Z0-9_])@("([^"\\n]+)"|((?:[a-zA-Z]:[/\\\\])?(?:[a-zA-Z0-9_./\\\\-]+(?:\\.[a-zA-Z0-9_-]+)+|[a-zA-Z0-9_.-]+[/\\\\][a-zA-Z0-9_./\\\\-]+)))`,
+    'g',
+  );
 
   const tokens: InlineFileToken[] = [];
   let lastIndex = 0;
@@ -52,13 +57,6 @@ export function parseUserMessageTokens(rawText: string): InlineFileToken[] {
     const leadingText = isSpecialPlaceholder || isBracketMention ? '' : atIndex > 0 ? fullMatch.slice(0, atIndex) : '';
     const actualStart = matchStart + leadingText.length;
 
-    if (actualStart > lastIndex) {
-      tokens.push({
-        type: 'text',
-        text: withPlaceholders.slice(lastIndex, actualStart),
-      });
-    }
-
     const filePath = isSpecialPlaceholder
       ? embeddedFiles[Number(match[2])]
       : isBracketMention
@@ -66,6 +64,17 @@ export function parseUserMessageTokens(rawText: string): InlineFileToken[] {
         : match[5] !== undefined
           ? match[5]
           : match[6];
+
+    if (filePath === undefined) {
+      continue;
+    }
+
+    if (actualStart > lastIndex) {
+      tokens.push({
+        type: 'text',
+        text: withPlaceholders.slice(lastIndex, actualStart),
+      });
+    }
 
     const fileName = filePath.split(/[/\\]/).pop() || filePath;
 

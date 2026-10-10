@@ -97,5 +97,13 @@ describe('user-mentions (用户消息内联文件引用解析)', () => {
       { type: 'text', text: '普通的讨论内容，没有包含任何文件引用。' },
     ]);
   });
+
+  it('文本中含有类似占位符格式的字符串时不崩溃并安全作为文本解析', () => {
+    const raw = '讨论 __PI_MENTION_START__99__PI_MENTION_END__ 的解析逻辑';
+    const tokens = parseUserMessageTokens(raw);
+    expect(tokens).toEqual([
+      { type: 'text', text: '讨论 __PI_MENTION_START__99__PI_MENTION_END__ 的解析逻辑' },
+    ]);
+  });
 });
 
