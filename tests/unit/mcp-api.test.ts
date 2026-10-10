@@ -88,4 +88,29 @@ describe('mcpApi remove/setDisabled 的 scope 回退防护', () => {
     const global = JSON.parse(readFileSync(globalFile, 'utf8'));
     expect(Object.keys(global.mcpServers)).toEqual(['keep']);
   });
+
+  it('rejects empty or whitespace names in upsert, remove, and setDisabled', async () => {
+    const upsertRes = await mcpApi.upsert({ scope: 'global', name: '  ', config: { command: 'node' } });
+    expect(upsertRes.success).toBe(false);
+    expect(upsertRes.error).toBe('empty name');
+
+    const removeRes = await mcpApi.remove({ scope: 'global', name: '' });
+    expect(removeRes.success).toBe(false);
+    expect(removeRes.error).toBe('empty name');
+
+    const setDisabledRes = await mcpApi.setDisabled({ scope: 'global', name: ' \t ', disabled: true });
+    expect(setDisabledRes.success).toBe(false);
+    expect(setDisabledRes.error).toBe('empty name');
+  });
+
+  it('rejects invalid or missing config in upsert', async () => {
+    // @ts-expect-error testing missing config
+    const noConfig = await mcpApi.upsert({ scope: 'global', name: 'test' });
+    expect(noConfig.success).toBe(false);
+    expect(noConfig.error).toBe('command or url required');
+
+    const emptyConfig = await mcpApi.upsert({ scope: 'global', name: 'test', config: {} });
+    expect(emptyConfig.success).toBe(false);
+    expect(emptyConfig.error).toBe('command or url required');
+  });
 });

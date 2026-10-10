@@ -133,9 +133,9 @@ export const mcpApi = {
   },
 
   upsert: async (payload: PiMcpUpsertPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
-    const name = payload.name.trim();
+    const name = (payload?.name ?? '').trim();
     if (!name) return { success: false, error: 'empty name' };
-    if (!payload.config.command && !payload.config.url) {
+    if (!payload?.config || (!payload.config.command && !payload.config.url)) {
       return { success: false, error: 'command or url required' };
     }
     try {
@@ -161,6 +161,8 @@ export const mcpApi = {
   },
 
   remove: async (payload: PiMcpServerRefPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    const name = (payload?.name ?? '').trim();
+    if (!name) return { success: false, error: 'empty name' };
     try {
       const { agentDir, cwd } = await resolvePaths(ctx);
       // project scope 请求丢失 cwd 时必须失败，不能回退到 global 配置——
@@ -172,7 +174,7 @@ export const mcpApi = {
         payload.scope === 'project' && cwd
           ? path.join(cwd, '.mcp.json')
           : path.join(agentDir, 'mcp.json');
-      writeMcpConfigFile(filePath, removeServer(readMcpConfigFile(filePath), payload.name));
+      writeMcpConfigFile(filePath, removeServer(readMcpConfigFile(filePath), name));
       return { success: true };
     } catch (err) {
       return { success: false, error: toError(err) };
@@ -180,6 +182,8 @@ export const mcpApi = {
   },
 
   setDisabled: async (payload: PiMcpSetDisabledPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    const name = (payload?.name ?? '').trim();
+    if (!name) return { success: false, error: 'empty name' };
     try {
       const { agentDir, cwd } = await resolvePaths(ctx);
       // 同 remove：project scope 无 cwd 不得写 global 配置。
@@ -192,7 +196,7 @@ export const mcpApi = {
           : path.join(agentDir, 'mcp.json');
       writeMcpConfigFile(
         filePath,
-        setServerDisabled(readMcpConfigFile(filePath), payload.name, payload.disabled),
+        setServerDisabled(readMcpConfigFile(filePath), name, payload.disabled),
       );
       return { success: true };
     } catch (err) {
