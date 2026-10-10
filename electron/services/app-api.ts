@@ -8,6 +8,7 @@ import type {
   AppWriteBinaryFilePayload,
   HostSuccess,
 } from '@shared/host-api/contract';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 function resolveAppVersion(): string {
   const version = app.getVersion();
@@ -35,10 +36,13 @@ export const appApi = {
   name: () => app.getName(),
   platform: () => process.platform,
   writeClipboard: (payload: { text: string }) => {
-    clipboard.writeText(payload.text);
+    clipboard.writeText(typeof payload?.text === 'string' ? payload.text : '');
     return { success: true };
   },
   writeClipboardImage: (payload: AppClipboardImagePayload): HostSuccess => {
+    if (!payload?.data || typeof payload.data !== 'string') {
+      return { success: false, error: 'Failed to create image from buffer' };
+    }
     try {
       const buffer = Buffer.from(payload.data, 'base64');
       const image = nativeImage.createFromBuffer(buffer);
@@ -52,6 +56,15 @@ export const appApi = {
     }
   },
   writeBinaryFile: async (payload: AppWriteBinaryFilePayload): Promise<HostSuccess> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return { success: false, error: 'path is required' };
+    }
+    if (isWindowsDevicePath(payload.path.trim())) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
+    if (typeof payload?.data !== 'string') {
+      return { success: false, error: 'data is required' };
+    }
     try {
       const buffer = Buffer.from(payload.data, 'base64');
       await fs.writeFile(payload.path, buffer);
@@ -61,6 +74,9 @@ export const appApi = {
     }
   },
   editCommand: (payload: AppEditCommandPayload): HostSuccess => {
+    if (!payload?.command) {
+      return { success: false, error: 'command is required' };
+    }
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     if (!win || win.isDestroyed()) {
       return { success: false, error: 'No active window' };

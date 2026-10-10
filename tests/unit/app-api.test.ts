@@ -113,4 +113,27 @@ describe('appApi', () => {
     expect(res.success).toBe(true);
     expect(writtenFiles['/tmp/test.png']?.toString('utf8')).toBe('hello-binary');
   });
+
+  it('rejects invalid path or device path in writeBinaryFile', async () => {
+    // @ts-expect-error testing empty path
+    const emptyRes = await appApi.writeBinaryFile({ path: '', data: 'abc' });
+    expect(emptyRes.success).toBe(false);
+    expect(emptyRes.error).toBe('path is required');
+
+    const deviceRes = await appApi.writeBinaryFile({ path: 'CON', data: 'abc' });
+    expect(deviceRes.success).toBe(false);
+    expect(deviceRes.error).toBe('device paths are not allowed');
+
+    // @ts-expect-error testing invalid data
+    const noDataRes = await appApi.writeBinaryFile({ path: '/tmp/test.bin' });
+    expect(noDataRes.success).toBe(false);
+    expect(noDataRes.error).toBe('data is required');
+  });
+
+  it('rejects missing command in editCommand', () => {
+    // @ts-expect-error testing missing command
+    const res = appApi.editCommand({});
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('command is required');
+  });
 });
