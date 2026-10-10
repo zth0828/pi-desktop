@@ -75,6 +75,8 @@ describe('isValidSkillName', () => {
     expect(isValidSkillName('NUL')).toBe(false);
     expect(isValidSkillName('com1')).toBe(false);
     expect(isValidSkillName('lpt2')).toBe(false);
+    expect(isValidSkillName('CONIN$')).toBe(false);
+    expect(isValidSkillName('conout$')).toBe(false);
     expect(isValidSkillName('con.txt')).toBe(false);
     expect(isValidSkillName('skill:test')).toBe(false);
     expect(isValidSkillName('skill*name')).toBe(false);

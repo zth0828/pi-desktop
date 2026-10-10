@@ -2,12 +2,12 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { stripWindowsExtendedPrefix } from './same-path';
 
-const DOS_DEVICE_REGEX = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i;
+const DOS_DEVICE_REGEX = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\$|CONOUT\$)(?:\.|$)/i;
 
 export function isWindowsDevicePath(p: string): boolean {
   if (p.startsWith('\\\\.\\') || p.startsWith('\\\\?\\')) return true;
   const normalized = p.replace(/\\/g, '/');
-  if (/^\/\/\.?\//.test(normalized)) return true;
+  if (/^\/\/[.?]\//.test(normalized)) return true;
   const segments = normalized.split('/');
   return segments.some((seg) => DOS_DEVICE_REGEX.test(seg));
 }

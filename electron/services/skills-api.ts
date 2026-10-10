@@ -136,7 +136,7 @@ export function updateDisableModelInvocation(content: string, disable: boolean):
   return `---\n${newYaml.trim()}\n---${rest}`;
 }
 
-const INVALID_SKILL_NAME = /[<>:"/\\|?*]|^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i;
+const INVALID_SKILL_NAME = /[<>:"/\\|?*]|^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\$|CONOUT\$)(?:\.|$)/i;
 
 export function isValidSkillName(name: string): boolean {
   if (!name || name === '..' || name === '.' || name.endsWith('.') || name.endsWith(' ')) {
