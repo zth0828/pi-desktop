@@ -13,6 +13,7 @@ import type {
   ShellOpenPathWithPayload,
 } from '@shared/host-api/contract';
 import { stripWindowsExtendedPrefix } from '../utils/same-path';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 const execFileAsync = promisify(execFile);
 
@@ -138,8 +139,15 @@ async function discoveredApplications(): Promise<ShellListApplicationsResult> {
 }
 
 async function openPath(payload: { path: string }): Promise<HostSuccess> {
+  if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+    return { success: false, error: 'invalid-path' };
+  }
+  const clean = stripWindowsExtendedPrefix(payload.path.trim());
+  if (isWindowsDevicePath(clean)) {
+    return { success: false, error: 'device paths are not allowed' };
+  }
   try {
-    const target = path.resolve(stripWindowsExtendedPrefix(payload.path));
+    const target = path.resolve(clean);
     try {
       await stat(target);
     } catch {
@@ -153,7 +161,14 @@ async function openPath(payload: { path: string }): Promise<HostSuccess> {
 }
 
 async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSuccess> {
-  const target = path.resolve(stripWindowsExtendedPrefix(payload.path));
+  if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+    return { success: false, error: 'invalid-path' };
+  }
+  const clean = stripWindowsExtendedPrefix(payload.path.trim());
+  if (isWindowsDevicePath(clean)) {
+    return { success: false, error: 'device paths are not allowed' };
+  }
+  const target = path.resolve(clean);
   try {
     try {
       await stat(target);
@@ -207,8 +222,15 @@ export const shellApi = {
   openPath,
   openPathWith,
   showInFolder: async (payload: { path: string }): Promise<HostSuccess> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return { success: false, error: 'invalid-path' };
+    }
+    const clean = stripWindowsExtendedPrefix(payload.path.trim());
+    if (isWindowsDevicePath(clean)) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
     try {
-      const target = path.resolve(stripWindowsExtendedPrefix(payload.path));
+      const target = path.resolve(clean);
       try {
         await stat(target);
         shell.showItemInFolder(target);

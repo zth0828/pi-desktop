@@ -33,6 +33,18 @@ describe('shell-api', () => {
     expect(res.error).toBe('file-not-found');
   });
 
+  it('openPath, openPathWith 与 showInFolder 拦截空路径与 Windows 设备路径', async () => {
+    expect(await shellApi.openPath({ path: '' })).toEqual({ success: false, error: 'invalid-path' });
+    expect(await shellApi.openPath({ path: '   ' })).toEqual({ success: false, error: 'invalid-path' });
+    expect(await shellApi.openPath({ path: 'CON' })).toEqual({ success: false, error: 'device paths are not allowed' });
+
+    expect(await shellApi.openPathWith({ path: '', application: { id: 'app', name: 'Code', path: '/bin/code' } })).toEqual({ success: false, error: 'invalid-path' });
+    expect(await shellApi.openPathWith({ path: 'CON', application: { id: 'app', name: 'Code', path: '/bin/code' } })).toEqual({ success: false, error: 'device paths are not allowed' });
+
+    expect(await shellApi.showInFolder({ path: '' })).toEqual({ success: false, error: 'invalid-path' });
+    expect(await shellApi.showInFolder({ path: 'CON' })).toEqual({ success: false, error: 'device paths are not allowed' });
+  });
+
   it('openPathWith 对不存在的文件返回 file-not-found', async () => {
     const res = await shellApi.openPathWith({
       path: '/non/existent/path/xyz.txt',
