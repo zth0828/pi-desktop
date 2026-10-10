@@ -45,4 +45,15 @@ describe('companion-package (内置伴生扩展路径与打包解析)', () => {
       rmSync(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it('拦截包含路径穿越或非法字符的伴生扩展 id', async () => {
+    const { packagesApi } = await import('../../electron/services/packages-api');
+    const status = await packagesApi.getCompanionStatus({ id: '../evil' });
+    expect(status.installed).toBe(false);
+
+    const toggle = await packagesApi.toggleCompanion({ id: '../../evil', enable: true });
+    expect(toggle.success).toBe(false);
+    expect(toggle.error).toBe('invalid companion extension id');
+  });
 });
+

@@ -88,6 +88,8 @@ async function getPackageManager(ctx?: HostActionContext): Promise<{
   return { adapter, handle, agentDir };
 }
 
+const VALID_COMPANION_ID = /^[a-zA-Z0-9_-]+$/;
+
 export const packagesApi = {
   list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiPackageListResult> => {
     const adapter = await loadPiAdapter();
@@ -157,6 +159,9 @@ export const packagesApi = {
   detail: async (payload: PiPackageDetailQuery): Promise<PiPackageDetailResult> => fetchPackageDetail(payload),
 
   getCompanionStatus: async (payload: PiCompanionExtensionQuery, ctx?: HostActionContext): Promise<PiCompanionExtensionStatus> => {
+    if (!VALID_COMPANION_ID.test(payload.id)) {
+      return { id: payload.id, installed: false };
+    }
     const { agentDir } = await getPackageManager(ctx);
     const targetPath = getCompanionTargetPath(agentDir, payload.id);
     const installed = existsSync(targetPath);
@@ -167,8 +172,12 @@ export const packagesApi = {
     payload: PiCompanionExtensionTogglePayload,
     ctx?: HostActionContext,
   ): Promise<PiCompanionExtensionToggleResult> => {
+    if (!VALID_COMPANION_ID.test(payload.id)) {
+      return { success: false, installed: false, error: 'invalid companion extension id' };
+    }
     const { agentDir } = await getPackageManager(ctx);
     const targetPath = getCompanionTargetPath(agentDir, payload.id);
+
 
     try {
       if (payload.enable) {
