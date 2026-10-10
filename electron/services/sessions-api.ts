@@ -801,8 +801,9 @@ export const sessionsApi = {
       // 清理——删除「当前打开的会话」后 runtime 的 newSession 尚未落盘新文件，
       // 目录此时为空但马上要写入，删了会让后续写文件 ENOENT。
       if (sessionCwd && !hasRuntimeWithCwd(sessionCwd)) {
-        await rmdir(path.dirname(payload.path)).catch(() => {});
+        await rmdir(path.dirname(targetFile)).catch(() => {});
       }
+
       // 清理会话对应的导出记录索引
       try {
         const store = await getElectronStore();
