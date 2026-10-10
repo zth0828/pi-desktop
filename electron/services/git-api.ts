@@ -14,6 +14,7 @@ type GitPaths = { repoDir: string; headPath: string };
 
 /** 从 cwd 向上找 .git（目录或 worktree 的 gitdir 文件）。 */
 export function findGitPaths(cwd: string): GitPaths | null {
+  if (!cwd || typeof cwd !== 'string' || !cwd.trim()) return null;
   let dir = cwd;
   for (;;) {
     const gitPath = join(dir, '.git');

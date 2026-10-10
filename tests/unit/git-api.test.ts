@@ -76,5 +76,13 @@ describe('git-api', () => {
     expect(checkoutRes.success).toBe(false);
     expect(checkoutRes.error).toBe('invalid branch name');
   });
+
+  it('空路径或纯空白 cwd 不得误检主进程目录并返回 null', async () => {
+    const emptyBranch = await getGitBranch('');
+    expect(emptyBranch.branch).toBeNull();
+
+    const wsBranch = await getGitBranch('   ');
+    expect(wsBranch.branch).toBeNull();
+  });
 });
 
