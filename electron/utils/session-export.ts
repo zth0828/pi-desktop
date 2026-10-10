@@ -6,7 +6,8 @@ import { stripAttachmentEnvelope } from '@shared/message-attachments';
 const EXPORT_FOLDER_SEGMENTS = ['Pi Desktop', 'Exports'] as const;
 const WINDOWS_RESERVED_NAMES = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\$|CONOUT\$)(?:\.|$)/i;
 
-export function sanitizePathSegment(segment: string, fallback = 'default'): string {
+export function sanitizePathSegment(segment?: string, fallback = 'default'): string {
+  if (typeof segment !== 'string') return fallback;
   const sanitized = segment
     .replace(/[<>:"/\\|?*\x00-\x1f\r\n\t]/g, '_')
     .replace(/\s+/g, ' ')
@@ -20,7 +21,7 @@ export function sanitizePathSegment(segment: string, fallback = 'default'): stri
 }
 
 export function projectFolderName(cwd?: string): string {
-  if (!cwd) return 'default';
+  if (!cwd || typeof cwd !== 'string') return 'default';
   const name = cwd.split(/[\\/]/).filter(Boolean).pop();
   return sanitizePathSegment(name ?? 'default', 'default');
 }
@@ -55,10 +56,11 @@ export async function sessionExportPath(
 ): Promise<string> {
   const opts: SessionExportTargetOptions = typeof options === 'string'
     ? { sessionFile: options }
-    : options;
+    : options ?? { sessionFile: '' };
 
+  const sessionFile = typeof opts.sessionFile === 'string' ? opts.sessionFile : '';
   const directory = await ensureSessionExportDirectory(opts.cwd);
-  const baseName = path.basename(opts.sessionFile, path.extname(opts.sessionFile));
+  const baseName = sessionFile ? path.basename(sessionFile, path.extname(sessionFile)) : 'session';
 
   // 提取创建日期与短 ID
   // 标准命名：2026-08-22T20-44-15-718Z_01a02b37-8be6-71c8-9f73-72160c75bd76

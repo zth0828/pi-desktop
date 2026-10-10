@@ -42,8 +42,16 @@ describe('session-export utilities', () => {
       expect(sanitizePathSegment('CON.txt')).toBe('CON.txt_');
       expect(sanitizePathSegment('aux.log')).toBe('aux.log_');
     });
-  });
 
+    it('对非字符串输入安全返回 fallback', () => {
+      // @ts-expect-error testing undefined input
+      expect(sanitizePathSegment(undefined)).toBe('default');
+      // @ts-expect-error testing null input
+      expect(sanitizePathSegment(null, 'custom')).toBe('custom');
+      // @ts-expect-error testing number input
+      expect(sanitizePathSegment(123 as unknown as string, 'num')).toBe('num');
+    });
+  });
 
   describe('projectFolderName', () => {
     it('从 Unix 路径提取项目名', () => {
@@ -55,9 +63,11 @@ describe('session-export utilities', () => {
       expect(projectFolderName('C:\\Users\\bingking\\Projects\\my-project')).toBe('my-project');
     });
 
-    it('缺省 cwd 返回 default', () => {
+    it('缺省 cwd 或非字符串返回 default', () => {
       expect(projectFolderName(undefined)).toBe('default');
       expect(projectFolderName('')).toBe('default');
+      // @ts-expect-error testing non-string cwd
+      expect(projectFolderName(123 as unknown as string)).toBe('default');
     });
   });
 
