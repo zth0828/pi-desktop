@@ -419,6 +419,7 @@ export const appUpdateApi = {
           detached: true,
           stdio: 'ignore',
         });
+        child.on('error', () => {});
         child.unref();
 
         setTimeout(() => {
@@ -480,6 +481,7 @@ export const appUpdateApi = {
           stdio: 'ignore',
           windowsHide: true,
         });
+        child.on('error', () => {});
         child.unref();
 
         setTimeout(() => {
@@ -517,6 +519,7 @@ export const appUpdateApi = {
             detached: true,
             stdio: 'ignore',
           });
+          child.on('error', () => {});
           child.unref();
 
           setTimeout(() => {
@@ -542,6 +545,7 @@ export const appUpdateApi = {
           stdio: 'ignore',
           windowsHide: true,
         });
+        child.on('error', () => {});
         child.unref();
         setTimeout(() => {
           app.quit();
