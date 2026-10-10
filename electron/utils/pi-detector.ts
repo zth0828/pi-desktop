@@ -73,7 +73,7 @@ function findOnPath(bin: string, platform: NodeJS.Platform = process.platform): 
       if (!existsSync(candidate)) continue;
       if (bin === 'pi') {
         try {
-          if (realpathSync(candidate).startsWith(ownModules + path.sep)) continue;
+          if (isUnderDir(realpathSync(candidate), ownModules)) continue;
         } catch {
           // realpath 失败不过滤
         }
