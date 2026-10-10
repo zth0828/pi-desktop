@@ -61,4 +61,27 @@ describe('shell-api', () => {
     expect(showRes.success).toBe(true);
     expect(shell.showItemInFolder).toHaveBeenCalledWith(__filename);
   });
+
+  it('openExternal 只放行 http/https/mailto 安全协议并拦截其他危险协议', async () => {
+    const { shell } = await import('electron');
+    vi.mocked(shell.openExternal).mockClear();
+
+    await shellApi.openExternal({ url: 'https://github.com' });
+    expect(shell.openExternal).toHaveBeenCalledWith('https://github.com');
+
+    vi.mocked(shell.openExternal).mockClear();
+    await shellApi.openExternal({ url: 'http://localhost:3000' });
+    expect(shell.openExternal).toHaveBeenCalledWith('http://localhost:3000');
+
+    vi.mocked(shell.openExternal).mockClear();
+    await shellApi.openExternal({ url: 'file:///etc/passwd' });
+    expect(shell.openExternal).not.toHaveBeenCalled();
+
+    await shellApi.openExternal({ url: 'javascript:alert(1)' });
+    expect(shell.openExternal).not.toHaveBeenCalled();
+
+    await shellApi.openExternal({ url: 'ms-msdt:/id' });
+    expect(shell.openExternal).not.toHaveBeenCalled();
+  });
 });
+

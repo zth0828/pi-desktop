@@ -189,6 +189,14 @@ async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSucc
 
 export const shellApi = {
   openExternal: async (payload: ShellOpenExternalPayload) => {
+    try {
+      const parsed = new URL(payload.url);
+      if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+        return;
+      }
+    } catch {
+      return;
+    }
     await shell.openExternal(payload.url);
   },
   listApplications: discoveredApplications,
