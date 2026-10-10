@@ -222,8 +222,12 @@ export const skillsApi = {
     if (isWindowsDevicePath(payload.filePath)) {
       return { content: '' };
     }
-    const content = await readFile(payload.filePath, 'utf8');
-    return { content: content.length > 512 * 1024 ? `${content.slice(0, 512 * 1024)}\n…` : content };
+    try {
+      const content = await readFile(payload.filePath, 'utf8');
+      return { content: content.length > 512 * 1024 ? `${content.slice(0, 512 * 1024)}\n…` : content };
+    } catch {
+      return { content: '' };
+    }
   },
 
 
