@@ -132,6 +132,15 @@ describe('normalizeDisplayPath & formatAttachmentDisplayName', () => {
     expect(normalizeDisplayPath('/tmp/project/index.ts', '/private/tmp/project')).toBe('index.ts');
   });
 
+  it('handles Windows drive casing and extended path prefixes', () => {
+    expect(normalizeDisplayPath('c:\\workspace\\src\\app.tsx', 'C:\\workspace')).toBe('src/app.tsx');
+    expect(normalizeDisplayPath('\\\\?\\C:\\workspace\\src\\app.tsx', 'C:/workspace')).toBe('src/app.tsx');
+    expect(normalizeDisplayPath('\\??\\C:\\workspace\\src\\app.tsx', 'c:/workspace')).toBe('src/app.tsx');
+    expect(normalizeDisplayPath('//?/c:/workspace/src/app.tsx', 'C:\\workspace')).toBe('src/app.tsx');
+    expect(formatAttachmentDisplayName('c:\\workspace\\src\\app.tsx', 'C:\\workspace')).toBe('src/app.tsx');
+    expect(formatAttachmentDisplayName('D:\\external\\report.pdf', 'C:\\workspace')).toBe('report.pdf');
+  });
+
   it('keeps external absolute paths in normalizeDisplayPath but simplifies in formatAttachmentDisplayName', () => {
     const ext = '/Users/someone/Downloads/report.pdf';
     expect(normalizeDisplayPath(ext, '/workspace')).toBe(ext);

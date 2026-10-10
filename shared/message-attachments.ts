@@ -151,25 +151,37 @@ export type QueueDisplayInfo = {
   displayText: string;
 };
 
+function stripWinPrefix(p: string): string {
+  if (/^(?:[\\/]{2}\?[\\/]|[\\/]\?\?[\\/])unc[\\/]/i.test(p)) return `//${p.slice(8)}`;
+  if (/^(?:[\\/]{2}\?[\\/]|[\\/]\?\?[\\/])/i.test(p)) return p.slice(4);
+  return p;
+}
+
 /** 规范化文件展示路径：相对 cwd 的文件去除前缀，外部绝对路径保持原样。 */
 export function normalizeDisplayPath(filePath: string, cwd?: string): string {
-  let normalized = filePath.replace(/\\/g, '/');
-  if (normalized.startsWith('./')) {
-    normalized = normalized.slice(2);
+  let child = stripWinPrefix(filePath).replace(/\\/g, '/');
+  if (child.startsWith('./')) {
+    child = child.slice(2);
   }
-  if (!cwd) return normalized;
-  const root = cwd.replace(/\\/g, '/').replace(/\/$/, '');
-  if (normalized === root) return '.';
-  if (normalized.startsWith(`${root}/`)) {
-    return normalized.slice(root.length + 1);
+  if (!cwd) return child;
+  const root = stripWinPrefix(cwd).replace(/\\/g, '/');
+  const isWindows = /^[a-zA-Z]:/.test(child) || /^[a-zA-Z]:/.test(root) || child.startsWith('//') || root.startsWith('//');
+  const a = isWindows ? child.toLowerCase() : child;
+  const b = isWindows ? root.toLowerCase() : root;
+  if (a === b || (b.endsWith('/') && a === b.slice(0, -1)) || (a.endsWith('/') && b === a.slice(0, -1))) return '.';
+  const bWithSlash = b.endsWith('/') ? b : `${b}/`;
+  if (a.startsWith(bWithSlash)) {
+    return child.slice(bWithSlash.length);
   }
-  const privateRoot = root.startsWith('/private/')
-    ? root.slice('/private'.length)
-    : `/private${root}`;
-  if (normalized.startsWith(`${privateRoot}/`)) {
-    return normalized.slice(privateRoot.length + 1);
+  const privateRoot = b.startsWith('/private/')
+    ? b.slice('/private'.length)
+    : `/private${b}`;
+  const privateWithSlash = privateRoot.endsWith('/') ? privateRoot : `${privateRoot}/`;
+  if (a === privateRoot) return '.';
+  if (a.startsWith(privateWithSlash)) {
+    return child.slice(privateWithSlash.length);
   }
-  return normalized;
+  return child;
 }
 
 /** 规范化附件卡片展示文案：优先展示简洁文件名（外部绝对路径展示文件名，避免 /Users/... 长路径挤占换行）。 */

@@ -402,5 +402,43 @@ describe('isAbsolutePath & isPathInside', () => {
     expect(isPathInside('C:/workspace/src/../src/a.ts', 'C:/workspace')).toBe(true);
     expect(isPathInside('C:/workspace/src/a.ts', 'c:/workspace/sub/..')).toBe(true);
   });
+
+  it('collectFallbackFiles 与 sessionChangeFiles 支持驱动器大小写差异与点路径段合并', () => {
+    const fallback = collectFallbackFiles({
+      call1: {
+        toolName: 'edit',
+        status: 'success',
+        args: { path: 'c:/repo/src/../src/b.ts' },
+        result: { details: { diff: '+1 line' } },
+      },
+      call2: {
+        toolName: 'edit',
+        status: 'success',
+        args: { path: 'C:/repo/src/b.ts' },
+        result: { details: { diff: '+2 lines' } },
+      },
+    });
+    expect(fallback).toEqual([
+      { path: 'c:/repo/src/b.ts', added: 1, deleted: 0, diff: '+2 lines' },
+    ]);
+
+    const sessionFiles = sessionChangeFiles({
+      call1: {
+        toolName: 'edit',
+        status: 'success',
+        args: { path: 'd:/external/report.md' },
+        result: { details: { diff: '+1' } },
+      },
+      call2: {
+        toolName: 'edit',
+        status: 'success',
+        args: { path: 'D:/external/report.md' },
+        result: { details: { diff: '+2' } },
+      },
+    }, 'C:/workspace');
+    expect(sessionFiles).toEqual([
+      { path: 'd:/external/report.md', added: 1, deleted: 0, diff: '+2', editCount: 2 },
+    ]);
+  });
 });
 

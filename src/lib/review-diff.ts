@@ -293,9 +293,10 @@ export function sessionChangeFiles(
       added = args.content ? lines.length - (args.content.endsWith('\n') ? 1 : 0) : 0;
     }
 
-    const existing = byPath.get(displayPath);
-    byPath.set(displayPath, {
-      path: displayPath,
+    const key = /^[a-zA-Z]:/.test(displayPath) ? displayPath.toLowerCase() : displayPath;
+    const existing = byPath.get(key);
+    byPath.set(key, {
+      path: existing?.path ?? displayPath,
       diff: diff ?? existing?.diff,
       added,
       deleted,
@@ -316,14 +317,18 @@ export function mergeReviewFiles(
   toolFiles: (ReviewFallbackFile | ReviewSessionFile)[],
 ): ReviewListEntry[] {
   const byPath = new Map<string, ReviewListEntry>();
-  for (const file of baselineFiles) byPath.set(file.path, file);
+  for (const file of baselineFiles) {
+    const key = /^[a-zA-Z]:/.test(file.path) ? file.path.toLowerCase() : file.path;
+    byPath.set(key, file);
+  }
   for (const file of toolFiles) {
     const isAbs = isAbsolutePath(file.path);
     const insideWorkspace = isAbs ? isPathInside(file.path, cwd) : true;
     if (baselineAvailable && insideWorkspace) continue;
     const displayPath = normalizeDisplayPath(file.path, cwd);
-    if (!byPath.has(displayPath)) {
-      byPath.set(displayPath, {
+    const key = /^[a-zA-Z]:/.test(displayPath) ? displayPath.toLowerCase() : displayPath;
+    if (!byPath.has(key)) {
+      byPath.set(key, {
         path: displayPath,
         status: 'modified',
         added: file.added,
@@ -351,11 +356,13 @@ export function collectFallbackFiles(
     if (ex.toolName !== 'edit' && ex.toolName !== 'write') continue;
     if (ex.status !== 'success') continue;
     const args = ex.args as Record<string, unknown> | undefined;
-    const path =
+    const rawPath =
       (typeof args?.path === 'string' && args.path) ||
       (typeof args?.file_path === 'string' && args.file_path) ||
       '';
-    if (!path) continue;
+    if (!rawPath) continue;
+    const path = normalizeLexicalPath(rawPath).replace(/^\.\//, '');
+    const key = /^[a-zA-Z]:/.test(path) ? path.toLowerCase() : path;
     const details =
       ex.result && typeof ex.result === 'object'
         ? (ex.result as { details?: unknown }).details
@@ -378,7 +385,8 @@ export function collectFallbackFiles(
       const lines = args.content.split('\n');
       added = args.content ? lines.length - (args.content.endsWith('\n') ? 1 : 0) : 0;
     }
-    byPath.set(path, { path, diff, added, deleted });
+    const existing = byPath.get(key);
+    byPath.set(key, { path: existing?.path ?? path, diff, added, deleted });
   }
   return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
