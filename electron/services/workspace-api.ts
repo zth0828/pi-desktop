@@ -7,8 +7,8 @@ import type {
   WorkspaceReadPayload,
   WorkspaceReadResult,
 } from '@shared/host-api/contract';
-import { resolveWorkspacePath } from '../utils/workspace-path';
-import { normalizePreviewablePath } from '../utils/previewable-files';
+import { isWindowsDevicePath, resolveWorkspacePath } from '../utils/workspace-path';
+import { isInsideWorkspace, normalizePreviewablePath } from '../utils/previewable-files';
 import { samePath, stripWindowsExtendedPrefix } from '../utils/same-path';
 import { resolveRuntimeForContext } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
@@ -58,6 +58,12 @@ async function resolvePreviewFile(pathValue: string, ctx?: HostActionContext): P
   const root = await realpath(runtime.cwd);
   if (!path.isAbsolute(pathValue)) return resolveWorkspacePath(root, pathValue);
   const candidate = normalizePreviewablePath(pathValue);
+  if (isInsideWorkspace(root, candidate)) {
+    if (isWindowsDevicePath(candidate)) throw new Error('device paths are not allowed');
+    const resolved = await realpath(candidate);
+    if (!isInsideWorkspace(root, resolved)) throw new Error('path escapes workspace');
+    return resolved;
+  }
   if (!hasPreviewableExternalFile(runtime.previewableExternalFiles, candidate)) {
     throw new Error('file is outside the active workspace and was not produced by this session');
   }
