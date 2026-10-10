@@ -5,13 +5,13 @@
 import { realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pathsEqual } from './same-path';
+import { pathsEqual, stripWindowsExtendedPrefix } from './same-path';
 
 export type RiskyWorkspaceReason = 'home' | 'root';
 
 function resolveExisting(target: string): string | null {
   try {
-    return realpathSync(target);
+    return stripWindowsExtendedPrefix(realpathSync(stripWindowsExtendedPrefix(target)));
   } catch {
     // 目录不存在/无权限：放行，由 runtime 的正常报错路径处理
     return null;

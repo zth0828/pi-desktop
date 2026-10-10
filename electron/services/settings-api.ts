@@ -4,6 +4,7 @@ import type {
 } from '@shared/host-api/contract';
 import { getElectronStore } from '../utils/electron-store';
 import { riskyWorkspaceReason } from '../utils/workspace-safety';
+import { stripWindowsExtendedPrefix } from '../utils/same-path';
 import { rebuildNativeMacMenu } from '../main/menu';
 import { rebuildTrayMenu } from '../main/tray';
 
@@ -58,8 +59,10 @@ export const settingsApi = {
     // 工作区安全：主目录 / 盘符根不能作为持久化工作区（agent 会扫描个人全部文件）。
     // 这里拒绝写入，两个 UI 入口（Chat 空态选择 / 设置页）都会拿到失败并提示。
     if (payload.key === 'workspaceCwd' && typeof payload.value === 'string') {
-      const risky = riskyWorkspaceReason(payload.value);
+      const cleanValue = stripWindowsExtendedPrefix(payload.value);
+      const risky = riskyWorkspaceReason(cleanValue);
       if (risky) return { success: false, error: `risky-workspace-${risky}` };
+      payload = { ...payload, value: cleanValue };
     }
     if (payload.value === undefined) store.delete(payload.key);
     else store.set(payload.key, payload.value);
