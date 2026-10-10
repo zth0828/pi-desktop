@@ -148,28 +148,49 @@ type ReviewListEntry = {
   deleted: number;
 };
 
-function stripWinPrefix(p: string): string {
+export function stripWinPrefix(p: string): string {
   if (/^[\\/]{2}\?[\\/]unc[\\/]/i.test(p)) return `//${p.slice(8)}`;
   if (/^[\\/]{2}\?[\\/]/i.test(p)) return p.slice(4);
   return p;
 }
 
-function normalizePathSegments(p: string): string {
-  const parts = p.split('/');
+export function normalizeLexicalPath(raw: string): string {
+  const stripped = stripWinPrefix(raw).replace(/\\/g, '/');
+  let root = '';
+  let rest = stripped;
+  const uncMatch = /^\/\/([^/]+(?:\/[^/]+)?)(?:\/(.*))?$/.exec(stripped);
+  if (uncMatch) {
+    root = `//${uncMatch[1]}/`;
+    rest = uncMatch[2] ?? '';
+  } else if (/^[a-zA-Z]:(?:\/|$)/.test(stripped)) {
+    root = stripped.length === 2 ? `${stripped}/` : stripped.slice(0, 3);
+    rest = stripped.slice(3);
+  } else if (stripped.startsWith('/')) {
+    root = '/';
+    rest = stripped.slice(1);
+  }
+  const parts = rest.split('/');
   const stack: string[] = [];
   for (const part of parts) {
     if (!part || part === '.') continue;
     if (part === '..') {
       if (stack.length > 0 && stack[stack.length - 1] !== '..') {
         stack.pop();
-      } else {
+      } else if (!root) {
         stack.push('..');
       }
     } else {
       stack.push(part);
     }
   }
-  return stack.join('/');
+  if (!root) {
+    return stack.join('/') || '.';
+  }
+  const joined = `${root}${stack.join('/')}`;
+  if (root.endsWith('/') && joined !== root) {
+    return joined.replace(/\/+$/, '');
+  }
+  return joined;
 }
 
 export function isAbsolutePath(filePath: string): boolean {
@@ -179,46 +200,48 @@ export function isAbsolutePath(filePath: string): boolean {
 
 export function isPathInside(childPath: string, parentDir?: string): boolean {
   if (!parentDir) return false;
-  const child = stripWinPrefix(childPath).replace(/\\/g, '/').replace(/\/$/, '');
-  const parent = stripWinPrefix(parentDir).replace(/\\/g, '/').replace(/\/$/, '');
+  const child = normalizeLexicalPath(childPath);
+  const parent = normalizeLexicalPath(parentDir);
   if (!isAbsolutePath(child)) {
-    const norm = normalizePathSegments(child);
-    return !norm.startsWith('../') && norm !== '..';
+    return !child.startsWith('../') && child !== '..';
+  }
+  if (!isAbsolutePath(parent)) {
+    return false;
   }
   const isWindows = /^[a-zA-Z]:/.test(child) || /^[a-zA-Z]:/.test(parent) || child.startsWith('//') || parent.startsWith('//');
   const a = isWindows ? child.toLowerCase() : child;
   const b = isWindows ? parent.toLowerCase() : parent;
-  if (a === b || a.startsWith(`${b}/`)) return true;
+  const bWithSlash = b.endsWith('/') ? b : `${b}/`;
+  if (a === b || a.startsWith(bWithSlash)) return true;
   const privateParent = b.startsWith('/private/')
     ? b.slice('/private'.length)
     : `/private${b}`;
-  return a === privateParent || a.startsWith(`${privateParent}/`);
+  const privateWithSlash = privateParent.endsWith('/') ? privateParent : `${privateParent}/`;
+  return a === privateParent || a.startsWith(privateWithSlash);
 }
 
 /** 规范化文件展示路径：相对 cwd 的文件去除前缀，外部绝对路径保持原样。 */
 export function normalizeDisplayPath(filePath: string, cwd?: string): string {
-  let normalized = stripWinPrefix(filePath).replace(/\\/g, '/');
-  if (normalized.startsWith('./')) {
-    normalized = normalized.slice(2);
-  }
-  if (!cwd) return normalized;
-  const root = stripWinPrefix(cwd).replace(/\\/g, '/').replace(/\/$/, '');
-  const isWindows = /^[a-zA-Z]:/.test(normalized) || /^[a-zA-Z]:/.test(root) || normalized.startsWith('//') || root.startsWith('//');
-  const target = normalized.replace(/\/$/, '');
-  const a = isWindows ? target.toLowerCase() : target;
+  const child = normalizeLexicalPath(filePath);
+  if (!cwd) return child;
+  const root = normalizeLexicalPath(cwd);
+  const isWindows = /^[a-zA-Z]:/.test(child) || /^[a-zA-Z]:/.test(root) || child.startsWith('//') || root.startsWith('//');
+  const a = isWindows ? child.toLowerCase() : child;
   const b = isWindows ? root.toLowerCase() : root;
   if (a === b) return '.';
-  if (a.startsWith(`${b}/`)) {
-    return normalized.slice(root.length + 1);
+  const bWithSlash = b.endsWith('/') ? b : `${b}/`;
+  if (a.startsWith(bWithSlash)) {
+    return child.slice(bWithSlash.length);
   }
   const privateRoot = b.startsWith('/private/')
     ? b.slice('/private'.length)
     : `/private${b}`;
+  const privateWithSlash = privateRoot.endsWith('/') ? privateRoot : `${privateRoot}/`;
   if (a === privateRoot) return '.';
-  if (a.startsWith(`${privateRoot}/`)) {
-    return normalized.slice(privateRoot.length + 1);
+  if (a.startsWith(privateWithSlash)) {
+    return child.slice(privateWithSlash.length);
   }
-  return normalized;
+  return child;
 }
 
 /**

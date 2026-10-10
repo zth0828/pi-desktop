@@ -13,6 +13,7 @@ import {
   isPathInside,
   mergeReviewFiles,
   normalizeDisplayPath,
+  normalizeLexicalPath,
   sessionChangeFiles,
   hunkLineKind,
   parseUnifiedDiff,
@@ -389,6 +390,17 @@ describe('isAbsolutePath & isPathInside', () => {
     expect(normalizeDisplayPath('c:', 'C:\\')).toBe('.');
     expect(normalizeDisplayPath('C:/src/app.ts', 'C:/')).toBe('src/app.ts');
     expect(normalizeDisplayPath('/', '/')).toBe('.');
+  });
+
+  it('normalizeLexicalPath 与 isPathInside 正确处理带点段的绝对路径与工作区上卷逃逸', () => {
+    expect(normalizeLexicalPath('C:/workspace/../outside/a.ts')).toBe('C:/outside/a.ts');
+    expect(normalizeLexicalPath('/tmp/project/../outside/a.txt')).toBe('/tmp/outside/a.txt');
+    expect(normalizeLexicalPath('//server/share/repo/../outside/a.ts')).toBe('//server/share/outside/a.ts');
+    expect(isPathInside('C:/workspace/../outside/a.ts', 'C:/workspace')).toBe(false);
+    expect(isPathInside('/tmp/project/../outside/a.txt', '/tmp/project')).toBe(false);
+    expect(normalizeDisplayPath('C:/workspace/../outside/a.ts', 'C:/workspace')).toBe('C:/outside/a.ts');
+    expect(isPathInside('C:/workspace/src/../src/a.ts', 'C:/workspace')).toBe(true);
+    expect(isPathInside('C:/workspace/src/a.ts', 'c:/workspace/sub/..')).toBe(true);
   });
 });
 
