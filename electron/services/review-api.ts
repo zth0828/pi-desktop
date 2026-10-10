@@ -51,8 +51,9 @@ async function removeDirBestEffort(dir: string): Promise<void> {
 }
 
 function runGit(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; input?: string } = {}): Promise<GitResult> {
+  const cleanCwd = stripWindowsExtendedPrefix(cwd);
   return new Promise((resolvePromise, reject) => {
-    const child = spawn('git', ['-C', cwd, ...args], {
+    const child = spawn('git', ['-C', cleanCwd, ...args], {
       env: envWithUserPath({ ...GIT_STABLE_ENV, ...opts.env }),
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
@@ -360,7 +361,7 @@ export function normalizeGitRelPath(cwd: string, rawPath: string): string {
   const cleanPath = stripWindowsExtendedPrefix(rawPath);
   const cleanCwd = stripWindowsExtendedPrefix(cwd);
   const normalized = cleanPath.replace(/\\/g, '/').replace(/^\.\//, '');
-  if (!cleanPath.startsWith('/') && !/^[a-zA-Z]:/.test(normalized)) {
+  if (!normalized.startsWith('/') && !/^[a-zA-Z]:/.test(normalized)) {
     return normalized;
   }
   try {
@@ -374,7 +375,7 @@ export function normalizeGitRelPath(cwd: string, rawPath: string): string {
     // 目标文件可能已被删除（如被删文件的 revert），回退到字符串前缀判定
   }
   const root = cleanCwd.replace(/\\/g, '/').replace(/\/$/, '');
-  const isWindows = /^[a-zA-Z]:/.test(normalized) || /^[a-zA-Z]:/.test(root);
+  const isWindows = /^[a-zA-Z]:/.test(normalized) || /^[a-zA-Z]:/.test(root) || normalized.startsWith('//') || root.startsWith('//');
   const a = isWindows ? normalized.toLowerCase() : normalized;
   const b = isWindows ? root.toLowerCase() : root;
   if (a.startsWith(`${b}/`)) {

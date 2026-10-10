@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import type { GitBranchListResult, GitBranchResult, GitCheckoutResult } from '@shared/host-api/contract';
 import { isCwdRunning } from './pi-runtime-api';
 import { envWithUserPath } from '../utils/shell-env';
+import { stripWindowsExtendedPrefix } from '../utils/same-path';
 
 type GitPaths = { repoDir: string; headPath: string };
 
@@ -43,12 +44,13 @@ export function findGitPaths(cwd: string): GitPaths | null {
 }
 
 function execGit(repoDir: string, args: string[], timeout = 5000): Promise<{ stdout: string; stderr: string }> {
+  const cleanDir = stripWindowsExtendedPrefix(repoDir);
   return new Promise((resolvePromise, rejectPromise) => {
     execFile(
       'git',
       ['--no-optional-locks', ...args],
       {
-        cwd: repoDir,
+        cwd: cleanDir,
         encoding: 'utf8',
         env: envWithUserPath(),
         timeout,
@@ -90,7 +92,7 @@ export function getGitBranch(cwd: string): Promise<GitBranchResult> {
       return;
     }
     execFile('git', ['--no-optional-locks', 'symbolic-ref', '--quiet', '--short', 'HEAD'], {
-      cwd: gitPaths.repoDir,
+      cwd: stripWindowsExtendedPrefix(gitPaths.repoDir),
       encoding: 'utf8',
       env: envWithUserPath(),
       windowsHide: true,
