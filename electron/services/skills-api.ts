@@ -188,7 +188,7 @@ export const skillsApi = {
     ctx?: HostActionContext,
   ): Promise<PiSkillSetModeResult> => {
     try {
-      if (isWindowsDevicePath(payload.filePath)) {
+      if (!payload?.filePath || typeof payload.filePath !== 'string' || !payload.filePath.trim() || isWindowsDevicePath(payload.filePath)) {
         return { ok: false, error: 'Skill file does not exist' };
       }
       const resolved = safeRealpath(payload.filePath);
@@ -219,7 +219,7 @@ export const skillsApi = {
 
   read: async (payload: PiSkillReadPayload): Promise<PiSkillReadResult> => {
     // 查看用：只读 SKILL.md 原文，截断兜底（正常 skill 文件远低于此）
-    if (isWindowsDevicePath(payload.filePath)) {
+    if (!payload?.filePath || typeof payload.filePath !== 'string' || !payload.filePath.trim() || isWindowsDevicePath(payload.filePath)) {
       return { content: '' };
     }
     try {
@@ -261,10 +261,10 @@ export const skillsApi = {
   import: async (payload: PiSkillImportPayload, ctx?: HostActionContext): Promise<PiSkillImportResult> => {
     const targetDir = path.join(resolveAgentDir(ctx), 'skills');
     const results: PiSkillImportResult['results'] = [];
-    for (const item of payload.skills) {
+    for (const item of (payload?.skills ?? [])) {
       try {
-        if (!isValidSkillName(item.name) || isWindowsDevicePath(item.dir)) {
-          results.push({ name: item.name, ok: false, action: 'error', error: 'invalid name' });
+        if (!item || !isValidSkillName(item.name) || !item.dir || typeof item.dir !== 'string' || isWindowsDevicePath(item.dir)) {
+          results.push({ name: item?.name ?? 'unknown', ok: false, action: 'error', error: 'invalid name' });
           continue;
         }
         const rawDir = stripWindowsExtendedPrefix(item.dir);

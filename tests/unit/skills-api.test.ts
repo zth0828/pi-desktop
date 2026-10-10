@@ -100,9 +100,23 @@ describe('isValidSkillName', () => {
     const missingRes = await skillsApi.read({ filePath: '/nonexistent/SKILL.md' });
     expect(missingRes.content).toBe('');
 
+    const emptyRead = await skillsApi.read({ filePath: '' });
+    expect(emptyRead.content).toBe('');
+
+    const undefRead = await skillsApi.read({ filePath: undefined as unknown as string });
+    expect(undefRead.content).toBe('');
+
     const modeRes = await skillsApi.setInvocationMode({ filePath: 'AUX', disableModelInvocation: true });
     expect(modeRes.ok).toBe(false);
     expect(modeRes.error).toBe('Skill file does not exist');
+
+    const emptyMode = await skillsApi.setInvocationMode({ filePath: '', disableModelInvocation: true });
+    expect(emptyMode.ok).toBe(false);
+    expect(emptyMode.error).toBe('Skill file does not exist');
+
+    const undefMode = await skillsApi.setInvocationMode({ filePath: undefined as unknown as string, disableModelInvocation: true });
+    expect(undefMode.ok).toBe(false);
+    expect(undefMode.error).toBe('Skill file does not exist');
   });
 });
 
