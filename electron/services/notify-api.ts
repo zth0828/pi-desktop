@@ -15,6 +15,9 @@ const activeNotifications = new Set<Notification>();
 
 export const notifyApi = {
   dispatch: async (payload: NotifyDispatchPayload): Promise<HostSuccess> => {
+    if (!payload?.title || typeof payload.title !== 'string' || !payload.title.trim()) {
+      return { success: false, error: 'title is required' };
+    }
     const mode = (await settingsApi.get({ key: 'notifyMode' })) as NotifyMode | undefined;
     // 扩展 UI 请求通知的独立开关（run 完成通知只看 notifyMode 档位）
     const uiRequestEnabled = payload.kind === 'uiRequest'
