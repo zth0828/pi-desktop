@@ -3,6 +3,7 @@
 // 同一文件多次改动合并累计，顺序按首次出现。
 import type { ChatMessage, ToolExecution } from './chat-types';
 import { parseDiffLines, resultDetails } from './tool-display';
+import { stripWinPrefix } from './review-diff';
 
 /**
  * 逻辑轮（一轮对话）：user 消息开启新一轮，后续 assistant/toolResult 消息归入该轮。
@@ -153,7 +154,7 @@ export function collectTurnChanges(
     if (!ex || ex.status !== 'success') continue;
     const rawPath = argsPath(ex.args);
     if (!rawPath) continue;
-    const path = rawPath.replace(/\\/g, '/').replace(/^\.\//, '');
+    const path = stripWinPrefix(rawPath).replace(/\\/g, '/').replace(/^\.\//, '');
     if (ex.toolName === 'edit') {
       const details = resultDetails(ex.result);
       const diff = typeof details?.diff === 'string' ? details.diff : undefined;
