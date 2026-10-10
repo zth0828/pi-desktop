@@ -16,7 +16,7 @@ import type {
   PiMcpUpsertPayload,
 } from '@shared/host-api/contract';
 import { loadPiAdapter } from './pi-adapter';
-import { detectPiEnvironment } from '../utils/pi-detector';
+import { detectPiEnvironment, needsWindowsCommandShell } from '../utils/pi-detector';
 import { envWithUserPath } from '../utils/shell-env';
 import {
   listServers,
@@ -206,10 +206,14 @@ export const mcpApi = {
     if (!env.pi.found || !env.pi.binPath) {
       return { success: false, error: 'pi not found' };
     }
+    const binPath = env.pi.binPath!;
+    const useShell = needsWindowsCommandShell(binPath);
     return new Promise((resolvePromise) => {
-      const child = spawn(env.pi.binPath!, ['install', ADAPTER_SOURCE], {
+      const child = spawn(useShell ? path.win32.basename(binPath) : binPath, ['install', ADAPTER_SOURCE], {
         env: envWithUserPath(),
         stdio: ['ignore', 'pipe', 'pipe'],
+        shell: useShell,
+        cwd: useShell ? path.win32.dirname(binPath) : undefined,
         windowsHide: true,
       });
       let output = '';
