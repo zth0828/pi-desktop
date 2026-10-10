@@ -4,6 +4,7 @@
 // 与 tool-display.ts 的 parseDiffLines 不同：那边解析的是 pi edit 工具 details.diff 的
 // 私有格式（"+12 content"），这里解析的是 `git diff` 的标准 unified diff。
 import { editPreviewDiff } from './tool-display';
+import { stripWinPrefix, normalizeLexicalPath } from '@shared/message-attachments';
 
 function writeContentDiff(content: unknown): string | undefined {
   if (typeof content !== 'string' || !content.trim()) return undefined;
@@ -148,50 +149,8 @@ type ReviewListEntry = {
   deleted: number;
 };
 
-export function stripWinPrefix(p: string): string {
-  if (/^(?:[\\/]{2}\?[\\/]|[\\/]\?\?[\\/])unc[\\/]/i.test(p)) return `//${p.slice(8)}`;
-  if (/^(?:[\\/]{2}\?[\\/]|[\\/]\?\?[\\/])/i.test(p)) return p.slice(4);
-  return p;
-}
+export { stripWinPrefix, normalizeLexicalPath };
 
-export function normalizeLexicalPath(raw: string): string {
-  const stripped = stripWinPrefix(raw).replace(/\\/g, '/');
-  let root = '';
-  let rest = stripped;
-  const uncMatch = /^\/\/([^/]+(?:\/[^/]+)?)(?:\/(.*))?$/.exec(stripped);
-  if (uncMatch) {
-    root = `//${uncMatch[1]}/`;
-    rest = uncMatch[2] ?? '';
-  } else if (/^[a-zA-Z]:(?:\/|$)/.test(stripped)) {
-    root = stripped.length === 2 ? `${stripped}/` : stripped.slice(0, 3);
-    rest = stripped.slice(3);
-  } else if (stripped.startsWith('/')) {
-    root = '/';
-    rest = stripped.slice(1);
-  }
-  const parts = rest.split('/');
-  const stack: string[] = [];
-  for (const part of parts) {
-    if (!part || part === '.') continue;
-    if (part === '..') {
-      if (stack.length > 0 && stack[stack.length - 1] !== '..') {
-        stack.pop();
-      } else if (!root) {
-        stack.push('..');
-      }
-    } else {
-      stack.push(part);
-    }
-  }
-  if (!root) {
-    return stack.join('/') || '.';
-  }
-  const joined = `${root}${stack.join('/')}`;
-  if (root.endsWith('/') && joined !== root) {
-    return joined.replace(/\/+$/, '');
-  }
-  return joined;
-}
 
 export function isAbsolutePath(filePath: string): boolean {
   const normalized = stripWinPrefix(filePath).replace(/\\/g, '/');

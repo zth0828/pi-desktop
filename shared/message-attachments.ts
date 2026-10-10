@@ -151,24 +151,60 @@ export type QueueDisplayInfo = {
   displayText: string;
 };
 
-function stripWinPrefix(p: string): string {
+export function stripWinPrefix(p: string): string {
   if (/^(?:[\\/]{2}\?[\\/]|[\\/]\?\?[\\/])unc[\\/]/i.test(p)) return `//${p.slice(8)}`;
   if (/^(?:[\\/]{2}\?[\\/]|[\\/]\?\?[\\/])/i.test(p)) return p.slice(4);
   return p;
 }
 
+export function normalizeLexicalPath(raw: string): string {
+  const stripped = stripWinPrefix(raw).replace(/\\/g, '/');
+  let root = '';
+  let rest = stripped;
+  const uncMatch = /^\/\/([^/]+(?:\/[^/]+)?)(?:\/(.*))?$/.exec(stripped);
+  if (uncMatch) {
+    root = `//${uncMatch[1]}/`;
+    rest = uncMatch[2] ?? '';
+  } else if (/^[a-zA-Z]:(?:\/|$)/.test(stripped)) {
+    root = stripped.length === 2 ? `${stripped}/` : stripped.slice(0, 3);
+    rest = stripped.slice(3);
+  } else if (stripped.startsWith('/')) {
+    root = '/';
+    rest = stripped.slice(1);
+  }
+  const parts = rest.split('/');
+  const stack: string[] = [];
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (stack.length > 0 && stack[stack.length - 1] !== '..') {
+        stack.pop();
+      } else if (!root) {
+        stack.push('..');
+      }
+    } else {
+      stack.push(part);
+    }
+  }
+  if (!root) {
+    return stack.join('/') || '.';
+  }
+  const joined = `${root}${stack.join('/')}`;
+  if (root.endsWith('/') && joined !== root) {
+    return joined.replace(/\/+$/, '');
+  }
+  return joined;
+}
+
 /** 规范化文件展示路径：相对 cwd 的文件去除前缀，外部绝对路径保持原样。 */
 export function normalizeDisplayPath(filePath: string, cwd?: string): string {
-  let child = stripWinPrefix(filePath).replace(/\\/g, '/');
-  if (child.startsWith('./')) {
-    child = child.slice(2);
-  }
+  const child = normalizeLexicalPath(filePath);
   if (!cwd) return child;
-  const root = stripWinPrefix(cwd).replace(/\\/g, '/');
+  const root = normalizeLexicalPath(cwd);
   const isWindows = /^[a-zA-Z]:/.test(child) || /^[a-zA-Z]:/.test(root) || child.startsWith('//') || root.startsWith('//');
   const a = isWindows ? child.toLowerCase() : child;
   const b = isWindows ? root.toLowerCase() : root;
-  if (a === b || (b.endsWith('/') && a === b.slice(0, -1)) || (a.endsWith('/') && b === a.slice(0, -1))) return '.';
+  if (a === b) return '.';
   const bWithSlash = b.endsWith('/') ? b : `${b}/`;
   if (a.startsWith(bWithSlash)) {
     return child.slice(bWithSlash.length);

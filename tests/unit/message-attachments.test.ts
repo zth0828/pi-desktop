@@ -141,6 +141,15 @@ describe('normalizeDisplayPath & formatAttachmentDisplayName', () => {
     expect(formatAttachmentDisplayName('D:\\external\\report.pdf', 'C:\\workspace')).toBe('report.pdf');
   });
 
+  it('handles lexical dot segments and parent traversal in display paths', () => {
+    expect(normalizeDisplayPath('c:\\workspace\\src\\..\\src\\app.tsx', 'C:\\workspace')).toBe('src/app.tsx');
+    expect(normalizeDisplayPath('c:\\workspace\\..\\outside.txt', 'C:\\workspace')).toBe('c:/outside.txt');
+    expect(formatAttachmentDisplayName('c:\\workspace\\..\\outside.txt', 'C:\\workspace')).toBe('outside.txt');
+    expect(normalizeDisplayPath('/workspace/nested/../../outside.md', '/workspace')).toBe('/outside.md');
+    expect(formatAttachmentDisplayName('/workspace/nested/../../outside.md', '/workspace')).toBe('outside.md');
+  });
+
+
   it('keeps external absolute paths in normalizeDisplayPath but simplifies in formatAttachmentDisplayName', () => {
     const ext = '/Users/someone/Downloads/report.pdf';
     expect(normalizeDisplayPath(ext, '/workspace')).toBe(ext);
