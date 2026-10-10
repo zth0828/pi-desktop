@@ -162,10 +162,12 @@ async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSucc
     if (process.platform === 'darwin' && payload.application.path.endsWith('.app')) {
       await execFileAsync('open', ['-a', payload.application.path, target], { timeout: 15_000 });
     } else if (payload.application?.path) {
+      const useShell = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(payload.application.path);
       const child = spawn(payload.application.path, [target], {
         detached: true,
         stdio: 'ignore',
         windowsHide: true,
+        shell: useShell,
       });
       child.unref();
     } else {
