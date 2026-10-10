@@ -41,6 +41,7 @@ import {
   getRuntimeForSession,
   hasRuntimeWithCwd,
   sendRuntimeStateToWindow,
+  resolveRuntimeForContext,
   isSessionRunning,
 } from './pi-runtime-api';
 import {
@@ -52,6 +53,7 @@ import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 import { loadPiAdapter, type PiSessionCatalogPort, type PiSessionDocumentHandle } from './pi-adapter';
 import { samePath, stripWindowsExtendedPrefix } from '../utils/same-path';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 import { hashSessionPath, safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { stripAttachmentEnvelope } from '@shared/message-attachments';
 import { toModelUnavailableError } from '@shared/provider-error';
@@ -661,18 +663,24 @@ export const sessionsApi = {
   },
 
   switch: (payload: PiSessionPathPayload, ctx?: HostActionContext): Promise<PiSessionSwitchResult> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return Promise.resolve({ success: false, error: 'invalid session path' });
+    }
     timingMark('switch:recv');
     // 以目标 sessionPath 为锁键串行：switch 有多个 await 点，并发调用会交叉
     // 改写全局 active 与窗口绑定（两个窗口同时 switch 时归属由执行顺序决定）
     return serializeSessionOp(payload.path, () => switchSessionImpl(payload, ctx));
   },
 
-  rename: async (payload: PiSessionRenamePayload): Promise<HostSuccess> => {
+  rename: async (payload: PiSessionRenamePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return { success: false, error: 'invalid session path' };
+    }
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     const name = payload.name.trim();
     if (!name) return { success: false, error: 'empty name' };
     try {
-      const active = getActiveRuntime();
+      const active = resolveRuntimeForContext(ctx) ?? getActiveRuntime();
       const adapter = await loadPiAdapter();
       if (active && samePath(payload.path, active.adapterRuntime.session.view.sessionFile)) {
         adapter.sessions.appendSessionInfo(active.adapterRuntime.session.view.sessionManager, name);
@@ -687,9 +695,12 @@ export const sessionsApi = {
     }
   },
 
-  fork: async (payload: PiSessionPathPayload): Promise<PiSessionForkResult> => {
+  fork: async (payload: PiSessionPathPayload, ctx?: HostActionContext): Promise<PiSessionForkResult> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return { success: false, error: 'invalid session path' };
+    }
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
-    const active = getActiveRuntime();
+    const active = resolveRuntimeForContext(ctx) ?? getActiveRuntime();
     if (!active) return { success: false, error: 'session not started' };
     try {
       const adapter = await loadPiAdapter();
@@ -698,7 +709,7 @@ export const sessionsApi = {
       if (!newPath) return { success: false, error: 'fork produced no session file' };
       const result = await active.adapterRuntime.switchSession(newPath);
       if (result.cancelled) return { success: false, error: 'cancelled' };
-      await afterSessionReplaced(active);
+      await afterSessionReplaced(active, ctx);
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'fork' });
       return { success: true, path: newPath };
     } catch (err) {
@@ -707,6 +718,9 @@ export const sessionsApi = {
   },
 
   archive: async (payload: PiSessionArchivePayload): Promise<HostSuccess> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return { success: false, error: 'invalid session path' };
+    }
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     try {
       const adapter = await loadPiAdapter();
@@ -720,6 +734,9 @@ export const sessionsApi = {
   },
 
   pin: async (payload: PiSessionPinPayload): Promise<HostSuccess> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return { success: false, error: 'invalid session path' };
+    }
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     try {
       const adapter = await loadPiAdapter();
@@ -752,6 +769,23 @@ export const sessionsApi = {
   },
 
   remove: async (payload: PiSessionPathPayload): Promise<HostSuccess> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return { success: false, error: 'invalid session path' };
+    }
+    const cleanPath = stripWindowsExtendedPrefix(payload.path.trim());
+    if (isWindowsDevicePath(cleanPath)) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
+    const targetFile = stripWindowsExtendedPrefix(path.resolve(cleanPath));
+    if (existsSync(targetFile)) {
+      try {
+        if (statSync(targetFile).isDirectory()) {
+          return { success: false, error: 'session path cannot be a directory' };
+        }
+      } catch {
+        // ignore
+      }
+    }
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     invalidateSessionMetadata(payload.path);
     const sessionPathHash = hashSessionPath(payload.path);
@@ -763,7 +797,6 @@ export const sessionsApi = {
       // 对齐 pi `/resume` 的删除语义：真实应用优先移到系统废纸篓；
       // E2E 隔离目录直接删除，避免把测试会话灌进用户废纸篓。
       let method: 'trash' | 'rm' = 'trash';
-      const targetFile = stripWindowsExtendedPrefix(path.resolve(payload.path));
       if (!existsSync(targetFile)) {
         method = 'rm';
       } else if (process.env.PI_DESKTOP_USER_DATA_DIR) {
@@ -833,15 +866,18 @@ export const sessionsApi = {
     }
   },
 
-  exportHtml: async (payload: PiSessionPathPayload): Promise<PiSessionExportResult> => {
-    const active = getActiveRuntime();
+  exportHtml: async (payload: PiSessionPathPayload, ctx?: HostActionContext): Promise<PiSessionExportResult> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return { success: false, error: 'invalid session path' };
+    }
+    const active = resolveRuntimeForContext(ctx) ?? getActiveRuntime();
     if (!active) return { success: false, error: 'session not started' };
     try {
       // exportToHtml 挂在 AgentSession 上，只能导「当前会话」；目标不是当前会话时先切过去。
       if (!samePath(payload.path, active.adapterRuntime.session.view.sessionFile)) {
         const result = await active.adapterRuntime.switchSession(payload.path);
         if (result.cancelled) return { success: false, error: 'cancelled' };
-        await afterSessionReplaced(active);
+        await afterSessionReplaced(active, ctx);
       }
 
       const session = active.adapterRuntime.session;

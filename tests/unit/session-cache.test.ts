@@ -48,4 +48,19 @@ describe('sessionsApi metadata cache', () => {
     await sessionsApi.remove({ path: `${sessionFile}` });
     expect(sessionMetadataCache.size).toBe(0);
   });
+
+  it('remove 拦截空路径、纯空白、Windows 设备路径与目录路径', async () => {
+    expect(await sessionsApi.remove({ path: '' })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.remove({ path: '   ' })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.remove({ path: 'CON' })).toEqual({ success: false, error: 'device paths are not allowed' });
+    expect(await sessionsApi.remove({ path: tempDir })).toEqual({ success: false, error: 'session path cannot be a directory' });
+  });
+
+  it('rename, fork, archive, pin 与 exportHtml 拦截非法空会话路径', async () => {
+    expect(await sessionsApi.rename({ path: '', name: 'new-name' })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.fork({ path: '' })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.archive({ path: '', archived: true })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.pin({ path: '', pinned: true })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.exportHtml({ path: '' })).toEqual({ success: false, error: 'invalid session path' });
+  });
 });
