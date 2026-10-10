@@ -116,7 +116,7 @@ export async function updateSessionHeaderCwd(sessionPath: string, newCwd: string
     const firstLine = firstNewline === -1 ? content : content.slice(0, firstNewline);
     if (!firstLine.trim()) return;
     const header = JSON.parse(firstLine) as { type?: string; cwd?: string; [key: string]: unknown };
-    if (header.type !== 'session' || header.cwd === newCwd) return;
+    if (header.type !== 'session' || (typeof header.cwd === 'string' && samePath(header.cwd, newCwd))) return;
 
     header.cwd = newCwd;
     const newFirstLine = JSON.stringify(header);
@@ -125,9 +125,13 @@ export async function updateSessionHeaderCwd(sessionPath: string, newCwd: string
         ? `${newFirstLine}\n`
         : `${newFirstLine}\n${content.slice(firstNewline + 1)}`;
     const tempFile = `${sessionPath}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(tempFile, updatedContent, 'utf8');
-    await rename(tempFile, sessionPath);
-    sessionMetadataCache.delete(sessionPath);
+    try {
+      await writeFile(tempFile, updatedContent, 'utf8');
+      await rename(tempFile, sessionPath);
+    } finally {
+      await rm(tempFile, { force: true }).catch(() => {});
+    }
+    invalidateSessionMetadata(sessionPath);
   } catch (err) {
     writePiDiagnostic({
       level: 'warning',
@@ -194,6 +198,15 @@ export const sessionMetadataCache = new Map<string, SessionMetadataCacheEntry>()
 
 export function clearSessionMetadataCache(): void {
   sessionMetadataCache.clear();
+}
+
+export function invalidateSessionMetadata(targetPath: string): void {
+  sessionMetadataCache.delete(targetPath);
+  for (const key of sessionMetadataCache.keys()) {
+    if (samePath(key, targetPath)) {
+      sessionMetadataCache.delete(key);
+    }
+  }
 }
 
 function sessionManagerFor(path: string, sessions: PiSessionCatalogPort): PiSessionDocumentHandle {
@@ -666,7 +679,7 @@ export const sessionsApi = {
       } else {
         adapter.sessions.appendSessionInfo(adapter.sessions.open(payload.path), name);
       }
-      sessionMetadataCache.delete(payload.path);
+      invalidateSessionMetadata(payload.path);
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'rename' });
       return { success: true };
     } catch (err) {
@@ -698,7 +711,7 @@ export const sessionsApi = {
     try {
       const adapter = await loadPiAdapter();
       setArchived(payload.path, payload.archived, adapter.sessions);
-      sessionMetadataCache.delete(payload.path);
+      invalidateSessionMetadata(payload.path);
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'archive' });
       return { success: true };
     } catch (err) {
@@ -711,7 +724,7 @@ export const sessionsApi = {
     try {
       const adapter = await loadPiAdapter();
       setPinned(payload.path, payload.pinned, adapter.sessions);
-      sessionMetadataCache.delete(payload.path);
+      invalidateSessionMetadata(payload.path);
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'pin' });
       return { success: true };
     } catch (err) {
@@ -729,7 +742,7 @@ export const sessionsApi = {
       }
       for (const session of projectSessions) {
         setArchived(session.path, payload.archived, adapter.sessions);
-        sessionMetadataCache.delete(session.path);
+        invalidateSessionMetadata(session.path);
       }
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'archive' });
       return { success: true };
@@ -740,7 +753,7 @@ export const sessionsApi = {
 
   remove: async (payload: PiSessionPathPayload): Promise<HostSuccess> => {
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
-    sessionMetadataCache.delete(payload.path);
+    invalidateSessionMetadata(payload.path);
     const sessionPathHash = hashSessionPath(payload.path);
     // 删除后清理空目录需要知道会话属于哪个工作区（文件删除前读取）
     const sessionCwd = await sessionHeaderCwd(payload.path);
@@ -794,8 +807,14 @@ export const sessionsApi = {
       try {
         const store = await getElectronStore();
         const records = (store.get('sessionExportRecords') ?? {}) as Record<string, PiSessionExportRecord>;
-        if (records[payload.path]) {
-          delete records[payload.path];
+        let modified = false;
+        for (const key of Object.keys(records)) {
+          if (samePath(key, payload.path)) {
+            delete records[key];
+            modified = true;
+          }
+        }
+        if (modified) {
           store.set('sessionExportRecords', records);
         }
       } catch {}

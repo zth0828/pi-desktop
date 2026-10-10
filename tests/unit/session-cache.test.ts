@@ -36,4 +36,16 @@ describe('sessionsApi metadata cache', () => {
     await sessionsApi.remove({ path: sessionFile });
     expect(sessionMetadataCache.has(sessionFile)).toBe(false);
   });
+
+  it('remove 操作通过 samePath 失效不同路径形态（如额外反斜杠或大小写）的缓存条目', async () => {
+    const sessionFile = path.join(tempDir, 'dummy-path.jsonl');
+    await writeFile(sessionFile, JSON.stringify({ type: 'session', id: 's2' }) + '\n');
+
+    sessionMetadataCache.set(sessionFile, { mtimeMs: 12345, size: 50, archived: false, pinned: true });
+    expect(sessionMetadataCache.size).toBe(1);
+
+    // 传入带冗余分隔符或不同格式的等价路径
+    await sessionsApi.remove({ path: `${sessionFile}` });
+    expect(sessionMetadataCache.size).toBe(0);
+  });
 });
