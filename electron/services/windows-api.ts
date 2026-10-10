@@ -61,6 +61,7 @@ export const windowsApi = {
     if (ctx) BrowserWindow.fromWebContents(ctx.sender)?.close();
   },
   openDetached: (payload: WindowsOpenDetachedPayload): void => {
+    if (!payload?.sessionPath || typeof payload.sessionPath !== 'string' || !payload.sessionPath.trim()) return;
     timingMark('openDetached:recv');
     // 会话已经在主窗口或其他独立窗口时，不创建第二份；同时通知持有窗口激活对应面板。
     const existing = findWindowBySession(payload.sessionPath);
@@ -74,6 +75,7 @@ export const windowsApi = {
     createSessionWindow(payload.sessionPath, payload.cwd);
   },
   openDetachedAt: (payload: WindowsOpenDetachedAtPayload, ctx?: HostActionContext): void => {
+    if (!payload?.sessionPath || typeof payload.sessionPath !== 'string' || !payload.sessionPath.trim()) return;
     const existing = findWindowBySession(payload.sessionPath);
     if (existing) {
       const sourceWin = ctx ? BrowserWindow.fromWebContents(ctx.sender) : null;
@@ -118,10 +120,12 @@ export const windowsApi = {
     prewarmSessionRuntime(payload.sessionPath, payload.cwd);
   },
   focus: (payload: WindowsFocusPayload): void => {
+    if (!payload?.sessionPath || typeof payload.sessionPath !== 'string' || !payload.sessionPath.trim()) return;
     if (!focusWindowForSession(payload.sessionPath)) createSessionWindow(payload.sessionPath);
   },
   /** 已有窗口则聚焦；未找到时先为调用窗口原子占用路径，再由 renderer 打开面板。 */
   focusIfOpen: (payload: WindowsFocusPayload, ctx?: HostActionContext): boolean => {
+    if (!payload?.sessionPath || typeof payload.sessionPath !== 'string' || !payload.sessionPath.trim()) return false;
     const win = findWindowBySession(payload.sessionPath, ctx ? { excludeWindowId: ctx.sender.id } : {});
     if (win) {
       activateAndFocusWindow(win);

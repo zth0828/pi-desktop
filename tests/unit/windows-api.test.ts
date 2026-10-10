@@ -265,4 +265,20 @@ describe('windowsApi', () => {
       expect(() => windowsApi.restoreExpandRight()).not.toThrow();
     });
   });
+
+  describe('sessionPath validation', () => {
+    it('openDetached, openDetachedAt, focus 与 focusIfOpen 忽略空路径', () => {
+      windowsApi.openDetached({ sessionPath: '' });
+      expect(mocks.createSessionWindow).not.toHaveBeenCalled();
+
+      windowsApi.openDetachedAt({ sessionPath: '   ', screenX: 0, screenY: 0 });
+      expect(mocks.createSessionWindowAtPoint).not.toHaveBeenCalled();
+
+      windowsApi.focus({ sessionPath: '' });
+      expect(mocks.focusWindowForSession).not.toHaveBeenCalled();
+
+      expect(windowsApi.focusIfOpen({ sessionPath: '' })).toBe(false);
+      expect(mocks.findWindowBySession).not.toHaveBeenCalled();
+    });
+  });
 });
