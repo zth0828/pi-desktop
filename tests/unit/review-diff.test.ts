@@ -439,6 +439,24 @@ describe('isAbsolutePath & isPathInside', () => {
     expect(sessionFiles).toEqual([
       { path: 'd:/external/report.md', added: 1, deleted: 0, diff: '+2', editCount: 2 },
     ]);
+
+    const uncFallback = collectFallbackFiles({
+      call1: {
+        toolName: 'edit',
+        status: 'success',
+        args: { path: '//Server/Share/repo/c.ts' },
+        result: { details: { diff: '+1 line' } },
+      },
+      call2: {
+        toolName: 'edit',
+        status: 'success',
+        args: { path: '//server/share/repo/c.ts' },
+        result: { details: { diff: '+3 lines' } },
+      },
+    });
+    expect(uncFallback).toEqual([
+      { path: '//Server/Share/repo/c.ts', added: 1, deleted: 0, diff: '+3 lines' },
+    ]);
   });
 });
 

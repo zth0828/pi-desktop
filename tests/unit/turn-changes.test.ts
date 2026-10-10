@@ -128,6 +128,23 @@ describe('collectTurnChanges', () => {
     expect(changes.files).toEqual([
       { path: 'c:/repo/src/b.ts', added: 2, deleted: 0, toolCallId: 'call2' },
     ]);
+
+    const uncExecutions: Record<string, ToolExecution> = {
+      call1: exec({
+        toolCallId: 'call1',
+        args: { path: '//Server/Share/repo/c.ts' },
+        result: { content: [], details: { diff: '+1 line' } },
+      }),
+      call2: exec({
+        toolCallId: 'call2',
+        args: { path: '//server/share/repo/c.ts' },
+        result: { content: [], details: { diff: '+3 lines' } },
+      }),
+    };
+    const uncChanges = collectTurnChanges(uncExecutions, ['call1', 'call2']);
+    expect(uncChanges.files).toEqual([
+      { path: '//Server/Share/repo/c.ts', added: 2, deleted: 0, toolCallId: 'call2' },
+    ]);
   });
 
   it('跳过失败/中断/无 diff 的执行与非 edit/write 工具', () => {

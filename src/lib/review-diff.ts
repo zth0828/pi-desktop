@@ -4,7 +4,11 @@
 // 与 tool-display.ts 的 parseDiffLines 不同：那边解析的是 pi edit 工具 details.diff 的
 // 私有格式（"+12 content"），这里解析的是 `git diff` 的标准 unified diff。
 import { editPreviewDiff } from './tool-display';
-import { stripWinPrefix, normalizeLexicalPath } from '@shared/message-attachments';
+import {
+  stripWinPrefix,
+  normalizeLexicalPath,
+  normalizeDisplayPath,
+} from '@shared/message-attachments';
 
 function writeContentDiff(content: unknown): string | undefined {
   if (typeof content !== 'string' || !content.trim()) return undefined;
@@ -149,8 +153,12 @@ type ReviewListEntry = {
   deleted: number;
 };
 
-export { stripWinPrefix, normalizeLexicalPath };
+export { stripWinPrefix, normalizeLexicalPath, normalizeDisplayPath };
 
+/** 为 Windows 盘符路径与 UNC 共享路径生成不区分大小写的 Map 键 */
+export function pathMapKey(p: string): string {
+  return /^[a-zA-Z]:/.test(p) || p.startsWith('//') ? p.toLowerCase() : p;
+}
 
 export function isAbsolutePath(filePath: string): boolean {
   const normalized = stripWinPrefix(filePath).replace(/\\/g, '/');
@@ -177,30 +185,6 @@ export function isPathInside(childPath: string, parentDir?: string): boolean {
     : `/private${b}`;
   const privateWithSlash = privateParent.endsWith('/') ? privateParent : `${privateParent}/`;
   return a === privateParent || a.startsWith(privateWithSlash);
-}
-
-/** 规范化文件展示路径：相对 cwd 的文件去除前缀，外部绝对路径保持原样。 */
-export function normalizeDisplayPath(filePath: string, cwd?: string): string {
-  const child = normalizeLexicalPath(filePath);
-  if (!cwd) return child;
-  const root = normalizeLexicalPath(cwd);
-  const isWindows = /^[a-zA-Z]:/.test(child) || /^[a-zA-Z]:/.test(root) || child.startsWith('//') || root.startsWith('//');
-  const a = isWindows ? child.toLowerCase() : child;
-  const b = isWindows ? root.toLowerCase() : root;
-  if (a === b) return '.';
-  const bWithSlash = b.endsWith('/') ? b : `${b}/`;
-  if (a.startsWith(bWithSlash)) {
-    return child.slice(bWithSlash.length);
-  }
-  const privateRoot = b.startsWith('/private/')
-    ? b.slice('/private'.length)
-    : `/private${b}`;
-  const privateWithSlash = privateRoot.endsWith('/') ? privateRoot : `${privateRoot}/`;
-  if (a === privateRoot) return '.';
-  if (a.startsWith(privateWithSlash)) {
-    return child.slice(privateWithSlash.length);
-  }
-  return child;
 }
 
 /**
@@ -252,7 +236,7 @@ export function sessionChangeFiles(
       added = args.content ? lines.length - (args.content.endsWith('\n') ? 1 : 0) : 0;
     }
 
-    const key = /^[a-zA-Z]:/.test(displayPath) ? displayPath.toLowerCase() : displayPath;
+    const key = pathMapKey(displayPath);
     const existing = byPath.get(key);
     byPath.set(key, {
       path: existing?.path ?? displayPath,
@@ -277,7 +261,7 @@ export function mergeReviewFiles(
 ): ReviewListEntry[] {
   const byPath = new Map<string, ReviewListEntry>();
   for (const file of baselineFiles) {
-    const key = /^[a-zA-Z]:/.test(file.path) ? file.path.toLowerCase() : file.path;
+    const key = pathMapKey(file.path);
     byPath.set(key, file);
   }
   for (const file of toolFiles) {
@@ -285,7 +269,7 @@ export function mergeReviewFiles(
     const insideWorkspace = isAbs ? isPathInside(file.path, cwd) : true;
     if (baselineAvailable && insideWorkspace) continue;
     const displayPath = normalizeDisplayPath(file.path, cwd);
-    const key = /^[a-zA-Z]:/.test(displayPath) ? displayPath.toLowerCase() : displayPath;
+    const key = pathMapKey(displayPath);
     if (!byPath.has(key)) {
       byPath.set(key, {
         path: displayPath,
@@ -321,7 +305,7 @@ export function collectFallbackFiles(
       '';
     if (!rawPath) continue;
     const path = normalizeLexicalPath(rawPath).replace(/^\.\//, '');
-    const key = /^[a-zA-Z]:/.test(path) ? path.toLowerCase() : path;
+    const key = pathMapKey(path);
     const details =
       ex.result && typeof ex.result === 'object'
         ? (ex.result as { details?: unknown }).details
