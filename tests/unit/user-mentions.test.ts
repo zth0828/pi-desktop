@@ -45,6 +45,17 @@ describe('user-mentions (用户消息内联文件引用解析)', () => {
     ]);
   });
 
+  it('正确解析包含双下划线如 __init__.py 与 __tests__ 的 Pi 展开 <file> 块', () => {
+    const raw = '导入 <file name="/project/src/__init__.py">\n# init\n</file>\n 与测试 <file name="C:\\repo\\__tests__\\app.test.tsx">\n// test\n</file>';
+    const tokens = parseUserMessageTokens(raw);
+    expect(tokens).toEqual([
+      { type: 'text', text: '导入 ' },
+      { type: 'file', path: '/project/src/__init__.py', name: '__init__.py', raw: '__PI_MENTION__:/project/src/__init__.py__' },
+      { type: 'text', text: ' 与测试 ' },
+      { type: 'file', path: 'C:\\repo\\__tests__\\app.test.tsx', name: 'app.test.tsx', raw: '__PI_MENTION__:C:\\repo\\__tests__\\app.test.tsx__' },
+    ]);
+  });
+
   it('正确解析带空格的双引号引用 @"path with space/note.txt"', () => {
     const raw = '前面是文字 @"docs/test plan.md" 后面是文字';
     const tokens = parseUserMessageTokens(raw);

@@ -20,18 +20,23 @@ export function parseUserMessageTokens(rawText: string): InlineFileToken[] {
     .replace(/<skill\s+[^>]*>[\s\S]*?<\/skill>\n?/g, '');
 
   // 2. 将 <file name="path"> 替换为标准化占位标记，保留其在句子中的相对位置
+  const embeddedFiles: string[] = [];
   const withPlaceholders = clean.replace(
     /<file name="([^"]*)">\n?[\s\S]*?\n?<\/file>\n?/g,
-    (_match, filePath) => `__PI_MENTION__:${filePath}__`,
+    (_match, filePath) => {
+      const idx = embeddedFiles.length;
+      embeddedFiles.push(filePath);
+      return `__PI_MENTION_START__${idx}__PI_MENTION_END__`;
+    },
   );
 
   // 3. 正则匹配：
-  // - __PI_MENTION__:path__
+  // - __PI_MENTION_START__idx__PI_MENTION_END__
   // - @[path]
   // - @"quoted path"
   // - @filename.ext 或 @dir/file.ext（支持紧随中文字符或行首，排除邮箱如 user@example.com）
   const mentionRegex =
-    /(__PI_MENTION__:(.+?)__)|@\[([^\]]+)\]|(?:^|[^a-zA-Z0-9_])@("([^"\n]+)"|((?:[a-zA-Z]:[/\\])?(?:[a-zA-Z0-9_./\\-]+(?:\.[a-zA-Z0-9_-]+)+|[a-zA-Z0-9_.-]+[/\\][a-zA-Z0-9_./\\-]+)))/g;
+    /(__PI_MENTION_START__(\d+)__PI_MENTION_END__)|@\[([^\]]+)\]|(?:^|[^a-zA-Z0-9_])@("([^"\n]+)"|((?:[a-zA-Z]:[/\\])?(?:[a-zA-Z0-9_./\\-]+(?:\.[a-zA-Z0-9_-]+)+|[a-zA-Z0-9_.-]+[/\\][a-zA-Z0-9_./\\-]+)))/g;
 
   const tokens: InlineFileToken[] = [];
   let lastIndex = 0;
@@ -55,7 +60,7 @@ export function parseUserMessageTokens(rawText: string): InlineFileToken[] {
     }
 
     const filePath = isSpecialPlaceholder
-      ? match[2]
+      ? embeddedFiles[Number(match[2])]
       : isBracketMention
         ? match[3]
         : match[5] !== undefined
@@ -64,7 +69,9 @@ export function parseUserMessageTokens(rawText: string): InlineFileToken[] {
 
     const fileName = filePath.split(/[/\\]/).pop() || filePath;
 
-    const rawToken = fullMatch.slice(leadingText.length);
+    const rawToken = isSpecialPlaceholder
+      ? `__PI_MENTION__:${filePath}__`
+      : fullMatch.slice(leadingText.length);
 
     tokens.push({
       type: 'file',
