@@ -3,7 +3,7 @@
 // 同一文件多次改动合并累计，顺序按首次出现。
 import type { ChatMessage, ToolExecution } from './chat-types';
 import { parseDiffLines, resultDetails } from './tool-display';
-import { stripWinPrefix } from './review-diff';
+import { normalizeLexicalPath } from './review-diff';
 
 /**
  * 逻辑轮（一轮对话）：user 消息开启新一轮，后续 assistant/toolResult 消息归入该轮。
@@ -142,19 +142,20 @@ export function collectTurnChanges(
   toolCallIds: string[],
 ): TurnChanges {
   const byPath = new Map<string, TurnFileChange>();
-  const bump = (path: string, added: number, deleted: number, toolCallId?: string) => {
-    const entry = byPath.get(path) ?? { path, added: 0, deleted: 0, toolCallId };
+  const bump = (key: string, path: string, added: number, deleted: number, toolCallId?: string) => {
+    const entry = byPath.get(key) ?? { path, added: 0, deleted: 0, toolCallId };
     entry.added += added;
     entry.deleted += deleted;
     if (toolCallId) entry.toolCallId = toolCallId;
-    byPath.set(path, entry);
+    byPath.set(key, entry);
   };
   for (const id of toolCallIds) {
     const ex = toolExecutions[id];
     if (!ex || ex.status !== 'success') continue;
     const rawPath = argsPath(ex.args);
     if (!rawPath) continue;
-    const path = stripWinPrefix(rawPath).replace(/\\/g, '/').replace(/^\.\//, '');
+    const path = normalizeLexicalPath(rawPath).replace(/^\.\//, '');
+    const key = /^[a-zA-Z]:/.test(path) ? path.toLowerCase() : path;
     if (ex.toolName === 'edit') {
       const details = resultDetails(ex.result);
       const diff = typeof details?.diff === 'string' ? details.diff : undefined;
@@ -165,10 +166,10 @@ export function collectTurnChanges(
         if (line.kind === 'add') added += 1;
         else if (line.kind === 'del') deleted += 1;
       }
-      bump(path, added, deleted, id);
+      bump(key, path, added, deleted, id);
     } else if (ex.toolName === 'write') {
       const content = (ex.args as Record<string, unknown>).content;
-      bump(path, typeof content === 'string' ? contentLines(content) : 0, 0, id);
+      bump(key, path, typeof content === 'string' ? contentLines(content) : 0, 0, id);
     }
   }
   const files = [...byPath.values()];

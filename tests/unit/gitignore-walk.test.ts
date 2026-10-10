@@ -133,5 +133,9 @@ describe('walkGitignoreAware（fd 不可用时的 @ 补全回退）', () => {
     const extResult = await filesApi.listDir({ cwd: `\\\\?\\${root}`, dir: 'src' });
     expect(extResult.dir).toBe('src');
     expect(extResult.dirs).toEqual(['nested']);
+
+    const devResult = await filesApi.listDir({ cwd: root, dir: 'CON' });
+    expect(devResult.dirs).toEqual([]);
+    expect(devResult.files).toEqual([]);
   });
 });

@@ -28,7 +28,7 @@ function readWindowsRegistryPath(key: string): string[] {
       return match[1]
         .trim()
         .split(';')
-        .map((entry) => expandWindowsEnvVars(entry.trim()))
+        .map((entry) => expandWindowsEnvVars(entry.trim().replace(/^"(.*)"$/, '$1').trim()))
         .filter(Boolean);
     }
   } catch {
@@ -63,7 +63,7 @@ function mergeWindowsPaths(pathsList: string[][]): string {
   const merged: string[] = [];
   for (const list of pathsList) {
     for (const entry of list) {
-      const normalized = entry.trim();
+      const normalized = entry.trim().replace(/^"(.*)"$/, '$1').trim();
       if (!normalized) continue;
       const key = normalized.toLowerCase();
       if (!seen.has(key)) {

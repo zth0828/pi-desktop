@@ -149,8 +149,8 @@ type ReviewListEntry = {
 };
 
 export function stripWinPrefix(p: string): string {
-  if (/^[\\/]{2}\?[\\/]unc[\\/]/i.test(p)) return `//${p.slice(8)}`;
-  if (/^[\\/]{2}\?[\\/]/i.test(p)) return p.slice(4);
+  if (/^(?:[\\/]{2}\?[\\/]|[\\/]\?\?[\\/])unc[\\/]/i.test(p)) return `//${p.slice(8)}`;
+  if (/^(?:[\\/]{2}\?[\\/]|[\\/]\?\?[\\/])/i.test(p)) return p.slice(4);
   return p;
 }
 

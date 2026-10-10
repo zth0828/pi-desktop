@@ -111,6 +111,25 @@ describe('collectTurnChanges', () => {
     ]);
   });
 
+  it('支持驱动器大小写差异与点路径段合并', () => {
+    const executions: Record<string, ToolExecution> = {
+      call1: exec({
+        toolCallId: 'call1',
+        args: { path: 'c:/repo/src/../src/b.ts' },
+        result: { content: [], details: { diff: '+1 line' } },
+      }),
+      call2: exec({
+        toolCallId: 'call2',
+        args: { path: 'C:/repo/src/b.ts' },
+        result: { content: [], details: { diff: '+2 lines' } },
+      }),
+    };
+    const changes = collectTurnChanges(executions, ['call1', 'call2']);
+    expect(changes.files).toEqual([
+      { path: 'c:/repo/src/b.ts', added: 2, deleted: 0, toolCallId: 'call2' },
+    ]);
+  });
+
   it('跳过失败/中断/无 diff 的执行与非 edit/write 工具', () => {
     const executions: Record<string, ToolExecution> = {
       call1: exec({ toolCallId: 'call1', status: 'error', args: { path: 'a.ts' } }),

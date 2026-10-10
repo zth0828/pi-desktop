@@ -32,11 +32,13 @@ describe('session-export utilities', () => {
       expect(sanitizePathSegment('   ', 'fallback-name')).toBe('fallback-name');
     });
 
-    it('对 Windows 保留设备名称（CON, PRN, AUX, NUL 等）添加后缀规避冲突', () => {
+    it('对 Windows 保留设备名称（CON, PRN, AUX, NUL, CONIN$, CONOUT$ 等）添加后缀规避冲突', () => {
       expect(sanitizePathSegment('CON')).toBe('CON_');
       expect(sanitizePathSegment('aux')).toBe('aux_');
       expect(sanitizePathSegment('NUL')).toBe('NUL_');
       expect(sanitizePathSegment('com1')).toBe('com1_');
+      expect(sanitizePathSegment('CONIN$')).toBe('CONIN$_');
+      expect(sanitizePathSegment('conout$')).toBe('conout$_');
     });
   });
 

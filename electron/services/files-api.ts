@@ -12,6 +12,7 @@ import { loadPiAdapter } from './pi-adapter';
 import { readIgnoreLevel, isIgnored, walkGitignoreAware, DEFAULT_EXCLUDED_DIRS, type IgnoreLevel } from '../utils/gitignore-walk';
 import { stripWindowsExtendedPrefix } from '../utils/same-path';
 import { isInsideWorkspace } from '../utils/previewable-files';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 const MAX_FILES = 200;
 
@@ -93,6 +94,9 @@ export const filesApi = {
   listDir: async (payload: PiFileListDirPayload): Promise<PiFileListDirResult> => {
     const base = stripWindowsExtendedPrefix(payload.cwd);
     const rel = (payload.dir ?? '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+    if (isWindowsDevicePath(rel)) {
+      return { dir: rel, dirs: [], files: [] };
+    }
     const dirPath = path.join(base, rel);
     if (!isInsideWorkspace(base, dirPath)) {
       return { dir: rel, dirs: [], files: [] };
