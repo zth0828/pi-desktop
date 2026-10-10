@@ -149,8 +149,8 @@ type ReviewListEntry = {
 };
 
 function stripWinPrefix(p: string): string {
-  if (p.startsWith('\\\\?\\UNC\\') || p.startsWith('//?/UNC/')) return `//${p.slice(8)}`;
-  if (p.startsWith('\\\\?\\') || p.startsWith('//?/')) return p.slice(4);
+  if (/^[\\/]{2}\?[\\/]unc[\\/]/i.test(p)) return `//${p.slice(8)}`;
+  if (/^[\\/]{2}\?[\\/]/i.test(p)) return p.slice(4);
   return p;
 }
 
@@ -166,7 +166,7 @@ export function isPathInside(childPath: string, parentDir?: string): boolean {
   if (!isAbsolutePath(child)) {
     return !child.startsWith('../') && child !== '..';
   }
-  const isWindows = /^[a-zA-Z]:/.test(child) || /^[a-zA-Z]:/.test(parent);
+  const isWindows = /^[a-zA-Z]:/.test(child) || /^[a-zA-Z]:/.test(parent) || child.startsWith('//') || parent.startsWith('//');
   const a = isWindows ? child.toLowerCase() : child;
   const b = isWindows ? parent.toLowerCase() : parent;
   if (a === b || a.startsWith(`${b}/`)) return true;
@@ -184,8 +184,9 @@ export function normalizeDisplayPath(filePath: string, cwd?: string): string {
   }
   if (!cwd) return normalized;
   const root = stripWinPrefix(cwd).replace(/\\/g, '/').replace(/\/$/, '');
-  const isWindows = /^[a-zA-Z]:/.test(normalized) || /^[a-zA-Z]:/.test(root);
-  const a = isWindows ? normalized.toLowerCase() : normalized;
+  const isWindows = /^[a-zA-Z]:/.test(normalized) || /^[a-zA-Z]:/.test(root) || normalized.startsWith('//') || root.startsWith('//');
+  const target = normalized.replace(/\/$/, '');
+  const a = isWindows ? target.toLowerCase() : target;
   const b = isWindows ? root.toLowerCase() : root;
   if (a === b) return '.';
   if (a.startsWith(`${b}/`)) {

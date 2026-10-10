@@ -370,9 +370,20 @@ describe('isAbsolutePath & isPathInside', () => {
     expect(isPathInside('../escaped.ts', 'C:/workspace')).toBe(false);
   });
 
-  it('isPathInside 与 normalizeDisplayPath 支持 Windows 扩展前缀 (\\\\?\\)', () => {
+  it('isPathInside 与 normalizeDisplayPath 支持 Windows 扩展前缀 (\\\\?\\) 及 UNC 路径', () => {
     expect(isPathInside('\\\\?\\C:\\workspace\\src\\a.ts', 'C:/workspace')).toBe(true);
     expect(normalizeDisplayPath('\\\\?\\C:\\workspace\\src\\a.ts', 'C:/workspace')).toBe('src/a.ts');
+    expect(isPathInside('\\\\server\\share\\repo\\a.ts', '\\\\server\\share\\repo')).toBe(true);
+    expect(normalizeDisplayPath('\\\\server\\share\\repo\\a.ts', '\\\\server\\share\\repo')).toBe('a.ts');
+    expect(normalizeDisplayPath('\\\\?\\UNC\\server\\share\\repo\\a.ts', '\\\\server\\share\\repo')).toBe('a.ts');
+  });
+
+  it('normalizeDisplayPath 在目标为根目录时返回当前目录 "."', () => {
+    expect(normalizeDisplayPath('C:/', 'C:/')).toBe('.');
+    expect(normalizeDisplayPath('C:\\', 'c:\\')).toBe('.');
+    expect(normalizeDisplayPath('c:', 'C:\\')).toBe('.');
+    expect(normalizeDisplayPath('C:/src/app.ts', 'C:/')).toBe('src/app.ts');
+    expect(normalizeDisplayPath('/', '/')).toBe('.');
   });
 });
 
