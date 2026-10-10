@@ -1,5 +1,6 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { stripWindowsExtendedPrefix } from './same-path';
 
 const WINDOWS_DEVICE_PATH_REGEX = /^(?:[\\/]{2}\.?[\\/]|(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$))/i;
 
@@ -8,7 +9,9 @@ export function isWindowsDevicePath(p: string): boolean {
 }
 
 function isInside(root: string, candidate: string): boolean {
-  const rel = path.relative(root, candidate);
+  const cleanRoot = stripWindowsExtendedPrefix(root);
+  const cleanCandidate = stripWindowsExtendedPrefix(candidate);
+  const rel = path.relative(cleanRoot, cleanCandidate);
   return rel === '' || (!rel.startsWith(`..${path.sep}`) && rel !== '..' && !path.isAbsolute(rel));
 }
 

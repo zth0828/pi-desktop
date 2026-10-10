@@ -5,6 +5,7 @@
 import { realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathsEqual } from './same-path';
 
 export type RiskyWorkspaceReason = 'home' | 'root';
 
@@ -21,7 +22,7 @@ export function riskyWorkspaceReason(cwd: string): RiskyWorkspaceReason | null {
   const resolved = resolveExisting(cwd);
   if (resolved === null) return null;
   const home = resolveExisting(os.homedir());
-  if (home !== null && resolved === home) return 'home';
-  if (resolved === path.parse(resolved).root) return 'root';
+  if (home !== null && pathsEqual(resolved, home)) return 'home';
+  if (pathsEqual(resolved, path.parse(resolved).root)) return 'root';
   return null;
 }

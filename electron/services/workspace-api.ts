@@ -9,7 +9,7 @@ import type {
 } from '@shared/host-api/contract';
 import { resolveWorkspacePath } from '../utils/workspace-path';
 import { normalizePreviewablePath } from '../utils/previewable-files';
-import { samePath } from '../utils/same-path';
+import { samePath, stripWindowsExtendedPrefix } from '../utils/same-path';
 import { resolveRuntimeForContext } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
 
@@ -65,7 +65,7 @@ async function resolvePreviewFile(pathValue: string, ctx?: HostActionContext): P
 }
 
 function relativePath(root: string, absolute: string): string {
-  return path.relative(root, absolute).split(path.sep).join('/');
+  return path.relative(stripWindowsExtendedPrefix(root), stripWindowsExtendedPrefix(absolute)).split(path.sep).join('/');
 }
 
 function looksBinary(buffer: Buffer): boolean {

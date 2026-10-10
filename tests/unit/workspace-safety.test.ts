@@ -9,6 +9,7 @@ describe('riskyWorkspaceReason', () => {
     expect(riskyWorkspaceReason(os.homedir())).toBe('home');
     // 带尾斜杠/重复分隔符的等价写法也应命中
     expect(riskyWorkspaceReason(`${os.homedir()}/`)).toBe('home');
+    expect(riskyWorkspaceReason(`${os.homedir()}///`)).toBe('home');
   });
 
   it('把文件系统根判定为 root', () => {
