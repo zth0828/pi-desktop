@@ -32,6 +32,19 @@ describe('pathsEqual', () => {
     expect(pathsEqual('C:\\Users\\X\\', 'c:\\users\\x', 'win32')).toBe(true);
     expect(pathsEqual('C:/Users/X/', 'c:\\users\\x\\', 'win32')).toBe(true);
   });
+
+  it('win32: normalizes drive roots and multiple slashes', () => {
+    expect(pathsEqual('C:', 'C:\\', 'win32')).toBe(true);
+    expect(pathsEqual('C:\\\\', 'c:\\', 'win32')).toBe(true);
+    expect(pathsEqual('C:/', 'c:', 'win32')).toBe(true);
+    expect(pathsEqual('D:', 'C:', 'win32')).toBe(false);
+  });
+
+  it('win32: strips extended-length prefixes (\\\\?\\ and \\\\?\\UNC\\)', () => {
+    expect(pathsEqual('\\\\?\\C:\\Users\\X', 'c:\\users\\x', 'win32')).toBe(true);
+    expect(pathsEqual('//?/c:/Users/X', 'C:\\Users\\X', 'win32')).toBe(true);
+    expect(pathsEqual('\\\\?\\UNC\\server\\share\\repo', '\\\\server\\share\\repo', 'win32')).toBe(true);
+  });
 });
 
 describe('samePath', () => {

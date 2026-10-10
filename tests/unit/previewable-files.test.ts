@@ -131,6 +131,15 @@ describe('isInsideWorkspace', () => {
       expect(isInsideWorkspace(root, subFile.replace('/private/tmp/', '/tmp/'))).toBe(true);
     }
   });
+
+  it('支持 Windows 扩展前缀 (\\\\?\\) 路径识别', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'pi-ws-prefix-'));
+    roots.push(root);
+    const subFile = path.join(root, 'sub', 'file.ts');
+    const prefixedRoot = `\\\\?\\${root}`;
+    expect(isInsideWorkspace(prefixedRoot, subFile)).toBe(true);
+    expect(isInsideWorkspace(root, `\\\\?\\${subFile}`)).toBe(true);
+  });
 });
 
 function nameFor(file: string): string {

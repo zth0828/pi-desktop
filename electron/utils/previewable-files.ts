@@ -1,13 +1,16 @@
 import path from 'node:path';
 import { realpathSync } from 'node:fs';
+import { stripWindowsExtendedPrefix } from './same-path';
 
 const PREVIEWABLE_TOOLS = new Set(['read', 'edit', 'write']);
 
 /** Existing paths use their real filesystem identity (/tmp -> /private/tmp on macOS). */
 export function normalizePreviewablePath(filePath: string): string {
-  const resolved = path.resolve(filePath);
+  const clean = stripWindowsExtendedPrefix(filePath);
+  const resolved = path.resolve(clean);
   try {
-    return realpathSync(resolved);
+    const real = realpathSync(resolved);
+    return stripWindowsExtendedPrefix(real);
   } catch {
     // A write target may not exist yet. Resolve the nearest existing parent so
     // /tmp/new-file and /private/tmp/new-file still share one identity on macOS.
@@ -19,7 +22,9 @@ export function normalizePreviewablePath(filePath: string): string {
       suffix.unshift(path.basename(parent));
       parent = next;
       try {
-        return path.join(realpathSync(parent), ...suffix);
+        const realParent = realpathSync(parent);
+        const joined = path.join(realParent, ...suffix);
+        return stripWindowsExtendedPrefix(joined);
       } catch {
         // Keep walking toward the filesystem root.
       }
@@ -31,15 +36,17 @@ export function normalizePreviewablePath(filePath: string): string {
  * 判定目标路径是否位于工作区内（处理 macOS /tmp 与 /private/tmp symlink 等跨平台等价形式）。
  */
 export function isInsideWorkspace(root: string, candidate: string): boolean {
+  const cleanRoot = stripWindowsExtendedPrefix(root);
+  const cleanCandidate = stripWindowsExtendedPrefix(candidate);
   try {
-    const resolvedCandidate = path.isAbsolute(candidate) ? candidate : path.resolve(root, candidate);
-    const realRoot = normalizePreviewablePath(root);
+    const resolvedCandidate = path.isAbsolute(cleanCandidate) ? cleanCandidate : path.resolve(cleanRoot, cleanCandidate);
+    const realRoot = normalizePreviewablePath(cleanRoot);
     const realCandidate = normalizePreviewablePath(resolvedCandidate);
     const relative = path.relative(realRoot, realCandidate);
     return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
   } catch {
-    const resolvedCandidate = path.isAbsolute(candidate) ? candidate : path.resolve(root, candidate);
-    const relative = path.relative(root, resolvedCandidate);
+    const resolvedCandidate = path.isAbsolute(cleanCandidate) ? cleanCandidate : path.resolve(cleanRoot, cleanCandidate);
+    const relative = path.relative(cleanRoot, resolvedCandidate);
     return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
   }
 }
