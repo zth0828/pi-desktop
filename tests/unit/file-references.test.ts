@@ -118,4 +118,10 @@ describe('expandFileReferences', () => {
     const { text } = await expandFileReferences('看 @nope/missing.txt', dir);
     expect(text).toBe('看 @nope/missing.txt');
   });
+
+  it('Windows 保留设备名称与设备命名空间路径保留原文不展开', async () => {
+    const { text } = await expandFileReferences('测试 @CON 和 @aux 及 @\\\\.\\pipe\\ipc', dir);
+    expect(text).toBe('测试 @CON 和 @aux 及 @\\\\.\\pipe\\ipc');
+  });
 });
+

@@ -12,6 +12,7 @@ import {
   isProbablyBinary,
   MAX_FILE_TEXT_BYTES,
 } from '@shared/file-references';
+import { isWindowsDevicePath } from './workspace-path';
 
 export type ExpandedImage = {
   type: 'image';
@@ -32,8 +33,11 @@ async function expandToken(
   tokenPath: string,
   cwd: string,
 ): Promise<{ replacement: string; image?: ExpandedImage } | null> {
+  if (isWindowsDevicePath(tokenPath)) return null;
   const absolutePath = resolveRefPath(tokenPath, cwd);
+  if (isWindowsDevicePath(absolutePath)) return null;
   let stats;
+
   try {
     stats = await stat(absolutePath);
   } catch {
