@@ -34,6 +34,9 @@ describe('resolveWorkspacePath', () => {
   it('rejects lexical and absolute escapes', async () => {
     await expect(resolveWorkspacePath(root, '../outside/secret.txt')).rejects.toThrow('escapes workspace');
     await expect(resolveWorkspacePath(root, path.join(outside, 'secret.txt'))).rejects.toThrow('absolute');
+    await expect(resolveWorkspacePath(root, 'C:secret')).rejects.toThrow('absolute paths are not allowed');
+    await expect(resolveWorkspacePath(root, 'C:/secret')).rejects.toThrow('absolute paths are not allowed');
+    await expect(resolveWorkspacePath(root, 'D:\\secret')).rejects.toThrow('absolute paths are not allowed');
   });
 
   it('rejects symlinks whose targets escape the workspace', async () => {
