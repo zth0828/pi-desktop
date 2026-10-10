@@ -458,5 +458,17 @@ describe('isAbsolutePath & isPathInside', () => {
       { path: '//Server/Share/repo/c.ts', added: 1, deleted: 0, diff: '+3 lines' },
     ]);
   });
+
+  it('safely handles null and undefined inputs across functions', () => {
+    expect(parseUnifiedDiff(undefined as unknown as string)).toBeNull();
+    expect(buildSplitDiffRows(undefined as unknown as any)).toEqual([]);
+    expect(hunkLineKind(undefined as unknown as string)).toBe('context');
+    expect(isAbsolutePath(undefined as unknown as string)).toBe(false);
+    expect(isPathInside(undefined as unknown as string, '/workspace')).toBe(false);
+    expect(isPathInside('/workspace/foo', undefined)).toBe(false);
+    expect(sessionChangeFiles(undefined as unknown as any)).toEqual([]);
+    expect(collectFallbackFiles(undefined as unknown as any)).toEqual([]);
+    expect(mergeReviewFiles(undefined, true, undefined as unknown as any, undefined as unknown as any)).toEqual([]);
+  });
 });
 

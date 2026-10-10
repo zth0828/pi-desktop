@@ -111,6 +111,9 @@ function extractModelRef(text: string): { providerId: string; modelId: string } 
 }
 
 export function parseProviderError(message: string): ProviderErrorInfo {
+  if (!message || typeof message !== 'string') {
+    return { category: 'unknown' };
+  }
   const status = extractStatus(message);
   const requestId = extractRequestId(message);
   const modelRef = extractModelRef(message);

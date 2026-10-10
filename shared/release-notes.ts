@@ -3,7 +3,7 @@
  * 提取出面向应用内展示的纯粹更新内容与变更日志。
  */
 export function sanitizeReleaseNotes(text?: string | null): string {
-  if (!text) return '';
+  if (!text || typeof text !== 'string') return '';
   let content = text.trim();
 
   // 1. 匹配并去除以 "### 📥 下载地址" 或 "## 📥 下载地址" 或 "### 下载地址" 开始的下载专区

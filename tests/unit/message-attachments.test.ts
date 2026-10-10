@@ -171,4 +171,22 @@ describe('normalizeDisplayPath & formatAttachmentDisplayName', () => {
       imageIndex: undefined,
     });
   });
+
+  it('safely tolerates null, undefined and non-string inputs', () => {
+    expect(stripAttachmentEnvelope(undefined as unknown as string)).toBe('');
+    expect(stripAttachmentEnvelope(null as unknown as string)).toBe('');
+    expect(parseUserMessage(undefined as unknown as string)).toEqual({
+      text: '',
+      attachments: [],
+      files: [],
+      skills: [],
+    });
+    expect(formatOrderedAttachmentPrompt(undefined as unknown as string, [])).toBe('');
+    expect(formatAttachmentDisplayName(undefined as unknown as string)).toBe('');
+    expect(normalizeDisplayPath(undefined as unknown as string)).toBe('');
+    expect(extractQueueAttachments(undefined as unknown as string)).toEqual({
+      attachments: [],
+      displayText: '',
+    });
+  });
 });

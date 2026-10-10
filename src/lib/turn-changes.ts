@@ -21,6 +21,7 @@ export type LogicalTurn = {
 
 /** 按 user 消息边界把消息列表切成逻辑轮；首条 user 之前的消息不属于任何轮 */
 export function groupLogicalTurns(messages: ChatMessage[]): LogicalTurn[] {
+  if (!Array.isArray(messages)) return [];
   const turns: LogicalTurn[] = [];
   let current: LogicalTurn | null = null;
   messages.forEach((m, i) => {
@@ -47,6 +48,7 @@ export function groupLogicalTurns(messages: ChatMessage[]): LogicalTurn[] {
  * 使失败回合也能折叠成一段错误信息，而不是全量平铺展开。
  */
 export function turnFinalResponseIndex(messages: ChatMessage[], turn: LogicalTurn): number | undefined {
+  if (!Array.isArray(messages) || !turn) return undefined;
   for (let i = turn.endIndex; i > turn.startIndex; i -= 1) {
     const message = messages[i];
     if (message.role !== 'assistant') continue;
@@ -68,6 +70,7 @@ export function turnTimeRange(
   toolExecutions: Record<string, ToolExecution>,
   toolCallIds: string[],
 ): { startedAt?: number; endedAt?: number } {
+  if (!toolExecutions || !Array.isArray(toolCallIds)) return {};
   let startedAt: number | undefined;
   let endedAt: number | undefined;
   for (const id of toolCallIds) {
@@ -96,6 +99,7 @@ export function turnDurationMs(
   fallbackMs?: number,
 ): number | null {
   if (fallbackMs !== undefined && Number.isFinite(fallbackMs) && fallbackMs >= 0) return fallbackMs;
+  if (!Array.isArray(messages) || !turn || !toolExecutions) return null;
   const range = turnTimeRange(toolExecutions, turn.toolCallIds);
   const timestamps = messages
     .slice(turn.startIndex, turn.endIndex + 1)
@@ -141,6 +145,9 @@ export function collectTurnChanges(
   toolExecutions: Record<string, ToolExecution>,
   toolCallIds: string[],
 ): TurnChanges {
+  if (!toolExecutions || !Array.isArray(toolCallIds)) {
+    return { files: [], added: 0, deleted: 0 };
+  }
   const byPath = new Map<string, TurnFileChange>();
   const bump = (key: string, path: string, added: number, deleted: number, toolCallId?: string) => {
     const entry = byPath.get(key) ?? { path, added: 0, deleted: 0, toolCallId };
@@ -199,7 +206,8 @@ export function isTurnCompleted(
   toolExecutions: Record<string, ToolExecution>,
   isStreaming: boolean,
 ): boolean {
-  const turnHasRunningTool = turn.toolCallIds.some((id) => toolExecutions[id]?.status === 'running');
+  if (!Array.isArray(messages) || !turn) return true;
+  const turnHasRunningTool = (turn.toolCallIds ?? []).some((id) => toolExecutions?.[id]?.status === 'running');
   if (turnHasRunningTool) return false;
 
   const turnHasStreamingMessage = messages

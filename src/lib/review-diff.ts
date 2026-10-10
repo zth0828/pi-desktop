@@ -34,6 +34,7 @@ export type ParsedFileDiff = {
 
 /** 解析单文件标准 unified diff；没有 hunk（空 diff / 纯 mode 变更）返回 null。 */
 export function parseUnifiedDiff(diff: string): ParsedFileDiff | null {
+  if (!diff || typeof diff !== 'string') return null;
   const normalized = diff.replace(/\r\n/g, '\n');
   const lines = normalized.split('\n');
   // split artifact：diff 以 \n 结尾时末尾多一个空串，先去掉
@@ -73,6 +74,7 @@ function hunkStarts(header: string): { old: number; next: number } {
 
 /** Align delete/add runs into two columns while preserving context line numbers. */
 export function buildSplitDiffRows(hunk: ReviewHunk): SplitDiffRow[] {
+  if (!hunk || !Array.isArray(hunk.lines)) return [];
   const rows: SplitDiffRow[] = [];
   let { old: oldLine, next: nextLine } = hunkStarts(hunk.header);
   for (let index = 0; index < hunk.lines.length;) {
@@ -113,6 +115,7 @@ export function buildSplitDiffRows(hunk: ReviewHunk): SplitDiffRow[] {
 
 /** hunk 内容行的展示分类（'\' 标记行单独一类，不配色） */
 export function hunkLineKind(line: string): ReviewDiffLineKind {
+  if (!line || typeof line !== 'string') return 'context';
   if (line.startsWith('+')) return 'add';
   if (line.startsWith('-')) return 'del';
   if (line.startsWith('\\')) return 'marker';
@@ -157,16 +160,18 @@ export { stripWinPrefix, normalizeLexicalPath, normalizeDisplayPath };
 
 /** 为 Windows 盘符路径与 UNC 共享路径生成不区分大小写的 Map 键 */
 export function pathMapKey(p: string): string {
+  if (!p || typeof p !== 'string') return '';
   return /^[a-zA-Z]:/.test(p) || p.startsWith('//') ? p.toLowerCase() : p;
 }
 
 export function isAbsolutePath(filePath: string): boolean {
+  if (!filePath || typeof filePath !== 'string') return false;
   const normalized = stripWinPrefix(filePath).replace(/\\/g, '/');
   return normalized.startsWith('/') || /^[a-zA-Z]:(?:\/|$)/.test(normalized);
 }
 
 export function isPathInside(childPath: string, parentDir?: string): boolean {
-  if (!parentDir) return false;
+  if (!childPath || typeof childPath !== 'string' || !parentDir || typeof parentDir !== 'string') return false;
   const child = normalizeLexicalPath(childPath);
   const parent = normalizeLexicalPath(parentDir);
   if (!isAbsolutePath(child)) {
@@ -200,6 +205,7 @@ export function sessionChangeFiles(
   }>,
   cwd?: string,
 ): ReviewSessionFile[] {
+  if (!toolExecutions || typeof toolExecutions !== 'object') return [];
   const byPath = new Map<string, ReviewSessionFile>();
   for (const ex of Object.values(toolExecutions)) {
     if (ex.toolName !== 'edit' && ex.toolName !== 'write') continue;
@@ -260,11 +266,13 @@ export function mergeReviewFiles(
   toolFiles: (ReviewFallbackFile | ReviewSessionFile)[],
 ): ReviewListEntry[] {
   const byPath = new Map<string, ReviewListEntry>();
-  for (const file of baselineFiles) {
+  for (const file of (baselineFiles ?? [])) {
+    if (!file?.path) continue;
     const key = pathMapKey(file.path);
     byPath.set(key, file);
   }
-  for (const file of toolFiles) {
+  for (const file of (toolFiles ?? [])) {
+    if (!file?.path) continue;
     const isAbs = isAbsolutePath(file.path);
     const insideWorkspace = isAbs ? isPathInside(file.path, cwd) : true;
     if (baselineAvailable && insideWorkspace) continue;
@@ -294,6 +302,7 @@ export function collectFallbackFiles(
     result?: unknown;
   }>,
 ): ReviewFallbackFile[] {
+  if (!toolExecutions || typeof toolExecutions !== 'object') return [];
   const byPath = new Map<string, ReviewFallbackFile>();
   for (const ex of Object.values(toolExecutions)) {
     if (ex.toolName !== 'edit' && ex.toolName !== 'write') continue;

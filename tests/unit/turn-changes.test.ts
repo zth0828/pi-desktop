@@ -353,5 +353,18 @@ describe('isTurnCompleted', () => {
     const [turn] = groupLogicalTurns(messages);
     expect(isTurnCompleted(messages, turn, 0, 1, {}, true)).toBe(false);
   });
+
+  it('safely handles undefined or empty inputs across turn functions', () => {
+    expect(groupLogicalTurns(undefined as unknown as any)).toEqual([]);
+    expect(turnFinalResponseIndex(undefined as unknown as any, undefined as unknown as any)).toBeUndefined();
+    expect(turnTimeRange(undefined as unknown as any, undefined as unknown as any)).toEqual({});
+    expect(turnDurationMs(undefined as unknown as any, undefined as unknown as any, undefined as unknown as any)).toBeNull();
+    expect(collectTurnChanges(undefined as unknown as any, undefined as unknown as any)).toEqual({
+      files: [],
+      added: 0,
+      deleted: 0,
+    });
+    expect(isTurnCompleted(undefined as unknown as any, undefined as unknown as any, 0, 1, {}, false)).toBe(true);
+  });
 });
 

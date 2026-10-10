@@ -11,6 +11,12 @@ export interface ParsedSkillDoc {
 }
 
 export function parseSkillDocument(content: string): ParsedSkillDoc {
+  if (!content || typeof content !== 'string') {
+    return {
+      disableModelInvocation: false,
+      body: '',
+    };
+  }
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?$/);
   if (!match) {
     return {

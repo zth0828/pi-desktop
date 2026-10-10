@@ -36,6 +36,7 @@ export type AtToken = {
  * `@` 前必须是行首或空白；路径为连续的 `非空白@` 字符，或 `@"..."` 引用形式。
  */
 export function extractAtTokens(text: string): AtToken[] {
+  if (!text || typeof text !== 'string') return [];
   const tokens: AtToken[] = [];
   // (?:^|\s) 后 @ 开头；@"..." 或 @<非空白非@>+
   const re = /(^|\s)@("([^"\n]*)"|[^\s@]+)/g;
@@ -51,6 +52,7 @@ export function extractAtTokens(text: string): AtToken[] {
 
 /** 简单二进制嗅探：内容含 NUL 即视为二进制。 */
 export function isProbablyBinary(text: string): boolean {
+  if (!text || typeof text !== 'string') return false;
   return text.includes(String.fromCharCode(0));
 }
 
@@ -65,6 +67,7 @@ const IMAGE_MEDIA_TYPES: Record<string, string> = {
 
 /** 按扩展名判图片（pi 用魔数嗅探，壳从简；不支持的扩展返回 undefined 按文本处理）。 */
 export function imageMediaTypeForPath(filePath: string): string | undefined {
+  if (!filePath || typeof filePath !== 'string') return undefined;
   const dot = filePath.lastIndexOf('.');
   if (dot < 0) return undefined;
   return IMAGE_MEDIA_TYPES[filePath.slice(dot).toLowerCase()];
