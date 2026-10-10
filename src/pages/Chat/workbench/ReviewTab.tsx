@@ -398,7 +398,7 @@ export function ReviewWorkspace() {
                   {sessionOpen &&
                     sessionFiles.map((file) => (
                       <div
-                        className={`review-file${selected?.group === 'session' && selected.path === file.path ? ' selected' : ''}`}
+                        className={`review-file${selected?.group === 'session' && pathMapKey(file.path) === selectedKey ? ' selected' : ''}`}
                         data-testid="review-file"
                         key={`session:${file.path}`}
                       >
@@ -438,7 +438,7 @@ export function ReviewWorkspace() {
                       const baselineFile = isBaselineFile(file.path);
                       return (
                         <div
-                          className={`review-file${selected?.group === 'workspace' && selected.path === file.path ? ' selected' : ''}`}
+                          className={`review-file${selected?.group === 'workspace' && pathMapKey(file.path) === selectedKey ? ' selected' : ''}`}
                           data-testid="review-file"
                           key={`workspace:${file.path}`}
                         >
