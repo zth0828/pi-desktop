@@ -70,4 +70,11 @@ describe('git-api', () => {
     const branchRes = await getGitBranch(repoDir);
     expect(branchRes.branch).toBe('feature-test');
   });
+
+  it('空分支名或纯空白分支名拦截并返回错误', async () => {
+    const checkoutRes = await checkoutGitBranch(repoDir, '   ');
+    expect(checkoutRes.success).toBe(false);
+    expect(checkoutRes.error).toBe('invalid branch name');
+  });
 });
+

@@ -139,6 +139,10 @@ export async function checkoutGitBranch(
   cwd: string,
   branch: string,
 ): Promise<GitCheckoutResult> {
+  const targetBranch = (branch ?? '').trim();
+  if (!targetBranch) {
+    return { success: false, error: 'invalid branch name' };
+  }
   if (isCwdRunning(cwd)) {
     return { success: false, error: 'running' };
   }
@@ -152,11 +156,11 @@ export async function checkoutGitBranch(
       return { success: false, error: 'dirty' };
     }
     try {
-      await execGit(gitPaths.repoDir, ['switch', branch]);
+      await execGit(gitPaths.repoDir, ['switch', '--', targetBranch]);
     } catch {
-      await execGit(gitPaths.repoDir, ['checkout', branch]);
+      await execGit(gitPaths.repoDir, ['checkout', '--', targetBranch]);
     }
-    return { success: true, branch };
+    return { success: true, branch: targetBranch };
   } catch (err: unknown) {
     const gitErr = err as { stderr?: string; message?: string };
     const errorMsg = gitErr.stderr || gitErr.message || 'checkout failed';
