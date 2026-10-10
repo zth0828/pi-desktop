@@ -738,11 +738,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       dismissSessionCwdMissing: () => set({ sessionCwdMissing: null }),
 
       openWorkspaceFile: (rawPath) => {
-        const cwd = get().cwd?.replace(/\/$/, '');
-        const normalized = rawPath.replace(/\\/g, '/');
-        const path = cwd && normalized.startsWith(`${cwd}/`)
-          ? normalized.slice(cwd.length + 1)
-          : normalized;
+        const path = normalizeDisplayPath(rawPath, get().cwd);
         set({
           workspaceOpen: true,
           reviewOpen: false,

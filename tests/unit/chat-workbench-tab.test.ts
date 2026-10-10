@@ -40,4 +40,32 @@ describe('chat store workbench tab routing', () => {
       nonce: 2,
     });
   });
+
+  it('openWorkspaceFile 正确规范化跨平台工作区绝对路径并转换为相对路径', () => {
+    const store = createChatStore();
+    store.setState({ cwd: 'C:\\repo\\project' });
+
+    // Windows 反斜杠与大小写不敏感驱动器
+    store.getState().openWorkspaceFile('c:/repo/project/src/index.ts');
+    expect(store.getState().workspaceOpen).toBe(true);
+    expect(store.getState().reviewOpen).toBe(false);
+    expect(store.getState().workspaceFileRequest).toEqual({
+      path: 'src/index.ts',
+      nonce: 1,
+    });
+
+    // Windows 扩展前缀 (\\?\)
+    store.getState().openWorkspaceFile('\\\\?\\C:\\repo\\project\\src\\app.tsx');
+    expect(store.getState().workspaceFileRequest).toEqual({
+      path: 'src/app.tsx',
+      nonce: 2,
+    });
+
+    // 外部绝对路径保持原样
+    store.getState().openWorkspaceFile('D:\\other\\secret.txt');
+    expect(store.getState().workspaceFileRequest).toEqual({
+      path: 'D:/other/secret.txt',
+      nonce: 3,
+    });
+  });
 });
