@@ -21,6 +21,7 @@ import type { HostActionContext } from '../main/ipc/host-contract';
 import { samePath, stripWindowsExtendedPrefix } from '../utils/same-path';
 import { envWithUserPath } from '../utils/shell-env';
 import { normalizeLexicalPath } from '@shared/message-attachments';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 type GitResult = { code: number; stdout: string; stderr: string };
 
@@ -359,6 +360,9 @@ const CONFLICT_CODES = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']);
  * 将任意平台路径（Windows 反斜杠、绝对路径、macOS /private 别名）转换为相对于 cwd 的 Git POSIX 路径。
  */
 export function normalizeGitRelPath(cwd: string, rawPath: string): string {
+  if (!rawPath || typeof rawPath !== 'string' || !rawPath.trim()) {
+    return '';
+  }
   const cleanPath = normalizeLexicalPath(rawPath);
   const cleanCwd = normalizeLexicalPath(cwd);
   if (!cleanPath.startsWith('/') && !/^[a-zA-Z]:/.test(cleanPath)) {
@@ -436,6 +440,12 @@ export const reviewApi = {
   },
 
   getFileDiff: async (payload: ReviewFileDiffPayload, ctx?: HostActionContext): Promise<ReviewFileDiffResult> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return { available: false, reason: 'empty-path', path: payload?.path ?? '', diff: '' };
+    }
+    if (isWindowsDevicePath(payload.path)) {
+      return { available: false, reason: 'device-path', path: payload.path, diff: '' };
+    }
     const active = resolveRuntimeForContext(ctx);
     if (!active) {
       return { available: false, reason: 'not-started', path: payload.path, diff: '' };
@@ -449,6 +459,9 @@ export const reviewApi = {
       return { available: false, reason: failure ?? 'not-started', path: payload.path, diff: '' };
     }
     const targetPath = normalizeGitRelPath(active.cwd, payload.path);
+    if (!targetPath) {
+      return { available: false, reason: 'empty-path', path: payload.path, diff: '' };
+    }
     try {
       const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
       const r = await runGit(active.cwd, ['diff', '--no-renames', base.ref, cur, '--', targetPath], { env: base.gitEnv });
@@ -470,6 +483,12 @@ export const reviewApi = {
 
   /** 文件级回滚：baseline→当前 的整文件 diff 反向 apply（新增文件被删、删除文件被还原）。 */
   revertFile: async (payload: ReviewRevertFilePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return { success: false, error: 'empty path' };
+    }
+    if (isWindowsDevicePath(payload.path)) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'not-started' };
     if (hasCapturingCwd(active.cwd)) {
@@ -479,6 +498,7 @@ export const reviewApi = {
     const failure = findBaselineFailure(active.cwd);
     if (!base) return { success: false, error: failure ?? 'not-started' };
     const targetPath = normalizeGitRelPath(active.cwd, payload.path);
+    if (!targetPath) return { success: false, error: 'empty path' };
     try {
       if ((await conflictPaths(active.cwd, base)).has(targetPath)) {
         return { success: false, error: 'conflicted files cannot be reverted from Review' };
@@ -500,6 +520,15 @@ export const reviewApi = {
 
   /** hunk 级回滚：渲染层重建的单 hunk patch，直接 git apply -R（失败原文返回给 UI）。 */
   revertHunk: async (payload: ReviewRevertHunkPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
+      return { success: false, error: 'empty path' };
+    }
+    if (!payload?.patch || typeof payload.patch !== 'string' || !payload.patch.trim()) {
+      return { success: false, error: 'empty patch' };
+    }
+    if (isWindowsDevicePath(payload.path)) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'not-started' };
     if (hasCapturingCwd(active.cwd)) {
@@ -508,8 +537,8 @@ export const reviewApi = {
     const base = currentBaseline(active);
     const failure = findBaselineFailure(active.cwd);
     if (!base) return { success: false, error: failure ?? 'not-started' };
-    if (!payload.patch.trim()) return { success: false, error: 'empty patch' };
     const targetPath = normalizeGitRelPath(active.cwd, payload.path);
+    if (!targetPath) return { success: false, error: 'empty path' };
     try {
       if ((await conflictPaths(active.cwd, base)).has(targetPath)) {
         return { success: false, error: 'conflicted files cannot be reverted from Review' };

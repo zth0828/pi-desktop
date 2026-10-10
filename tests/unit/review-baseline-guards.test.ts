@@ -124,6 +124,56 @@ describe('review baseline guards and non-blocking capture', () => {
       expect(normalizeGitRelPath('C:/workspace', 'c:/workspace/../outside/a.ts')).toBe('c:/outside/a.ts');
       expect(normalizeGitRelPath('/tmp/project', '/tmp/project/nested/../../outside.txt')).toBe('/tmp/outside.txt');
     });
+
+    it('对空串或非字符串路径返回空字符串', () => {
+      expect(normalizeGitRelPath('/workspace', '')).toBe('');
+      expect(normalizeGitRelPath('/workspace', '   ')).toBe('');
+      // @ts-expect-error testing invalid rawPath
+      expect(normalizeGitRelPath('/workspace', undefined)).toBe('');
+    });
+  });
+
+  describe('reviewApi input guards', () => {
+    it('getFileDiff 对空路径或非法路径返回 empty-path 或 device-path', async () => {
+      // @ts-expect-error testing empty payload
+      const emptyPayload = await reviewApi.getFileDiff({});
+      expect(emptyPayload.available).toBe(false);
+      expect(emptyPayload.reason).toBe('empty-path');
+
+      const blankPath = await reviewApi.getFileDiff({ path: '   ' });
+      expect(blankPath.available).toBe(false);
+      expect(blankPath.reason).toBe('empty-path');
+
+      const devicePath = await reviewApi.getFileDiff({ path: 'CON' });
+      expect(devicePath.available).toBe(false);
+      expect(devicePath.reason).toBe('device-path');
+    });
+
+    it('revertFile 对空路径或设备路径拦截并返回错误', async () => {
+      // @ts-expect-error testing empty payload
+      const emptyPayload = await reviewApi.revertFile({});
+      expect(emptyPayload.success).toBe(false);
+      expect(emptyPayload.error).toBe('empty path');
+
+      const devicePath = await reviewApi.revertFile({ path: 'NUL' });
+      expect(devicePath.success).toBe(false);
+      expect(devicePath.error).toBe('device paths are not allowed');
+    });
+
+    it('revertHunk 对空路径、空 patch 或设备路径拦截并返回错误', async () => {
+      // @ts-expect-error testing empty payload
+      const emptyPayload = await reviewApi.revertHunk({});
+      expect(emptyPayload.success).toBe(false);
+      expect(emptyPayload.error).toBe('empty path');
+
+      const emptyPatch = await reviewApi.revertHunk({ path: 'src/index.ts', patch: '   ' });
+      expect(emptyPatch.success).toBe(false);
+      expect(emptyPatch.error).toBe('empty patch');
+
+      const devicePath = await reviewApi.revertHunk({ path: 'COM1', patch: 'patch content' });
+      expect(devicePath.success).toBe(false);
+      expect(devicePath.error).toBe('device paths are not allowed');
+    });
   });
 });
 
