@@ -5,6 +5,7 @@ import { stripWindowsExtendedPrefix } from './same-path';
 const DOS_DEVICE_REGEX = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\$|CONOUT\$)(?:\.|$)/i;
 
 export function isWindowsDevicePath(p: string): boolean {
+  if (!p || typeof p !== 'string') return false;
   if (p.startsWith('\\\\.\\') || p.startsWith('\\\\?\\') || p.startsWith('\\??\\') || p.startsWith('\\\\??\\')) return true;
   const normalized = p.replace(/\\/g, '/');
   if (/^(?:\/\/[.?]\/|\/\/\?\?\/|\/\?\?\/)/.test(normalized)) return true;

@@ -58,6 +58,13 @@ describe('resolveWorkspacePath', () => {
     await expect(resolveWorkspacePath(root, 'CONIN$')).rejects.toThrow('device paths are not allowed');
     await expect(resolveWorkspacePath(root, 'CONOUT$')).rejects.toThrow('device paths are not allowed');
   });
+
+  it('对空串、非字符串或 undefined 安全返回 false 而不抛错', () => {
+    expect(isWindowsDevicePath('')).toBe(false);
+    expect(isWindowsDevicePath(undefined as unknown as string)).toBe(false);
+    expect(isWindowsDevicePath(null as unknown as string)).toBe(false);
+    expect(isWindowsDevicePath(123 as unknown as string)).toBe(false);
+  });
 });
 
 describe('workspaceApi.readFile', () => {
