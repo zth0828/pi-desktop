@@ -54,4 +54,18 @@ describe('dialogApi', () => {
     const res = await dialogApi.save({});
     expect(res).toEqual({ canceled: true, filePath: undefined });
   });
+
+  it('剥离 defaultPath 中的 Windows 扩展前缀 (\\\\?\\)', async () => {
+    showOpenDialogMock.mockResolvedValueOnce({ canceled: false, filePaths: ['C:\\projects\\app'] });
+    await dialogApi.open({ defaultPath: '\\\\?\\C:\\projects\\app' });
+    expect(showOpenDialogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: 'C:\\projects\\app' }),
+    );
+
+    showSaveDialogMock.mockResolvedValueOnce({ canceled: false, filePath: 'C:\\projects\\app\\file.txt' });
+    await dialogApi.save({ defaultPath: '\\\\?\\C:\\projects\\app\\file.txt' });
+    expect(showSaveDialogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: 'C:\\projects\\app\\file.txt' }),
+    );
+  });
 });

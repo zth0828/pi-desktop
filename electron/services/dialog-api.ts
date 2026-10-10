@@ -8,6 +8,7 @@ import type {
 } from '@shared/host-api/contract';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { getMainWindow } from '../main/window-manager';
+import { stripWindowsExtendedPrefix } from '../utils/same-path';
 
 export const dialogApi = {
   open: async (payload: DialogOpenPayload, ctx?: HostActionContext): Promise<DialogOpenResult> => {
@@ -18,7 +19,7 @@ export const dialogApi = {
     if (win && !win.isVisible()) win.show();
     const options = {
       title: payload.title,
-      defaultPath: payload.defaultPath,
+      defaultPath: payload.defaultPath ? stripWindowsExtendedPrefix(payload.defaultPath) : undefined,
       properties: payload.properties ?? ['openDirectory' as const],
     };
     const result = win
@@ -31,7 +32,7 @@ export const dialogApi = {
     if (win && !win.isVisible()) win.show();
     const options = {
       title: payload.title,
-      defaultPath: payload.defaultPath,
+      defaultPath: payload.defaultPath ? stripWindowsExtendedPrefix(payload.defaultPath) : undefined,
       filters: payload.filters,
     };
     const result = win
