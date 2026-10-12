@@ -174,8 +174,8 @@ describe('walkGitignoreAware（fd 不可用时的 @ 补全回退）', () => {
     await walkGitignoreAware(null, '', out, []);
     expect(out).toEqual([]);
 
-    // @ts-expect-error testing missing options
-    await walkGitignoreAware(root, '', out, []);
+    // @ts-expect-error testing invalid options
+    await walkGitignoreAware(root, '', out, [], null);
     expect(Array.isArray(out)).toBe(true);
   });
 });

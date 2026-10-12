@@ -24,7 +24,6 @@ describe('projectTrustApi', () => {
   });
 
   it('rejects invalid or device path in set', async () => {
-    // @ts-expect-error testing missing path
     const emptyRes = await projectTrustApi.set({ path: '', decision: true });
     expect(emptyRes.success).toBe(false);
     expect(emptyRes.error).toBe('invalid-path');
