@@ -34,6 +34,7 @@ export function isIgnored(levels: IgnoreLevel[], rel: string): boolean {
   if (!Array.isArray(levels) || !rel || typeof rel !== 'string') return false;
   let ignored = false;
   for (const level of levels) {
+    if (!level || typeof level.relDir !== 'string' || !level.matcher || typeof level.matcher.test !== 'function') continue;
     const relFromLevel = level.relDir === ''
       ? rel
       : rel.startsWith(level.relDir + '/')
@@ -62,10 +63,14 @@ export async function walkGitignoreAware(
   dir: string,
   out: string[],
   levels: IgnoreLevel[],
-  options: WalkOptions,
+  options?: WalkOptions,
 ): Promise<void> {
-  const { maxFiles, excludedDirs = DEFAULT_EXCLUDED_DIRS } = options;
-  if (out.length >= maxFiles) return;
+  const maxFiles = typeof options?.maxFiles === 'number' && Number.isFinite(options.maxFiles) && options.maxFiles > 0
+    ? options.maxFiles
+    : 200;
+  const excludedDirs = options?.excludedDirs instanceof Set ? options.excludedDirs : DEFAULT_EXCLUDED_DIRS;
+  if (!Array.isArray(out) || out.length >= maxFiles) return;
+  if (!root || typeof root !== 'string') return;
   let entries;
   try {
     entries = await readdir(path.join(root, dir), { withFileTypes: true });

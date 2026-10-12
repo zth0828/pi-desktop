@@ -165,6 +165,18 @@ describe('walkGitignoreAware（fd 不可用时的 @ 补全回退）', () => {
     expect(isIgnored(undefined as unknown as any, 'src')).toBe(false);
     expect(isIgnored([] as any, undefined as unknown as string)).toBe(false);
     expect(isIgnored([] as any, 123 as unknown as string)).toBe(false);
+    expect(isIgnored([null as any, {} as any], 'src')).toBe(false);
+  });
+
+  it('walkGitignoreAware 安全处理缺省 options 与空 root', async () => {
+    const out: string[] = [];
+    // @ts-expect-error testing missing root
+    await walkGitignoreAware(null, '', out, []);
+    expect(out).toEqual([]);
+
+    // @ts-expect-error testing missing options
+    await walkGitignoreAware(root, '', out, []);
+    expect(Array.isArray(out)).toBe(true);
   });
 });
 
