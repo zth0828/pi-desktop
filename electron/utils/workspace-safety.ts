@@ -6,12 +6,15 @@ import { realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathsEqual, stripWindowsExtendedPrefix } from './same-path';
+import { isWindowsDevicePath } from './workspace-path';
 
 export type RiskyWorkspaceReason = 'home' | 'root';
 
 function resolveExisting(target: string): string | null {
   try {
-    return stripWindowsExtendedPrefix(realpathSync(stripWindowsExtendedPrefix(target)));
+    const stripped = stripWindowsExtendedPrefix(target);
+    if (isWindowsDevicePath(stripped)) return null;
+    return stripWindowsExtendedPrefix(realpathSync(stripped));
   } catch {
     // 目录不存在/无权限：放行，由 runtime 的正常报错路径处理
     return null;

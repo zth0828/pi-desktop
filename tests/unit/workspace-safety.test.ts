@@ -43,4 +43,10 @@ describe('riskyWorkspaceReason', () => {
     expect(riskyWorkspaceReason(undefined as unknown as string)).toBeNull();
     expect(riskyWorkspaceReason(123 as unknown as string)).toBeNull();
   });
+
+  it('Windows 设备路径安全返回 null 而不触发 realpath', () => {
+    expect(riskyWorkspaceReason('CON')).toBeNull();
+    expect(riskyWorkspaceReason('\\\\.\\pipe\\foo')).toBeNull();
+    expect(riskyWorkspaceReason('NUL')).toBeNull();
+  });
 });
