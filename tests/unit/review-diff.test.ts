@@ -473,8 +473,11 @@ describe('isAbsolutePath & isPathInside', () => {
     expect(isPathInside(undefined as unknown as string, '/workspace')).toBe(false);
     expect(isPathInside('/workspace/foo', undefined)).toBe(false);
     expect(sessionChangeFiles(undefined as unknown as any)).toEqual([]);
+    expect(sessionChangeFiles({ call1: null as any, call2: undefined as any })).toEqual([]);
     expect(collectFallbackFiles(undefined as unknown as any)).toEqual([]);
+    expect(collectFallbackFiles({ call1: null as any, call2: undefined as any })).toEqual([]);
     expect(mergeReviewFiles(undefined, true, undefined as unknown as any, undefined as unknown as any)).toEqual([]);
+    expect(mergeReviewFiles(undefined, true, null as any, null as any)).toEqual([]);
   });
 });
 

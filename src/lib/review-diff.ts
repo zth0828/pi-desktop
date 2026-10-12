@@ -209,6 +209,7 @@ export function sessionChangeFiles(
   if (!toolExecutions || typeof toolExecutions !== 'object') return [];
   const byPath = new Map<string, ReviewSessionFile>();
   for (const ex of Object.values(toolExecutions)) {
+    if (!ex || typeof ex !== 'object') continue;
     if (ex.toolName !== 'edit' && ex.toolName !== 'write') continue;
     if (ex.status !== 'success') continue;
     const args = ex.args as Record<string, unknown> | undefined;
@@ -267,12 +268,12 @@ export function mergeReviewFiles(
   toolFiles: (ReviewFallbackFile | ReviewSessionFile)[],
 ): ReviewListEntry[] {
   const byPath = new Map<string, ReviewListEntry>();
-  for (const file of (baselineFiles ?? [])) {
+  for (const file of (Array.isArray(baselineFiles) ? baselineFiles : [])) {
     if (!file?.path) continue;
     const key = pathMapKey(file.path);
     byPath.set(key, file);
   }
-  for (const file of (toolFiles ?? [])) {
+  for (const file of (Array.isArray(toolFiles) ? toolFiles : [])) {
     if (!file?.path) continue;
     const isAbs = isAbsolutePath(file.path);
     const insideWorkspace = isAbs ? isPathInside(file.path, cwd) : true;
@@ -306,6 +307,7 @@ export function collectFallbackFiles(
   if (!toolExecutions || typeof toolExecutions !== 'object') return [];
   const byPath = new Map<string, ReviewFallbackFile>();
   for (const ex of Object.values(toolExecutions)) {
+    if (!ex || typeof ex !== 'object') continue;
     if (ex.toolName !== 'edit' && ex.toolName !== 'write') continue;
     if (ex.status !== 'success') continue;
     const args = ex.args as Record<string, unknown> | undefined;
