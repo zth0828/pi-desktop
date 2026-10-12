@@ -5,6 +5,7 @@ import type {
 import { getElectronStore } from '../utils/electron-store';
 import { riskyWorkspaceReason } from '../utils/workspace-safety';
 import { stripWindowsExtendedPrefix } from '../utils/same-path';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 import { rebuildNativeMacMenu } from '../main/menu';
 import { rebuildTrayMenu } from '../main/tray';
 
@@ -36,6 +37,7 @@ export const settingsApi = {
       appVersionCheckAssetName: store.get('appVersionCheckAssetName') as string | undefined,
       appVersionCheckDownloadedPath: store.get('appVersionCheckDownloadedPath') as string | undefined,
       appVersionCheckStagedAppPath: store.get('appVersionCheckStagedAppPath') as string | undefined,
+      appVersionCheckStagedPatchPath: store.get('appVersionCheckStagedPatchPath') as string | undefined,
       appVersionCheckSkippedVersion: store.get('appVersionCheckSkippedVersion') as string | undefined,
       appVersionCheckNoticedLatest: store.get('appVersionCheckNoticedLatest') as string | undefined,
       appVersionCheckNoticedAt: store.get('appVersionCheckNoticedAt') as number | undefined,
@@ -60,8 +62,14 @@ export const settingsApi = {
     const store = await getElectronStore();
     // 工作区安全：主目录 / 盘符根不能作为持久化工作区（agent 会扫描个人全部文件）。
     // 这里拒绝写入，两个 UI 入口（Chat 空态选择 / 设置页）都会拿到失败并提示。
-    if (payload.key === 'workspaceCwd' && typeof payload.value === 'string') {
-      const cleanValue = stripWindowsExtendedPrefix(payload.value);
+    if (payload.key === 'workspaceCwd' && payload.value !== undefined) {
+      if (typeof payload.value !== 'string' || !payload.value.trim()) {
+        return { success: false, error: 'invalid-workspace-path' };
+      }
+      const cleanValue = stripWindowsExtendedPrefix(payload.value.trim());
+      if (isWindowsDevicePath(cleanValue)) {
+        return { success: false, error: 'device paths are not allowed' };
+      }
       const risky = riskyWorkspaceReason(cleanValue);
       if (risky) return { success: false, error: `risky-workspace-${risky}` };
       payload = { ...payload, value: cleanValue };
