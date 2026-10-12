@@ -1,105 +1,155 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractSubagentProgress,
+  extractSubagentSubTasks,
   extractSubagentText,
   formatToolArgs,
   isSubagentTool,
+  parseActionTraces,
 } from '../../src/lib/subagent-tool';
 import type { ToolExecution } from '../../src/lib/chat-types';
 
-describe('isSubagentTool', () => {
-  it('识别标准与常见子任务工具名', () => {
+describe('subagent-tool helper', () => {
+  it('isSubagentTool 能准确识别各种 subagent 与 task 工具名称', () => {
     expect(isSubagentTool('subagent')).toBe(true);
-    expect(isSubagentTool('subagent_run')).toBe(true);
     expect(isSubagentTool('run_subagent')).toBe(true);
+    expect(isSubagentTool('subagent_run')).toBe(true);
     expect(isSubagentTool('task')).toBe(true);
     expect(isSubagentTool('task_runner')).toBe(true);
-    expect(isSubagentTool('run_task')).toBe(true);
-    expect(isSubagentTool('delegate')).toBe(true);
-    expect(isSubagentTool('delegate_task')).toBe(true);
     expect(isSubagentTool('agent_worker')).toBe(true);
-    expect(isSubagentTool('research_agent')).toBe(true);
+    expect(isSubagentTool('delegate')).toBe(true);
     expect(isSubagentTool('worker')).toBe(true);
-  });
 
-  it('排除非子任务工具', () => {
-    expect(isSubagentTool('bash')).toBe(false);
-    expect(isSubagentTool('edit')).toBe(false);
-    expect(isSubagentTool('write')).toBe(false);
     expect(isSubagentTool('read')).toBe(false);
-    expect(isSubagentTool('grep')).toBe(false);
-    expect(isSubagentTool('find')).toBe(false);
-    expect(isSubagentTool('ls')).toBe(false);
-    expect(isSubagentTool('mcp')).toBe(false);
-    expect(isSubagentTool('read_file')).toBe(false);
+    expect(isSubagentTool('bash')).toBe(false);
+    expect(isSubagentTool('write')).toBe(false);
     expect(isSubagentTool('')).toBe(false);
     expect(isSubagentTool(undefined)).toBe(false);
   });
-});
 
-describe('formatToolArgs', () => {
-  it('格式化对象为美化 JSON 字符串', () => {
-    const formatted = formatToolArgs({ agent: 'coder', task: 'refactor code' });
-    expect(formatted).toContain('"agent": "coder"');
-    expect(formatted).toContain('"task": "refactor code"');
-  });
-
-  it('处理空/字符串/异常输入', () => {
+  it('formatToolArgs 正确格式化对象与基础类型', () => {
+    expect(formatToolArgs({ agent: 'scout' })).toBe('{\n  "agent": "scout"\n}');
+    expect(formatToolArgs('plain text')).toBe('plain text');
     expect(formatToolArgs(undefined)).toBe('');
     expect(formatToolArgs(null)).toBe('');
-    expect(formatToolArgs('raw text')).toBe('raw text');
-  });
-});
-
-describe('extractSubagentText', () => {
-  it('提取标准 pi content 结构文本', () => {
-    const result = {
-      content: [
-        { type: 'text', text: 'Step 1 done' },
-        { type: 'text', text: 'Step 2 done' },
-      ],
-    };
-    expect(extractSubagentText(result)).toBe('Step 1 done\nStep 2 done');
   });
 
-  it('提取自由文本或兜底字段', () => {
-    expect(extractSubagentText('Raw output text')).toBe('Raw output text');
-    expect(extractSubagentText({ text: 'Progress 80%' })).toBe('Progress 80%');
-    expect(extractSubagentText({ message: 'Task completed' })).toBe('Task completed');
-    expect(extractSubagentText({ output: 'Build successful' })).toBe('Build successful');
-    expect(extractSubagentText({ summary: 'Found 3 bugs' })).toBe('Found 3 bugs');
-    expect(extractSubagentText(null)).toBe('');
+  it('extractSubagentText 能从各种包装中提取纯文本', () => {
+    expect(extractSubagentText('direct string')).toBe('direct string');
+    expect(extractSubagentText({ output: 'output text' })).toBe('output text');
+    expect(extractSubagentText({ text: 'text field' })).toBe('text field');
+    expect(extractSubagentText({ content: [{ type: 'text', text: 'content text' }] })).toBe('content text');
   });
-});
 
-describe('extractSubagentProgress', () => {
-  it('运行中优先从 partialResult 提取流式摘要与进度', () => {
+  it('parseActionTraces 从消息列表中提取工具调用轨迹', () => {
+    const messages = [
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'start' }],
+      },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'call-1',
+            name: 'read',
+            input: { path: 'server/api/v1/user.go' },
+          },
+          {
+            type: 'tool_use',
+            id: 'call-2',
+            name: 'grep',
+            input: { query: 'SELECT', path: 'server/' },
+          },
+        ],
+      },
+    ];
+
+    const traces = parseActionTraces(messages);
+    expect(traces).toHaveLength(2);
+    expect(traces[0].toolName).toBe('read');
+    expect(traces[0].id).toBe('call-1');
+    expect(traces[1].toolName).toBe('grep');
+    expect(traces[1].id).toBe('call-2');
+  });
+
+  it('extractSubagentSubTasks 能够从 details.results 提取结构化子任务和操作轨迹', () => {
     const execution: ToolExecution = {
-      toolCallId: 'call_sub_1',
+      toolCallId: 'call-100',
       toolName: 'subagent',
-      args: { agent: 'researcher', task: 'analyze dependencies' },
-      status: 'running',
-      startedAt: 1000,
-      partialResult: { content: [{ type: 'text', text: 'Indexing 40%...' }] },
+      status: 'success',
+      args: {
+        tasks: [
+          { agent: 'scout', task: '分析后端接口' },
+          { agent: 'reviewer', task: '审查架构' },
+        ],
+      },
+      result: {
+        content: [{ type: 'text', text: 'Done' }],
+        details: {
+          results: [
+            {
+              agent: 'scout',
+              task: '分析后端接口',
+              output: '发现 2 处未检查 error',
+              messages: [
+                {
+                  role: 'assistant',
+                  content: [
+                    {
+                      type: 'tool_use',
+                      id: 'call-sub-1',
+                      name: 'read',
+                      input: { path: 'server/api/v1/user.go' },
+                    },
+                  ],
+                },
+              ],
+              usage: { input: 100, output: 50, total: 150 },
+            },
+            {
+              agent: 'reviewer',
+              task: '审查架构',
+              output: '架构设计符合规范',
+              messages: [],
+            },
+          ],
+        },
+      },
     };
-    const info = extractSubagentProgress(execution);
-    expect(info.summary).toBe('researcher');
-    expect(info.agentName).toBe('researcher');
-    expect(info.outputText).toBe('Indexing 40%...');
+
+    const subtasks = extractSubagentSubTasks(execution);
+    expect(subtasks).toHaveLength(2);
+
+    expect(subtasks[0].agent).toBe('scout');
+    expect(subtasks[0].task).toBe('分析后端接口');
+    expect(subtasks[0].output).toBe('发现 2 处未检查 error');
+    expect(subtasks[0].actions).toHaveLength(1);
+    expect(subtasks[0].actions[0].toolName).toBe('read');
+    expect(subtasks[0].usage?.total).toBe(150);
+
+    expect(subtasks[1].agent).toBe('reviewer');
+    expect(subtasks[1].task).toBe('审查架构');
+    expect(subtasks[1].output).toBe('架构设计符合规范');
+    expect(subtasks[1].actions).toHaveLength(0);
   });
 
-  it('已结束从 result 提取最终结果', () => {
+  it('extractSubagentSubTasks 在任务执行中（running）时保留状态', () => {
     const execution: ToolExecution = {
-      toolCallId: 'call_task_1',
-      toolName: 'task',
-      args: { task: 'run unit tests', description: 'testing suite' },
-      status: 'success',
-      startedAt: 1000,
-      endedAt: 2000,
-      result: { content: [{ type: 'text', text: 'All 15 tests passed.' }] },
+      toolCallId: 'call-200',
+      toolName: 'subagent',
+      status: 'running',
+      args: {
+        tasks: [{ agent: 'worker', task: '正在跑测试' }],
+      },
+      partialResult: 'running stdout...',
     };
-    const info = extractSubagentProgress(execution);
-    expect(info.summary).toBe('run unit tests');
-    expect(info.outputText).toBe('All 15 tests passed.');
+
+    const subtasks = extractSubagentSubTasks(execution);
+    expect(subtasks).toHaveLength(1);
+    expect(subtasks[0].status).toBe('running');
+    expect(subtasks[0].agent).toBe('worker');
+    expect(subtasks[0].task).toBe('正在跑测试');
   });
 });

@@ -80,9 +80,10 @@ export function extractSubagentProgress(execution: ToolExecution): SubagentProgr
     }
   }
 
-  const outputSource = execution.status === 'running' && execution.partialResult !== undefined
-    ? execution.partialResult
-    : execution.result;
+  const outputSource =
+    execution.status === 'running' && execution.partialResult !== undefined
+      ? execution.partialResult
+      : execution.result;
 
   const outputText = extractSubagentText(outputSource);
 
@@ -91,4 +92,220 @@ export function extractSubagentProgress(execution: ToolExecution): SubagentProgr
     agentName,
     outputText,
   };
+}
+
+/**
+ * 子任务内部执行的工具调用轨迹记录。
+ */
+export interface SubagentActionTrace {
+  id: string;
+  toolName: string;
+  summary: string;
+  args?: unknown;
+}
+
+/**
+ * 结构化的单项子任务信息。
+ */
+export interface SubagentSubTask {
+  id: string;
+  index: number;
+  agent: string;
+  task: string;
+  status: 'running' | 'success' | 'error';
+  output: string;
+  actions: SubagentActionTrace[];
+  usage?: {
+    input?: number;
+    output?: number;
+    total?: number;
+  };
+}
+
+/**
+ * 从消息历史记录中解析出工具调用（tool_use）轨迹。
+ */
+export function parseActionTraces(messages: unknown): SubagentActionTrace[] {
+  if (!Array.isArray(messages)) return [];
+  const traces: SubagentActionTrace[] = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i] as {
+      role?: string;
+      content?: unknown;
+    };
+    if (!msg || typeof msg !== 'object') continue;
+
+    // 只关注 assistant 侧发起工具调用的消息
+    if (Array.isArray(msg.content)) {
+      for (let j = 0; j < msg.content.length; j++) {
+        const item = msg.content[j] as {
+          type?: string;
+          id?: string;
+          name?: string;
+          input?: unknown;
+          args?: unknown;
+        };
+        if (item && item.type === 'tool_use' && item.name) {
+          const toolName = item.name;
+          const inputArgs = item.input ?? item.args;
+          const summary = toolSummary(toolName, inputArgs) ?? formatToolArgs(inputArgs).slice(0, 80);
+          traces.push({
+            id: item.id || `trace-${i}-${j}`,
+            toolName,
+            summary: summary || toolName,
+            args: inputArgs,
+          });
+        }
+      }
+    }
+  }
+
+  return traces;
+}
+
+/**
+ * 从 ToolExecution 解析出所有拆分的子任务及其内部轨迹与独立输出。
+ * 支持 pi-subagents 官方标准的 details.results，以及 tasks/chain 声明。
+ */
+export function extractSubagentSubTasks(execution: ToolExecution): SubagentSubTask[] {
+  const args = execution.args && typeof execution.args === 'object'
+    ? (execution.args as Record<string, unknown>)
+    : null;
+
+  // 1. 从参数定义中提取所有子任务目标声明
+  interface DeclaredTask {
+    agent: string;
+    task: string;
+  }
+  const declaredList: DeclaredTask[] = [];
+
+  const rawTasks = args?.tasks ?? args?.subtasks ?? args?.chain;
+  if (Array.isArray(rawTasks)) {
+    for (const item of rawTasks) {
+      if (typeof item === 'string') {
+        declaredList.push({ agent: 'subagent', task: item });
+      } else if (item && typeof item === 'object') {
+        const rec = item as Record<string, unknown>;
+        const agent = (typeof rec.agent === 'string' && rec.agent.trim())
+          ? rec.agent.trim()
+          : (typeof rec.name === 'string' && rec.name.trim())
+            ? rec.name.trim()
+            : 'subagent';
+        const task = (typeof rec.task === 'string' && rec.task.trim())
+          ? rec.task.trim()
+          : (typeof rec.prompt === 'string' && rec.prompt.trim())
+            ? rec.prompt.trim()
+            : (typeof rec.instruction === 'string' && rec.instruction.trim())
+              ? rec.instruction.trim()
+              : '';
+        declaredList.push({ agent, task });
+      }
+    }
+  } else if (args) {
+    const singleTask = (typeof args.task === 'string' && args.task.trim())
+      ? args.task.trim()
+      : (typeof args.prompt === 'string' && args.prompt.trim())
+        ? args.prompt.trim()
+        : '';
+    if (singleTask) {
+      const singleAgent = (typeof args.agent === 'string' && args.agent.trim())
+        ? args.agent.trim()
+        : 'subagent';
+      declaredList.push({ agent: singleAgent, task: singleTask });
+    }
+  }
+
+  // 2. 从 result / partialResult 中提取返回的执行详情
+  const resultSource = execution.result ?? execution.partialResult;
+  let resultsFromDetails: Array<Record<string, unknown>> = [];
+
+  if (resultSource && typeof resultSource === 'object') {
+    const resObj = resultSource as Record<string, unknown>;
+    const details = resObj.details;
+    if (details && typeof details === 'object') {
+      const detObj = details as Record<string, unknown>;
+      if (Array.isArray(detObj.results)) {
+        resultsFromDetails = detObj.results as Array<Record<string, unknown>>;
+      }
+    } else if (Array.isArray(resObj.results)) {
+      resultsFromDetails = resObj.results as Array<Record<string, unknown>>;
+    }
+  }
+
+  // 3. 构建聚合结果列表
+  const subTasks: SubagentSubTask[] = [];
+
+  // 如果有结构化详情结果，优先以此为基准建立子任务
+  if (resultsFromDetails.length > 0) {
+    resultsFromDetails.forEach((res, index) => {
+      const agent = (typeof res.agent === 'string' && res.agent.trim())
+        ? res.agent.trim()
+        : declaredList[index]?.agent ?? 'subagent';
+      const task = (typeof res.task === 'string' && res.task.trim())
+        ? res.task.trim()
+        : declaredList[index]?.task ?? '';
+      const output = extractSubagentText(res.output ?? res.content ?? res.result ?? res);
+      const actions = parseActionTraces(res.messages);
+
+      const usage = res.usage && typeof res.usage === 'object'
+        ? (res.usage as { input?: number; output?: number; total?: number })
+        : undefined;
+
+      const status: SubagentSubTask['status'] = execution.status === 'running'
+        ? 'running'
+        : res.error || execution.status === 'error'
+          ? 'error'
+          : 'success';
+
+      subTasks.push({
+        id: `subtask-${execution.toolCallId}-${index}`,
+        index,
+        agent,
+        task,
+        status,
+        output,
+        actions,
+        usage,
+      });
+    });
+  } else if (declaredList.length > 0) {
+    // 只有声明任务（例如执行中或纯文本返回）
+    const totalOutput = extractSubagentText(resultSource);
+    declaredList.forEach((decl, index) => {
+      // 只有单任务时直接绑定完整输出；多任务未拆分时只在第一个挂载或保留为空
+      const output = declaredList.length === 1 ? totalOutput : '';
+      subTasks.push({
+        id: `subtask-${execution.toolCallId}-${index}`,
+        index,
+        agent: decl.agent,
+        task: decl.task,
+        status: execution.status === 'running'
+          ? 'running'
+          : execution.status === 'error' || execution.interrupted
+            ? 'error'
+            : 'success',
+        output,
+        actions: [],
+      });
+    });
+  } else {
+    // 退化兼容单任务
+    const progress = extractSubagentProgress(execution);
+    subTasks.push({
+      id: `subtask-${execution.toolCallId}-0`,
+      index: 0,
+      agent: progress.agentName ?? 'subagent',
+      task: progress.summary,
+      status: execution.status === 'running'
+        ? 'running'
+        : execution.status === 'error' || execution.interrupted
+          ? 'error'
+          : 'success',
+      output: progress.outputText,
+      actions: [],
+    });
+  }
+
+  return subTasks;
 }

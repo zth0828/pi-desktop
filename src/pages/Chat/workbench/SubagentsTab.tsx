@@ -13,12 +13,165 @@ import {
 import { formatDuration } from '../../../lib/tool-display';
 import {
   extractSubagentProgress,
+  extractSubagentSubTasks,
   formatToolArgs,
   isSubagentTool,
+  type SubagentSubTask,
 } from '../../../lib/subagent-tool';
+import { Markdown } from '../../../components/Markdown';
 import { usePaneChatStore } from '../chat-store-context';
 
 export type SubagentFilter = 'all' | 'running' | 'completed' | 'failed';
+
+function SubTaskCard({
+  task,
+  copiedId,
+  onCopy,
+}: {
+  task: SubagentSubTask;
+  copiedId: string | null;
+  onCopy: (text: string, id: string, e: MouseEvent) => void;
+}) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(true);
+  const [traceExpanded, setTraceExpanded] = useState(false);
+  const taskCopyKey = `${task.id}-task`;
+  const resultCopyKey = `${task.id}-result`;
+
+  return (
+    <div className={`subagent-task-card ${task.status}`} data-testid={`subtask-card-${task.id}`}>
+      <div
+        className="subagent-task-header"
+        onClick={() => setExpanded((v) => !v)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setExpanded((v) => !v);
+          }
+        }}
+      >
+        <span className="subagent-task-chevron">
+          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        </span>
+        <span className="subagent-task-agent-badge font-mono">{task.agent}</span>
+        <span className="subagent-task-title" title={task.task}>
+          {task.task.slice(0, 120) || t('workspace.subagentTask')}
+        </span>
+        <div className="subagent-task-header-meta">
+          {task.actions.length > 0 && (
+            <span className="subagent-task-actions-badge">
+              {t('workspace.subagentActions', { count: task.actions.length })}
+            </span>
+          )}
+          {task.usage?.total ? (
+            <span className="subagent-task-usage-badge font-mono">
+              {task.usage.total.toLocaleString()} tokens
+            </span>
+          ) : null}
+          {task.status === 'running' && (
+            <span className="subagent-status-badge running">
+              <span className="subagent-spinner" />
+              {t('workspace.subagentRunning')}
+            </span>
+          )}
+          {task.status === 'success' && (
+            <span className="subagent-status-badge success">
+              <Check size={11} strokeWidth={2.5} />
+            </span>
+          )}
+          {task.status === 'error' && (
+            <span className="subagent-status-badge error">
+              <AlertCircle size={11} />
+            </span>
+          )}
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="subagent-task-body">
+          {task.task && (
+            <div className="subagent-task-desc-section">
+              <div className="subagent-task-section-bar">
+                <span className="subagent-task-section-label">{t('workspace.subagentTask')}</span>
+                <button
+                  type="button"
+                  className="subagent-copy-btn"
+                  onClick={(e) => onCopy(task.task, taskCopyKey, e)}
+                  title={t('workspace.subagentCopyTask')}
+                >
+                  {copiedId === taskCopyKey ? <Check size={11} /> : <Copy size={11} />}
+                  <span>
+                    {copiedId === taskCopyKey ? t('workspace.subagentCopied') : t('workspace.subagentCopyTask')}
+                  </span>
+                </button>
+              </div>
+              <div className="subagent-task-desc-content">
+                <Markdown text={task.task} />
+              </div>
+            </div>
+          )}
+
+          {task.actions.length > 0 && (
+            <div className="subagent-task-trace-section">
+              <div
+                className="subagent-task-section-bar clickable"
+                onClick={() => setTraceExpanded((v) => !v)}
+              >
+                <div className="subagent-task-section-left">
+                  {traceExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  <span className="subagent-task-section-label">{t('workspace.subagentTrace')}</span>
+                  <span className="subagent-task-trace-count">({task.actions.length})</span>
+                </div>
+              </div>
+              {traceExpanded && (
+                <div className="subagent-trace-list font-mono">
+                  {task.actions.map((act) => (
+                    <div key={act.id} className="subagent-trace-item" title={act.summary}>
+                      <span className="subagent-trace-tool">{act.toolName}</span>
+                      <span className="subagent-trace-summary">{act.summary}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {(task.output || task.status === 'running') && (
+            <div className="subagent-task-result-section">
+              <div className="subagent-task-section-bar">
+                <span className="subagent-task-section-label">
+                  {task.status === 'running' ? t('chat.tool.partialOutput') : t('workspace.subagentResult')}
+                </span>
+                {task.output && (
+                  <button
+                    type="button"
+                    className="subagent-copy-btn"
+                    onClick={(e) => onCopy(task.output, resultCopyKey, e)}
+                    title={t('workspace.subagentCopyResult')}
+                  >
+                    {copiedId === resultCopyKey ? <Check size={11} /> : <Copy size={11} />}
+                    <span>
+                      {copiedId === resultCopyKey ? t('workspace.subagentCopied') : t('workspace.subagentCopyResult')}
+                    </span>
+                  </button>
+                )}
+              </div>
+              <div className="subagent-task-result-content" data-testid="subagent-output">
+                {task.output ? (
+                  <Markdown text={task.output} />
+                ) : (
+                  <span className="cursor-blink">▍</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function SubagentsTab() {
   const { t } = useTranslation();
@@ -27,6 +180,7 @@ export function SubagentsTab() {
   const [filter, setFilter] = useState<SubagentFilter>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showRawArgs, setShowRawArgs] = useState<Record<string, boolean>>({});
 
   // 收集所有子任务/subagent 工具执行记录，按开始时间倒序
   const allSubagents = useMemo(() => {
@@ -130,8 +284,10 @@ export function SubagentsTab() {
             const isSuccess = item.status === 'success';
             const open = expandedId === item.toolCallId || isRunning;
             const progress = extractSubagentProgress(item);
+            const subTasks = extractSubagentSubTasks(item);
             const duration = formatDuration(item.startedAt, item.endedAt);
             const hasArgs = Boolean(item.args && typeof item.args === 'object' && Object.keys(item.args).length > 0);
+            const rawArgsVisible = showRawArgs[item.toolCallId] ?? false;
 
             return (
               <div
@@ -233,40 +389,49 @@ export function SubagentsTab() {
 
                 {open && (
                   <div className="subagent-item-body">
-                    {hasArgs && (
-                      <div className="subagent-section">
-                        <div className="subagent-section-title">{t('chat.tool.parameters')}</div>
-                        <pre className="subagent-args-block custom-scroll font-mono">
-                          {formatToolArgs(item.args)}
-                        </pre>
+                    {/* 结构化子任务卡片列表 */}
+                    {subTasks.length > 0 && (
+                      <div className="subagent-tasks-container">
+                        <div className="subagent-tasks-header">
+                          <span className="subagent-tasks-title">
+                            {t('workspace.subagentTasks')} ({subTasks.length})
+                          </span>
+                        </div>
+                        <div className="subagent-tasks-list">
+                          {subTasks.map((task) => (
+                            <SubTaskCard
+                              key={task.id}
+                              task={task}
+                              copiedId={copiedId}
+                              onCopy={handleCopy}
+                            />
+                          ))}
+                        </div>
                       </div>
                     )}
 
-                    {(progress.outputText || isRunning) && (
-                      <div className="subagent-section">
-                        <div className="subagent-section-bar">
-                          <span className="subagent-section-title">
-                            {isRunning ? t('chat.tool.partialOutput') : t('chat.tool.result')}
-                          </span>
-                          {progress.outputText && (
-                            <button
-                              type="button"
-                              className="subagent-copy-btn"
-                              onClick={(e) => handleCopy(progress.outputText, item.toolCallId, e)}
-                            >
-                              {copiedId === item.toolCallId ? <Check size={11} /> : <Copy size={11} />}
-                              <span>
-                                {copiedId === item.toolCallId
-                                  ? t('workspace.commandsCopied')
-                                  : t('workspace.commandsCopyOutput')}
-                              </span>
-                            </button>
-                          )}
+                    {/* 原始参数折叠面板（便于排查底层调用） */}
+                    {hasArgs && (
+                      <div className="subagent-raw-args-section">
+                        <div
+                          className="subagent-raw-args-toggle"
+                          onClick={() =>
+                            setShowRawArgs((prev) => ({
+                              ...prev,
+                              [item.toolCallId]: !rawArgsVisible,
+                            }))
+                          }
+                          role="button"
+                          tabIndex={0}
+                        >
+                          {rawArgsVisible ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          <span>{t('chat.tool.parameters')}</span>
                         </div>
-                        <pre className="subagent-output-block custom-scroll font-mono" data-testid="subagent-output">
-                          {progress.outputText || ''}
-                          {isRunning && <span className="cursor-blink">▍</span>}
-                        </pre>
+                        {rawArgsVisible && (
+                          <pre className="subagent-args-block custom-scroll font-mono">
+                            {formatToolArgs(item.args)}
+                          </pre>
+                        )}
                       </div>
                     )}
                   </div>

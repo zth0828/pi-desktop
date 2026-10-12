@@ -1333,3 +1333,237 @@
   max-height: 220px;
   overflow-y: auto;
 }
+
+.subagent-tasks-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subagent-tasks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0 4px;
+}
+
+.subagent-tasks-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.subagent-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subagent-task-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.15s ease;
+}
+
+.subagent-task-card.running {
+  border-color: var(--accent);
+}
+
+.subagent-task-card.error {
+  border-color: var(--danger);
+}
+
+.subagent-task-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--bg-surface);
+}
+
+.subagent-task-header:hover {
+  background: var(--bg-hover);
+}
+
+.subagent-task-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.subagent-task-agent-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  flex-shrink: 0;
+}
+
+.subagent-task-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-task-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.subagent-task-actions-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+}
+
+.subagent-task-usage-badge {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.subagent-task-body {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-surface);
+}
+
+.subagent-task-desc-section,
+.subagent-task-result-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.subagent-task-section-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.subagent-task-section-bar.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.subagent-task-section-bar.clickable:hover {
+  opacity: 0.85;
+}
+
+.subagent-task-section-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.subagent-task-section-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.subagent-task-trace-count {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.subagent-task-desc-content,
+.subagent-task-result-content {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  padding: 8px 10px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow-x: auto;
+  word-break: break-word;
+}
+
+.subagent-task-trace-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.subagent-trace-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.subagent-trace-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-trace-tool {
+  font-weight: 600;
+  color: var(--accent);
+  flex-shrink: 0;
+  min-width: 44px;
+}
+
+.subagent-trace-summary {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-raw-args-section {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+
+.subagent-raw-args-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 4px;
+}
+
+.subagent-raw-args-toggle:hover {
+  color: var(--text-secondary);
+}
+
