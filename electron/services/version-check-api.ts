@@ -364,13 +364,15 @@ export const versionCheckApi = {
     return null;
   },
   dismissNotice: async (payload: { kind: 'app' | 'pi'; latest: string }) => {
-    if (!payload?.latest || typeof payload.latest !== 'string') return { success: false, error: 'invalid-latest' };
+    const latest = typeof payload?.latest === 'string' ? payload.latest.trim() : '';
+    if (!latest) return { success: false, error: 'invalid-latest' };
+    if (payload?.kind !== 'app' && payload?.kind !== 'pi') return { success: false, error: 'invalid-kind' };
     const now = Date.now();
     if (payload.kind === 'app') {
-      await settingsApi.set({ key: 'appVersionCheckNoticedLatest', value: payload.latest });
+      await settingsApi.set({ key: 'appVersionCheckNoticedLatest', value: latest });
       await settingsApi.set({ key: 'appVersionCheckNoticedAt', value: now });
     } else {
-      await settingsApi.set({ key: 'piVersionCheckNoticedLatest', value: payload.latest });
+      await settingsApi.set({ key: 'piVersionCheckNoticedLatest', value: latest });
       await settingsApi.set({ key: 'piVersionCheckNoticedAt', value: now });
     }
     return { success: true };
@@ -399,8 +401,9 @@ export const versionCheckApi = {
     return { success: true };
   },
   skipVersion: async (payload: { version: string }) => {
-    if (!payload?.version || typeof payload.version !== 'string') return { success: false, error: 'invalid-version' };
-    await settingsApi.set({ key: 'appVersionCheckSkippedVersion', value: payload.version });
+    const version = typeof payload?.version === 'string' ? payload.version.trim() : '';
+    if (!version) return { success: false, error: 'invalid-version' };
+    await settingsApi.set({ key: 'appVersionCheckSkippedVersion', value: version });
     return { success: true };
   },
   unskipVersion: async () => {

@@ -183,11 +183,26 @@ describe('version-check-api', () => {
       value: 'v1.2.0',
     });
 
+    const emptySkip = await versionCheckApi.skipVersion({ version: '   ' });
+    expect(emptySkip.success).toBe(false);
+    expect(emptySkip.error).toBe('invalid-version');
+
     await versionCheckApi.unskipVersion();
     expect(settingsApiMock.set).toHaveBeenCalledWith({
       key: 'appVersionCheckSkippedVersion',
       value: undefined,
     });
+  });
+
+  it('validates kind and latest in dismissNotice', async () => {
+    const invalidLatest = await versionCheckApi.dismissNotice({ kind: 'app', latest: '  ' });
+    expect(invalidLatest.success).toBe(false);
+    expect(invalidLatest.error).toBe('invalid-latest');
+
+    // @ts-expect-error testing invalid kind
+    const invalidKind = await versionCheckApi.dismissNotice({ kind: 'unknown', latest: 'v1.0.0' });
+    expect(invalidKind.success).toBe(false);
+    expect(invalidKind.error).toBe('invalid-kind');
   });
 
   it('detects version jump when lastRunVersion is older than current version', async () => {
