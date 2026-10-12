@@ -56,6 +56,9 @@ async function resolvePreviewFile(pathValue: string, ctx?: HostActionContext): P
   if (!pathValue || typeof pathValue !== 'string' || !pathValue.trim()) {
     throw new Error('empty path');
   }
+  if (isWindowsDevicePath(pathValue)) {
+    throw new Error('device paths are not allowed');
+  }
   const runtime = resolveRuntimeForContext(ctx);
   if (!runtime) throw new Error('session not started');
   const root = await realpath(runtime.cwd);

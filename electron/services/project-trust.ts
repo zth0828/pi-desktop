@@ -15,6 +15,7 @@ import type {
 } from '@shared/host-api/contract';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiAdapter } from './pi-adapter';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 type PendingTrustRequest = {
   payload: PiTrustRequestPayload;
@@ -94,6 +95,9 @@ export const projectTrustApi = {
   set: async (payload: PiTrustSetPayload): Promise<HostSuccess> => {
     if (!payload?.path || typeof payload.path !== 'string') {
       return { success: false, error: 'invalid-path' };
+    }
+    if (isWindowsDevicePath(payload.path)) {
+      return { success: false, error: 'device paths are not allowed' };
     }
     const adapter = await loadPiAdapter();
     await adapter.trust.set(payload.path, payload.decision);
