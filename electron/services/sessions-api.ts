@@ -676,8 +676,11 @@ export const sessionsApi = {
     if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
       return { success: false, error: 'invalid session path' };
     }
+    if (isWindowsDevicePath(payload.path.trim())) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
-    const name = payload.name.trim();
+    const name = typeof payload?.name === 'string' ? payload.name.trim() : '';
     if (!name) return { success: false, error: 'empty name' };
     try {
       const active = resolveRuntimeForContext(ctx) ?? getActiveRuntime();
@@ -698,6 +701,9 @@ export const sessionsApi = {
   fork: async (payload: PiSessionPathPayload, ctx?: HostActionContext): Promise<PiSessionForkResult> => {
     if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
       return { success: false, error: 'invalid session path' };
+    }
+    if (isWindowsDevicePath(payload.path.trim())) {
+      return { success: false, error: 'device paths are not allowed' };
     }
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     const active = resolveRuntimeForContext(ctx) ?? getActiveRuntime();
@@ -721,6 +727,9 @@ export const sessionsApi = {
     if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
       return { success: false, error: 'invalid session path' };
     }
+    if (isWindowsDevicePath(payload.path.trim())) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     try {
       const adapter = await loadPiAdapter();
@@ -736,6 +745,9 @@ export const sessionsApi = {
   pin: async (payload: PiSessionPinPayload): Promise<HostSuccess> => {
     if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
       return { success: false, error: 'invalid session path' };
+    }
+    if (isWindowsDevicePath(payload.path.trim())) {
+      return { success: false, error: 'device paths are not allowed' };
     }
     if (isSessionRunning(payload.path)) return { success: false, error: 'session is running' };
     try {
@@ -876,6 +888,9 @@ export const sessionsApi = {
   exportHtml: async (payload: PiSessionPathPayload, ctx?: HostActionContext): Promise<PiSessionExportResult> => {
     if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
       return { success: false, error: 'invalid session path' };
+    }
+    if (isWindowsDevicePath(payload.path.trim())) {
+      return { success: false, error: 'device paths are not allowed' };
     }
     const active = resolveRuntimeForContext(ctx) ?? getActiveRuntime();
     if (!active) return { success: false, error: 'session not started' };

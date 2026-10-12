@@ -56,12 +56,24 @@ describe('sessionsApi metadata cache', () => {
     expect(await sessionsApi.remove({ path: tempDir })).toEqual({ success: false, error: 'session path cannot be a directory' });
   });
 
-  it('rename, fork, archive, pin 与 exportHtml 拦截非法空会话路径', async () => {
+  it('rename, fork, archive, pin 与 exportHtml 拦截非法空会话路径、设备路径与非法名称', async () => {
     expect(await sessionsApi.rename({ path: '', name: 'new-name' })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.rename({ path: 'CON', name: 'new-name' })).toEqual({ success: false, error: 'device paths are not allowed' });
+    expect(await sessionsApi.rename({ path: '/valid/session.jsonl', name: '' })).toEqual({ success: false, error: 'empty name' });
+    expect(await sessionsApi.rename({ path: '/valid/session.jsonl', name: '   ' })).toEqual({ success: false, error: 'empty name' });
+    expect(await sessionsApi.rename({ path: '/valid/session.jsonl', name: undefined as unknown as string })).toEqual({ success: false, error: 'empty name' });
+
     expect(await sessionsApi.fork({ path: '' })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.fork({ path: 'CON' })).toEqual({ success: false, error: 'device paths are not allowed' });
+
     expect(await sessionsApi.archive({ path: '', archived: true })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.archive({ path: 'CON', archived: true })).toEqual({ success: false, error: 'device paths are not allowed' });
+
     expect(await sessionsApi.pin({ path: '', pinned: true })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.pin({ path: 'CON', pinned: true })).toEqual({ success: false, error: 'device paths are not allowed' });
+
     expect(await sessionsApi.exportHtml({ path: '' })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.exportHtml({ path: 'CON' })).toEqual({ success: false, error: 'device paths are not allowed' });
   });
 
   it('archiveProject 拦截非法工作区路径', async () => {
