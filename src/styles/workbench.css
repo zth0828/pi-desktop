@@ -1566,22 +1566,26 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 420px;
+  max-height: 480px;
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 4px;
 }
 
-/* 单条内部工具执行卡片（匹配命令面板规范） */
+/* 单条内部工具执行卡片（匹配命令面板规范，保证单行高度与可读性） */
 .internal-tool-item {
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg);
+  background: var(--bg-sunken);
   overflow: hidden;
-  transition: border-color 0.15s ease;
+  flex-shrink: 0;
+  min-height: 34px;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .internal-tool-item:hover {
   border-color: var(--border-hover, var(--border));
+  background: var(--bg-surface);
 }
 
 .internal-tool-item.error {
@@ -1591,8 +1595,10 @@
 .internal-tool-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 7px 10px;
+  min-height: 34px;
+  box-sizing: border-box;
   cursor: pointer;
   user-select: none;
   background: none;
@@ -1607,18 +1613,21 @@
   color: var(--text-tertiary);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  width: 14px;
 }
 
 .internal-tool-badge {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  padding: 1px 5px;
+  padding: 2px 6px;
   border-radius: 4px;
   font-family: var(--font-mono, monospace);
   text-transform: uppercase;
   flex-shrink: 0;
-  background: var(--bg-sunken);
+  line-height: 1.2;
+  background: var(--bg-surface);
   color: var(--text-secondary);
   border: 1px solid var(--border);
 }
@@ -1656,7 +1665,8 @@
 
 .internal-tool-summary {
   font-family: var(--font-mono, monospace);
-  font-size: 11.5px;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--text);
   flex: 1;
   min-width: 0;
@@ -1674,8 +1684,9 @@
 }
 
 .internal-tool-status-pill {
-  font-size: 10px;
-  padding: 1px 6px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  padding: 2px 7px;
   border-radius: 4px;
   font-weight: 500;
   flex-shrink: 0;
@@ -1693,11 +1704,11 @@
 
 .internal-tool-body {
   border-top: 1px solid var(--border);
-  padding: 8px 10px;
-  background: var(--bg-sunken);
+  padding: 10px 12px;
+  background: var(--bg-surface);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .internal-tool-section {
@@ -1713,7 +1724,7 @@
 }
 
 .internal-tool-section-label {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -1722,16 +1733,16 @@
 
 .internal-tool-code-block {
   margin: 0;
-  padding: 6px 8px;
-  font-size: 11px;
+  padding: 8px 10px;
+  font-size: 11.5px;
   line-height: 1.45;
   color: var(--text-secondary);
-  background: var(--bg-surface);
+  background: var(--bg-sunken);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 5px;
   white-space: pre-wrap;
   word-break: break-all;
-  max-height: 220px;
+  max-height: 240px;
   overflow-y: auto;
 }
 
@@ -1764,41 +1775,9 @@
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 6px;
-  max-height: 380px;
+  max-height: 480px;
   overflow-y: auto;
   word-break: break-word;
-}
-
-.subagent-raw-args-section {
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--border);
-}
-
-.subagent-raw-args-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  user-select: none;
-  margin-bottom: 4px;
-}
-
-.subagent-raw-args-toggle:hover {
-  color: var(--text-secondary);
-}
-
-.subagent-task-messages-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--bg-sunken);
-  color: var(--text-secondary);
 }
 
 .subagent-task-error-box {
@@ -1824,130 +1803,6 @@
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.subagent-transcript-toggle-hint {
-  font-size: 11px;
-  color: var(--accent);
-}
-
-.subagent-transcript-container {
-  max-height: 360px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px 10px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-.subagent-transcript-msg {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-}
-
-.subagent-transcript-msg.role-user {
-  border-left: 3px solid var(--accent);
-}
-
-.subagent-transcript-msg.role-assistant {
-  border-left: 3px solid #8b5cf6;
-}
-
-.subagent-transcript-msg.role-toolResult,
-.subagent-transcript-msg.role-tool {
-  border-left: 3px solid #10b981;
-}
-
-.subagent-transcript-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.subagent-transcript-badge {
-  font-size: 9.5px;
-  font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 3px;
-  text-transform: uppercase;
-}
-
-.subagent-transcript-badge.user {
-  background: rgba(59, 130, 246, 0.15);
-  color: var(--accent);
-}
-
-.subagent-transcript-badge.assistant {
-  background: rgba(139, 92, 246, 0.15);
-  color: #8b5cf6;
-}
-
-.subagent-transcript-badge.toolResult,
-.subagent-transcript-badge.tool {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-}
-
-.subagent-transcript-tool-tag {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.subagent-transcript-content {
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--text);
-  overflow-x: auto;
-}
-
-.subagent-transcript-content pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.subagent-transcript-thinking {
-  margin-bottom: 4px;
-  background: var(--bg-sunken);
-  border: 1px dashed var(--border);
-  border-radius: 4px;
-  padding: 4px 6px;
-}
-
-.subagent-transcript-thinking summary {
-  cursor: pointer;
-  font-size: 10px;
-  color: var(--text-tertiary);
-  user-select: none;
-}
-
-.subagent-transcript-thinking pre {
-  margin-top: 4px;
-  font-size: 10.5px;
-  color: var(--text-secondary);
-}
-
-.subagent-transcript-tool-call {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: var(--bg-sunken);
-  padding: 4px 6px;
-  border-radius: 4px;
-}
-
-.subagent-transcript-tool-name {
-  font-size: 10.5px;
-  color: var(--accent);
 }
 
 

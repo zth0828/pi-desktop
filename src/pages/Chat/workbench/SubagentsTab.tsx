@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Copy,
   Locate,
-  MessageSquare,
   Square,
   Wrench,
 } from 'lucide-react';
@@ -138,72 +137,7 @@ function InternalToolActionItem({
 }
 
 /**
- * 子 Agent 内部的完整会话记录回放组件。
- */
-function SubagentTranscriptView({ messages }: { messages: unknown[] }) {
-  const { t } = useTranslation();
-
-  return (
-    <div className="subagent-transcript-container custom-scroll font-mono" data-testid="subagent-transcript">
-      {messages.map((rawMsg: any, idx: number) => {
-        const role = rawMsg?.role || 'unknown';
-        const isAssistant = role === 'assistant';
-        const isUser = role === 'user';
-        const content = rawMsg?.content;
-
-        return (
-          <div key={idx} className={`subagent-transcript-msg role-${role}`}>
-            <div className="subagent-transcript-header">
-              <span className={`subagent-transcript-badge ${role}`}>
-                {isUser ? 'User' : isAssistant ? 'Agent' : 'Tool'}
-              </span>
-              {rawMsg?.toolName && (
-                <span className="subagent-transcript-tool-tag">{rawMsg.toolName}</span>
-              )}
-            </div>
-
-            <div className="subagent-transcript-content">
-              {Array.isArray(content) ? (
-                content.map((block: any, bIdx: number) => {
-                  if (block.type === 'thinking' && block.thinking) {
-                    return (
-                      <details key={bIdx} className="subagent-transcript-thinking">
-                        <summary>{t('workspace.subagentThinking')}</summary>
-                        <pre className="custom-scroll">{block.thinking}</pre>
-                      </details>
-                    );
-                  }
-                  if ((block.type === 'toolCall' || block.type === 'tool_use') && block.name) {
-                    const args = block.arguments ?? block.input ?? block.args;
-                    return (
-                      <div key={bIdx} className="subagent-transcript-tool-call">
-                        <span className="subagent-transcript-tool-name font-bold">$ {block.name}</span>
-                        <pre className="custom-scroll">{formatToolArgs(args)}</pre>
-                      </div>
-                    );
-                  }
-                  if (block.type === 'text' && block.text) {
-                    return (
-                      <div key={bIdx} className="subagent-transcript-text">
-                        <Markdown text={block.text} />
-                      </div>
-                    );
-                  }
-                  return null;
-                })
-              ) : typeof content === 'string' ? (
-                <pre className="custom-scroll">{content}</pre>
-              ) : null}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/**
- * 独立的 Subagent 顶级卡片（支持展开任务描述、结构化内部工具调用列表、Output Markdown 产出与会话记录）。
+ * 独立的 Subagent 顶级卡片（支持展开任务描述、结构化内部工具调用列表、Output Markdown 产出）。
  */
 function SubagentCard({
   task,
@@ -224,8 +158,7 @@ function SubagentCard({
 }) {
   const { t } = useTranslation();
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
-  const [actionsExpanded, setActionsExpanded] = useState(true);
-  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+  const [actionsExpanded, setActionsExpanded] = useState(!task.output);
 
   const taskCopyKey = `${task.id}-task`;
   const resultCopyKey = `${task.id}-result`;
@@ -438,28 +371,6 @@ function SubagentCard({
                   <span className="cursor-blink">▍</span>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* 完整会话记录回放 */}
-          {task.messages && task.messages.length > 0 && (
-            <div className="subagent-task-transcript-section">
-              <div
-                className="subagent-task-section-bar clickable"
-                onClick={() => setTranscriptExpanded((v) => !v)}
-              >
-                <div className="subagent-task-section-left">
-                  {transcriptExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                  <span className="subagent-task-section-label">{t('workspace.subagentMessages')}</span>
-                  <span className="subagent-task-trace-count">({task.messages.length})</span>
-                </div>
-                <span className="subagent-transcript-toggle-hint">
-                  {transcriptExpanded ? t('workspace.subagentHideTranscript') : t('workspace.subagentShowTranscript')}
-                </span>
-              </div>
-              {transcriptExpanded && (
-                <SubagentTranscriptView messages={task.messages} />
-              )}
             </div>
           )}
         </div>
