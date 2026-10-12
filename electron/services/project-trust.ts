@@ -83,24 +83,29 @@ export const projectTrustApi = {
   listPending: (): PiTrustRequestPayload[] => [...pending.values()].map((entry) => entry.payload),
 
   respond: (payload: PiTrustRespondPayload): HostSuccess => {
-    if (!payload?.requestId || typeof payload.requestId !== 'string') {
+    if (!payload?.requestId || typeof payload.requestId !== 'string' || !payload.requestId.trim()) {
       return { success: false, error: 'invalid-request-id' };
     }
-    settle(payload.requestId, payload.label);
+    const label = typeof payload.label === 'string' ? payload.label : undefined;
+    settle(payload.requestId.trim(), label);
     return { success: true };
   },
 
   list: async (): Promise<PiTrustListResult> => ({ entries: await listEntries() }),
 
   set: async (payload: PiTrustSetPayload): Promise<HostSuccess> => {
-    if (!payload?.path || typeof payload.path !== 'string') {
+    if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
       return { success: false, error: 'invalid-path' };
     }
-    if (isWindowsDevicePath(payload.path)) {
+    const cleanPath = payload.path.trim();
+    if (isWindowsDevicePath(cleanPath)) {
       return { success: false, error: 'device paths are not allowed' };
     }
+    if (typeof payload.decision !== 'boolean' && payload.decision !== null) {
+      return { success: false, error: 'invalid-decision' };
+    }
     const adapter = await loadPiAdapter();
-    await adapter.trust.set(payload.path, payload.decision);
+    await adapter.trust.set(cleanPath, payload.decision);
     sendHostEvent('piTrust', 'changed', { entries: await listEntries() });
     return { success: true };
   },
