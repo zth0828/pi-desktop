@@ -404,6 +404,12 @@ export const providersApi = {
   },
 
   setApiKey: async (payload: PiProviderSetKeyPayload, ctx?: HostActionContext): Promise<PiProviderSetKeyResult> => {
+    if (!payload?.providerId || typeof payload.providerId !== 'string') {
+      return { success: false, error: 'invalid providerId' };
+    }
+    if (typeof payload?.apiKey !== 'string') {
+      return { success: false, error: 'invalid apiKey' };
+    }
     const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
     try {
       // login('api_key') 的 interaction.prompt 直接回传 GUI 录入的 key；
@@ -433,6 +439,9 @@ export const providersApi = {
   },
 
   removeCredential: async (payload: { providerId: string }, ctx?: HostActionContext): Promise<HostSuccess> => {
+    if (!payload?.providerId || typeof payload.providerId !== 'string') {
+      return { success: false, error: 'invalid providerId' };
+    }
     const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
     try {
       await adapter.providers.logout(runtime, payload.providerId);
@@ -449,6 +458,9 @@ export const providersApi = {
   },
 
   deleteCustom: async (payload: { providerId: string }, ctx?: HostActionContext): Promise<HostSuccess> => {
+    if (!payload?.providerId || typeof payload.providerId !== 'string') {
+      return { success: false, error: 'invalid providerId' };
+    }
     const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
     try {
       const configured = configuredProviders(agentDir);
@@ -469,6 +481,9 @@ export const providersApi = {
 
   /** OAuth：pi 的 provider-owned 流程；授权 URL 等经 providers.oauthProgress 事件推给 GUI。 */
   startOAuth: async (payload: { providerId: string }, ctx?: HostActionContext): Promise<HostSuccess> => {
+    if (!payload?.providerId || typeof payload.providerId !== 'string') {
+      return { success: false, error: 'invalid providerId' };
+    }
     const { adapter, runtime } = await getModelRuntime(ctx);
     try {
       await adapter.providers.login(runtime, payload.providerId, 'oauth', {
@@ -503,6 +518,15 @@ export const providersApi = {
   /** 自定义供应商：合并写入 <agentDir>/models.json（pi 文档定义的公开配置格式）。 */
   addCustom: async (payload: PiProviderAddCustomPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
+      if (!payload?.id || typeof payload.id !== 'string' || !payload.id.trim()) {
+        return { success: false, error: 'invalid provider id' };
+      }
+      if (!payload?.baseUrl || typeof payload.baseUrl !== 'string' || !payload.baseUrl.trim()) {
+        return { success: false, error: 'invalid baseUrl' };
+      }
+      if (!payload?.api || typeof payload.api !== 'string') {
+        return { success: false, error: 'invalid api' };
+      }
       const adapter = await loadPiAdapter();
       const agentDir = adapter.paths.getAgentDir();
       // id 冲突保护：与已有自定义/内置供应商同 id 的写入会静默覆盖对方配置
@@ -529,8 +553,8 @@ export const providersApi = {
         const compat = compatForOpenAi(serverType);
         const thinkingMap = thinkingLevelMapFor(serverType);
         providers[payload.id] = {
-        name: payload.name.trim() || payload.id,
-        baseUrl: normalizeBaseUrlForApi(payload.baseUrl, payload.api),
+        name: (typeof payload.name === 'string' && payload.name.trim()) || payload.id,
+        baseUrl: normalizeBaseUrlForApi(payload.baseUrl.trim(), payload.api),
         api: payload.api,
         ...(localServer && !payload.apiKey ? { apiKey: placeholderApiKey(serverType) } : {}),
         // 第三方 OpenAI 兼容服务器（vLLM/SGLang/Ollama/LM Studio 等）普遍不接受
@@ -542,7 +566,7 @@ export const providersApi = {
           : {}),
         // 第三方模型缺省按支持推理处理：思考深度菜单可用；网关拒绝思考参数时
         // 用户可在 Models 页逐模型关闭。
-        models: payload.models.map((m) => {
+        models: (Array.isArray(payload.models) ? payload.models : []).map((m) => {
           const builtin = findBuiltinModel(builtinCatalog, m.id);
           const tlm = m.thinkingLevelMap ?? (lmStudio && (m.reasoning ?? true) && thinkingMap ? thinkingMap : undefined);
           return {
@@ -582,6 +606,9 @@ export const providersApi = {
    */
   updateCustom: async (payload: PiProviderUpdateCustomPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
+      if (!payload?.providerId || typeof payload.providerId !== 'string') {
+        return { success: false, error: 'invalid providerId' };
+      }
       const adapter = await loadPiAdapter();
       const agentDir = adapter.paths.getAgentDir();
       const existing = configuredProviders(agentDir)[payload.providerId];
@@ -617,6 +644,9 @@ export const providersApi = {
    */
   setModelReasoning: async (payload: PiProviderSetModelReasoningPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
+      if (!payload?.providerId || typeof payload.providerId !== 'string' || !payload?.modelId || typeof payload.modelId !== 'string') {
+        return { success: false, error: 'providerId and modelId are required' };
+      }
       const adapter = await loadPiAdapter();
       const agentDir = adapter.paths.getAgentDir();
       let found = false;
@@ -661,6 +691,9 @@ export const providersApi = {
    */
   setModelInput: async (payload: PiProviderSetModelInputPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
+      if (!payload?.providerId || typeof payload.providerId !== 'string' || !payload?.modelId || typeof payload.modelId !== 'string') {
+        return { success: false, error: 'providerId and modelId are required' };
+      }
       const adapter = await loadPiAdapter();
       const agentDir = adapter.paths.getAgentDir();
       let found = false;
@@ -709,7 +742,16 @@ export const providersApi = {
    * 也不改供应商状态。
    */
   probe: async (payload: PiProviderProbePayload): Promise<PiProviderProbeResult> => {
-    const base = payload.baseUrl.replace(/\/+$/, '');
+    if (!payload?.baseUrl || typeof payload.baseUrl !== 'string' || !payload.baseUrl.trim()) {
+      return {
+        models: [],
+        modelDetails: [],
+        protocols: [],
+        serverType: 'generic',
+        catalogError: 'invalid baseUrl',
+      };
+    }
+    const base = payload.baseUrl.trim().replace(/\/+$/, '');
     const openAiBases = /\/v1$/i.test(base) ? [base] : [base, `${base}/v1`];
     // 目录探测同样带 pi UA：agentrouter 等网关按客户端白名单拦截未知 UA
     const headers: Record<string, string> = {
@@ -1080,6 +1122,9 @@ export const providersApi = {
   },
 
   setDefaultModel: async (payload: PiDefaultModel, ctx?: HostActionContext): Promise<HostSuccess> => {
+    if (!payload?.provider || !payload?.id || typeof payload.provider !== 'string' || typeof payload.id !== 'string') {
+      return { success: false, error: 'provider and id are required' };
+    }
     const active = await resolveRuntimeForContextReady(ctx);
     if (active) return piRuntimeApi.setModel(payload, ctx);
     try {
@@ -1116,6 +1161,9 @@ export const providersApi = {
   },
 
   setDefaultThinking: async (payload: { level: string }): Promise<HostSuccess> => {
+    if (!payload?.level || typeof payload.level !== 'string') {
+      return { success: false, error: 'invalid level' };
+    }
     try {
       const adapter = await loadPiAdapter();
       const handle = adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir: adapter.paths.getAgentDir() });
@@ -1135,9 +1183,10 @@ export const providersApi = {
   setDefaultTools: async (payload: { tools: string[] }): Promise<HostSuccess> => {
     try {
       const adapter = await loadPiAdapter();
+      const tools = Array.isArray(payload?.tools) ? payload.tools.filter((t): t is string => typeof t === 'string') : [];
       // defaultTools 是整表覆盖语义：设置页按完整列表写回，未勾选的内置工具即被关闭
       await adapter.settings.updateJson(adapter.paths.getAgentDir(), 'settings.json', (doc) => {
-        doc.defaultTools = payload.tools;
+        doc.defaultTools = tools;
       });
       await reloadRuntimeSettings();
       return { success: true };
