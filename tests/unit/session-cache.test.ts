@@ -73,7 +73,9 @@ describe('sessionsApi metadata cache', () => {
     expect(await sessionsApi.pin({ path: 'CON', pinned: true })).toEqual({ success: false, error: 'device paths are not allowed' });
 
     expect(await sessionsApi.exportHtml({ path: '' })).toEqual({ success: false, error: 'invalid session path' });
+    expect(await sessionsApi.exportHtml({ path: '__proto__' })).toEqual({ success: false, error: 'invalid session path' });
     expect(await sessionsApi.exportHtml({ path: 'CON' })).toEqual({ success: false, error: 'device paths are not allowed' });
+    expect(await sessionsApi.exportHtml({ path: '\\\\?\\CON' })).toEqual({ success: false, error: 'device paths are not allowed' });
 
     expect(await sessionsApi.switch({ path: '' })).toEqual({ success: false, error: 'invalid session path' });
     expect(await sessionsApi.switch({ path: 'CON' })).toEqual({ success: false, error: 'device paths are not allowed' });

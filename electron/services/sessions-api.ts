@@ -896,7 +896,12 @@ export const sessionsApi = {
     if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
       return { success: false, error: 'invalid session path' };
     }
-    if (isWindowsDevicePath(payload.path.trim())) {
+    const rawPath = payload.path.trim();
+    if (['__proto__', 'constructor', 'prototype'].includes(rawPath)) {
+      return { success: false, error: 'invalid session path' };
+    }
+    const cleanPath = stripWindowsExtendedPrefix(rawPath);
+    if (isWindowsDevicePath(cleanPath)) {
       return { success: false, error: 'device paths are not allowed' };
     }
     const active = resolveRuntimeForContext(ctx) ?? getActiveRuntime();
@@ -940,8 +945,10 @@ export const sessionsApi = {
 
       const store = await getElectronStore();
       const records = (store.get('sessionExportRecords') ?? {}) as Record<string, PiSessionExportRecord>;
-      records[payload.path] = record;
-      store.set('sessionExportRecords', records);
+      if (!['__proto__', 'constructor', 'prototype'].includes(payload.path)) {
+        records[payload.path] = record;
+        store.set('sessionExportRecords', records);
+      }
       store.set('lastSessionExportRecord', record);
       await settingsApi.set({ key: 'lastSessionExportPath', value: exported });
 
