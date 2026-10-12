@@ -96,4 +96,19 @@ describe('appUpdateApi.installDownloaded', () => {
     expect(res.success).toBe(true);
     expect(electronMock.shell.openPath).toHaveBeenCalledWith('/tmp/Pi.Desktop-0.5.0.dmg');
   });
+
+  it('rejects device paths in installer path', async () => {
+    settingsApiMock.get.mockResolvedValue('\\\\.\\nul');
+    const res = await appUpdateApi.installDownloaded();
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('device paths are not allowed');
+
+    const openRes = await appUpdateApi.openDownloaded();
+    expect(openRes.success).toBe(false);
+    expect(openRes.error).toBe('device paths are not allowed');
+
+    const showRes = await appUpdateApi.showDownloaded();
+    expect(showRes.success).toBe(false);
+    expect(showRes.error).toBe('device paths are not allowed');
+  });
 });

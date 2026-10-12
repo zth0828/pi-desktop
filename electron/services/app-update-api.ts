@@ -10,6 +10,8 @@ import { settingsApi } from './settings-api';
 import { sendHostEvent } from '../main/ipc/host-events';
 import { hostFetch } from '../utils/host-fetch';
 import { hasStreamingRuntimes } from './pi-runtime-api';
+import { stripWindowsExtendedPrefix } from '../utils/same-path';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 const githubUrl = () => process.env.PI_DESKTOP_GITHUB_API_URL ?? 'https://api.github.com/repos/zth0828/pi-desktop/releases/latest';
 let inFlight: Promise<AppUpdateDownloadResult> | null = null;
@@ -361,23 +363,29 @@ export const appUpdateApi = {
   },
   openDownloaded: async () => {
     const pathName = await settingsApi.get({ key: 'appVersionCheckDownloadedPath' });
-    if (!pathName || typeof pathName !== 'string') return { success: false, error: 'No downloaded installer' };
-    if (pathName.endsWith('-patch.zip')) {
-      shell.showItemInFolder(pathName);
+    if (!pathName || typeof pathName !== 'string' || !pathName.trim()) return { success: false, error: 'No downloaded installer' };
+    const cleanPath = stripWindowsExtendedPrefix(pathName.trim());
+    if (isWindowsDevicePath(cleanPath)) return { success: false, error: 'device paths are not allowed' };
+    if (cleanPath.endsWith('-patch.zip')) {
+      shell.showItemInFolder(cleanPath);
       return { success: true };
     }
-    const error = await shell.openPath(pathName);
+    const error = await shell.openPath(cleanPath);
     return error ? { success: false, error } : { success: true };
   },
   showDownloaded: async () => {
     const pathName = await settingsApi.get({ key: 'appVersionCheckDownloadedPath' });
-    if (!pathName || typeof pathName !== 'string') return { success: false, error: 'No downloaded installer' };
-    shell.showItemInFolder(pathName);
+    if (!pathName || typeof pathName !== 'string' || !pathName.trim()) return { success: false, error: 'No downloaded installer' };
+    const cleanPath = stripWindowsExtendedPrefix(pathName.trim());
+    if (isWindowsDevicePath(cleanPath)) return { success: false, error: 'device paths are not allowed' };
+    shell.showItemInFolder(cleanPath);
     return { success: true };
   },
   installDownloaded: async (payload?: { force?: boolean }): Promise<HostSuccess> => {
     const pathName = await settingsApi.get({ key: 'appVersionCheckDownloadedPath' });
-    if (!pathName || typeof pathName !== 'string') return { success: false, error: 'No downloaded installer' };
+    if (!pathName || typeof pathName !== 'string' || !pathName.trim()) return { success: false, error: 'No downloaded installer' };
+    const cleanPath = stripWindowsExtendedPrefix(pathName.trim());
+    if (isWindowsDevicePath(cleanPath)) return { success: false, error: 'device paths are not allowed' };
     if (!payload?.force && hasStreamingRuntimes()) {
       return { success: false, error: 'RUNNING_SESSIONS' };
     }
@@ -387,7 +395,7 @@ export const appUpdateApi = {
     }
 
     const stagedPatchPath = await settingsApi.get({ key: 'appVersionCheckStagedPatchPath' });
-    if (stagedPatchPath && typeof stagedPatchPath === 'string' && existsSync(stagedPatchPath)) {
+    if (stagedPatchPath && typeof stagedPatchPath === 'string' && stagedPatchPath.trim() && !isWindowsDevicePath(stripWindowsExtendedPrefix(stagedPatchPath.trim())) && existsSync(stagedPatchPath)) {
       const stagedPatchDir = path.dirname(stagedPatchPath);
 
       if (process.platform === 'darwin') {
