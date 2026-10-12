@@ -990,8 +990,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             const now = Date.now();
             const durationMs = s.runStartedAt == null ? 0 : Math.max(0, now - s.runStartedAt);
             const toolExecutions = Object.fromEntries(
-              Object.entries(s.toolExecutions).map(([id, ex]) =>
-                ex.status === 'running'
+              Object.entries(s.toolExecutions || {}).map(([id, ex]) =>
+                ex && ex.status === 'running'
                   ? [id, { ...ex, status: 'error' as const, interrupted: true, endedAt: ex.endedAt ?? now }]
                   : [id, ex],
               ),
@@ -1086,7 +1086,12 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
             break;
           }
           case 'queue.updated':
-            set({ queue: { steering: event.steering, followUp: event.followUp } });
+            set({
+              queue: {
+                steering: Array.isArray(event.steering) ? event.steering : [],
+                followUp: Array.isArray(event.followUp) ? event.followUp : [],
+              },
+            });
             break;
           case 'retry.started':
             set({
