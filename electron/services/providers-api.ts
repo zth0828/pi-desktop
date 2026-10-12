@@ -44,6 +44,8 @@ import { determineCatalogSource } from '@shared/provider-catalog';
 
 type ModelRuntime = PiModelRuntimeHandle;
 
+const FORBIDDEN_PROPERTY_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 let runtimePromise: Promise<ModelRuntime> | null = null;
 let runtimeGeneration = '';
 
@@ -439,13 +441,14 @@ export const providersApi = {
   },
 
   removeCredential: async (payload: { providerId: string }, ctx?: HostActionContext): Promise<HostSuccess> => {
-    if (!payload?.providerId || typeof payload.providerId !== 'string') {
+    const trimmedId = typeof payload?.providerId === 'string' ? payload.providerId.trim() : '';
+    if (!trimmedId || FORBIDDEN_PROPERTY_KEYS.has(trimmedId)) {
       return { success: false, error: 'invalid providerId' };
     }
     const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
     try {
-      await adapter.providers.logout(runtime, payload.providerId);
-      await updateConfiguredProvider(agentDir, payload.providerId, (provider) => {
+      await adapter.providers.logout(runtime, trimmedId);
+      await updateConfiguredProvider(agentDir, trimmedId, (provider) => {
         delete provider.apiKey;
         if (Array.isArray(provider.models)) provider.models = [];
       });
@@ -458,18 +461,19 @@ export const providersApi = {
   },
 
   deleteCustom: async (payload: { providerId: string }, ctx?: HostActionContext): Promise<HostSuccess> => {
-    if (!payload?.providerId || typeof payload.providerId !== 'string') {
+    const trimmedId = typeof payload?.providerId === 'string' ? payload.providerId.trim() : '';
+    if (!trimmedId || FORBIDDEN_PROPERTY_KEYS.has(trimmedId)) {
       return { success: false, error: 'invalid providerId' };
     }
     const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
     try {
       const configured = configuredProviders(agentDir);
-      if (!configured[payload.providerId]) {
-        return { success: false, error: `custom provider not found: ${payload.providerId}` };
+      if (!Object.prototype.hasOwnProperty.call(configured, trimmedId)) {
+        return { success: false, error: `custom provider not found: ${trimmedId}` };
       }
-      await adapter.providers.logout(runtime, payload.providerId);
-      await updateConfiguredProvider(agentDir, payload.providerId, (_provider, providers) => {
-        delete providers[payload.providerId];
+      await adapter.providers.logout(runtime, trimmedId);
+      await updateConfiguredProvider(agentDir, trimmedId, (_provider, providers) => {
+        delete providers[trimmedId];
       });
       invalidateModelRuntime();
       await adapter.providers.refresh(runtime, { allowNetwork: false });
@@ -518,7 +522,8 @@ export const providersApi = {
   /** 自定义供应商：合并写入 <agentDir>/models.json（pi 文档定义的公开配置格式）。 */
   addCustom: async (payload: PiProviderAddCustomPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
-      if (!payload?.id || typeof payload.id !== 'string' || !payload.id.trim()) {
+      const trimmedId = typeof payload?.id === 'string' ? payload.id.trim() : '';
+      if (!trimmedId || FORBIDDEN_PROPERTY_KEYS.has(trimmedId)) {
         return { success: false, error: 'invalid provider id' };
       }
       if (!payload?.baseUrl || typeof payload.baseUrl !== 'string' || !payload.baseUrl.trim()) {
@@ -532,8 +537,8 @@ export const providersApi = {
       // id 冲突保护：与已有自定义/内置供应商同 id 的写入会静默覆盖对方配置
       const { runtime: currentRuntime } = await getModelRuntime(ctx);
       const existingIds = new Set(adapter.providers.listProviders(currentRuntime).map((provider) => provider.id));
-      if (existingIds.has(payload.id)) {
-        return { success: false, error: `provider id already exists: ${payload.id}` };
+      if (existingIds.has(trimmedId)) {
+        return { success: false, error: `provider id already exists: ${trimmedId}` };
       }
       // pi 内置目录官方规格：探测不到的字段（上下文/输出/能力/价格）以此兜底
       const builtinCatalog = loadBuiltinModelCatalog(adapter.packageRoot);
@@ -546,14 +551,14 @@ export const providersApi = {
         // 强制要求 apiKey 或 headers（models.md：keyless 本地服务器应保留占位值），
         // 否则会话报 "No API key found"。写入服务器会忽略的占位 key 解除门槛。
         const localServer = isLocalServer(payload.baseUrl);
-        const serverType = resolveServerType(payload.serverType, payload.id, payload.baseUrl);
+        const serverType = resolveServerType(payload.serverType, trimmedId, payload.baseUrl);
         const lmStudio = serverType === 'lm-studio';
         // 思考控制按服务器类型决定（见 custom-provider-config.ts）：LM Studio 走
         // reasoning_effort + off 映射；vLLM（Qwen3 等）走 chat_template_kwargs。
         const compat = compatForOpenAi(serverType);
         const thinkingMap = thinkingLevelMapFor(serverType);
-        providers[payload.id] = {
-        name: (typeof payload.name === 'string' && payload.name.trim()) || payload.id,
+        providers[trimmedId] = {
+        name: (typeof payload.name === 'string' && payload.name.trim()) || trimmedId,
         baseUrl: normalizeBaseUrlForApi(payload.baseUrl.trim(), payload.api),
         api: payload.api,
         ...(localServer && !payload.apiKey ? { apiKey: placeholderApiKey(serverType) } : {}),
@@ -606,26 +611,28 @@ export const providersApi = {
    */
   updateCustom: async (payload: PiProviderUpdateCustomPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     try {
-      if (!payload?.providerId || typeof payload.providerId !== 'string') {
+      const trimmedId = typeof payload?.providerId === 'string' ? payload.providerId.trim() : '';
+      if (!trimmedId || FORBIDDEN_PROPERTY_KEYS.has(trimmedId)) {
         return { success: false, error: 'invalid providerId' };
       }
       const adapter = await loadPiAdapter();
       const agentDir = adapter.paths.getAgentDir();
-      const existing = configuredProviders(agentDir)[payload.providerId];
-      if (!existing) {
-        return { success: false, error: `custom provider not found: ${payload.providerId}` };
+      const configured = configuredProviders(agentDir);
+      if (!Object.prototype.hasOwnProperty.call(configured, trimmedId)) {
+        return { success: false, error: `custom provider not found: ${trimmedId}` };
       }
+      const existing = configured[trimmedId];
       // baseUrl 规范化依赖 api（anthropic 需去掉 /v1 后缀）：优先用本次提交的 api
       const nextApi = payload.api ?? existing.api ?? '';
-      const found = await updateConfiguredProvider(agentDir, payload.providerId, (provider) => {
-        if (payload.name !== undefined) provider.name = payload.name.trim() || payload.providerId;
+      const found = await updateConfiguredProvider(agentDir, trimmedId, (provider) => {
+        if (payload.name !== undefined) provider.name = payload.name.trim() || trimmedId;
         if (payload.api !== undefined) provider.api = payload.api;
         if (payload.baseUrl !== undefined) {
           provider.baseUrl = normalizeBaseUrlForApi(payload.baseUrl, nextApi);
         }
       });
       if (!found) {
-        return { success: false, error: `custom provider not found: ${payload.providerId}` };
+        return { success: false, error: `custom provider not found: ${trimmedId}` };
       }
       invalidateModelRuntime();
       const active = await resolveRuntimeForContextReady(ctx);
