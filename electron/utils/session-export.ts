@@ -67,10 +67,12 @@ export async function sessionExportPath(
   const dateMatch = baseName.match(/^(\d{4}-\d{2}-\d{2})/);
   const dateStr = dateMatch ? dateMatch[1] : new Date().toISOString().slice(0, 10);
 
-  const rawId = opts.id ?? baseName.split('_').pop()?.replace(/\.jsonl$/, '') ?? baseName;
-  const shortId = rawId.slice(0, 8);
+  const rawId = typeof opts.id === 'string'
+    ? opts.id
+    : (baseName.split('_').pop()?.replace(/\.jsonl$/, '') ?? baseName);
+  const shortId = typeof rawId === 'string' ? rawId.slice(0, 8) : '';
 
-  const rawTitle = opts.title ? stripAttachmentEnvelope(opts.title) : '';
+  const rawTitle = typeof opts.title === 'string' ? stripAttachmentEnvelope(opts.title) : '';
   const cleanTitle = sanitizePathSegment(rawTitle.slice(0, 50), '');
 
   const fileName = cleanTitle

@@ -127,5 +127,17 @@ describe('session-export utilities', () => {
 
       expect(path.basename(exportPath)).toBe('pi-session-2026-08-22_01a02b37.html');
     });
+
+    it('非字符串 id 与 title 安全容忍', async () => {
+      const exportPath = await sessionExportPath({
+        sessionFile: mockSessionFile,
+        cwd: '/Users/bingking/Desktop/pi-desktop',
+        id: 123 as unknown as string,
+        title: 456 as unknown as string,
+      });
+
+      expect(path.basename(exportPath)).toBe('pi-session-2026-08-22_01a02b37.html');
+    });
   });
 });
+
