@@ -147,7 +147,7 @@ test('场景4：npm 安装但版本过低 → 阻断升级页', async ({ launchE
 });
 
 test('场景5：npm 安装且版本达标 → 进入主界面', async ({ launchElectronApp }) => {
-  const fake = await makeFakeNpmPrefix('0.83.0');
+  const fake = await makeFakeNpmPrefix('1.0.0');
   try {
     const app = await launchElectronApp({
       userPath: joinPath(isWin ? fake.prefix : `${fake.prefix}/bin`, nodeBinDir, SYSTEM_BINS),
@@ -162,7 +162,7 @@ test('场景5：npm 安装且版本达标 → 进入主界面', async ({ launchE
 });
 
 test('场景5b：npm 全局包已安装但 pi shim 不在 PATH → 仍进入主界面', async ({ launchElectronApp }) => {
-  const fake = await makeFakeNpmPrefix('0.83.0');
+  const fake = await makeFakeNpmPrefix('1.0.0');
   try {
     const app = await launchElectronApp({
       userPath: joinPath(nodeBinDir, SYSTEM_BINS),

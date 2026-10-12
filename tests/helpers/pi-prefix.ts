@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 const PI_PACKAGE = '@earendil-works/pi-coding-agent';
-const REQUESTED_VERSION = process.env.PI_TEST_VERSION ?? '0.84.2';
+const REQUESTED_VERSION = process.env.PI_TEST_VERSION ?? '1.0.0';
 const TESTED_VERSION = REQUESTED_VERSION === 'latest'
   ? execFileSync('npm', ['view', PI_PACKAGE, 'version'], { encoding: 'utf8', timeout: 30_000 }).trim()
   : REQUESTED_VERSION;

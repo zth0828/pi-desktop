@@ -24,7 +24,7 @@ const PI_NPM_ROOT = join(PI_PREFIX, 'lib/node_modules');
 const PI_BIN_DIR = join(PI_PREFIX, 'bin');
 if (!existsSync(join(PI_NPM_ROOT, '@earendil-works/pi-coding-agent/package.json'))) {
   console.log('[perf] installing test pi into .cache/pi-test-prefix ...');
-  execFileSync('npm', ['i', '-g', '--prefix', PI_PREFIX, '@earendil-works/pi-coding-agent@^0.83.0'], {
+  execFileSync('npm', ['i', '-g', '--prefix', PI_PREFIX, '@earendil-works/pi-coding-agent@latest'], {
     stdio: 'inherit',
     timeout: 300_000,
   });

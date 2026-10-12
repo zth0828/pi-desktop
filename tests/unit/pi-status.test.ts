@@ -11,9 +11,9 @@ function env(overrides: {
   return {
     node: { found: true, version: '24.14.0', meetsMin: true, ...overrides.node },
     npm: { found: true, version: '11.9.0', ...overrides.npm },
-    pi: { found: true, version: '0.83.0', installKind: 'npm', meetsMin: true, ...overrides.pi },
+    pi: { found: true, version: '1.0.0', installKind: 'npm', meetsMin: true, ...overrides.pi },
     minNodeVersion: '22.19.0',
-    minPiVersion: '0.83.0',
+    minPiVersion: '1.0.0',
     compatibility: overrides.compatibility,
   };
 }
@@ -40,7 +40,7 @@ describe('computeOnboardingState — onboarding 五场景', () => {
   });
 
   it('npm 安装但版本过低 → pi-outdated', () => {
-    expect(computeOnboardingState(env({ pi: { version: '0.82.1', meetsMin: false } }))).toBe('pi-outdated');
+    expect(computeOnboardingState(env({ pi: { version: '0.84.2', meetsMin: false } }))).toBe('pi-outdated');
   });
 
   it('npm 安装且版本达标 → ready', () => {

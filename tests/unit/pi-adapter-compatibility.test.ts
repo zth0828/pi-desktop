@@ -91,11 +91,12 @@ describe('Pi Adapter compatibility report', () => {
     expect(manifest.piCompat.min).toBe(MIN_PI_VERSION);
     expect(manifest.piCompat.tested).toEqual([...TESTED_PI_RANGES]);
     expect(manifest.piCompat.fallback).toBe(FALLBACK_PI_VERSION);
-    expect(isPiVersionTested('0.83.0')).toBe(true);
-    expect(isPiVersionTested('0.84.99')).toBe(true);
+    expect(isPiVersionTested('0.83.0')).toBe(false);
+    expect(isPiVersionTested('0.84.99')).toBe(false);
     expect(isPiVersionTested('0.85.0')).toBe(false);
     expect(isPiVersionTested('1.0.0')).toBe(true);
     expect(isPiVersionTested('1.0.4')).toBe(true);
-    expect(isPiVersionTested('1.1.0')).toBe(false);
+    expect(isPiVersionTested('1.1.0')).toBe(true);
+    expect(isPiVersionTested('1.2.0')).toBe(false);
   });
 });

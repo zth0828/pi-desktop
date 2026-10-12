@@ -21,7 +21,7 @@ writeFileSync(
   path.join(pkgDir, 'package.json'),
   JSON.stringify({
     name: '@earendil-works/pi-coding-agent',
-    version: '0.83.0',
+    version: '1.0.0',
     bin: { pi: 'dist/cli.js' },
   }),
 );
@@ -52,7 +52,7 @@ describe('pi-detector 路径逻辑', () => {
       path.join(windowsPkgDir, 'package.json'),
       JSON.stringify({
         name: '@earendil-works/pi-coding-agent',
-        version: '0.84.2',
+        version: '1.0.0',
         bin: { pi: 'dist/cli.js' },
       }),
     );
@@ -68,7 +68,7 @@ describe('pi-detector 路径逻辑', () => {
         binPath: path.join(prefix, 'pi.cmd'),
         realBinPath: realpathSync(cliPath),
         packageRoot: realpathSync(windowsPkgDir),
-        version: '0.84.2',
+        version: '1.0.0',
         installKind: 'npm',
         meetsMin: true,
       });
@@ -95,7 +95,7 @@ describe('pi-detector 路径逻辑', () => {
         binPath: undefined,
         realBinPath: realpathSync(path.join(globalRoot, '@earendil-works/pi-coding-agent/dist/cli.js')),
         packageRoot: realpathSync(path.join(globalRoot, '@earendil-works/pi-coding-agent')),
-        version: '0.84.2',
+        version: '1.0.0',
         installKind: 'npm',
         meetsMin: true,
       });
@@ -109,7 +109,7 @@ describe('pi-detector 路径逻辑', () => {
   it('locatePackageRoot 从 bin 真实路径向上找到包根与版本', () => {
     const located = locatePackageRoot(path.join(pkgDir, 'dist/cli.js'));
     expect(located?.packageRoot).toBe(pkgDir);
-    expect(located?.version).toBe('0.83.0');
+    expect(located?.version).toBe('1.0.0');
   });
 
   it('locatePackageRoot 对非 pi 路径返回 null', () => {
@@ -129,7 +129,7 @@ describe('pi-detector 路径逻辑', () => {
     const detected = detectPiPackageRoot(pkgDir, { found: true, globalRoot: path.join(root, 'other') });
     expect(detected).toMatchObject({
       found: true,
-      version: '0.83.0',
+      version: '1.0.0',
       packageRoot: realpathSync(pkgDir),
       installKind: 'non-npm',
       meetsMin: true,

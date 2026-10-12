@@ -45,19 +45,18 @@
     "test:watch": "vitest",
     "test:e2e": "pnpm run build:vite && playwright test",
     "test:contract": "vitest run --config vitest.contract.config.ts",
-    "test:contract:min": "PI_TEST_VERSION=0.83.0 pnpm test:contract",
-    "test:contract:recommended": "PI_TEST_VERSION=0.84.2 pnpm test:contract",
+    "test:contract:min": "PI_TEST_VERSION=1.0.0 pnpm test:contract",
+    "test:contract:recommended": "PI_TEST_VERSION=1.1.0 pnpm test:contract",
     "test:contract:latest": "PI_TEST_VERSION=latest pnpm test:contract",
     "screenshots:readme": "pnpm run build:vite && node scripts/capture-readme-screenshots.mjs"
   },
   "piCompat": {
-    "min": "0.83.0",
+    "min": "1.0.0",
     "tested": [
-      "0.83.x",
-      "0.84.x",
-      "1.0.x"
+      "1.0.x",
+      "1.1.x"
     ],
-    "fallback": "0.84.2"
+    "fallback": "1.0.0"
   },
   "dependencies": {
     "electron-store": "^11.0.2",
