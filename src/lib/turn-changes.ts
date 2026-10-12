@@ -25,6 +25,7 @@ export function groupLogicalTurns(messages: ChatMessage[]): LogicalTurn[] {
   const turns: LogicalTurn[] = [];
   let current: LogicalTurn | null = null;
   messages.forEach((m, i) => {
+    if (!m) return;
     if (m.role === 'user') {
       current = { startIndex: i, toolCallIds: [], endIndex: i };
       turns.push(current);
@@ -34,8 +35,10 @@ export function groupLogicalTurns(messages: ChatMessage[]): LogicalTurn[] {
     if (m.role === 'bashExecution') return;
     if (!current) return;
     current.endIndex = i;
-    for (const b of m.content) {
-      if (b.type === 'toolCall' && b.id) current.toolCallIds.push(b.id);
+    if (Array.isArray(m.content)) {
+      for (const b of m.content) {
+        if (b && b.type === 'toolCall' && b.id) current.toolCallIds.push(b.id);
+      }
     }
   });
   return turns;
@@ -51,14 +54,15 @@ export function turnFinalResponseIndex(messages: ChatMessage[], turn: LogicalTur
   if (!Array.isArray(messages) || !turn) return undefined;
   for (let i = turn.endIndex; i > turn.startIndex; i -= 1) {
     const message = messages[i];
-    if (message.role !== 'assistant') continue;
-    const hasText = message.content.some((block) => block.type === 'text' && block.text?.trim());
-    const hasToolCall = message.content.some((block) => block.type === 'toolCall');
+    if (!message || message.role !== 'assistant') continue;
+    const content = Array.isArray(message.content) ? message.content : [];
+    const hasText = content.some((block) => block && block.type === 'text' && block.text?.trim());
+    const hasToolCall = content.some((block) => block && block.type === 'toolCall');
     if (hasText && !hasToolCall) return i;
   }
   for (let i = turn.endIndex; i > turn.startIndex; i -= 1) {
     const message = messages[i];
-    if (message.role !== 'assistant') continue;
+    if (!message || message.role !== 'assistant') continue;
     const raw = message.raw as { errorMessage?: string } | undefined;
     if (raw?.errorMessage) return i;
   }
@@ -103,7 +107,7 @@ export function turnDurationMs(
   const range = turnTimeRange(toolExecutions, turn.toolCallIds);
   const timestamps = messages
     .slice(turn.startIndex, turn.endIndex + 1)
-    .map((message) => message.timestamp)
+    .map((message) => message?.timestamp)
     .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
   const starts = [range.startedAt, ...timestamps].filter((value): value is number => value !== undefined);
   const ends = [range.endedAt, ...timestamps].filter((value): value is number => value !== undefined);
@@ -212,7 +216,7 @@ export function isTurnCompleted(
 
   const turnHasStreamingMessage = messages
     .slice(turn.startIndex, turn.endIndex + 1)
-    .some((m) => m.streaming);
+    .some((m) => m?.streaming);
   if (turnHasStreamingMessage) return false;
 
   if (turnIndex < totalTurns - 1) return true;

@@ -366,5 +366,14 @@ describe('isTurnCompleted', () => {
     });
     expect(isTurnCompleted(undefined as unknown as any, undefined as unknown as any, 0, 1, {}, false)).toBe(true);
   });
+
+  it('safely handles nullish or malformed messages in message lists', () => {
+    const sparse = [null as any, { role: 'user', content: null as any }, null as any, { role: 'assistant', content: null as any }];
+    const turns = groupLogicalTurns(sparse);
+    expect(turns.length).toBe(1);
+    expect(turnFinalResponseIndex(sparse, turns[0])).toBeUndefined();
+    expect(turnDurationMs(sparse, turns[0], {})).toBeNull();
+    expect(isTurnCompleted(sparse, turns[0], 0, 1, {}, false)).toBe(true);
+  });
 });
 
