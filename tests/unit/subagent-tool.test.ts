@@ -41,7 +41,7 @@ describe('subagent-tool helper', () => {
     expect(extractSubagentText({ content: [{ type: 'text', text: 'content text' }] })).toBe('content text');
   });
 
-  it('parseActionTraces 从消息列表中提取工具调用轨迹', () => {
+  it('parseActionTraces 支持 tool_use 与 pi 原生 toolCall 轨迹提取', () => {
     const messages = [
       {
         role: 'user',
@@ -57,10 +57,10 @@ describe('subagent-tool helper', () => {
             input: { path: 'server/api/v1/user.go' },
           },
           {
-            type: 'tool_use',
+            type: 'toolCall',
             id: 'call-2',
             name: 'grep',
-            input: { query: 'SELECT', path: 'server/' },
+            arguments: { query: 'SELECT', path: 'server/' },
           },
         ],
       },
@@ -74,7 +74,7 @@ describe('subagent-tool helper', () => {
     expect(traces[1].id).toBe('call-2');
   });
 
-  it('extractSubagentSubTasks 能够从 details.results 提取结构化子任务和操作轨迹', () => {
+  it('extractSubagentSubTasks 能从 messages 末尾提取最终文本，并正确标记退出码失败状态', () => {
     const execution: ToolExecution = {
       toolCallId: 'call-100',
       toolName: 'subagent',
@@ -82,7 +82,7 @@ describe('subagent-tool helper', () => {
       args: {
         tasks: [
           { agent: 'scout', task: '分析后端接口' },
-          { agent: 'reviewer', task: '审查架构' },
+          { agent: 'Explore', task: '无效 agent' },
         ],
       },
       result: {
@@ -92,16 +92,25 @@ describe('subagent-tool helper', () => {
             {
               agent: 'scout',
               task: '分析后端接口',
-              output: '发现 2 处未检查 error',
+              exitCode: 0,
               messages: [
                 {
                   role: 'assistant',
                   content: [
                     {
-                      type: 'tool_use',
+                      type: 'toolCall',
                       id: 'call-sub-1',
                       name: 'read',
-                      input: { path: 'server/api/v1/user.go' },
+                      arguments: { path: 'server/api/v1/user.go' },
+                    },
+                  ],
+                },
+                {
+                  role: 'assistant',
+                  content: [
+                    {
+                      type: 'text',
+                      text: '# 排查分析完成\n发现 2 处潜在漏洞。',
                     },
                   ],
                 },
@@ -109,9 +118,10 @@ describe('subagent-tool helper', () => {
               usage: { input: 100, output: 50, total: 150 },
             },
             {
-              agent: 'reviewer',
-              task: '审查架构',
-              output: '架构设计符合规范',
+              agent: 'Explore',
+              task: '无效 agent',
+              exitCode: 1,
+              stderr: 'Unknown agent: "Explore".',
               messages: [],
             },
           ],
@@ -123,16 +133,15 @@ describe('subagent-tool helper', () => {
     expect(subtasks).toHaveLength(2);
 
     expect(subtasks[0].agent).toBe('scout');
-    expect(subtasks[0].task).toBe('分析后端接口');
-    expect(subtasks[0].output).toBe('发现 2 处未检查 error');
+    expect(subtasks[0].status).toBe('success');
+    expect(subtasks[0].output).toBe('# 排查分析完成\n发现 2 处潜在漏洞。');
     expect(subtasks[0].actions).toHaveLength(1);
     expect(subtasks[0].actions[0].toolName).toBe('read');
-    expect(subtasks[0].usage?.total).toBe(150);
+    expect(subtasks[0].messages).toHaveLength(2);
 
-    expect(subtasks[1].agent).toBe('reviewer');
-    expect(subtasks[1].task).toBe('审查架构');
-    expect(subtasks[1].output).toBe('架构设计符合规范');
-    expect(subtasks[1].actions).toHaveLength(0);
+    expect(subtasks[1].agent).toBe('Explore');
+    expect(subtasks[1].status).toBe('error');
+    expect(subtasks[1].stderr).toBe('Unknown agent: "Explore".');
   });
 
   it('extractSubagentSubTasks 在任务执行中（running）时保留状态', () => {

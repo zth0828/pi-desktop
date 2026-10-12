@@ -1567,3 +1567,164 @@
   color: var(--text-secondary);
 }
 
+.subagent-task-messages-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+}
+
+.subagent-task-error-box {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--danger);
+}
+
+.subagent-task-error-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.subagent-task-error-box pre {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.subagent-transcript-toggle-hint {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.subagent-transcript-container {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.subagent-transcript-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+}
+
+.subagent-transcript-msg.role-user {
+  border-left: 3px solid var(--accent);
+}
+
+.subagent-transcript-msg.role-assistant {
+  border-left: 3px solid #8b5cf6;
+}
+
+.subagent-transcript-msg.role-toolResult,
+.subagent-transcript-msg.role-tool {
+  border-left: 3px solid #10b981;
+}
+
+.subagent-transcript-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.subagent-transcript-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.subagent-transcript-badge.user {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent);
+}
+
+.subagent-transcript-badge.assistant {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+}
+
+.subagent-transcript-badge.toolResult,
+.subagent-transcript-badge.tool {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.subagent-transcript-tool-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.subagent-transcript-content {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text);
+  overflow-x: auto;
+}
+
+.subagent-transcript-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.subagent-transcript-thinking {
+  margin-bottom: 4px;
+  background: var(--bg-sunken);
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+.subagent-transcript-thinking summary {
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  user-select: none;
+}
+
+.subagent-transcript-thinking pre {
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.subagent-transcript-tool-call {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-sunken);
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.subagent-transcript-tool-name {
+  font-size: 10.5px;
+  color: var(--accent);
+}
+
+

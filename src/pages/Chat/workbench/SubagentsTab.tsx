@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Copy,
   Locate,
+  MessageSquare,
   Square,
 } from 'lucide-react';
 import { formatDuration } from '../../../lib/tool-display';
@@ -23,6 +24,72 @@ import { usePaneChatStore } from '../chat-store-context';
 
 export type SubagentFilter = 'all' | 'running' | 'completed' | 'failed';
 
+/**
+ * 子 Agent 内部的完整会话记录回放组件。
+ */
+function SubagentTranscriptView({ messages }: { messages: unknown[] }) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="subagent-transcript-container custom-scroll font-mono" data-testid="subagent-transcript">
+      {messages.map((rawMsg: any, idx: number) => {
+        const role = rawMsg?.role || 'unknown';
+        const isAssistant = role === 'assistant';
+        const isUser = role === 'user';
+        const isTool = role === 'toolResult' || role === 'tool';
+        const content = rawMsg?.content;
+
+        return (
+          <div key={idx} className={`subagent-transcript-msg role-${role}`}>
+            <div className="subagent-transcript-header">
+              <span className={`subagent-transcript-badge ${role}`}>
+                {isUser ? 'User' : isAssistant ? 'Agent' : 'Tool'}
+              </span>
+              {rawMsg?.toolName && (
+                <span className="subagent-transcript-tool-tag">{rawMsg.toolName}</span>
+              )}
+            </div>
+
+            <div className="subagent-transcript-content">
+              {Array.isArray(content) ? (
+                content.map((block: any, bIdx: number) => {
+                  if (block.type === 'thinking' && block.thinking) {
+                    return (
+                      <details key={bIdx} className="subagent-transcript-thinking">
+                        <summary>{t('workspace.subagentThinking')}</summary>
+                        <pre className="custom-scroll">{block.thinking}</pre>
+                      </details>
+                    );
+                  }
+                  if ((block.type === 'toolCall' || block.type === 'tool_use') && block.name) {
+                    const args = block.arguments ?? block.input ?? block.args;
+                    return (
+                      <div key={bIdx} className="subagent-transcript-tool-call">
+                        <span className="subagent-transcript-tool-name font-bold">$ {block.name}</span>
+                        <pre className="custom-scroll">{formatToolArgs(args)}</pre>
+                      </div>
+                    );
+                  }
+                  if (block.type === 'text' && block.text) {
+                    return (
+                      <div key={bIdx} className="subagent-transcript-text">
+                        <Markdown text={block.text} />
+                      </div>
+                    );
+                  }
+                  return null;
+                })
+              ) : typeof content === 'string' ? (
+                <pre className="custom-scroll">{content}</pre>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function SubTaskCard({
   task,
   copiedId,
@@ -35,6 +102,7 @@ function SubTaskCard({
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
   const [traceExpanded, setTraceExpanded] = useState(false);
+  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const taskCopyKey = `${task.id}-task`;
   const resultCopyKey = `${task.id}-result`;
 
@@ -65,6 +133,12 @@ function SubTaskCard({
               {t('workspace.subagentActions', { count: task.actions.length })}
             </span>
           )}
+          {task.messages && task.messages.length > 0 && (
+            <span className="subagent-task-messages-badge">
+              <MessageSquare size={10} />
+              {t('workspace.subagentMessagesCount', { count: task.messages.length })}
+            </span>
+          )}
           {task.usage?.total ? (
             <span className="subagent-task-usage-badge font-mono">
               {task.usage.total.toLocaleString()} tokens
@@ -91,6 +165,18 @@ function SubTaskCard({
 
       {expanded && (
         <div className="subagent-task-body">
+          {/* 任务错误提示 */}
+          {task.stderr && (
+            <div className="subagent-task-error-box font-mono" data-testid="subagent-task-error">
+              <div className="subagent-task-error-title">
+                <AlertCircle size={12} />
+                <span>{t('workspace.subagentErrorDetails')}</span>
+              </div>
+              <pre>{task.stderr}</pre>
+            </div>
+          )}
+
+          {/* 任务目标描述 */}
           {task.task && (
             <div className="subagent-task-desc-section">
               <div className="subagent-task-section-bar">
@@ -113,6 +199,7 @@ function SubTaskCard({
             </div>
           )}
 
+          {/* 内部工具轨迹 */}
           {task.actions.length > 0 && (
             <div className="subagent-task-trace-section">
               <div
@@ -138,6 +225,7 @@ function SubTaskCard({
             </div>
           )}
 
+          {/* 产出结果报告 */}
           {(task.output || task.status === 'running') && (
             <div className="subagent-task-result-section">
               <div className="subagent-task-section-bar">
@@ -167,6 +255,28 @@ function SubTaskCard({
               </div>
             </div>
           )}
+
+          {/* 完整会话记录回放 */}
+          {task.messages && task.messages.length > 0 && (
+            <div className="subagent-task-transcript-section">
+              <div
+                className="subagent-task-section-bar clickable"
+                onClick={() => setTranscriptExpanded((v) => !v)}
+              >
+                <div className="subagent-task-section-left">
+                  {transcriptExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                  <span className="subagent-task-section-label">{t('workspace.subagentMessages')}</span>
+                  <span className="subagent-task-trace-count">({task.messages.length})</span>
+                </div>
+                <span className="subagent-transcript-toggle-hint">
+                  {transcriptExpanded ? t('workspace.subagentHideTranscript') : t('workspace.subagentShowTranscript')}
+                </span>
+              </div>
+              {transcriptExpanded && (
+                <SubagentTranscriptView messages={task.messages} />
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -194,19 +304,27 @@ export function SubagentsTab() {
     [allSubagents],
   );
 
-  const failedCount = useMemo(
-    () => allSubagents.filter((ex) => ex.status === 'error' || ex.interrupted).length,
-    [allSubagents],
-  );
+  const failedCount = useMemo(() => {
+    return allSubagents.filter((ex) => {
+      const progress = extractSubagentProgress(ex);
+      return ex.status === 'error' || ex.interrupted || progress.hasErrors;
+    }).length;
+  }, [allSubagents]);
 
   const filteredSubagents = useMemo(() => {
     switch (filter) {
       case 'running':
         return allSubagents.filter((ex) => ex.status === 'running');
       case 'completed':
-        return allSubagents.filter((ex) => ex.status === 'success');
+        return allSubagents.filter((ex) => {
+          const progress = extractSubagentProgress(ex);
+          return ex.status === 'success' && !progress.hasErrors && !ex.interrupted;
+        });
       case 'failed':
-        return allSubagents.filter((ex) => ex.status === 'error' || ex.interrupted);
+        return allSubagents.filter((ex) => {
+          const progress = extractSubagentProgress(ex);
+          return ex.status === 'error' || ex.interrupted || progress.hasErrors;
+        });
       default:
         return allSubagents;
     }
@@ -280,10 +398,10 @@ export function SubagentsTab() {
           filteredSubagents.map((item) => {
             const isRunning = item.status === 'running';
             const isInterrupted = item.interrupted === true;
-            const isError = item.status === 'error' && !isInterrupted;
-            const isSuccess = item.status === 'success';
-            const open = expandedId === item.toolCallId || isRunning;
             const progress = extractSubagentProgress(item);
+            const isError = !isRunning && (item.status === 'error' || progress.hasErrors || isInterrupted);
+            const isSuccess = !isRunning && !isError && item.status === 'success';
+            const open = expandedId === item.toolCallId || isRunning;
             const subTasks = extractSubagentSubTasks(item);
             const duration = formatDuration(item.startedAt, item.endedAt);
             const hasArgs = Boolean(item.args && typeof item.args === 'object' && Object.keys(item.args).length > 0);
