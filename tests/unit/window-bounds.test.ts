@@ -85,10 +85,12 @@ describe('computeCenteredExpansion', () => {
     });
   });
 
-  it('extraWidth ≤ 0 时不加宽', () => {
+  it('extraWidth ≤ 0 或非有限数字时不加宽且不产生 NaN', () => {
     const bounds = { x: 680, y: 40, width: 1200, height: 800 };
     expect(computeCenteredExpansion(bounds, workArea, 0)).toEqual({ applied: 0, nextX: 680, nextWidth: 1200 });
     expect(computeCenteredExpansion(bounds, workArea, -100)).toEqual({ applied: 0, nextX: 680, nextWidth: 1200 });
+    expect(computeCenteredExpansion(bounds, workArea, Number.NaN)).toEqual({ applied: 0, nextX: 680, nextWidth: 1200 });
+    expect(computeCenteredExpansion(bounds, workArea, undefined as unknown as number)).toEqual({ applied: 0, nextX: 680, nextWidth: 1200 });
   });
 
   it('超过屏幕总宽度时 clamp 到屏幕最大宽度与起始 0 坐标', () => {
@@ -118,9 +120,11 @@ describe('computeRightExpansion', () => {
     expect(computeRightExpansion({ x: 1760, y: 40, width: 800, height: 800 }, workArea, 656)).toBe(0);
   });
 
-  it('extraWidth ≤ 0 时为 0', () => {
+  it('extraWidth ≤ 0 或非有限数字时为 0', () => {
     expect(computeRightExpansion({ x: 100, y: 40, width: 1200, height: 800 }, workArea, 0)).toBe(0);
     expect(computeRightExpansion({ x: 100, y: 40, width: 1200, height: 800 }, workArea, -50)).toBe(0);
+    expect(computeRightExpansion({ x: 100, y: 40, width: 1200, height: 800 }, workArea, Number.NaN)).toBe(0);
+    expect(computeRightExpansion({ x: 100, y: 40, width: 1200, height: 800 }, workArea, undefined as unknown as number)).toBe(0);
   });
 
   it('workArea 有 x 偏移（副屏/左侧程序坞）时按偏移计算', () => {

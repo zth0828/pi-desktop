@@ -49,7 +49,7 @@ export function computeCenteredExpansion(
   workArea: WorkArea,
   extraWidth: number,
 ): CenteredExpansionResult {
-  const reqExtra = Math.max(0, Math.round(extraWidth));
+  const reqExtra = Number.isFinite(extraWidth) ? Math.max(0, Math.round(extraWidth)) : 0;
   if (reqExtra <= 0) {
     return { applied: 0, nextX: bounds.x, nextWidth: bounds.width };
   }
@@ -69,7 +69,8 @@ export function computeCenteredExpansion(
 /** 窗口向右加宽的可用量：不超过所在显示器 workArea 右缘；extraWidth ≤ 0 或右缘无空间时为 0。 */
 export function computeRightExpansion(bounds: WindowBounds, workArea: WorkArea, extraWidth: number): number {
   const available = Math.max(0, workArea.x + workArea.width - (bounds.x + bounds.width));
-  return Math.min(Math.max(0, Math.round(extraWidth)), available);
+  const reqExtra = Number.isFinite(extraWidth) ? Math.max(0, Math.round(extraWidth)) : 0;
+  return Math.min(reqExtra, available);
 }
 
 /** 展开后能否对称缩回：宽度仍是「原宽 + 加宽量」（±8px 容差）才恢复，否则视为用户手动改过尺寸。 */

@@ -30,6 +30,7 @@ import { timingMark } from '../utils/timing';
 import { centerBoundsAtPoint, isPointInsideRects } from '../utils/detach-drop';
 import { hashSessionPath, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { computeCenteredExpansion, shouldRestoreExpansion } from '../utils/window-bounds';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 /** 每窗口的居中对称展开状态：count 支持同窗口多面板各自展开工作台（只加宽一次，归零才缩回）。 */
 type ExpandRightState = {
@@ -62,6 +63,7 @@ export const windowsApi = {
   },
   openDetached: (payload: WindowsOpenDetachedPayload): void => {
     if (!payload?.sessionPath || typeof payload.sessionPath !== 'string' || !payload.sessionPath.trim()) return;
+    if (isWindowsDevicePath(payload.sessionPath) || (typeof payload.cwd === 'string' && isWindowsDevicePath(payload.cwd))) return;
     timingMark('openDetached:recv');
     // 会话已经在主窗口或其他独立窗口时，不创建第二份；同时通知持有窗口激活对应面板。
     const existing = findWindowBySession(payload.sessionPath);
@@ -76,6 +78,8 @@ export const windowsApi = {
   },
   openDetachedAt: (payload: WindowsOpenDetachedAtPayload, ctx?: HostActionContext): void => {
     if (!payload?.sessionPath || typeof payload.sessionPath !== 'string' || !payload.sessionPath.trim()) return;
+    if (isWindowsDevicePath(payload.sessionPath) || (typeof payload.cwd === 'string' && isWindowsDevicePath(payload.cwd))) return;
+    if (!Number.isFinite(payload.screenX) || !Number.isFinite(payload.screenY)) return;
     const existing = findWindowBySession(payload.sessionPath);
     if (existing) {
       const sourceWin = ctx ? BrowserWindow.fromWebContents(ctx.sender) : null;
@@ -121,11 +125,13 @@ export const windowsApi = {
   },
   focus: (payload: WindowsFocusPayload): void => {
     if (!payload?.sessionPath || typeof payload.sessionPath !== 'string' || !payload.sessionPath.trim()) return;
+    if (isWindowsDevicePath(payload.sessionPath)) return;
     if (!focusWindowForSession(payload.sessionPath)) createSessionWindow(payload.sessionPath);
   },
   /** 已有窗口则聚焦；未找到时先为调用窗口原子占用路径，再由 renderer 打开面板。 */
   focusIfOpen: (payload: WindowsFocusPayload, ctx?: HostActionContext): boolean => {
     if (!payload?.sessionPath || typeof payload.sessionPath !== 'string' || !payload.sessionPath.trim()) return false;
+    if (isWindowsDevicePath(payload.sessionPath)) return false;
     const win = findWindowBySession(payload.sessionPath, ctx ? { excludeWindowId: ctx.sender.id } : {});
     if (win) {
       activateAndFocusWindow(win);
@@ -145,6 +151,7 @@ export const windowsApi = {
   expandRight: (payload: WindowsExpandRightPayload, ctx?: HostActionContext): WindowsExpandRightResult => {
     const win = ctx ? BrowserWindow.fromWebContents(ctx.sender) : null;
     if (!win || win.isDestroyed()) return { applied: 0 };
+    if (!payload || !Number.isFinite(payload.extraWidth)) return { applied: 0 };
     const existing = expandRightStates.get(win.id);
     if (existing) {
       existing.count += 1;
