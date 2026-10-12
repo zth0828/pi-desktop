@@ -62,8 +62,8 @@ export const piSystemApi = {
         headers: { accept: 'application/json' },
       });
       if (!res.ok) throw new Error(`Status ${res.status}`);
-      const data = (await res.json()) as { version?: string };
-      return data.version;
+      const data = (await res.json()) as { version?: unknown };
+      return typeof data?.version === 'string' ? data.version : undefined;
     };
 
     try {
