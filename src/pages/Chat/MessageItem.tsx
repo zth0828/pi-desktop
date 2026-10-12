@@ -243,10 +243,10 @@ function MessageItemView({
   const [previewImage, setPreviewImage] = useState<{ url: string; name?: string } | null>(null);
   const [bashExpanded, setBashExpanded] = useState(false);
 
+  const companionInitialized = useCompanionStore((s) => s.initialized);
   const askQuestionInstalled = useCompanionStore((s) => s.askQuestionInstalled);
   const companionLoading = useCompanionStore((s) => s.loading);
   const toggleCompanion = useCompanionStore((s) => s.toggle);
-  const fetchCompanionStatus = useCompanionStore((s) => s.fetchStatus);
   const [companionToast, setCompanionToast] = useState(false);
 
   const subagentsInstalled = useCompanionStore((s) => s.subagentsInstalled);
@@ -590,7 +590,7 @@ function MessageItemView({
           {t('chat.stopLength')}
         </div>
       )}
-      {showTail && (!askQuestionInstalled || companionToast) && isPromptingForChoices(plainText) && (
+      {showTail && ((companionInitialized && !askQuestionInstalled) || companionToast) && isPromptingForChoices(plainText) && (
         <div className="companion-choice-hint" data-testid="companion-choice-hint">
           <div className="companion-choice-hint-content">
             <Sparkles size={14} className="companion-choice-hint-icon" />
@@ -619,7 +619,7 @@ function MessageItemView({
           )}
         </div>
       )}
-      {showTail && (!subagentsInstalled || subagentsToast) && isSuggestingSubagent(plainText) && (
+      {showTail && ((companionInitialized && !subagentsInstalled) || subagentsToast) && isSuggestingSubagent(plainText) && (
         <div className="companion-choice-hint subagent-install-hint" data-testid="subagent-install-hint">
           <div className="companion-choice-hint-content">
             <Bot size={14} className="companion-choice-hint-icon" />

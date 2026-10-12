@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { hostApi } from '../lib/host-api';
 
 type CompanionState = {
+  initialized: boolean;
   askQuestionInstalled: boolean;
   subagentsInstalled: boolean;
   loading: boolean;
@@ -9,11 +10,13 @@ type CompanionState = {
   error?: string;
   fetchStatus: (id?: string) => Promise<boolean>;
   fetchSubagentsStatus: () => Promise<boolean>;
+  fetchAllStatus: () => Promise<void>;
   installSubagents: () => Promise<boolean>;
   toggle: (id: string, enable: boolean) => Promise<boolean>;
 };
 
 export const useCompanionStore = create<CompanionState>((set) => ({
+  initialized: false,
   askQuestionInstalled: false,
   subagentsInstalled: false,
   loading: false,
@@ -42,6 +45,18 @@ export const useCompanionStore = create<CompanionState>((set) => ({
       return installed;
     } catch {
       return false;
+    }
+  },
+
+  fetchAllStatus: async () => {
+    try {
+      await Promise.allSettled([
+        useCompanionStore.getState().fetchStatus('ask-question'),
+        useCompanionStore.getState().fetchSubagentsStatus(),
+      ]);
+      set({ initialized: true });
+    } catch {
+      set({ initialized: true });
     }
   },
 

@@ -77,19 +77,20 @@ export default function ExtensionsPage() {
   };
 
   useEffect(() => {
-    void fetchCompanionStatus();
+    void useCompanionStore.getState().fetchAllStatus();
     return onNavigateToPage((page, targetView) => {
       if (page === 'extensions' && (targetView === 'discover' || targetView === 'installed')) {
         setView(targetView);
       }
     });
-  }, [fetchCompanionStatus]);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
       const result = await hostApi.piPackages.list();
       setPackages(result.packages);
       setError(undefined);
+      void useCompanionStore.getState().fetchAllStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }

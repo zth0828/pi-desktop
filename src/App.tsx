@@ -22,6 +22,7 @@ import { bindPiSystemEvents, usePiSystemStore } from './stores/pi-system';
 import { getActiveChatStore } from './stores/chat-registry';
 import { onHostEvent } from './lib/host-events';
 import { hostApi } from './lib/host-api';
+import { useCompanionStore } from './stores/companion';
 import { onNavigateToPage } from './lib/app-navigation';
 import { initTheme } from './lib/theme';
 import { SessionList } from './components/SessionList';
@@ -102,6 +103,7 @@ export default function App() {
     if (!environment) void detect();
     void initTheme();
     void hostApi.app.platform().then(setPlatform);
+    void useCompanionStore.getState().fetchAllStatus();
     // 恢复保存的语言
     void hostApi.settings.get('language').then((lng) => {
       if (lng && lng !== i18n.language) void i18n.changeLanguage(lng);
