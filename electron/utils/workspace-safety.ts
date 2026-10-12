@@ -19,6 +19,7 @@ function resolveExisting(target: string): string | null {
 }
 
 export function riskyWorkspaceReason(cwd: string): RiskyWorkspaceReason | null {
+  if (!cwd || typeof cwd !== 'string' || !cwd.trim()) return null;
   const resolved = resolveExisting(cwd);
   if (resolved === null) return null;
   const home = resolveExisting(os.homedir());

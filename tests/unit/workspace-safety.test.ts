@@ -36,4 +36,11 @@ describe('riskyWorkspaceReason', () => {
   it('不存在的路径放行（由 runtime 正常报错）', () => {
     expect(riskyWorkspaceReason(path.join(os.tmpdir(), 'pi-ws-does-not-exist-xyz'))).toBeNull();
   });
+
+  it('空路径或非字符串路径安全返回 null', () => {
+    expect(riskyWorkspaceReason('')).toBeNull();
+    expect(riskyWorkspaceReason('   ')).toBeNull();
+    expect(riskyWorkspaceReason(undefined as unknown as string)).toBeNull();
+    expect(riskyWorkspaceReason(123 as unknown as string)).toBeNull();
+  });
 });

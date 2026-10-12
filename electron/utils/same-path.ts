@@ -7,6 +7,7 @@ import path from 'node:path';
  * 需与常规驱动器路径拉齐后再比对。
  */
 export function stripWindowsExtendedPrefix(p: string): string {
+  if (!p || typeof p !== 'string') return '';
   if (/^(?:[\\/]{2}\?[\\/]|[\\/]\?\?[\\/])unc[\\/]/i.test(p)) {
     return `\\\\${p.slice(8)}`;
   }

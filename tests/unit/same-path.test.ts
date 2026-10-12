@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { pathsEqual, samePath } from '../../electron/utils/same-path';
+import { pathsEqual, samePath, stripWindowsExtendedPrefix } from '../../electron/utils/same-path';
 
 describe('pathsEqual', () => {
   it('identical strings match on any platform', () => {
@@ -92,5 +92,13 @@ describe('samePath', () => {
     expect(samePath(a, '')).toBe(false);
     expect(samePath({} as unknown as string, a)).toBe(false);
     expect(samePath(123 as unknown as string, a)).toBe(false);
+  });
+
+  it('stripWindowsExtendedPrefix safely handles null, undefined and non-string inputs', () => {
+    expect(stripWindowsExtendedPrefix(undefined as unknown as string)).toBe('');
+    expect(stripWindowsExtendedPrefix(null as unknown as string)).toBe('');
+    expect(stripWindowsExtendedPrefix(123 as unknown as string)).toBe('');
+    expect(stripWindowsExtendedPrefix('\\\\?\\C:\\repo')).toBe('C:\\repo');
+    expect(stripWindowsExtendedPrefix('\\\\?\\UNC\\server\\share')).toBe('\\\\server\\share');
   });
 });
