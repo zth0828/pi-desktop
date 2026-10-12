@@ -6,7 +6,7 @@ export type SearchableSession = {
   allMessagesText: string;
   /** 与 runtime state.messages 同序，用于把内容命中定位到具体消息。 */
   messageTexts?: string[];
-  modified: Date;
+  modified: Date | string | number;
 };
 
 export type SessionSearchHit<T extends SearchableSession> = {
@@ -27,7 +27,18 @@ function normalizedIndex(text: string | undefined, query: string): number {
   return text?.toLocaleLowerCase().indexOf(query) ?? -1;
 }
 
+function toTimestamp(dateOrValue: unknown): number {
+  if (dateOrValue instanceof Date) return dateOrValue.getTime();
+  if (typeof dateOrValue === 'number' && Number.isFinite(dateOrValue)) return dateOrValue;
+  if (typeof dateOrValue === 'string') {
+    const parsed = Date.parse(dateOrValue);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
 function excerpt(text: string, matchIndex: number, queryLength: number): string {
+  if (!text || typeof text !== 'string') return '';
   const compact = text.replace(/\s+/g, ' ').trim();
   if (compact.length <= 180) return compact;
 
@@ -54,7 +65,7 @@ export function searchSessions<T extends SearchableSession>(
       return [{
         session,
         match: 'name',
-        snippet: session.firstMessage.replace(/\s+/g, ' ').trim(),
+        snippet: typeof session.firstMessage === 'string' ? session.firstMessage.replace(/\s+/g, ' ').trim() : '',
         matchIndex: nameIndex,
       }];
     }
@@ -94,7 +105,7 @@ export function searchSessions<T extends SearchableSession>(
     .sort((a, b) => (
       MATCH_PRIORITY[a.match] - MATCH_PRIORITY[b.match]
       || a.matchIndex - b.matchIndex
-      || b.session.modified.getTime() - a.session.modified.getTime()
+      || toTimestamp(b.session.modified) - toTimestamp(a.session.modified)
     ))
     .slice(0, Math.max(1, Math.min(limit, 100)));
 }

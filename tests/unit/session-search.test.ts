@@ -69,4 +69,13 @@ describe('searchSessions', () => {
     // @ts-expect-error testing undefined sessions
     expect(searchSessions(undefined, 'test')).toEqual([]);
   });
+
+  it('supports string and numeric modified timestamps without throwing', () => {
+    const results = searchSessions([
+      session({ name: 'Alpha', modified: '2026-01-01T00:00:00.000Z' }),
+      session({ name: 'Beta', modified: 1767225600000 }),
+      session({ name: 'Gamma', firstMessage: undefined as unknown as string, modified: 'invalid' }),
+    ], 'a');
+    expect(results.length).toBeGreaterThan(0);
+  });
 });

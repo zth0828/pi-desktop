@@ -618,7 +618,7 @@ export const sessionsApi = {
     const rawInfos = await adapter.sessions.listAll();
     const infos = rawInfos.filter((info) => info.messageCount > 0);
     const current = ctx?.sessionPath ?? currentSessionFile();
-    const limit = Math.max(1, Math.min(payload.limit ?? 50, 100));
+    const limit = Number.isFinite(payload?.limit) ? Math.max(1, Math.min(Math.floor(payload!.limit!), 100)) : 50;
     // 搜索结果 snippet 直接展示原文，先剥离附件信封再进索引/命中
     const strippedInfos = infos.map((info) => ({
       ...info,
