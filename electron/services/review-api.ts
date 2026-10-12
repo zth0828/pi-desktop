@@ -231,6 +231,7 @@ function hasCapturingCwd(cwd: string): boolean {
 }
 
 export function isCapturingReviewBaseline(cwd: string): boolean {
+  if (!cwd || typeof cwd !== 'string') return false;
   return hasCapturingCwd(cwd);
 }
 
@@ -246,6 +247,9 @@ function disposeBaseline(): void {
  * 非 Git 目录使用临时 bare object store，项目目录本身不会出现 .git。
  */
 export async function captureReviewBaseline(cwd: string): Promise<void> {
+  if (!cwd || typeof cwd !== 'string' || !cwd.trim()) return;
+  const cleanCwd = stripWindowsExtendedPrefix(cwd.trim());
+  if (!cleanCwd || isWindowsDevicePath(cleanCwd)) return;
   if (findBaseline(cwd) || hasCapturingCwd(cwd)) return;
   capturingCwds.add(cwd);
   for (const key of [...baselineFailures.keys()]) {
@@ -361,6 +365,11 @@ const CONFLICT_CODES = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']);
  */
 export function normalizeGitRelPath(cwd: string, rawPath: string): string {
   if (!rawPath || typeof rawPath !== 'string' || !rawPath.trim()) {
+    return '';
+  }
+  const strippedRaw = stripWindowsExtendedPrefix(rawPath.trim());
+  const strippedCwd = typeof cwd === 'string' ? stripWindowsExtendedPrefix(cwd.trim()) : '';
+  if (isWindowsDevicePath(strippedRaw) || (strippedCwd && isWindowsDevicePath(strippedCwd))) {
     return '';
   }
   const cleanPath = normalizeLexicalPath(rawPath);

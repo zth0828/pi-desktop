@@ -130,6 +130,23 @@ describe('review baseline guards and non-blocking capture', () => {
       expect(normalizeGitRelPath('/workspace', '   ')).toBe('');
       // @ts-expect-error testing invalid rawPath
       expect(normalizeGitRelPath('/workspace', undefined)).toBe('');
+      expect(normalizeGitRelPath('/workspace', '\\\\.\\nul')).toBe('');
+      expect(normalizeGitRelPath('/workspace', 'CON')).toBe('');
+      expect(normalizeGitRelPath('NUL', 'src/app.ts')).toBe('');
+      expect(normalizeGitRelPath('\\\\.\\COM1', 'src/app.ts')).toBe('');
+    });
+  });
+
+  describe('captureReviewBaseline guards', () => {
+    it('对空串、纯空白或设备路径 cwd 静默忽略且不创建 baseline', async () => {
+      // @ts-expect-error testing invalid cwd
+      await captureReviewBaseline(undefined);
+      await captureReviewBaseline('');
+      await captureReviewBaseline('   ');
+      await captureReviewBaseline('\\\\.\\nul');
+      await captureReviewBaseline('CON');
+      expect(isCapturingReviewBaseline('')).toBe(false);
+      expect(isCapturingReviewBaseline('\\\\.\\nul')).toBe(false);
     });
   });
 
