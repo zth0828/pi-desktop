@@ -40,6 +40,8 @@ describe('shell-api', () => {
 
     expect(await shellApi.openPathWith({ path: '', application: { id: 'app', name: 'Code', path: '/bin/code' } })).toEqual({ success: false, error: 'invalid-path' });
     expect(await shellApi.openPathWith({ path: 'CON', application: { id: 'app', name: 'Code', path: '/bin/code' } })).toEqual({ success: false, error: 'device paths are not allowed' });
+    expect(await shellApi.openPathWith({ path: __filename, application: { id: 'app', name: 'Code', path: 'CON' } })).toEqual({ success: false, error: 'device paths are not allowed' });
+    expect(await shellApi.openPathWith({ path: __filename, application: { id: 'app', name: 'Code', path: '\\\\?\\CON' } })).toEqual({ success: false, error: 'device paths are not allowed' });
 
     expect(await shellApi.showInFolder({ path: '' })).toEqual({ success: false, error: 'invalid-path' });
     expect(await shellApi.showInFolder({ path: 'CON' })).toEqual({ success: false, error: 'device paths are not allowed' });

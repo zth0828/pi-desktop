@@ -175,7 +175,8 @@ async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSucc
     } catch {
       return { success: false, error: 'file-not-found' };
     }
-    const appPath = typeof payload?.application?.path === 'string' ? payload.application.path.trim() : '';
+    const rawAppPath = typeof payload?.application?.path === 'string' ? payload.application.path.trim() : '';
+    const appPath = stripWindowsExtendedPrefix(rawAppPath);
     if (appPath && isWindowsDevicePath(appPath)) {
       return { success: false, error: 'device paths are not allowed' };
     }
