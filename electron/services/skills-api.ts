@@ -107,6 +107,7 @@ async function freeSkillName(targetDir: string, name: string): Promise<string> {
 
 /** 更新 SKILL.md Frontmatter 中的 disable-model-invocation 属性，保持正文与其它属性不变 */
 export function updateDisableModelInvocation(content: string, disable: boolean): string {
+  if (typeof content !== 'string') return '';
   const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n[\s\S]*)$/);
   if (!frontmatterMatch) {
     if (disable) {
@@ -140,7 +141,7 @@ export function updateDisableModelInvocation(content: string, disable: boolean):
 const INVALID_SKILL_NAME = /[<>:"/\\|?*]|^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONIN\$|CONOUT\$)(?:\.|$)/i;
 
 export function isValidSkillName(name: string): boolean {
-  if (!name || name === '..' || name === '.' || name.endsWith('.') || name.endsWith(' ')) {
+  if (!name || typeof name !== 'string' || name === '..' || name === '.' || name.endsWith('.') || name.endsWith(' ')) {
     return false;
   }
   return !INVALID_SKILL_NAME.test(name);

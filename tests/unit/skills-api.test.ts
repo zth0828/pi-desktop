@@ -59,6 +59,11 @@ disable-model-invocation: true
     const updated = updateDisableModelInvocation(original, false);
     expect(updated).toBe(original);
   });
+
+  it('safely handles non-string content', () => {
+    expect(updateDisableModelInvocation(undefined as unknown as string, true)).toBe('');
+    expect(updateDisableModelInvocation(null as unknown as string, false)).toBe('');
+  });
 });
 
 describe('isValidSkillName', () => {
@@ -90,6 +95,9 @@ describe('isValidSkillName', () => {
     expect(isValidSkillName('skill.')).toBe(false);
     expect(isValidSkillName('skill ')).toBe(false);
     expect(isValidSkillName('')).toBe(false);
+    expect(isValidSkillName(undefined as unknown as string)).toBe(false);
+    expect(isValidSkillName(null as unknown as string)).toBe(false);
+    expect(isValidSkillName(123 as unknown as string)).toBe(false);
   });
 
   it('skillsApi.read 与 setInvocationMode 拦截 Windows 设备路径', async () => {
