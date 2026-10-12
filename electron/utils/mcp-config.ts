@@ -12,11 +12,15 @@ export type McpConfigDoc = {
 /** 读配置文件；文件不存在或 JSON 损坏时按空文档处理（损坏不覆盖，由写入方显式改）。 */
 export function readMcpConfigFile(filePath: string): McpConfigDoc {
   if (!existsSync(filePath)) return {};
-  const raw = readFileSync(filePath, 'utf8').trim();
-  if (!raw) return {};
-  const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-  return parsed as McpConfigDoc;
+  try {
+    const raw = readFileSync(filePath, 'utf8').trim();
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as McpConfigDoc;
+  } catch {
+    return {};
+  }
 }
 
 export function writeMcpConfigFile(filePath: string, doc: McpConfigDoc): void {

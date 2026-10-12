@@ -147,12 +147,15 @@ export const mcpApi = {
             : null
           : path.join(agentDir, 'mcp.json');
       if (!filePath) return { success: false, error: 'no workspace for project scope' };
+      const originalName = typeof payload.originalName === 'string' && payload.originalName.trim()
+        ? payload.originalName.trim()
+        : undefined;
       const doc = readMcpConfigFile(filePath);
       // 编辑时保留壳不认识的字段（socket/auth/directTools 等）
-      const base = doc.mcpServers?.[payload.originalName ?? name] ?? {};
+      const base = doc.mcpServers?.[originalName ?? name] ?? {};
       writeMcpConfigFile(
         filePath,
-        upsertServer(doc, name, { ...base, ...payload.config }, payload.originalName),
+        upsertServer(doc, name, { ...base, ...payload.config }, originalName),
       );
       return { success: true };
     } catch (err) {

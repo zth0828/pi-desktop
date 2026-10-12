@@ -30,6 +30,12 @@ describe('mcp-config', () => {
     expect(listServers(readMcpConfigFile(file))).toEqual([]);
   });
 
+  it('文件损坏（非法 JSON）时安全回退为空文档', () => {
+    writeFileSync(file, 'not-valid-json{');
+    expect(readMcpConfigFile(file)).toEqual({});
+    expect(listServers(readMcpConfigFile(file))).toEqual([]);
+  });
+
   it('upsert 新增 server 并保留文件里其他字段', () => {
     writeFileSync(file, JSON.stringify({ theme: 'dark', mcpServers: { a: { command: 'x' } } }));
     const doc = upsertServer(readMcpConfigFile(file), 'b', { url: 'http://localhost:1' });
