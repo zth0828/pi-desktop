@@ -87,6 +87,7 @@ import { settingsApi } from './settings-api';
 import { timingMark } from '../utils/timing';
 import { safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { riskyWorkspaceReason } from '../utils/workspace-safety';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 import {
   compatibilityFailure,
   loadPiAdapter,
@@ -1263,9 +1264,16 @@ const START_TIMEOUT_MS = process.env.PI_DESKTOP_E2E === '1' && process.env.PI_DE
 
 export const piRuntimeApi = {
   start: async (payload: PiRuntimeStartPayload, ctx?: HostActionContext): Promise<PiRuntimeStateResult> => {
+    if (!payload?.cwd || typeof payload.cwd !== 'string' || !payload.cwd.trim()) {
+      throw new Error('invalid workspace cwd');
+    }
+    const cleanCwd = payload.cwd.trim();
+    if (isWindowsDevicePath(cleanCwd)) {
+      throw new Error('device paths are not allowed');
+    }
     // 工作区安全：主目录/根目录不启动 runtime（覆盖启动恢复 workspaceCwd 的旧危险值）；
     // 抛出的错误码由渲染层翻译成用户可见文案。
-    const risky = riskyWorkspaceReason(payload.cwd);
+    const risky = riskyWorkspaceReason(cleanCwd);
     if (risky) throw new Error(`risky-workspace-${risky}`);
 
     // 非主窗口调用方禁止改全局 active / 销毁 active；为该窗口创建并绑定独立 runtime
@@ -1359,6 +1367,8 @@ export const piRuntimeApi = {
   },
 
   prompt: async (payload: PiRuntimePromptPayload, ctx?: HostActionContext) => {
+    const rawText = typeof payload?.text === 'string' ? payload.text : '';
+    if (!rawText.trim()) return { success: false, error: 'empty prompt' };
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
     const session = active.adapterRuntime.session;
@@ -1550,6 +1560,9 @@ export const piRuntimeApi = {
 
   /** 消息级 fork（TUI /fork 选消息）：position='before'，新会话不含被选消息，文本回填编辑器。 */
   fork: async (payload: PiRuntimeForkPayload, ctx?: HostActionContext): Promise<PiRuntimeForkResult> => {
+    if (!payload?.entryId || typeof payload.entryId !== 'string') {
+      return { success: false, error: 'invalid entryId' };
+    }
     const runtime = resolveRuntimeForContext(ctx);
     if (!runtime) return { success: false, error: 'session not started' };
     // 以被 fork 的会话文件为锁键串行（排队期间状态可能变化，锁内重解析 runtime）
@@ -1628,6 +1641,9 @@ export const piRuntimeApi = {
 
   /** 分支跳转（TUI /tree）：同会话文件内移动 leaf，session 对象不变，推全量状态刷新列表。 */
   navigateTree: async (payload: PiRuntimeNavigatePayload, ctx?: HostActionContext): Promise<PiRuntimeNavigateResult> => {
+    if (!payload?.targetId || typeof payload.targetId !== 'string') {
+      return { success: false, error: 'invalid targetId' };
+    }
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
     const summarize = payload.summarize === true;
@@ -1662,6 +1678,9 @@ export const piRuntimeApi = {
 
   /** `!` bash 命令（TUI handleBashCommand 语义：扩展可经 user_bash 事件拦截执行）。 */
   executeBash: async (payload: PiRuntimeBashPayload, ctx?: HostActionContext) => {
+    if (!payload?.command || typeof payload.command !== 'string' || !payload.command.trim()) {
+      return { success: false, error: 'empty command' };
+    }
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
     const session = active.adapterRuntime.session;
@@ -1703,7 +1722,7 @@ export const piRuntimeApi = {
   setSessionName: async (payload: { name: string; notify?: boolean }, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
-    const name = payload.name.trim();
+    const name = typeof payload?.name === 'string' ? payload.name.trim() : '';
     if (!name) return { success: false, error: 'empty name' };
     try {
       active.adapterRuntime.session.setSessionName(name);
@@ -1835,6 +1854,7 @@ export const piRuntimeApi = {
   setThinkingLevel: async (payload: { level: string }, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
+    if (!payload?.level || typeof payload.level !== 'string') return { success: false, error: 'invalid level' };
     active.adapterRuntime.session.setThinkingLevel(payload.level);
     return modelUpdate(active.adapterRuntime.session, active);
   },
@@ -1842,6 +1862,9 @@ export const piRuntimeApi = {
   setContextWindow: async (payload: { contextWindow: number }, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
+    if (typeof payload?.contextWindow !== 'number' || !Number.isFinite(payload.contextWindow)) {
+      return { success: false, error: 'invalid contextWindow' };
+    }
     const target = Math.max(1024, Math.round(payload.contextWindow));
     active.adapterRuntime.session.setContextWindow(target);
     return modelUpdate(active.adapterRuntime.session, active);
@@ -1850,6 +1873,9 @@ export const piRuntimeApi = {
   setModel: async (payload: { provider: string; id: string }, ctx?: HostActionContext) => {
     const active = resolveRuntimeForContext(ctx);
     if (!active) return { success: false, error: 'session not started' };
+    if (!payload?.provider || !payload?.id || typeof payload.provider !== 'string' || typeof payload.id !== 'string') {
+      return { success: false, error: 'provider and id are required' };
+    }
     const model = active.adapter.providers.getModel(active.modelRuntimeHandle, payload.provider, payload.id);
     if (!model) return { success: false, error: `model not found: ${payload.provider}/${payload.id}` };
     await active.adapterRuntime.session.setModel(model);
