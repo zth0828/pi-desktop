@@ -894,7 +894,10 @@ async function createRuntime(
   await syncLmStudioModels(agentDir);
   timingMark('runtime:lmstudio-synced');
   const piBin = adapter.cliPath;
-  if (piBin) process.env.PI_CLI_PATH = piBin;
+  if (piBin) {
+    process.env.PI_CLI_PATH = piBin;
+    process.env.PI_SUBAGENT_PI_BINARY = piBin;
+  }
   const eventBusHandle = adapter.createEventBus();
   const hasTrustRequiring = adapter.trust.hasTrustRequiringProjectResources(cwd);
   const trust: { autoTrustCwd?: string } = {
