@@ -1360,190 +1360,413 @@
   gap: 8px;
 }
 
-.subagent-task-card {
+/* Subagent 顶级独立卡片 */
+.subagent-card-item {
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: border-color 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  margin-bottom: 10px;
 }
 
-.subagent-task-card.running {
+.subagent-card-item:hover {
+  border-color: var(--border-hover, var(--border));
+}
+
+.subagent-card-item.running {
   border-color: var(--accent);
 }
 
-.subagent-task-card.error {
-  border-color: var(--danger);
+.subagent-card-item.error {
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
-.subagent-task-header {
+.subagent-card-item.interrupted {
+  border-color: var(--border);
+}
+
+.subagent-card-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   cursor: pointer;
   user-select: none;
   background: var(--bg-surface);
+  transition: background-color 0.15s ease;
 }
 
-.subagent-task-header:hover {
+.subagent-card-header:hover {
   background: var(--bg-hover);
 }
 
-.subagent-task-chevron {
+.subagent-card-chevron {
   display: inline-flex;
   align-items: center;
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
-.subagent-task-agent-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: rgba(139, 92, 246, 0.12);
+.subagent-card-icon {
+  display: inline-flex;
+  align-items: center;
   color: #8b5cf6;
-  border: 1px solid rgba(139, 92, 246, 0.2);
   flex-shrink: 0;
 }
 
-.subagent-task-title {
+.subagent-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: 1;
   min-width: 0;
+}
+
+.subagent-card-agent-name {
   font-size: 12px;
+  font-weight: 600;
   color: var(--text);
+  flex-shrink: 0;
+}
+
+.subagent-card-task-summary {
+  font-size: 11.5px;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.subagent-task-header-meta {
+.subagent-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.subagent-card-tokens {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.subagent-card-duration {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.subagent-card-body {
+  border-top: 1px solid var(--border);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-surface);
+}
+
+/* 仿截图 2 的 TASK 目标行 */
+.subagent-card-task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.subagent-card-task-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.subagent-task-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #06b6d4;
+  flex-shrink: 0;
+}
+
+.subagent-task-pill-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(6, 182, 212, 0.15);
+  color: #06b6d4;
+  letter-spacing: 0.04em;
+}
+
+.subagent-task-pill-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.subagent-card-task-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding: 8px 10px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+  word-break: break-word;
+}
+
+/* 内部执行工具（对应截图 4 命令流风格） */
+.subagent-internal-actions-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.subagent-internal-actions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.subagent-internal-actions-header.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.subagent-internal-actions-header.clickable:hover {
+  opacity: 0.85;
+}
+
+.subagent-internal-actions-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.subagent-internal-actions-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.subagent-internal-actions-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.subagent-internal-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* 单条内部工具执行卡片（匹配命令面板规范） */
+.internal-tool-item {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.internal-tool-item:hover {
+  border-color: var(--border-hover, var(--border));
+}
+
+.internal-tool-item.error {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.internal-tool-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  user-select: none;
+  background: none;
+  transition: background-color 0.15s ease;
+}
+
+.internal-tool-header:hover {
+  background: var(--bg-hover);
+}
+
+.internal-tool-chevron {
+  color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.internal-tool-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono, monospace);
+  text-transform: uppercase;
+  flex-shrink: 0;
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.internal-tool-badge.bash {
+  background: rgba(139, 92, 246, 0.14);
+  color: #8b5cf6;
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+.internal-tool-badge.read {
+  background: rgba(59, 130, 246, 0.14);
+  color: var(--accent);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.internal-tool-badge.grep {
+  background: rgba(6, 182, 212, 0.14);
+  color: #06b6d4;
+  border-color: rgba(6, 182, 212, 0.25);
+}
+
+.internal-tool-badge.ls {
+  background: rgba(234, 179, 8, 0.14);
+  color: #d97706;
+  border-color: rgba(234, 179, 8, 0.25);
+}
+
+.internal-tool-badge.write,
+.internal-tool-badge.edit {
+  background: rgba(16, 185, 129, 0.14);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.internal-tool-summary {
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.internal-tool-meta {
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
 }
 
-.subagent-task-actions-badge {
+.internal-tool-status-pill {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 4px;
-  background: var(--bg-sunken);
-  color: var(--text-secondary);
+  font-weight: 500;
+  flex-shrink: 0;
 }
 
-.subagent-task-usage-badge {
-  font-size: 10px;
-  color: var(--text-tertiary);
+.internal-tool-status-pill.success {
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
 }
 
-.subagent-task-body {
+.internal-tool-status-pill.error {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+}
+
+.internal-tool-body {
   border-top: 1px solid var(--border);
-  padding: 10px 12px;
+  padding: 8px 10px;
+  background: var(--bg-sunken);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  background: var(--bg-surface);
+  gap: 8px;
 }
 
-.subagent-task-desc-section,
-.subagent-task-result-section {
+.internal-tool-section {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.subagent-task-section-bar {
+.internal-tool-section-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 2px;
 }
 
-.subagent-task-section-bar.clickable {
-  cursor: pointer;
-  user-select: none;
-}
-
-.subagent-task-section-bar.clickable:hover {
-  opacity: 0.85;
-}
-
-.subagent-task-section-left {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.subagent-task-section-label {
-  font-size: 10.5px;
+.internal-tool-section-label {
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
 }
 
-.subagent-task-trace-count {
-  font-size: 10.5px;
-  color: var(--text-tertiary);
-}
-
-.subagent-task-desc-content,
-.subagent-task-result-content {
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text);
-  padding: 8px 10px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  overflow-x: auto;
-  word-break: break-word;
-}
-
-.subagent-task-trace-section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.subagent-trace-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.internal-tool-code-block {
+  margin: 0;
   padding: 6px 8px;
-  background: var(--bg-sunken);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: 5px;
-  max-height: 180px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 220px;
   overflow-y: auto;
 }
 
-.subagent-trace-item {
+/* 产出结果区域 */
+.subagent-card-output-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.subagent-card-output-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.subagent-card-output-label {
   font-size: 11px;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.subagent-trace-tool {
   font-weight: 600;
-  color: var(--accent);
-  flex-shrink: 0;
-  min-width: 44px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
 }
 
-.subagent-trace-summary {
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.subagent-card-output-content {
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 380px;
+  overflow-y: auto;
+  word-break: break-word;
 }
 
 .subagent-raw-args-section {

@@ -127,6 +127,8 @@ export interface SubagentActionTrace {
   toolName: string;
   summary: string;
   args?: unknown;
+  output?: string;
+  isError?: boolean;
 }
 
 /**
@@ -137,7 +139,7 @@ export interface SubagentSubTask {
   index: number;
   agent: string;
   task: string;
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'interrupted';
   output: string;
   actions: SubagentActionTrace[];
   messages?: unknown[];
@@ -151,20 +153,54 @@ export interface SubagentSubTask {
 }
 
 /**
- * 从消息历史记录中解析出工具调用（toolCall / tool_use）轨迹。
+ * 格式化单条工具调用的单行简短摘要。
+ */
+export function formatActionSummary(toolName: string, args: unknown): string {
+  if (!args || typeof args !== 'object') return toolName;
+  const a = args as Record<string, unknown>;
+
+  if (toolName === 'read' && typeof a.path === 'string') {
+    return `${a.path}`;
+  }
+  if (toolName === 'bash' && typeof a.command === 'string') {
+    return `$ ${a.command}`;
+  }
+  if (toolName === 'grep') {
+    const q = a.query ?? a.pattern ?? '';
+    const p = a.path ?? '';
+    return p ? `${q} in ${p}` : String(q);
+  }
+  if (toolName === 'ls' && typeof a.path === 'string') {
+    return `${a.path}`;
+  }
+  if ((toolName === 'write' || toolName === 'edit') && typeof a.path === 'string') {
+    return `${a.path}`;
+  }
+
+  const custom = toolSummary(toolName, args);
+  if (custom) return custom;
+  return formatToolArgs(args).slice(0, 100);
+}
+
+/**
+ * 从消息历史记录中解析出工具调用（toolCall / tool_use）及其对应的执行结果。
  */
 export function parseActionTraces(messages: unknown): SubagentActionTrace[] {
   if (!Array.isArray(messages)) return [];
   const traces: SubagentActionTrace[] = [];
+  const traceMap = new Map<string, SubagentActionTrace>();
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i] as {
       role?: string;
       content?: unknown;
+      toolCallId?: string;
+      tool_use_id?: string;
+      isError?: boolean;
     };
     if (!msg || typeof msg !== 'object') continue;
 
-    if (Array.isArray(msg.content)) {
+    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
       for (let j = 0; j < msg.content.length; j++) {
         const item = msg.content[j] as {
           type?: string;
@@ -178,14 +214,26 @@ export function parseActionTraces(messages: unknown): SubagentActionTrace[] {
         if (item && (item.type === 'toolCall' || item.type === 'tool_use') && item.name) {
           const toolName = item.name;
           const inputArgs = item.arguments ?? item.input ?? item.args;
-          const summary = toolSummary(toolName, inputArgs) ?? formatToolArgs(inputArgs).slice(0, 100);
-          traces.push({
-            id: item.id || `trace-${i}-${j}`,
+          const summary = formatActionSummary(toolName, inputArgs);
+          const id = item.id || `trace-${i}-${j}`;
+          const traceItem: SubagentActionTrace = {
+            id,
             toolName,
             summary: summary || toolName,
             args: inputArgs,
-          });
+            output: '',
+            isError: false,
+          };
+          traces.push(traceItem);
+          traceMap.set(id, traceItem);
         }
+      }
+    } else if ((msg.role === 'toolResult' || msg.role === 'tool') && Array.isArray(msg.content)) {
+      const callId = msg.toolCallId || msg.tool_use_id;
+      if (callId && traceMap.has(callId)) {
+        const target = traceMap.get(callId)!;
+        target.isError = Boolean(msg.isError);
+        target.output = extractSubagentText(msg.content);
       }
     }
   }
@@ -321,11 +369,13 @@ export function extractSubagentSubTasks(execution: ToolExecution): SubagentSubTa
         Boolean(res.error) ||
         (stderr && (stderr.includes('Unknown agent') || stderr.includes('Error:')));
 
-      const status: SubagentSubTask['status'] = execution.status === 'running'
-        ? 'running'
-        : isFailed || execution.status === 'error' || execution.interrupted
-          ? 'error'
-          : 'success';
+      const status: SubagentSubTask['status'] = execution.interrupted
+        ? 'interrupted'
+        : execution.status === 'running'
+          ? 'running'
+          : isFailed || execution.status === 'error'
+            ? 'error'
+            : 'success';
 
       subTasks.push({
         id: `subtask-${execution.toolCallId}-${index}`,
@@ -349,11 +399,13 @@ export function extractSubagentSubTasks(execution: ToolExecution): SubagentSubTa
         index,
         agent: decl.agent,
         task: decl.task,
-        status: execution.status === 'running'
-          ? 'running'
-          : execution.status === 'error' || execution.interrupted
-            ? 'error'
-            : 'success',
+        status: execution.interrupted
+          ? 'interrupted'
+          : execution.status === 'running'
+            ? 'running'
+            : execution.status === 'error'
+              ? 'error'
+              : 'success',
         output,
         actions: [],
       });
@@ -365,11 +417,13 @@ export function extractSubagentSubTasks(execution: ToolExecution): SubagentSubTa
       index: 0,
       agent: progress.agentName ?? 'subagent',
       task: progress.summary,
-      status: execution.status === 'running'
-        ? 'running'
-        : execution.status === 'error' || execution.interrupted
-          ? 'error'
-          : 'success',
+      status: execution.interrupted
+        ? 'interrupted'
+        : execution.status === 'running'
+          ? 'running'
+          : execution.status === 'error'
+            ? 'error'
+            : 'success',
       output: progress.outputText,
       actions: [],
     });
