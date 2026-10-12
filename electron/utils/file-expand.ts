@@ -79,13 +79,15 @@ function readError(err: unknown): string {
 
 /** 把 text 里的 @path 就地展开为 <file> 块；图片收集到 images。 */
 export async function expandFileReferences(text: string, cwd: string): Promise<ExpandResult> {
+  if (!text || typeof text !== 'string') return { text: '', images: [] };
+  const safeCwd = typeof cwd === 'string' && cwd.trim() ? cwd : process.cwd();
   const tokens = extractAtTokens(text);
   if (tokens.length === 0) return { text, images: [] };
   const images: ExpandedImage[] = [];
   let result = '';
   let cursor = 0;
   for (const token of tokens) {
-    const expanded = await expandToken(token.path, cwd);
+    const expanded = await expandToken(token.path, safeCwd);
     if (!expanded) continue; // 保留原文
     result += text.slice(cursor, token.start) + expanded.replacement;
     cursor = token.end;
