@@ -176,4 +176,16 @@ describe('notifyApi.dispatch 点击跳转', () => {
     expect(mainWindow.show).toHaveBeenCalled();
     expect(mainWindow.focus).toHaveBeenCalled();
   });
+
+  it('sessionPath 为设备路径或纯空白时视为缺省会话（回退主窗口，不触发设备路径查询）', async () => {
+    const mainWindow = makeWindow();
+    getMainWindowMock.mockReturnValue(mainWindow);
+
+    await notifyApi.dispatch({ kind: 'runCompleted', title: '完成', sessionPath: 'CON' });
+    clickLastNotification();
+
+    expect(findWindowBySessionMock).not.toHaveBeenCalled();
+    expect(sendHostEventToWindowMock).not.toHaveBeenCalled();
+    expect(mainWindow.focus).toHaveBeenCalled();
+  });
 });

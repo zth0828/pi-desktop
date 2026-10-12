@@ -8,7 +8,8 @@ import { getMainWindow, findWindowBySession, resolveWindowSession, activateAndFo
 import { sendHostEventToWindow } from '../main/ipc/host-events';
 import { resolveNotifyFocused, shouldNotify, type NotifyMode } from './notify-policy';
 import { settingsApi } from './settings-api';
-import { samePath } from '../utils/same-path';
+import { samePath, stripWindowsExtendedPrefix } from '../utils/same-path';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 // 活跃通知实例集合：防止被 V8 垃圾回收导致 click 回调在用户点击前失效
 const activeNotifications = new Set<Notification>();
@@ -28,12 +29,18 @@ export const notifyApi = {
     // 同窗口多会话：切到其他会话后，后台会话完成不再被「窗口聚焦」吞掉；
     // 会话窗口已关（找不到）视为没在看，通知不吞；sessionPath 缺省（in-memory）
     // 保持任一窗口口径。
-    const sessionWindow = payload.sessionPath ? findWindowBySession(payload.sessionPath) : null;
-    const viewing = payload.sessionPath && sessionWindow
-      ? sessionWindow.isFocused() && samePath(resolveWindowSession(sessionWindow.webContents.id) ?? undefined, payload.sessionPath)
+    const cleanSessionPath =
+      typeof payload?.sessionPath === 'string' && payload.sessionPath.trim()
+        ? stripWindowsExtendedPrefix(payload.sessionPath.trim())
+        : undefined;
+    const safeSessionPath = cleanSessionPath && !isWindowsDevicePath(cleanSessionPath) ? cleanSessionPath : undefined;
+
+    const sessionWindow = safeSessionPath ? findWindowBySession(safeSessionPath) : null;
+    const viewing = safeSessionPath && sessionWindow
+      ? sessionWindow.isFocused() && samePath(resolveWindowSession(sessionWindow.webContents.id) ?? undefined, safeSessionPath)
       : null;
     const focused = resolveNotifyFocused(
-      payload.sessionPath,
+      safeSessionPath,
       viewing,
       windows.some((w) => w.isFocused()),
     );
@@ -69,12 +76,12 @@ export const notifyApi = {
         // 并同样发 focusSession 让目标窗口打开该会话——否则点击只聚焦不跳转。
         let target: BrowserWindow | null = null;
         let sessionWindow: BrowserWindow | null = null;
-        if (payload.sessionPath) {
-          sessionWindow = findWindowBySession(payload.sessionPath);
+        if (safeSessionPath) {
+          sessionWindow = findWindowBySession(safeSessionPath);
           if (sessionWindow) {
             activateAndFocusWindow(sessionWindow);
             sendHostEventToWindow(sessionWindow, 'windows', 'focusSession', {
-              sessionPath: payload.sessionPath,
+              sessionPath: safeSessionPath,
             });
             target = sessionWindow;
           }
@@ -83,9 +90,9 @@ export const notifyApi = {
         if (target) {
           activateAndFocusWindow(target);
           // 会话身份存在但没有任何窗口持有它：通知目标窗口打开该会话
-          if (payload.sessionPath && !sessionWindow) {
+          if (safeSessionPath && !sessionWindow) {
             sendHostEventToWindow(target, 'windows', 'focusSession', {
-              sessionPath: payload.sessionPath,
+              sessionPath: safeSessionPath,
             });
           }
         }
