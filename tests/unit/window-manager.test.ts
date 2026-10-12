@@ -291,4 +291,25 @@ describe('activateAndFocusWindow 跨平台窗口唤醒', () => {
     expect(win.visible).toBe(true);
     expect(win.focused).toBe(true);
   });
+
+  it('容忍非法或非数组 sessionPaths 及空路径参数', () => {
+    const win = fakeWindow();
+    wm.registerWindow(win as never);
+    expect(() => wm.setWindowSessions(win.webContents.id, null as unknown as string[])).not.toThrow();
+    expect(wm.resolveWindowSession(win.webContents.id)).toBeNull();
+
+    expect(() => wm.setWindowSessions(win.webContents.id, [123 as unknown as string, '   ', '/tmp/valid.jsonl'])).not.toThrow();
+    expect(wm.findWindowBySession('/tmp/valid.jsonl')).toBe(win);
+
+    expect(wm.findWindowBySession('')).toBeNull();
+    expect(wm.findWindowBySession(null as unknown as string)).toBeNull();
+    expect(wm.claimWindowSession(win.webContents.id, '')).toBe(false);
+    expect(wm.claimWindowSession(win.webContents.id, null as unknown as string)).toBe(false);
+    expect(wm.focusWindowForSession('')).toBe(false);
+
+    expect(() => wm.rebindWindowSession('', '')).not.toThrow();
+    expect(() => wm.unbindWindowSession('')).not.toThrow();
+    expect(() => wm.rebindWindowSessionForWindow(win.webContents.id, '', '')).not.toThrow();
+    expect(() => wm.unbindWindowSessionForWindow(win.webContents.id, '')).not.toThrow();
+  });
 });

@@ -143,8 +143,12 @@ export const windowsApi = {
   },
   setSessions: (payload: WindowsSetSessionsPayload, ctx?: HostActionContext): void => {
     if (!ctx) return;
-    const paths = Array.isArray(payload?.sessionPaths) ? payload.sessionPaths : [];
-    setWindowSessions(ctx.sender.id, paths, typeof payload?.activeSessionPath === 'string' ? payload.activeSessionPath : undefined);
+    const rawPaths = Array.isArray(payload?.sessionPaths) ? payload.sessionPaths : [];
+    const paths = rawPaths.filter((p): p is string => typeof p === 'string' && p.trim().length > 0 && !isWindowsDevicePath(p));
+    const active = typeof payload?.activeSessionPath === 'string' && payload.activeSessionPath.trim().length > 0 && !isWindowsDevicePath(payload.activeSessionPath)
+      ? payload.activeSessionPath
+      : undefined;
+    setWindowSessions(ctx.sender.id, paths, active);
   },
   list: (): WindowListEntry[] => listWindows(),
 

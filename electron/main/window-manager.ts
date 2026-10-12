@@ -72,17 +72,20 @@ export function bindWindowSession(webContentsId: number, sessionPath: string | n
 /** 替换窗口内所有面板的会话占用清单，并同步窗口级默认路由。 */
 export function setWindowSessions(
   webContentsId: number,
-  sessionPaths: string[],
+  sessionPaths: string[] = [],
   activeSessionPath?: string,
 ): void {
   const record = windows.get(webContentsId);
   if (!record) return;
-  record.sessionPaths = new Set(sessionPaths);
-  const active = activeSessionPath && sessionPaths.some((sessionPath) => samePath(sessionPath, activeSessionPath))
+  const safePaths = Array.isArray(sessionPaths)
+    ? sessionPaths.filter((sessionPath): sessionPath is string => typeof sessionPath === 'string' && sessionPath.trim().length > 0)
+    : [];
+  record.sessionPaths = new Set(safePaths);
+  const active = activeSessionPath && typeof activeSessionPath === 'string' && safePaths.some((sessionPath) => samePath(sessionPath, activeSessionPath))
     ? activeSessionPath
-    : record.sessionPath && sessionPaths.some((sessionPath) => samePath(sessionPath, record.sessionPath!))
+    : record.sessionPath && safePaths.some((sessionPath) => samePath(sessionPath, record.sessionPath!))
       ? record.sessionPath
-      : sessionPaths[0];
+      : safePaths[0];
   record.sessionPath = active ?? null;
 }
 
@@ -91,6 +94,7 @@ export function resolveWindowSession(webContentsId: number): string | null {
 }
 
 export function findWindowBySession(sessionPath: string, options: { detachedOnly?: boolean; excludeWindowId?: number } = {}): BrowserWindow | null {
+  if (!sessionPath || typeof sessionPath !== 'string' || !sessionPath.trim()) return null;
   for (const [windowId, record] of windows.entries()) {
     if (record.win.isDestroyed()) continue;
     if (options.excludeWindowId === windowId) continue;
@@ -121,6 +125,7 @@ export function rebindWindowSessionForWindow(
   oldPath: string,
   newPath: string,
 ): void {
+  if (!oldPath || !newPath || typeof oldPath !== 'string' || typeof newPath !== 'string') return;
   const record = windows.get(webContentsId);
   if (!record) return;
   if (record.sessionPath && samePath(record.sessionPath, oldPath)) record.sessionPath = newPath;
@@ -134,6 +139,7 @@ export function unbindWindowSessionForWindow(
   webContentsId: number,
   oldPath: string,
 ): void {
+  if (!oldPath || typeof oldPath !== 'string') return;
   const record = windows.get(webContentsId);
   if (!record) return;
   if (record.sessionPath && samePath(record.sessionPath, oldPath)) record.sessionPath = null;
@@ -196,6 +202,7 @@ export function focusOrCreateMainWindow(): BrowserWindow {
 
 /** 聚焦绑定了指定会话的窗口；没有对应窗口返回 false。 */
 export function focusWindowForSession(sessionPath: string): boolean {
+  if (!sessionPath || typeof sessionPath !== 'string' || !sessionPath.trim()) return false;
   const win = findWindowBySession(sessionPath);
   if (!win) return false;
   activateAndFocusWindow(win);
@@ -207,6 +214,7 @@ export function focusWindowForSession(sessionPath: string): boolean {
  * 因此“查找并占用”不会被另一个窗口的同类请求插入，避免两个窗口同时打开同一会话。
  */
 export function claimWindowSession(webContentsId: number, sessionPath: string): boolean {
+  if (!sessionPath || typeof sessionPath !== 'string' || !sessionPath.trim()) return false;
   const record = windows.get(webContentsId);
   if (!record || record.win.isDestroyed()) return false;
   const existing = findWindowBySession(sessionPath);
@@ -217,6 +225,7 @@ export function claimWindowSession(webContentsId: number, sessionPath: string): 
 
 /** 会话替换（fork/newSession 产生新会话文件）后，把绑定旧文件的窗口改绑到新文件。 */
 export function rebindWindowSession(oldPath: string, newPath: string): void {
+  if (!oldPath || !newPath || typeof oldPath !== 'string' || typeof newPath !== 'string') return;
   for (const record of windows.values()) {
     if (record.sessionPath && samePath(record.sessionPath, oldPath)) record.sessionPath = newPath;
     const replacement = [...record.sessionPaths].map((sessionPath) =>
@@ -228,6 +237,7 @@ export function rebindWindowSession(oldPath: string, newPath: string): void {
 
 /** 会话被删除或替换为内存态无文件会话后，清理所有窗口对旧文件的绑定。 */
 export function unbindWindowSession(oldPath: string): void {
+  if (!oldPath || typeof oldPath !== 'string') return;
   for (const record of windows.values()) {
     if (record.sessionPath && samePath(record.sessionPath, oldPath)) record.sessionPath = null;
     record.sessionPaths = new Set([...record.sessionPaths].filter((sessionPath) =>

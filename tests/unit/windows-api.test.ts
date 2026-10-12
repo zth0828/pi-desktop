@@ -280,5 +280,21 @@ describe('windowsApi', () => {
       expect(windowsApi.focusIfOpen({ sessionPath: '' })).toBe(false);
       expect(mocks.findWindowBySession).not.toHaveBeenCalled();
     });
+
+    it('setSessions 过滤空路径、非字符串与 Windows 设备路径', () => {
+      const sender = { id: 88 };
+      windowsApi.setSessions(
+        {
+          sessionPaths: ['/tmp/valid.jsonl', 'CON', 123 as unknown as string, '   ', '\\\\.\\nul', '/tmp/another.jsonl'],
+          activeSessionPath: 'NUL',
+        },
+        { sender } as never,
+      );
+      expect(mocks.setWindowSessions).toHaveBeenCalledWith(
+        88,
+        ['/tmp/valid.jsonl', '/tmp/another.jsonl'],
+        undefined,
+      );
+    });
   });
 });
