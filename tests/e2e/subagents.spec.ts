@@ -167,6 +167,12 @@ test('Subagent 工具调用：ToolCallCard 兜底展示、工作台面板实时�
   const output = page.getByTestId('subagent-output').first();
   await expect(output).toBeVisible();
   await expect(output).toContainText('Subagent indexing completed: found 42 files.');
+
+  // 断言主窗口消息流底部渲染专属的回合子任务聚合卡片（图 3 红框位置）
+  const turnSubagents = page.getByTestId('turn-subagents-card').first();
+  await expect(turnSubagents).toBeVisible();
+  await expect(turnSubagents).toContainText('Agent - researcher');
+  await expect(page.getByTestId('turn-subagents-open-workbench').first()).toBeVisible();
 });
 
 test('Subagent 工具调用中断：回合级中止时子任务被标记为 interrupted 且单工具中断按钮禁用', async ({ launchElectronApp }) => {
@@ -229,5 +235,44 @@ test('当模型建议使用子 Agent 时，渲染安装引导条并在未安装�
   const manageBtn = page.getByTestId('subagent-hint-manage');
   await expect(manageBtn).toBeVisible();
 });
+
+test('工作台拓展在切换到设置页面时自动缩回，并在切回对话页面时自动恢复拓宽', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  // 1. 记录初始常规窗口尺寸
+  const initialWidth = await page.evaluate(() => window.outerWidth);
+
+  // 2. 展开工作台（docked 模式触发展开拓宽）
+  await page.getByTestId('workspace-toggle').click();
+  await expect(page.getByTestId('workspace-subagents-tab')).toBeVisible({ timeout: 10_000 });
+
+  // 等待加宽完成
+  await expect.poll(async () => {
+    return page.evaluate(() => window.outerWidth);
+  }, { timeout: 5000 }).toBeGreaterThan(initialWidth);
+  const expandedWidth = await page.evaluate(() => window.outerWidth);
+
+  // 3. 点击左侧导航栏的「设置」切离 Chat
+  await page.getByTestId('nav-settings').click();
+  await expect(page.locator('.settings-page')).toBeVisible({ timeout: 10_000 });
+
+  // 4. 断言窗口自动缩回为初始常规尺寸
+  await expect.poll(async () => {
+    return page.evaluate(() => window.outerWidth);
+  }, { timeout: 5000 }).toBe(initialWidth);
+
+  // 5. 点击左侧导航栏的「对话」切回 Chat
+  await page.getByTestId('nav-chat').click();
+  await expect(page.getByTestId('chat-input')).toBeVisible({ timeout: 10_000 });
+
+  // 6. 断言窗口自动恢复为加宽后的尺寸，且工作台保持打开
+  await expect.poll(async () => {
+    return page.evaluate(() => window.outerWidth);
+  }, { timeout: 5000 }).toBe(expandedWidth);
+  await expect(page.getByTestId('workspace-subagents-tab')).toBeVisible();
+});
+
 
 

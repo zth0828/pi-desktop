@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  ExternalLink,
   Locate,
   Square,
   Wrench,
@@ -28,7 +29,7 @@ export type SubagentFilter = 'all' | 'running' | 'completed' | 'failed';
 /**
  * 内部单条工具调用的独立卡片组件（采用命令面板风格，支持点击展开查看入参与执行输出）。
  */
-function InternalToolActionItem({
+export function InternalToolActionItem({
   action,
   copiedId,
   onCopy,
@@ -139,7 +140,7 @@ function InternalToolActionItem({
 /**
  * 独立的 Subagent 顶级卡片（支持展开任务描述、结构化内部工具调用列表、Output Markdown 产出）。
  */
-function SubagentCard({
+export function SubagentCard({
   task,
   toolCallId,
   toolName,
@@ -147,18 +148,33 @@ function SubagentCard({
   copiedId,
   onCopy,
   onJumpToChat,
+  onOpenWorkbench,
 }: {
   task: SubagentSubTask;
   toolCallId: string;
   toolName: string;
   parentDuration?: string | null;
-  copiedId: string | null;
-  onCopy: (text: string, id: string, e: MouseEvent) => void;
-  onJumpToChat: (id: string, e: MouseEvent) => void;
+  copiedId?: string | null;
+  onCopy?: (text: string, id: string, e: MouseEvent) => void;
+  onJumpToChat?: (id: string, e: MouseEvent) => void;
+  onOpenWorkbench?: () => void;
 }) {
   const { t } = useTranslation();
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const [actionsExpanded, setActionsExpanded] = useState(!task.output);
+  const [internalCopiedId, setInternalCopiedId] = useState<string | null>(null);
+
+  const activeCopiedId = copiedId !== undefined ? copiedId : internalCopiedId;
+  const handleCopy = (text: string, id: string, e: MouseEvent) => {
+    e.stopPropagation();
+    if (onCopy) {
+      onCopy(text, id, e);
+    } else if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(text);
+      setInternalCopiedId(id);
+      setTimeout(() => setInternalCopiedId(null), 1500);
+    }
+  };
 
   const taskCopyKey = `${task.id}-task`;
   const resultCopyKey = `${task.id}-result`;
@@ -254,15 +270,33 @@ function SubagentCard({
             </span>
           )}
 
-          <button
-            type="button"
-            className="subagent-action-btn"
-            title={t('workspace.commandsJumpToChat')}
-            aria-label={t('workspace.commandsJumpToChat')}
-            onClick={(e) => onJumpToChat(toolCallId, e)}
-          >
-            <Locate size={12} />
-          </button>
+          {onJumpToChat && (
+            <button
+              type="button"
+              className="subagent-action-btn"
+              title={t('workspace.commandsJumpToChat')}
+              aria-label={t('workspace.commandsJumpToChat')}
+              onClick={(e) => onJumpToChat(toolCallId, e)}
+            >
+              <Locate size={12} />
+            </button>
+          )}
+
+          {onOpenWorkbench && (
+            <button
+              type="button"
+              className="subagent-action-btn"
+              data-testid="subagent-open-workbench"
+              title={t('chat.turnSubagents.viewInWorkbench')}
+              aria-label={t('chat.turnSubagents.viewInWorkbench')}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenWorkbench();
+              }}
+            >
+              <ExternalLink size={12} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -290,12 +324,12 @@ function SubagentCard({
               <button
                 type="button"
                 className="subagent-copy-btn"
-                onClick={(e) => onCopy(task.task, taskCopyKey, e)}
+                onClick={(e) => handleCopy(task.task, taskCopyKey, e)}
                 title={t('workspace.subagentCopyTask')}
               >
-                {copiedId === taskCopyKey ? <Check size={11} /> : <Copy size={11} />}
+                {activeCopiedId === taskCopyKey ? <Check size={11} /> : <Copy size={11} />}
                 <span>
-                  {copiedId === taskCopyKey ? t('workspace.subagentCopied') : t('workspace.subagentCopyTask')}
+                  {activeCopiedId === taskCopyKey ? t('workspace.subagentCopied') : t('workspace.subagentCopyTask')}
                 </span>
               </button>
             </div>
@@ -331,8 +365,8 @@ function SubagentCard({
                     <InternalToolActionItem
                       key={act.id}
                       action={act}
-                      copiedId={copiedId}
-                      onCopy={onCopy}
+                      copiedId={activeCopiedId}
+                      onCopy={handleCopy}
                     />
                   ))}
                 </div>
@@ -353,12 +387,12 @@ function SubagentCard({
                   <button
                     type="button"
                     className="subagent-copy-btn"
-                    onClick={(e) => onCopy(task.output, resultCopyKey, e)}
+                    onClick={(e) => handleCopy(task.output, resultCopyKey, e)}
                     title={t('workspace.subagentCopyResult')}
                   >
-                    {copiedId === resultCopyKey ? <Check size={11} /> : <Copy size={11} />}
+                    {activeCopiedId === resultCopyKey ? <Check size={11} /> : <Copy size={11} />}
                     <span>
-                      {copiedId === resultCopyKey ? t('workspace.subagentCopied') : t('workspace.subagentCopyResult')}
+                      {activeCopiedId === resultCopyKey ? t('workspace.subagentCopied') : t('workspace.subagentCopyResult')}
                     </span>
                   </button>
                 )}

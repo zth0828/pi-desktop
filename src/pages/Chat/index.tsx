@@ -27,6 +27,8 @@ import { ReviewPanel } from './ReviewPanel';
 import { TreeDialog } from './TreeDialog';
 import { SessionCwdMissingDialog } from './SessionCwdMissingDialog';
 import { TurnChangesCard } from './TurnChangesCard';
+import { TurnSubagentsCard } from './TurnSubagentsCard';
+import { isSubagentTool } from '../../lib/subagent-tool';
 
 function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
   const { t } = useTranslation();
@@ -230,6 +232,7 @@ const LazyMessageItem = memo(function LazyMessageItem({
 });
 
 type Props = {
+  active?: boolean;
   searchTarget?: { sessionId: string; messageIndex: number; nonce: number };
   onSearchTargetHandled?: () => void;
   /** 窗口首个面板：仅它执行 ?session= attach / workspaceCwd 恢复与工作区选择 */
@@ -247,7 +250,7 @@ function findMessageElement(list: HTMLElement, id: string): HTMLElement | null {
   return list.querySelector<HTMLElement>(`[id="${id}"]`);
 }
 
-export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachSession, attachTarget, onClosePane }: Props) {
+export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary, attachSession, attachTarget, onClosePane }: Props) {
   const { t } = useTranslation();
   const chatStore = usePaneChatStoreApi();
   const [cwd, setCwd] = useState<string | undefined>();
@@ -760,6 +763,10 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
       const name = toolExecutions[id]?.toolName;
       return name === 'edit' || name === 'write';
     });
+    const hasSubagents = turn.toolCallIds.some((id) => {
+      const name = toolExecutions[id]?.toolName;
+      return name && isSubagentTool(name);
+    });
 
     if (!canFold) {
       const isLastTurn = turnIndex === logicalTurns.length - 1;
@@ -812,6 +819,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
             </div>
           )}
           {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
+          {hasSubagents && <TurnSubagentsCard toolCallIds={turn.toolCallIds} />}
         </Fragment>
       );
     }
@@ -903,6 +911,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
             </section>
           )}
           {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
+          {hasSubagents && <TurnSubagentsCard toolCallIds={turn.toolCallIds} />}
         </Fragment>
       );
     }
@@ -1018,6 +1027,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
           enableViewportCheck={isHistoricalTurn}
         />
         {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
+        {hasSubagents && <TurnSubagentsCard toolCallIds={turn.toolCallIds} />}
       </Fragment>
     );
   };
@@ -1233,7 +1243,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
       </div>
       <TreeDialog />
       <SessionCwdMissingDialog />
-      <ReviewPanel />
+      <ReviewPanel active={active} />
     </div>
   );
 }
@@ -1246,6 +1256,7 @@ export function ChatPane({ searchTarget, onSearchTargetHandled, primary, attachS
 export default function ChatPage(props: Props) {
   return (
     <PaneLayout
+      active={props.active}
       searchTarget={props.searchTarget}
       onSearchTargetHandled={props.onSearchTargetHandled}
     />

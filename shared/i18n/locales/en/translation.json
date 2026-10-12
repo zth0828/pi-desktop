@@ -276,6 +276,11 @@
       "showLess": "Show less",
       "openFile": "Open file"
     },
+    "turnSubagents": {
+      "title": "Subagents ({{count}})",
+      "runningCount": "{{count}} running",
+      "viewInWorkbench": "Open in Workbench"
+    },
     "workLog": {
       "title_one": "Completed {{count}} step · {{duration}}",
       "title_other": "Completed {{count}} steps · {{duration}}",

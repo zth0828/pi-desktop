@@ -276,6 +276,11 @@
       "showLess": "收起",
       "openFile": "打开文件"
     },
+    "turnSubagents": {
+      "title": "子任务 ({{count}})",
+      "runningCount": "{{count}} 个执行中",
+      "viewInWorkbench": "在工作台打开"
+    },
     "workLog": {
       "title_one": "已完成 {{count}} 个步骤 · {{duration}}",
       "title_other": "已完成 {{count}} 个步骤 · {{duration}}",

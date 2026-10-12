@@ -1761,6 +1761,85 @@
 
 .turn-changes-more:hover { color: var(--text); background: var(--bg-hover); }
 
+/* 回合子任务专属聚合卡片 */
+
+.turn-subagents {
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.turn-subagents-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.turn-subagents-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.turn-subagents-bot-icon {
+  color: #8b5cf6;
+  flex-shrink: 0;
+}
+
+.turn-subagents-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.turn-subagents-running-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.turn-subagents-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  transition: color 0.15s ease;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.turn-subagents-view:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.turn-subagents-items {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  gap: 8px;
+  background: var(--bg-sunken);
+}
+
+.turn-subagents-items .subagent-card-item {
+  margin-bottom: 0;
+}
+
 /* 折叠态输出预览：尾部 N 行 + 截断警告 */
 
 .tool-card-preview {
