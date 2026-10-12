@@ -666,6 +666,13 @@ export const sessionsApi = {
     if (!payload?.path || typeof payload.path !== 'string' || !payload.path.trim()) {
       return Promise.resolve({ success: false, error: 'invalid session path' });
     }
+    const cleanPath = stripWindowsExtendedPrefix(payload.path.trim());
+    if (isWindowsDevicePath(cleanPath)) {
+      return Promise.resolve({ success: false, error: 'device paths are not allowed' });
+    }
+    if (payload.cwdOverride && isWindowsDevicePath(stripWindowsExtendedPrefix(payload.cwdOverride))) {
+      return Promise.resolve({ success: false, error: 'device paths are not allowed' });
+    }
     timingMark('switch:recv');
     // 以目标 sessionPath 为锁键串行：switch 有多个 await 点，并发调用会交叉
     // 改写全局 active 与窗口绑定（两个窗口同时 switch 时归属由执行顺序决定）
