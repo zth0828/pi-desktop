@@ -1,12 +1,15 @@
 import path from 'node:path';
 import { realpathSync } from 'node:fs';
 import { stripWindowsExtendedPrefix } from './same-path';
+import { isWindowsDevicePath } from './workspace-path';
 
 const PREVIEWABLE_TOOLS = new Set(['read', 'edit', 'write']);
 
 /** Existing paths use their real filesystem identity (/tmp -> /private/tmp on macOS). */
 export function normalizePreviewablePath(filePath: string): string {
-  const clean = stripWindowsExtendedPrefix(filePath);
+  if (!filePath || typeof filePath !== 'string' || !filePath.trim()) return '';
+  const clean = stripWindowsExtendedPrefix(filePath.trim());
+  if (isWindowsDevicePath(clean)) return clean;
   const resolved = path.resolve(clean);
   try {
     const real = realpathSync(resolved);
@@ -39,8 +42,11 @@ export function isInsideWorkspace(root: string, candidate: string): boolean {
   if (!root || typeof root !== 'string' || !root.trim() || !candidate || typeof candidate !== 'string' || !candidate.trim()) {
     return false;
   }
-  const cleanRoot = stripWindowsExtendedPrefix(root);
-  const cleanCandidate = stripWindowsExtendedPrefix(candidate);
+  const cleanRoot = stripWindowsExtendedPrefix(root.trim());
+  const cleanCandidate = stripWindowsExtendedPrefix(candidate.trim());
+  if (isWindowsDevicePath(cleanRoot) || isWindowsDevicePath(cleanCandidate)) {
+    return false;
+  }
   try {
     const resolvedCandidate = path.isAbsolute(cleanCandidate) ? cleanCandidate : path.resolve(cleanRoot, cleanCandidate);
     const realRoot = normalizePreviewablePath(cleanRoot);
@@ -94,7 +100,7 @@ export function previewableExternalFilesFromMessages(
       for (const text of texts) {
         for (const match of text.matchAll(/<(?:file|attachment)\s+[^>]*name="([^"]*)"/g)) {
           const filePath = match[1];
-          if (filePath && path.isAbsolute(filePath)) {
+          if (filePath && path.isAbsolute(filePath) && !isWindowsDevicePath(filePath)) {
             const normalized = normalizePreviewablePath(filePath);
             const relative = path.relative(root, normalized);
             const outside = relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
@@ -112,7 +118,7 @@ export function previewableExternalFilesFromMessages(
         };
         if (toolCall.type !== 'toolCall' || typeof toolCall.name !== 'string' || !PREVIEWABLE_TOOLS.has(toolCall.name)) continue;
         const requested = toolCall.arguments?.path ?? toolCall.arguments?.file_path;
-        if (typeof requested !== 'string' || !path.isAbsolute(requested)) continue;
+        if (typeof requested !== 'string' || !path.isAbsolute(requested) || isWindowsDevicePath(requested)) continue;
         const normalized = normalizePreviewablePath(requested);
         const relative = path.relative(root, normalized);
         const outside = relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);

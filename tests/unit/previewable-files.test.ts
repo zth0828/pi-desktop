@@ -147,6 +147,23 @@ describe('isInsideWorkspace', () => {
     expect(isInsideWorkspace('/tmp/workspace', '')).toBe(false);
     expect(isInsideWorkspace('/tmp/workspace', '   ')).toBe(false);
   });
+
+  it('拒绝 Windows 设备路径作为 root 或 candidate', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'pi-ws-device-'));
+    roots.push(root);
+    expect(isInsideWorkspace(root, '\\\\.\\nul')).toBe(false);
+    expect(isInsideWorkspace(root, 'CON')).toBe(false);
+    expect(isInsideWorkspace(root, 'NUL')).toBe(false);
+    expect(isInsideWorkspace('\\\\.\\nul', 'src/index.ts')).toBe(false);
+    expect(isInsideWorkspace('COM1', 'src/index.ts')).toBe(false);
+  });
+
+  it('normalizePreviewablePath 对空输入与 Windows 设备路径安全返回', () => {
+    expect(normalizePreviewablePath('')).toBe('');
+    expect(normalizePreviewablePath('   ')).toBe('');
+    expect(normalizePreviewablePath('\\\\.\\nul')).toBe('\\\\.\\nul');
+    expect(normalizePreviewablePath('COM1')).toBe('COM1');
+  });
 });
 
 function nameFor(file: string): string {
