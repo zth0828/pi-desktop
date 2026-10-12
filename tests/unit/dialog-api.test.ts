@@ -68,4 +68,24 @@ describe('dialogApi', () => {
       expect.objectContaining({ defaultPath: 'C:\\projects\\app\\file.txt' }),
     );
   });
+
+  it('过滤 defaultPath 中的 Windows 设备路径与非法类型', async () => {
+    showOpenDialogMock.mockResolvedValueOnce({ canceled: true });
+    await dialogApi.open({ defaultPath: 'CON' });
+    expect(showOpenDialogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: undefined }),
+    );
+
+    showOpenDialogMock.mockResolvedValueOnce({ canceled: true });
+    await dialogApi.open({ defaultPath: '\\\\.\\pipe\\test' });
+    expect(showOpenDialogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: undefined }),
+    );
+
+    showSaveDialogMock.mockResolvedValueOnce({ canceled: true });
+    await dialogApi.save({ defaultPath: 123 as unknown as string });
+    expect(showSaveDialogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: undefined }),
+    );
+  });
 });

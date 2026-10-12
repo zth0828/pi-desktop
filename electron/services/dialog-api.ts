@@ -10,6 +10,8 @@ import type { HostActionContext } from '../main/ipc/host-contract';
 import { getMainWindow } from '../main/window-manager';
 import { stripWindowsExtendedPrefix } from '../utils/same-path';
 
+import { isWindowsDevicePath } from '../utils/workspace-path';
+
 function resolveDialogWindow(ctx?: HostActionContext): BrowserWindow | null {
   try {
     if (ctx?.sender && !ctx.sender.isDestroyed()) {
@@ -23,14 +25,21 @@ function resolveDialogWindow(ctx?: HostActionContext): BrowserWindow | null {
   return main && !main.isDestroyed() ? main : null;
 }
 
+function sanitizeDefaultPath(rawPath?: unknown): string | undefined {
+  if (typeof rawPath !== 'string' || !rawPath.trim()) return undefined;
+  const stripped = stripWindowsExtendedPrefix(rawPath.trim());
+  if (isWindowsDevicePath(stripped)) return undefined;
+  return stripped;
+}
+
 export const dialogApi = {
   open: async (payload: DialogOpenPayload, ctx?: HostActionContext): Promise<DialogOpenResult> => {
     const win = resolveDialogWindow(ctx);
     if (win && !win.isVisible()) win.show();
     const options = {
-      title: payload?.title,
-      defaultPath: payload?.defaultPath ? stripWindowsExtendedPrefix(payload.defaultPath) : undefined,
-      properties: payload?.properties ?? ['openDirectory' as const],
+      title: typeof payload?.title === 'string' ? payload.title : undefined,
+      defaultPath: sanitizeDefaultPath(payload?.defaultPath),
+      properties: Array.isArray(payload?.properties) ? payload.properties : ['openDirectory' as const],
     };
     const result = win
       ? await dialog.showOpenDialog(win, options)
@@ -41,9 +50,9 @@ export const dialogApi = {
     const win = resolveDialogWindow(ctx);
     if (win && !win.isVisible()) win.show();
     const options = {
-      title: payload?.title,
-      defaultPath: payload?.defaultPath ? stripWindowsExtendedPrefix(payload.defaultPath) : undefined,
-      filters: payload?.filters,
+      title: typeof payload?.title === 'string' ? payload.title : undefined,
+      defaultPath: sanitizeDefaultPath(payload?.defaultPath),
+      filters: Array.isArray(payload?.filters) ? payload.filters : undefined,
     };
     const result = win
       ? await dialog.showSaveDialog(win, options)
