@@ -24,8 +24,10 @@ import { piRuntimeApi, resolveRuntimeForContext } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
 import { fetchPackageCatalog, fetchPackageDetail } from './package-catalog';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 function displayName(source: string): string {
+  if (!source || typeof source !== 'string') return '';
   if (source.startsWith('npm:')) {
     const spec = source.slice(4);
     if (spec.startsWith('@')) return `@${spec.split('@')[1] ?? spec}`;
@@ -109,6 +111,7 @@ export const packagesApi = {
   install: async (payload: PiPackageInstallPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const source = typeof payload?.source === 'string' ? payload.source.trim() : '';
     if (!source) return { success: false, error: 'empty source' };
+    if (isWindowsDevicePath(source)) return { success: false, error: 'device paths are not allowed' };
     try {
       const { adapter, handle } = await getPackageManager(ctx);
       const off = adapter.packages.onProgress(handle, (event) => sendHostEvent('piPackages', 'progress', event));
@@ -123,6 +126,7 @@ export const packagesApi = {
   remove: async (payload: PiPackageRemovePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const source = typeof payload?.source === 'string' ? payload.source.trim() : '';
     if (!source) return { success: false, error: 'empty source' };
+    if (isWindowsDevicePath(source)) return { success: false, error: 'device paths are not allowed' };
     try {
       const { adapter, handle } = await getPackageManager(ctx);
       const off = adapter.packages.onProgress(handle, (event) => sendHostEvent('piPackages', 'progress', event));
@@ -142,6 +146,7 @@ export const packagesApi = {
   update: async (payload: PiPackageUpdatePayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const source = typeof payload?.source === 'string' ? payload.source.trim() : '';
     if (!source) return { success: false, error: 'empty source' };
+    if (isWindowsDevicePath(source)) return { success: false, error: 'device paths are not allowed' };
     try {
       const { adapter, handle } = await getPackageManager(ctx);
       const off = adapter.packages.onProgress(handle, (event) => sendHostEvent('piPackages', 'progress', event));
