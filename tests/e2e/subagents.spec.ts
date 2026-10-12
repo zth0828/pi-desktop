@@ -206,3 +206,28 @@ test('Subagent 工具调用中断：回合级中止时子任务被标记为 inte
   await expect(interruptedBadge).toBeVisible({ timeout: 10_000 });
 });
 
+test('当模型建议使用子 Agent 时，渲染安装引导条并在未安装时支持一键操作', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  const input = page.getByTestId('chat-input');
+  await input.fill('SUGGEST_SUBAGENT');
+  await page.getByTestId('chat-send').click();
+
+  // 等待回合结束
+  await expect(page.getByTestId('chat-send')).toBeVisible({ timeout: 20_000 });
+
+  // 断言 subagent-install-hint 提示条可见
+  const hint = page.getByTestId('subagent-install-hint');
+  await expect(hint).toBeVisible({ timeout: 10_000 });
+  await expect(hint).toContainText(/pi-subagents/);
+
+  // 包含一键安装按钮与前往扩展管理按钮
+  const installBtn = page.getByTestId('subagent-hint-install');
+  await expect(installBtn).toBeVisible();
+  const manageBtn = page.getByTestId('subagent-hint-manage');
+  await expect(manageBtn).toBeVisible();
+});
+
+

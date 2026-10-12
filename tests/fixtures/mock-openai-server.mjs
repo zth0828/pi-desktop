@@ -486,7 +486,9 @@ const server = http.createServer((req, res) => {
     }
 
     let text = "PONG";
-    if (hasToolResult) {
+    if (lastUser.includes("SUGGEST_SUBAGENT")) {
+      text = "当前任务复杂度较高，建议使用 subagent 协同排查：\n1. scout 负责扫描接口\n2. reviewer 负责核对规范\n是否使用子 Agent 进行排查？";
+    } else if (hasToolResult) {
       const toolMsg = [...msgs].reverse().find((m) => m.role === "tool");
       const c = typeof toolMsg?.content === "string" ? toolMsg.content : JSON.stringify(toolMsg?.content ?? "");
       text = "FINAL:" + c.slice(0, 500);

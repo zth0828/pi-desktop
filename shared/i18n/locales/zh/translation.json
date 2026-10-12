@@ -136,6 +136,13 @@
       "manage": "前往扩展页",
       "enabledSuccess": "已成功启用智能选项提问工具"
     },
+    "subagentHint": {
+      "tip": "检测到建议使用子 Agent 协同排查，一键安装「pi-subagents」官方扩展即可使用。",
+      "install": "一键安装",
+      "installing": "正在安装…",
+      "manage": "前往扩展页",
+      "installedSuccess": "已成功安装 pi-subagents 扩展，子 Agent 能力已就绪"
+    },
     "status": {
       "working": "工作中…",
       "serverRunning": "开发服务正在前台运行；可停止当前任务，或让 pi 在后台启动服务。",
@@ -1266,6 +1273,15 @@
     "subagentAbortTooltip": "pi 暂不支持单工具独立中断；可点击主界面停止按钮中断当前回合",
     "noSubagents": "暂无子任务记录",
     "noSubagentsDesc": "当前会话尚未调用 subagent 或 task 类后台子任务",
+    "subagentTasks": "子任务拆分",
+    "subagentTask": "子任务",
+    "subagentTrace": "内部工具轨迹",
+    "subagentActions": "{{count}} 次工具调用",
+    "subagentNoActions": "无内部工具调用",
+    "subagentResult": "产出结果",
+    "subagentCopyTask": "复制子任务指令",
+    "subagentCopyResult": "复制输出结果",
+    "subagentCopied": "已复制",
     "itemCount": "{{count}} 个根目录项目",
     "filter": "筛选文件…",
     "loadingFolder": "正在加载…",

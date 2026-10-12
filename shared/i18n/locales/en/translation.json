@@ -136,6 +136,13 @@
       "manage": "Manage Extensions",
       "enabledSuccess": "Successfully enabled Smart Choices extension"
     },
+    "subagentHint": {
+      "tip": "Detected suggestion to delegate to subagents. Install the official \"pi-subagents\" extension to enable.",
+      "install": "Install Now",
+      "installing": "Installing…",
+      "manage": "Manage Extensions",
+      "installedSuccess": "Successfully installed pi-subagents extension"
+    },
     "status": {
       "working": "Working…",
       "serverRunning": "A development server is running in the foreground. Stop it, or ask pi to start it in the background.",
@@ -1267,6 +1274,15 @@
     "subagentAbortTooltip": "pi does not support single-tool abort; use turn abort to stop",
     "noSubagents": "No subagent tasks",
     "noSubagentsDesc": "No subagent or task tools have been executed in this session",
+    "subagentTasks": "Subtasks",
+    "subagentTask": "Subtask",
+    "subagentTrace": "Tool Call Trace",
+    "subagentActions": "{{count}} tool calls",
+    "subagentNoActions": "No internal tool calls",
+    "subagentResult": "Output",
+    "subagentCopyTask": "Copy subtask prompt",
+    "subagentCopyResult": "Copy output",
+    "subagentCopied": "Copied",
     "itemCount": "{{count}} root items",
     "filter": "Filter files…",
     "loadingFolder": "Loading…",

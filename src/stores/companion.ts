@@ -3,15 +3,21 @@ import { hostApi } from '../lib/host-api';
 
 type CompanionState = {
   askQuestionInstalled: boolean;
+  subagentsInstalled: boolean;
   loading: boolean;
+  subagentsLoading: boolean;
   error?: string;
   fetchStatus: (id?: string) => Promise<boolean>;
+  fetchSubagentsStatus: () => Promise<boolean>;
+  installSubagents: () => Promise<boolean>;
   toggle: (id: string, enable: boolean) => Promise<boolean>;
 };
 
 export const useCompanionStore = create<CompanionState>((set) => ({
   askQuestionInstalled: false,
+  subagentsInstalled: false,
   loading: false,
+  subagentsLoading: false,
   error: undefined,
 
   fetchStatus: async (id = 'ask-question') => {
@@ -22,6 +28,37 @@ export const useCompanionStore = create<CompanionState>((set) => ({
       }
       return res.installed;
     } catch {
+      return false;
+    }
+  },
+
+  fetchSubagentsStatus: async () => {
+    try {
+      const res = await hostApi.piPackages.list();
+      const installed = Array.isArray(res?.packages) && res.packages.some(
+        (p) => p.name === 'pi-subagents' || (typeof p.source === 'string' && p.source.includes('pi-subagents')),
+      );
+      set({ subagentsInstalled: installed });
+      return installed;
+    } catch {
+      return false;
+    }
+  },
+
+  installSubagents: async () => {
+    set({ subagentsLoading: true, error: undefined });
+    try {
+      const res = await hostApi.piPackages.install('npm:pi-subagents');
+      if (res.success) {
+        await hostApi.piRuntime.reload().catch(() => {});
+        set({ subagentsInstalled: true, subagentsLoading: false });
+        return true;
+      }
+      set({ subagentsLoading: false, error: res.error });
+      return false;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ subagentsLoading: false, error: message });
       return false;
     }
   },

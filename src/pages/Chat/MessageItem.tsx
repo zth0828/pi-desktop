@@ -1,6 +1,6 @@
 import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, Copy, GitFork, Pencil, Sparkles, Square } from 'lucide-react';
+import { Bot, Check, ChevronRight, Copy, GitFork, Pencil, Sparkles, Square } from 'lucide-react';
 import { formatAttachmentDisplayName, parseUserMessage, type ParsedSkillBlock } from '@shared/message-attachments';
 import { parseProviderError, PROVIDER_ERROR_HINT_KEYS } from '../../lib/provider-error';
 import { formatErrorMessage } from '../../lib/error-formatter';
@@ -17,6 +17,7 @@ import { ImageLightbox } from './ImageLightbox';
 import { ToolCallCard } from './ToolCallCard';
 import { renderUserMessageWithChips } from './chat-message/user-mentions';
 import { isPromptingForChoices } from './chat-message/companion-choice';
+import { isSuggestingSubagent } from './chat-message/subagent-detect';
 
 /**
  * 技能指令折叠块：用户指定技能发送时展开的说明书与规则。
@@ -248,11 +249,24 @@ function MessageItemView({
   const fetchCompanionStatus = useCompanionStore((s) => s.fetchStatus);
   const [companionToast, setCompanionToast] = useState(false);
 
+  const subagentsInstalled = useCompanionStore((s) => s.subagentsInstalled);
+  const subagentsLoading = useCompanionStore((s) => s.subagentsLoading);
+  const installSubagents = useCompanionStore((s) => s.installSubagents);
+  const [subagentsToast, setSubagentsToast] = useState(false);
+
   const handleEnableCompanion = async () => {
     const ok = await toggleCompanion('ask-question', true);
     if (ok) {
       setCompanionToast(true);
       window.setTimeout(() => setCompanionToast(false), 3000);
+    }
+  };
+
+  const handleInstallSubagents = async () => {
+    const ok = await installSubagents();
+    if (ok) {
+      setSubagentsToast(true);
+      window.setTimeout(() => setSubagentsToast(false), 3000);
     }
   };
   if (message.role === 'user') {
@@ -600,6 +614,35 @@ function MessageItemView({
                 onClick={() => navigateToPage('extensions', 'installed')}
               >
                 {t('chat.companionHint.manage')}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {showTail && (!subagentsInstalled || subagentsToast) && isSuggestingSubagent(plainText) && (
+        <div className="companion-choice-hint subagent-install-hint" data-testid="subagent-install-hint">
+          <div className="companion-choice-hint-content">
+            <Bot size={14} className="companion-choice-hint-icon" />
+            <span>{subagentsToast ? t('chat.subagentHint.installedSuccess') : t('chat.subagentHint.tip')}</span>
+          </div>
+          {!subagentsToast && (
+            <div className="companion-choice-hint-actions">
+              <button
+                type="button"
+                className="companion-choice-hint-enable-btn"
+                data-testid="subagent-hint-install"
+                disabled={subagentsLoading}
+                onClick={() => void handleInstallSubagents()}
+              >
+                {subagentsLoading ? t('chat.subagentHint.installing') : t('chat.subagentHint.install')}
+              </button>
+              <button
+                type="button"
+                className="companion-choice-hint-manage-btn"
+                data-testid="subagent-hint-manage"
+                onClick={() => navigateToPage('extensions', 'installed')}
+              >
+                {t('chat.subagentHint.manage')}
               </button>
             </div>
           )}
