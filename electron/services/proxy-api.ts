@@ -128,15 +128,16 @@ export async function applyProxyToPi(): Promise<ProxyApplyResult> {
 
 /** 构造注入给子进程（如 bash）的代理环境变量集合。 */
 export function buildProxyEnv(proxyUrl?: string): NodeJS.ProcessEnv {
-  if (!proxyUrl) return {};
+  if (!proxyUrl || typeof proxyUrl !== 'string' || !proxyUrl.trim()) return {};
+  const trimmed = proxyUrl.trim();
   const loopback = '127.0.0.1,localhost,::1';
   return {
-    HTTP_PROXY: proxyUrl,
-    HTTPS_PROXY: proxyUrl,
-    ALL_PROXY: proxyUrl,
-    http_proxy: proxyUrl,
-    https_proxy: proxyUrl,
-    all_proxy: proxyUrl,
+    HTTP_PROXY: trimmed,
+    HTTPS_PROXY: trimmed,
+    ALL_PROXY: trimmed,
+    http_proxy: trimmed,
+    https_proxy: trimmed,
+    all_proxy: trimmed,
     NO_PROXY: loopback,
     no_proxy: loopback,
   };

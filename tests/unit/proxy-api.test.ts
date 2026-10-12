@@ -69,6 +69,9 @@ describe('subprocess proxy env injection', () => {
   it('buildProxyEnv formats all proxy keys with loopback bypass', async () => {
     const { buildProxyEnv } = await import('../../electron/services/proxy-api');
     expect(buildProxyEnv()).toEqual({});
+    expect(buildProxyEnv('')).toEqual({});
+    expect(buildProxyEnv('   ')).toEqual({});
+    expect(buildProxyEnv(123 as unknown as string)).toEqual({});
     const env = buildProxyEnv('http://127.0.0.1:7897');
     expect(env.HTTP_PROXY).toBe('http://127.0.0.1:7897');
     expect(env.HTTPS_PROXY).toBe('http://127.0.0.1:7897');
