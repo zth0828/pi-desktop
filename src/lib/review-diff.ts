@@ -128,9 +128,10 @@ export function hunkLineKind(line: string): ReviewDiffLineKind {
  * git apply 自带偏移容忍；文件在 diff 生成后被外部改动导致 apply 失败时错误回显 UI。
  */
 export function buildHunkPatch(parsed: ParsedFileDiff, hunkIndex: number): string {
+  if (!parsed || !Array.isArray(parsed.hunks)) throw new Error('invalid parsed diff');
   const hunk = parsed.hunks[hunkIndex];
   if (!hunk) throw new Error(`hunk index out of range: ${hunkIndex}`);
-  return [...parsed.headerLines, hunk.header, ...hunk.lines].join('\n') + '\n';
+  return [...(parsed.headerLines ?? []), hunk.header, ...(hunk.lines ?? [])].join('\n') + '\n';
 }
 
 export type ReviewSessionFile = {

@@ -142,6 +142,12 @@ index 1111111..2222222 100644
     const parsed = parseUnifiedDiff(SAMPLE_DIFF)!;
     expect(() => buildHunkPatch(parsed, 2)).toThrow();
   });
+
+  it('非法 parsed diff 抛错', () => {
+    expect(() => buildHunkPatch(null as any, 0)).toThrow('invalid parsed diff');
+    expect(() => buildHunkPatch({} as any, 0)).toThrow('invalid parsed diff');
+    expect(() => buildHunkPatch({ hunks: 'not-an-array' } as any, 0)).toThrow('invalid parsed diff');
+  });
 });
 
 // 真 git 回路：重建的单 hunk patch 必须能被 git apply -R 接受，且只回滚目标 hunk
