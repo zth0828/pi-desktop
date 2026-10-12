@@ -131,9 +131,13 @@ export const filesApi = {
     for (const entry of entries) {
       if (entry.name.startsWith('.git') || DEFAULT_EXCLUDED_DIRS.has(entry.name)) continue;
       const relEntry = rel ? `${rel}/${entry.name}` : entry.name;
-      if (isIgnored(levels, relEntry)) continue;
-      if (entry.isDirectory()) dirs.push(entry.name);
-      else if (entry.isFile()) files.push(entry.name);
+      if (entry.isDirectory()) {
+        if (isIgnored(levels, `${relEntry}/`)) continue;
+        dirs.push(entry.name);
+      } else if (entry.isFile()) {
+        if (isIgnored(levels, relEntry)) continue;
+        files.push(entry.name);
+      }
     }
     dirs.sort((a, b) => a.localeCompare(b));
     files.sort((a, b) => a.localeCompare(b));

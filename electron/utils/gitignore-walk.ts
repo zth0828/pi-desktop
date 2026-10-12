@@ -31,6 +31,7 @@ export async function readIgnoreLevel(root: string, dir: string, relDir: string)
  * （ignore 包已处理单文件内的取反与注释/空行）。
  */
 export function isIgnored(levels: IgnoreLevel[], rel: string): boolean {
+  if (!Array.isArray(levels) || !rel || typeof rel !== 'string') return false;
   let ignored = false;
   for (const level of levels) {
     const relFromLevel = level.relDir === ''

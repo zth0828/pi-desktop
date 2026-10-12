@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readIgnoreLevel, walkGitignoreAware } from '../../electron/utils/gitignore-walk';
+import { isIgnored, readIgnoreLevel, walkGitignoreAware } from '../../electron/utils/gitignore-walk';
 import { filesApi } from '../../electron/services/files-api';
 
 let root: string;
@@ -148,4 +148,23 @@ describe('walkGitignoreAware（fd 不可用时的 @ 补全回退）', () => {
     expect(await filesApi.listDir({ cwd: '   ', dir: 'src' })).toEqual({ dir: 'src', dirs: [], files: [] });
     expect(await filesApi.listDir({ cwd: 'CON', dir: 'src' })).toEqual({ dir: 'src', dirs: [], files: [] });
   });
+
+  it('filesApi.listDir 正确按带尾斜杠的 gitignore 规则过滤目录', async () => {
+    write('.gitignore', 'dist/\nbuild/\n');
+    write('root.txt', 'hello');
+    write('src/index.ts', 'console.log(1);');
+    write('dist/bundle.js', 'built');
+    write('build/app.js', 'built');
+
+    const result = await filesApi.listDir({ cwd: root, dir: '' });
+    expect(result.dirs).toEqual(['src']);
+    expect(result.files).toEqual(['root.txt']);
+  });
+
+  it('isIgnored 安全容忍非数组 levels 与非字符串路径', () => {
+    expect(isIgnored(undefined as unknown as any, 'src')).toBe(false);
+    expect(isIgnored([] as any, undefined as unknown as string)).toBe(false);
+    expect(isIgnored([] as any, 123 as unknown as string)).toBe(false);
+  });
 });
+
