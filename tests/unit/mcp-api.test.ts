@@ -113,4 +113,26 @@ describe('mcpApi remove/setDisabled 的 scope 回退防护', () => {
     expect(emptyConfig.success).toBe(false);
     expect(emptyConfig.error).toBe('command or url required');
   });
+
+  it('rejects prototype keys and device paths in mcpApi methods', async () => {
+    const protoUpsert = await mcpApi.upsert({ scope: 'global', name: '__proto__', config: { command: 'node' } });
+    expect(protoUpsert.success).toBe(false);
+    expect(protoUpsert.error).toBe('invalid server name');
+
+    const protoRemove = await mcpApi.remove({ scope: 'global', name: 'constructor' });
+    expect(protoRemove.success).toBe(false);
+    expect(protoRemove.error).toBe('invalid server name');
+
+    const protoDisabled = await mcpApi.setDisabled({ scope: 'global', name: 'prototype', disabled: true });
+    expect(protoDisabled.success).toBe(false);
+    expect(protoDisabled.error).toBe('invalid server name');
+
+    const deviceUpsert = await mcpApi.upsert({ scope: 'global', name: 'CON', config: { command: 'node' } });
+    expect(deviceUpsert.success).toBe(false);
+    expect(deviceUpsert.error).toBe('device paths are not allowed');
+
+    const deviceRemove = await mcpApi.remove({ scope: 'global', name: '\\\\.\\nul' });
+    expect(deviceRemove.success).toBe(false);
+    expect(deviceRemove.error).toBe('device paths are not allowed');
+  });
 });

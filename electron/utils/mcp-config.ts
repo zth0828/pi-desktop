@@ -39,20 +39,24 @@ export function upsertServer(
   config: PiMcpServerConfig,
   originalName?: string,
 ): McpConfigDoc {
+  if (name === '__proto__' || name === 'constructor' || name === 'prototype') return doc;
   const servers = { ...(doc.mcpServers ?? {}) };
-  if (originalName && originalName !== name) delete servers[originalName];
+  if (originalName && originalName !== name && originalName !== '__proto__') delete servers[originalName];
   servers[name] = config;
   return { ...doc, mcpServers: servers };
 }
 
 export function removeServer(doc: McpConfigDoc, name: string): McpConfigDoc {
+  if (name === '__proto__' || name === 'constructor' || name === 'prototype') return doc;
   const servers = { ...(doc.mcpServers ?? {}) };
   delete servers[name];
   return { ...doc, mcpServers: servers };
 }
 
 export function setServerDisabled(doc: McpConfigDoc, name: string, disabled: boolean): McpConfigDoc {
-  const current = doc.mcpServers?.[name];
+  if (name === '__proto__' || name === 'constructor' || name === 'prototype') return doc;
+  if (!doc.mcpServers || !Object.prototype.hasOwnProperty.call(doc.mcpServers, name)) return doc;
+  const current = doc.mcpServers[name];
   if (!current) return doc;
   const config = { ...current };
   if (disabled) config.disabled = true;

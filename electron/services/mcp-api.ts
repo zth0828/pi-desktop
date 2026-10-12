@@ -18,6 +18,8 @@ import type {
 import { loadPiAdapter } from './pi-adapter';
 import { detectPiEnvironment, needsWindowsCommandShell } from '../utils/pi-detector';
 import { envWithUserPath } from '../utils/shell-env';
+import { stripWindowsExtendedPrefix } from '../utils/same-path';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 import {
   listServers,
   readMcpConfigFile,
@@ -41,12 +43,16 @@ async function resolvePaths(ctx?: HostActionContext): Promise<{ agentDir: string
   const adapter = await loadPiAdapter();
   const agentDir = adapter.paths.getAgentDir();
   const active = resolveRuntimeForContext(ctx);
-  const cwd = active?.cwd ?? (await settingsApi.get({ key: 'workspaceCwd' })) ?? undefined;
+  const rawCwd = active?.cwd ?? (await settingsApi.get({ key: 'workspaceCwd' }));
+  const cwd = typeof rawCwd === 'string' && rawCwd.trim() && !isWindowsDevicePath(stripWindowsExtendedPrefix(rawCwd.trim()))
+    ? stripWindowsExtendedPrefix(rawCwd.trim())
+    : undefined;
   return { agentDir, cwd };
 }
 
 /** adapter 检测：<agentDir>/npm/node_modules/pi-mcp-adapter 或 settings.json packages 含它。 */
 function detectAdapter(agentDir: string): boolean {
+  if (isWindowsDevicePath(agentDir)) return false;
   if (existsSync(path.join(agentDir, 'npm', 'node_modules', ADAPTER_PACKAGE))) return true;
   try {
     const settingsPath = path.join(agentDir, 'settings.json');
@@ -135,6 +141,18 @@ export const mcpApi = {
   upsert: async (payload: PiMcpUpsertPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const name = typeof payload?.name === 'string' ? payload.name.trim() : '';
     if (!name) return { success: false, error: 'empty name' };
+    if (name === '__proto__' || name === 'constructor' || name === 'prototype') {
+      return { success: false, error: 'invalid server name' };
+    }
+    const originalName = typeof payload?.originalName === 'string' && payload.originalName.trim()
+      ? payload.originalName.trim()
+      : undefined;
+    if (originalName && (originalName === '__proto__' || originalName === 'constructor' || originalName === 'prototype')) {
+      return { success: false, error: 'invalid server name' };
+    }
+    if (isWindowsDevicePath(name) || (originalName && isWindowsDevicePath(originalName))) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
     if (!payload?.config || (!payload.config.command && !payload.config.url)) {
       return { success: false, error: 'command or url required' };
     }
@@ -147,9 +165,7 @@ export const mcpApi = {
             : null
           : path.join(agentDir, 'mcp.json');
       if (!filePath) return { success: false, error: 'no workspace for project scope' };
-      const originalName = typeof payload.originalName === 'string' && payload.originalName.trim()
-        ? payload.originalName.trim()
-        : undefined;
+      if (isWindowsDevicePath(filePath)) return { success: false, error: 'device paths are not allowed' };
       const doc = readMcpConfigFile(filePath);
       // 编辑时保留壳不认识的字段（socket/auth/directTools 等）
       const base = doc.mcpServers?.[originalName ?? name] ?? {};
@@ -166,6 +182,12 @@ export const mcpApi = {
   remove: async (payload: PiMcpServerRefPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const name = typeof payload?.name === 'string' ? payload.name.trim() : '';
     if (!name) return { success: false, error: 'empty name' };
+    if (name === '__proto__' || name === 'constructor' || name === 'prototype') {
+      return { success: false, error: 'invalid server name' };
+    }
+    if (isWindowsDevicePath(name)) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
     try {
       const { agentDir, cwd } = await resolvePaths(ctx);
       // project scope 请求丢失 cwd 时必须失败，不能回退到 global 配置——
@@ -177,6 +199,7 @@ export const mcpApi = {
         payload.scope === 'project' && cwd
           ? path.join(cwd, '.mcp.json')
           : path.join(agentDir, 'mcp.json');
+      if (isWindowsDevicePath(filePath)) return { success: false, error: 'device paths are not allowed' };
       writeMcpConfigFile(filePath, removeServer(readMcpConfigFile(filePath), name));
       return { success: true };
     } catch (err) {
@@ -187,6 +210,12 @@ export const mcpApi = {
   setDisabled: async (payload: PiMcpSetDisabledPayload, ctx?: HostActionContext): Promise<HostSuccess> => {
     const name = typeof payload?.name === 'string' ? payload.name.trim() : '';
     if (!name) return { success: false, error: 'empty name' };
+    if (name === '__proto__' || name === 'constructor' || name === 'prototype') {
+      return { success: false, error: 'invalid server name' };
+    }
+    if (isWindowsDevicePath(name)) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
     try {
       const { agentDir, cwd } = await resolvePaths(ctx);
       // 同 remove：project scope 无 cwd 不得写 global 配置。
@@ -197,6 +226,7 @@ export const mcpApi = {
         payload.scope === 'project' && cwd
           ? path.join(cwd, '.mcp.json')
           : path.join(agentDir, 'mcp.json');
+      if (isWindowsDevicePath(filePath)) return { success: false, error: 'device paths are not allowed' };
       writeMcpConfigFile(
         filePath,
         setServerDisabled(readMcpConfigFile(filePath), name, payload.disabled),

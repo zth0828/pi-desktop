@@ -80,4 +80,12 @@ describe('mcp-config', () => {
     writeMcpConfigFile(nested, { mcpServers: { s: { command: 'run' } } });
     expect(listServers(readMcpConfigFile(nested))).toEqual([{ name: 's', config: { command: 'run' } }]);
   });
+
+  it('防范原型污染：对 __proto__ / constructor / prototype 操作返回原对象', () => {
+    const base = { mcpServers: { a: { command: 'run' } } };
+    expect(upsertServer(base, '__proto__', { command: 'polluted' })).toBe(base);
+    expect(removeServer(base, '__proto__')).toBe(base);
+    expect(setServerDisabled(base, '__proto__', true)).toBe(base);
+    expect(setServerDisabled(base, 'toString', true)).toBe(base);
+  });
 });
