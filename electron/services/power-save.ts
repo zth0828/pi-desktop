@@ -4,6 +4,7 @@
 import { appendFileSync } from 'node:fs';
 import { powerSaveBlocker } from 'electron';
 import { settingsApi } from './settings-api';
+import { isWindowsDevicePath } from '../utils/workspace-path';
 
 let blockerId: number | null = null;
 /** 多个后台 runtime 可同时运行；按 runtime key 计数，避免一个任务结束误解除另一个任务。 */
@@ -13,7 +14,7 @@ let settingsReadInFlight = false;
 /** E2E 观测钩子（同 notify 的 PI_DESKTOP_E2E_NOTIFY_LOG 模式）：按行落 JSON。 */
 function log(action: 'start' | 'stop'): void {
   const logPath = process.env.PI_DESKTOP_E2E_POWER_LOG;
-  if (!logPath) return;
+  if (!logPath || isWindowsDevicePath(logPath)) return;
   try {
     appendFileSync(logPath, `${JSON.stringify({ action, at: Date.now() })}\n`);
   } catch {
