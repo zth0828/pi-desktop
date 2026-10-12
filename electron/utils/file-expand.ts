@@ -81,6 +81,7 @@ function readError(err: unknown): string {
 export async function expandFileReferences(text: string, cwd: string): Promise<ExpandResult> {
   if (!text || typeof text !== 'string') return { text: '', images: [] };
   const safeCwd = typeof cwd === 'string' && cwd.trim() ? cwd : process.cwd();
+  if (isWindowsDevicePath(safeCwd)) return { text, images: [] };
   const tokens = extractAtTokens(text);
   if (tokens.length === 0) return { text, images: [] };
   const images: ExpandedImage[] = [];

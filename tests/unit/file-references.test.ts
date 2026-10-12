@@ -123,5 +123,11 @@ describe('expandFileReferences', () => {
     const { text } = await expandFileReferences('测试 @CON 和 @aux 及 @\\\\.\\pipe\\ipc', dir);
     expect(text).toBe('测试 @CON 和 @aux 及 @\\\\.\\pipe\\ipc');
   });
+
+  it('cwd 为 Windows 设备路径时安全返回原文本', async () => {
+    const { text, images } = await expandFileReferences('测试 @hello.txt', 'CON');
+    expect(text).toBe('测试 @hello.txt');
+    expect(images).toHaveLength(0);
+  });
 });
 
