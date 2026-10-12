@@ -71,10 +71,22 @@ describe('git-api', () => {
     expect(branchRes.branch).toBe('feature-test');
   });
 
-  it('空分支名或纯空白分支名拦截并返回错误', async () => {
+  it('空分支名、连字符开头或含控制字符的分支名拦截并返回错误', async () => {
     const checkoutRes = await checkoutGitBranch(repoDir, '   ');
     expect(checkoutRes.success).toBe(false);
     expect(checkoutRes.error).toBe('invalid branch name');
+
+    const dashRes = await checkoutGitBranch(repoDir, '-b');
+    expect(dashRes.success).toBe(false);
+    expect(dashRes.error).toBe('invalid branch name');
+
+    const ctrlRes = await checkoutGitBranch(repoDir, 'main\n');
+    expect(ctrlRes.success).toBe(false);
+    expect(ctrlRes.error).toBe('invalid branch name');
+
+    const devRes = await checkoutGitBranch('CON', 'feature-test');
+    expect(devRes.success).toBe(false);
+    expect(devRes.error).toBe('device paths are not allowed');
   });
 
   it('空路径或纯空白 cwd 不得误检主进程目录并返回 null', async () => {

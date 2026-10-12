@@ -143,9 +143,18 @@ export async function checkoutGitBranch(
   cwd: string,
   branch: string,
 ): Promise<GitCheckoutResult> {
-  const targetBranch = typeof branch === 'string' ? branch.trim() : '';
-  if (!targetBranch) {
+  if (typeof branch !== 'string') {
     return { success: false, error: 'invalid branch name' };
+  }
+  const targetBranch = branch.trim();
+  if (!targetBranch || targetBranch.startsWith('-') || /[\x00-\x1f\x7f]/.test(branch)) {
+    return { success: false, error: 'invalid branch name' };
+  }
+  if (!cwd || typeof cwd !== 'string' || !cwd.trim()) {
+    return { success: false, error: 'invalid workspace directory' };
+  }
+  if (isWindowsDevicePath(cwd)) {
+    return { success: false, error: 'device paths are not allowed' };
   }
   if (isCwdRunning(cwd)) {
     return { success: false, error: 'running' };
