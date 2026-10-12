@@ -444,7 +444,7 @@ export default function App() {
       <main className="content">
         {/* 主内容区顶部的全局错误条：侧栏等跨区域操作的失败提示，任何页面可见 */}
         <GlobalErrorBanner />
-        {visitedPages.has('chat') && <div className={`page-view${page === 'chat' ? ' active' : ''}`}><ChatPage searchTarget={chatSearchTarget} onSearchTargetHandled={clearChatSearchTarget} /></div>}
+        {visitedPages.has('chat') && <div className={`page-view${page === 'chat' ? ' active' : ''}`}><ChatPage active={page === 'chat'} searchTarget={chatSearchTarget} onSearchTargetHandled={clearChatSearchTarget} /></div>}
         {visitedPages.has('models') && <div className={`page-view${page === 'models' ? ' active' : ''}`}><ModelsPage /></div>}
         {visitedPages.has('sessions') && <div className={`page-view${page === 'sessions' ? ' active' : ''}`}><SessionsPage active={page === 'sessions'} onOpenChat={() => navigate('chat')} /></div>}
         {visitedPages.has('skills') && <div className={`page-view${page === 'skills' ? ' active' : ''}`}><SkillsPage /></div>}

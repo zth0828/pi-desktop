@@ -26,6 +26,7 @@ import { ChatStoreProvider, useActiveChatStore } from '../pages/Chat/chat-store-
 const SESSION_MIME = 'application/x-pi-session';
 
 export type PaneLayoutProps = {
+  active?: boolean;
   searchTarget?: { sessionId: string; messageIndex: number; nonce: number };
   onSearchTargetHandled?: () => void;
 };
@@ -166,6 +167,7 @@ function PaneLeaf({ node, shared }: { node: LeafNode; shared: SharedProps }) {
     >
       <ChatStoreProvider store={store}>
         <ChatPane
+          active={shared.active}
           primary={primary}
           attachSession={primary ? shared.attachSession : null}
           attachTarget={node.sessionPath ? { sessionPath: node.sessionPath, cwd: node.sessionCwd } : null}

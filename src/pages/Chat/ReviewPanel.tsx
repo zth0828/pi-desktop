@@ -40,7 +40,7 @@ const MIN_WORKSPACE_TREE_WIDTH = 200;
 const MAX_WORKSPACE_TREE_WIDTH = 450;
 const WORKSPACE_TREE_WIDTH_STORAGE_KEY = 'pi-desktop.workspace-tree-width';
 
-export function ReviewPanel() {
+export function ReviewPanel({ active = true }: { active?: boolean }) {
   const { t } = useTranslation();
   const reviewOpen = usePaneChatStore((s) => s.reviewOpen);
   const workspaceOpen = usePaneChatStore((s) => s.workspaceOpen);
@@ -237,21 +237,27 @@ export function ReviewPanel() {
     };
   }, [open, effectiveMode]);
 
-  // docked 展开时把 OS 窗口向右加宽出面板宽度：聊天列保持展开前像素宽，不被挤压。
-  // 关闭 / 切 overlay / 卸载时对称缩回。屏幕右缘空间不足由后端 clamp，差额仍由聊天列让出。
   useEffect(() => {
-    if (!open || effectiveMode !== 'docked') return;
-    const currentWidth = Math.round(panelRef.current?.clientWidth ?? expectedPanelWidth);
+    if (!open || effectiveMode !== 'docked') {
+      setPinnedWidth(undefined);
+    }
+  }, [open, effectiveMode]);
+
+  // docked 展开时把 OS 窗口向右加宽出面板宽度：聊天列保持展开前像素宽，不被挤压。
+  // 关闭 / 切 overlay / 页面离开 / 卸载时对称缩回。切回活跃页面时重新按记录宽度恢复拓宽。
+  useEffect(() => {
+    if (!open || effectiveMode !== 'docked' || !active) return;
+    const clientW = panelRef.current?.clientWidth;
+    const currentWidth = Math.round(pinnedWidth ?? (clientW && clientW > 0 ? clientW : expectedPanelWidth));
     if (currentWidth <= 0) return;
     setPinnedWidth(currentWidth);
     void hostApi.windows.expandRight({ extraWidth: currentWidth });
     return () => {
-      setPinnedWidth(undefined);
       void hostApi.windows.restoreExpandRight();
     };
-    // 仅在打开/模式切换时触发；面板宽度变化（拖拽）不重复扩窗
+    // 仅在打开/模式切换/活跃状态变化时触发；面板宽度变化（拖拽）不重复扩窗
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, effectiveMode]);
+  }, [open, effectiveMode, active]);
 
   useEffect(() => {
     if (!dragState) return;
