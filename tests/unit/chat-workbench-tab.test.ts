@@ -68,4 +68,42 @@ describe('chat store workbench tab routing', () => {
       nonce: 3,
     });
   });
+
+  it('openWorkspaceFile 忽略空字符串、纯空白或非字符串输入', () => {
+    const store = createChatStore();
+    expect(store.getState().workspaceFileRequest).toBeNull();
+
+    store.getState().openWorkspaceFile('');
+    expect(store.getState().workspaceFileRequest).toBeNull();
+
+    store.getState().openWorkspaceFile('   ');
+    expect(store.getState().workspaceFileRequest).toBeNull();
+
+    store.getState().openWorkspaceFile(null as any);
+    expect(store.getState().workspaceFileRequest).toBeNull();
+  });
+
+  it('openReviewFile 处理空白字符或未提供路径时打开审阅面板且 path 为 undefined', () => {
+    const store = createChatStore();
+    store.getState().openReviewFile('   ');
+    expect(store.getState().reviewOpen).toBe(true);
+    expect(store.getState().reviewFileRequest).toEqual({
+      path: undefined,
+      nonce: 1,
+    });
+  });
+
+  it('applyState 容忍 null 或缺失 messages/historyMessages 的异常状态对象', () => {
+    const store = createChatStore();
+    expect(() => store.getState().applyState(null as any)).not.toThrow();
+    expect(() =>
+      store.getState().applyState({
+        cwd: '/repo',
+        sessionId: 's-1',
+        generation: 1,
+      } as any),
+    ).not.toThrow();
+    expect(store.getState().messages).toEqual([]);
+    expect(store.getState().historyMessages).toEqual([]);
+  });
 });

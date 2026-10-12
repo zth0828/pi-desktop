@@ -738,7 +738,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       dismissSessionCwdMissing: () => set({ sessionCwdMissing: null }),
 
       openWorkspaceFile: (rawPath) => {
-        const path = normalizeDisplayPath(rawPath, get().cwd);
+        if (!rawPath || typeof rawPath !== 'string' || !rawPath.trim()) return;
+        const path = normalizeDisplayPath(rawPath.trim(), get().cwd);
         set({
           workspaceOpen: true,
           reviewOpen: false,
@@ -763,7 +764,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       openReviewFile: (rawPath) => {
-        const path = rawPath ? normalizeDisplayPath(rawPath, get().cwd) : undefined;
+        const trimmed = typeof rawPath === 'string' ? rawPath.trim() : undefined;
+        const path = trimmed ? normalizeDisplayPath(trimmed, get().cwd) : undefined;
         set({
           reviewOpen: true,
           workspaceOpen: false,
@@ -844,12 +846,15 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       applyState: (state) => {
+        if (!state) return;
         awaitingRun = false; // 绑定会话已替换：旧的待启动 run 不再属于本面板
-        const messages = state.messages.map((m, i) => ({
+        const rawMessages = Array.isArray(state.messages) ? state.messages : [];
+        const messages = rawMessages.map((m, i) => ({
           ...asMessage(m),
           entryId: state.messageEntryIds?.[i] ?? undefined,
         }));
-        const historyMessages = (state.historyMessages ?? state.messages).map((m, i) => ({
+        const rawHistory = Array.isArray(state.historyMessages) ? state.historyMessages : rawMessages;
+        const historyMessages = rawHistory.map((m, i) => ({
           ...asMessage(m),
           entryId: state.historyMessageEntryIds?.[i] ?? undefined,
         }));
@@ -906,7 +911,9 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         const ids = state.messageEntryIds ?? [];
         const historyIds = state.historyMessageEntryIds ?? [];
         const current = get();
-        const historyMessages = (state.historyMessages ?? state.messages).map((m, i) => ({
+        const rawMessages = Array.isArray(state.messages) ? state.messages : [];
+        const rawHistory = Array.isArray(state.historyMessages) ? state.historyMessages : rawMessages;
+        const historyMessages = rawHistory.map((m, i) => ({
           ...asMessage(m),
           entryId: historyIds[i] ?? undefined,
         }));
@@ -928,11 +935,13 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         if (state.sessionFile && state.sessionFile !== get().boundSessionPath) {
           set({ boundSessionPath: state.sessionFile });
         }
-        const messages = state.messages.map((m, i) => ({
+        const rawMessages = Array.isArray(state.messages) ? state.messages : [];
+        const messages = rawMessages.map((m, i) => ({
           ...asMessage(m),
           entryId: state.messageEntryIds?.[i] ?? undefined,
         }));
-        const historyMessages = (state.historyMessages ?? state.messages).map((m, i) => ({
+        const rawHistory = Array.isArray(state.historyMessages) ? state.historyMessages : rawMessages;
+        const historyMessages = rawHistory.map((m, i) => ({
           ...asMessage(m),
           entryId: state.historyMessageEntryIds?.[i] ?? undefined,
         }));
