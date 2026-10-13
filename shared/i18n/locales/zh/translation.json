@@ -1,4 +1,7 @@
 {
+  "common": {
+    "close": "关闭"
+  },
   "app": {
     "tagline": "pi coding agent 的桌面壳"
   },
@@ -191,6 +194,7 @@
       "running": "执行中",
       "success": "完成",
       "error": "出错",
+      "failed": "执行失败",
       "result": "结果",
       "command": "命令",
       "output": "输出",
@@ -1193,7 +1197,8 @@
     "jumpToMessage": "跳转到消息：{{question}}"
   },
   "list": {
-    "search": "搜索…"
+    "search": "搜索…",
+    "noResults": "无匹配结果"
   },
   "review": {
     "title": "评审",
@@ -1286,6 +1291,7 @@
     "subagentResult": "产出结果",
     "subagentCopyTask": "复制子任务指令",
     "subagentCopyResult": "复制输出结果",
+    "subagentCopyOutput": "复制输出",
     "subagentCopied": "已复制",
     "subagentMessages": "子 Agent 会话记录",
     "subagentMessagesCount": "{{count}} 条记录",

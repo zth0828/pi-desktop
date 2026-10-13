@@ -1,4 +1,7 @@
 {
+  "common": {
+    "close": "Close"
+  },
   "app": {
     "tagline": "A desktop shell for the pi coding agent"
   },
@@ -191,6 +194,7 @@
       "running": "running",
       "success": "done",
       "error": "error",
+      "failed": "Failed",
       "result": "Result",
       "command": "Command",
       "output": "Output",
@@ -1194,7 +1198,8 @@
     "jumpToMessage": "Jump to message: {{question}}"
   },
   "list": {
-    "search": "Search…"
+    "search": "Search…",
+    "noResults": "No results found"
   },
   "review": {
     "title": "Review",
@@ -1287,6 +1292,7 @@
     "subagentResult": "Output",
     "subagentCopyTask": "Copy subtask prompt",
     "subagentCopyResult": "Copy output",
+    "subagentCopyOutput": "Copy output",
     "subagentCopied": "Copied",
     "subagentMessages": "Subagent Session Transcript",
     "subagentMessagesCount": "{{count}} entries",
