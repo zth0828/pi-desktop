@@ -81,7 +81,10 @@ export interface SubagentProgressInfo {
  * 提取子任务的展示摘要与输出文本。
  */
 export function extractSubagentProgress(execution: ToolExecution): SubagentProgressInfo {
-  let summary = toolSummary(execution.toolName, execution.args) ?? execution.toolName;
+  const parsedArgs = tryParseJson(execution.args);
+  let summary = (parsedArgs && typeof parsedArgs === 'object' ? toolSummary(execution.toolName, parsedArgs) : null)
+    ?? toolSummary(execution.toolName, execution.args)
+    ?? execution.toolName;
   let agentName: string | undefined;
   let hasErrors = Boolean(execution.status === 'error' || execution.interrupted);
 
@@ -93,8 +96,8 @@ export function extractSubagentProgress(execution: ToolExecution): SubagentProgr
   const outputText = extractSubagentText(outputSource);
 
   // 尝试从 args 中解析 Agent 身份
-  if (execution.args && typeof execution.args === 'object') {
-    const a = execution.args as Record<string, unknown>;
+  if (parsedArgs && typeof parsedArgs === 'object') {
+    const a = parsedArgs as Record<string, unknown>;
     if (typeof a.agent === 'string' && a.agent.trim()) {
       agentName = a.agent.trim();
     } else if (typeof a.name === 'string' && a.name.trim()) {
@@ -321,8 +324,9 @@ function extractSubagentTaskOutput(res: Record<string, unknown>, fallbackText?: 
  * 从 ToolExecution 解析出所有拆分的子任务及其内部轨迹与独立输出。
  */
 export function extractSubagentSubTasks(execution: ToolExecution): SubagentSubTask[] {
-  const args = execution.args && typeof execution.args === 'object'
-    ? (execution.args as Record<string, unknown>)
+  const parsedArgs = tryParseJson(execution.args);
+  const args = parsedArgs && typeof parsedArgs === 'object'
+    ? (parsedArgs as Record<string, unknown>)
     : null;
 
   // 1. 从参数定义中提取所有子任务目标声明
@@ -350,7 +354,11 @@ export function extractSubagentSubTasks(execution: ToolExecution): SubagentSubTa
             ? rec.prompt.trim()
             : (typeof rec.instruction === 'string' && rec.instruction.trim())
               ? rec.instruction.trim()
-              : '';
+              : (typeof rec.description === 'string' && rec.description.trim())
+                ? rec.description.trim()
+                : (typeof rec.goal === 'string' && rec.goal.trim())
+                  ? rec.goal.trim()
+                  : '';
         declaredList.push({ agent, task });
       }
     }

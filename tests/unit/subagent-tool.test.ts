@@ -264,5 +264,29 @@ describe('subagent-tool helper', () => {
     expect(subtasks[0].agent).toBe('coder');
     expect(subtasks[0].task).toBe('重构并优化缓存逻辑');
   });
+
+  it('extractSubagentSubTasks 与 extractSubagentProgress 支持 JSON 字符串参数', () => {
+    const execution: ToolExecution = {
+      toolCallId: 'call-json-str',
+      toolName: 'subagent',
+      status: 'running',
+      args: JSON.stringify({
+        tasks: [
+          { agent: 'scout', task: '分析前端结构' },
+          { agent: 'tester', goal: '运行自动化回归' },
+        ],
+      }),
+    };
+
+    const progress = extractSubagentProgress(execution);
+    expect(progress.summary).toBe('scout, tester (2)');
+
+    const subtasks = extractSubagentSubTasks(execution);
+    expect(subtasks).toHaveLength(2);
+    expect(subtasks[0].agent).toBe('scout');
+    expect(subtasks[0].task).toBe('分析前端结构');
+    expect(subtasks[1].agent).toBe('tester');
+    expect(subtasks[1].task).toBe('运行自动化回归');
+  });
 });
 
