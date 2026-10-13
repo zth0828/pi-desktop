@@ -200,20 +200,28 @@ export function parseActionTraces(messages: unknown): SubagentActionTrace[] {
     };
     if (!msg || typeof msg !== 'object') continue;
 
-    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-      for (let j = 0; j < msg.content.length; j++) {
-        const item = msg.content[j] as {
+    if (msg.role === 'assistant') {
+      const contentList = Array.isArray(msg.content) ? msg.content : [];
+      const toolCalls = Array.isArray((msg as unknown as Record<string, unknown>).toolCalls)
+        ? ((msg as unknown as Record<string, unknown>).toolCalls as unknown[])
+        : Array.isArray((msg as unknown as Record<string, unknown>).tool_calls)
+          ? ((msg as unknown as Record<string, unknown>).tool_calls as unknown[])
+          : [];
+      const items = [...contentList, ...toolCalls];
+      for (let j = 0; j < items.length; j++) {
+        const item = items[j] as {
           type?: string;
           id?: string;
           name?: string;
+          function?: { name?: string; arguments?: unknown };
           arguments?: unknown;
           input?: unknown;
           args?: unknown;
         };
-        // 兼容 pi 原生 toolCall 与标准 tool_use
-        if (item && (item.type === 'toolCall' || item.type === 'tool_use') && item.name) {
-          const toolName = item.name;
-          const inputArgs = item.arguments ?? item.input ?? item.args;
+        const toolName = item?.name ?? item?.function?.name;
+        // 兼容 pi 原生 toolCall 与标准 tool_use / function call
+        if (item && (item.type === 'toolCall' || item.type === 'tool_use' || item.type === 'function' || toolName) && toolName) {
+          const inputArgs = item.arguments ?? item.input ?? item.args ?? item.function?.arguments;
           const summary = formatActionSummary(toolName, inputArgs);
           const id = item.id || `trace-${i}-${j}`;
           const traceItem: SubagentActionTrace = {
@@ -228,12 +236,13 @@ export function parseActionTraces(messages: unknown): SubagentActionTrace[] {
           traceMap.set(id, traceItem);
         }
       }
-    } else if ((msg.role === 'toolResult' || msg.role === 'tool') && Array.isArray(msg.content)) {
+    } else if (msg.role === 'toolResult' || msg.role === 'tool') {
       const callId = msg.toolCallId || msg.tool_use_id;
       if (callId && traceMap.has(callId)) {
         const target = traceMap.get(callId)!;
         target.isError = Boolean(msg.isError);
-        target.output = extractSubagentText(msg.content);
+        const text = extractSubagentText(msg.content ?? (msg as unknown as Record<string, unknown>).output ?? (msg as unknown as Record<string, unknown>).result);
+        if (text) target.output = text;
       }
     }
   }
@@ -250,16 +259,21 @@ function extractSubagentTaskOutput(res: Record<string, unknown>, fallbackText?: 
   const directText = extractSubagentText(res.output ?? res.content ?? res.result);
   if (directText) return directText;
 
-  // 2. 从 messages 中倒序查找最后一条 assistant 消息包含的 text block
+  // 2. 从 messages 中倒序查找最后一条 assistant 消息包含的文本
   if (Array.isArray(res.messages)) {
     for (let i = res.messages.length - 1; i >= 0; i--) {
       const m = res.messages[i] as { role?: string; content?: unknown };
-      if (m && m.role === 'assistant' && Array.isArray(m.content)) {
-        const textParts = m.content
-          .filter((b: any) => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim())
-          .map((b: any) => b.text.trim());
-        if (textParts.length > 0) {
-          return textParts.join('\n\n');
+      if (m && m.role === 'assistant') {
+        if (typeof m.content === 'string' && m.content.trim()) {
+          return m.content.trim();
+        }
+        if (Array.isArray(m.content)) {
+          const textParts = m.content
+            .filter((b: any) => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim())
+            .map((b: any) => b.text.trim());
+          if (textParts.length > 0) {
+            return textParts.join('\n\n');
+          }
         }
       }
     }

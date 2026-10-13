@@ -74,6 +74,58 @@ describe('subagent-tool helper', () => {
     expect(traces[1].id).toBe('call-2');
   });
 
+  it('parseActionTraces 支持字符串格式的 toolResult 内容提取', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'call-read',
+            name: 'read',
+            input: { path: 'package.json' },
+          },
+        ],
+      },
+      {
+        role: 'toolResult',
+        toolCallId: 'call-read',
+        content: '{"name": "test-pkg"}',
+      },
+    ];
+
+    const traces = parseActionTraces(messages);
+    expect(traces).toHaveLength(1);
+    expect(traces[0].output).toBe('{"name": "test-pkg"}');
+  });
+
+  it('extractSubagentSubTasks 能处理字符串 content 的 assistant 答复', () => {
+    const execution: ToolExecution = {
+      toolCallId: 'call-str',
+      toolName: 'subagent',
+      status: 'success',
+      args: { task: '单任务分析' },
+      result: {
+        details: {
+          results: [
+            {
+              agent: 'worker',
+              task: '单任务分析',
+              exitCode: 0,
+              messages: [
+                { role: 'assistant', content: '纯文本完成说明' },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    const subtasks = extractSubagentSubTasks(execution);
+    expect(subtasks).toHaveLength(1);
+    expect(subtasks[0].output).toBe('纯文本完成说明');
+  });
+
   it('extractSubagentSubTasks 能从 messages 末尾提取最终文本，并正确标记退出码失败状态', () => {
     const execution: ToolExecution = {
       toolCallId: 'call-100',
