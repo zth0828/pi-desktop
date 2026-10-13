@@ -255,8 +255,9 @@ function MessageItemView({
   const installSubagents = useCompanionStore((s) => s.installSubagents);
   const [subagentsToast, setSubagentsToast] = useState(false);
 
-  const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
-  const hasSubagentsInSession = Object.values(toolExecutions).some((ex) => isSubagentTool(ex?.toolName));
+  const hasSubagentsInSession = usePaneChatStore((s) =>
+    Object.values(s.toolExecutions).some((ex) => isSubagentTool(ex?.toolName)),
+  );
 
   const handleEnableCompanion = async () => {
     const ok = await toggleCompanion('ask-question', true);
