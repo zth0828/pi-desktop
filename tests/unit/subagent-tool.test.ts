@@ -288,5 +288,46 @@ describe('subagent-tool helper', () => {
     expect(subtasks[1].agent).toBe('tester');
     expect(subtasks[1].task).toBe('运行自动化回归');
   });
+
+  it('extractSubagentText 能从 JSON 字符串中解包 output 字段', () => {
+    expect(extractSubagentText(JSON.stringify({ output: '构建成功完成' }))).toBe('构建成功完成');
+    expect(extractSubagentText(JSON.stringify({ message: '执行已完成' }))).toBe('执行已完成');
+  });
+
+  it('extractSubagentProgress 与 extractSubagentSubTasks 支持 JSON 字符串格式的 result 解析', () => {
+    const execution: ToolExecution = {
+      toolCallId: 'call-result-json-str',
+      toolName: 'subagent',
+      status: 'success',
+      args: {
+        chain: [
+          { name: 'builder', task: '编译二进制文件' },
+        ],
+      },
+      result: JSON.stringify({
+        details: {
+          results: [
+            {
+              name: 'builder',
+              task: '编译二进制文件',
+              exitCode: 0,
+              output: '二进制打包成功: dist/app',
+            },
+          ],
+        },
+      }),
+    };
+
+    const progress = extractSubagentProgress(execution);
+    expect(progress.agentName).toBe('builder');
+    expect(progress.summary).toBe('builder ×1');
+    expect(progress.outputText).toBe('二进制打包成功: dist/app');
+
+    const subtasks = extractSubagentSubTasks(execution);
+    expect(subtasks).toHaveLength(1);
+    expect(subtasks[0].agent).toBe('builder');
+    expect(subtasks[0].task).toBe('编译二进制文件');
+    expect(subtasks[0].output).toBe('二进制打包成功: dist/app');
+  });
 });
 

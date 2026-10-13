@@ -53,7 +53,17 @@ export function formatToolArgs(args: unknown): string {
  */
 export function extractSubagentText(result: unknown): string {
   if (!result) return '';
-  if (typeof result === 'string') return result;
+  if (typeof result === 'string') {
+    const trimmed = result.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      const parsed = tryParseJson(result);
+      if (parsed && typeof parsed === 'object') {
+        const fromObj = extractSubagentText(parsed);
+        if (fromObj) return fromObj;
+      }
+    }
+    return result;
+  }
   const fromStandard = extractResultText(result);
   if (fromStandard) return fromStandard;
 
@@ -66,6 +76,18 @@ export function extractSubagentText(result: unknown): string {
     if (typeof r.output === 'string' && r.output.trim()) return r.output.trim();
     if (typeof r.result === 'string' && r.result.trim()) return r.result.trim();
     if (typeof r.content === 'string' && r.content.trim()) return r.content.trim();
+
+    const details = (r.details ?? r) as Record<string, unknown>;
+    if (details !== r) {
+      const fromDetails = extractSubagentText(details);
+      if (fromDetails) return fromDetails;
+    }
+    if (Array.isArray(details.results) && details.results.length > 0) {
+      const outputs = details.results
+        .map((item: any) => extractSubagentText(item?.output ?? item?.text ?? item?.result ?? item?.content))
+        .filter(Boolean);
+      if (outputs.length > 0) return outputs.join('\n\n');
+    }
   }
   return '';
 }
@@ -98,30 +120,43 @@ export function extractSubagentProgress(execution: ToolExecution): SubagentProgr
   // 尝试从 args 中解析 Agent 身份
   if (parsedArgs && typeof parsedArgs === 'object') {
     const a = parsedArgs as Record<string, unknown>;
+    const rawTasks = Array.isArray(a.tasks)
+      ? a.tasks
+      : Array.isArray(a.subtasks)
+        ? a.subtasks
+        : Array.isArray(a.chain)
+          ? a.chain
+          : null;
+
     if (typeof a.agent === 'string' && a.agent.trim()) {
       agentName = a.agent.trim();
     } else if (typeof a.name === 'string' && a.name.trim()) {
       agentName = a.name.trim();
-    } else if (Array.isArray(a.tasks) && a.tasks.length > 0) {
+    } else if (rawTasks && rawTasks.length > 0) {
       const distinctAgents = Array.from(
-        new Set(a.tasks.map((t: any) => t?.agent).filter(Boolean)),
+        new Set(
+          rawTasks
+            .map((t: any) => (typeof t === 'string' ? 'subagent' : t?.agent || t?.name))
+            .filter(Boolean),
+        ),
       );
       if (distinctAgents.length === 1) {
         agentName = distinctAgents[0];
-        summary = `${agentName} ×${a.tasks.length}`;
+        summary = `${agentName} ×${rawTasks.length}`;
       } else if (distinctAgents.length > 1) {
-        summary = `${distinctAgents.join(', ')} (${a.tasks.length})`;
+        summary = `${distinctAgents.join(', ')} (${rawTasks.length})`;
       }
     }
   }
 
-  // 尝试从 details.results 提取实际状态与结果
-  if (outputSource && typeof outputSource === 'object') {
-    const resObj = outputSource as Record<string, unknown>;
+  // 尝试从 details.results 提取实际状态与结果（支持 JSON 字符串与对象结果）
+  const parsedOutput = tryParseJson(outputSource);
+  if (parsedOutput && typeof parsedOutput === 'object') {
+    const resObj = parsedOutput as Record<string, unknown>;
     const details = (resObj.details ?? resObj) as Record<string, unknown>;
     if (Array.isArray(details.results) && details.results.length > 0) {
       const distinctAgents = Array.from(
-        new Set(details.results.map((r: any) => r?.agent).filter(Boolean)),
+        new Set(details.results.map((r: any) => r?.agent || r?.name).filter(Boolean)),
       );
       if (distinctAgents.length === 1) {
         agentName = distinctAgents[0];
@@ -388,12 +423,13 @@ export function extractSubagentSubTasks(execution: ToolExecution): SubagentSubTa
     }
   }
 
-  // 2. 从 result / partialResult 中提取返回的执行详情
+  // 2. 从 result / partialResult 中提取返回的执行详情（支持 JSON 字符串结果解析）
   const resultSource = execution.result ?? execution.partialResult;
+  const parsedResult = tryParseJson(resultSource);
   let resultsFromDetails: Array<Record<string, unknown>> = [];
 
-  if (resultSource && typeof resultSource === 'object') {
-    const resObj = resultSource as Record<string, unknown>;
+  if (parsedResult && typeof parsedResult === 'object') {
+    const resObj = parsedResult as Record<string, unknown>;
     const details = (resObj.details ?? resObj) as Record<string, unknown>;
     if (Array.isArray(details.results)) {
       resultsFromDetails = details.results as Array<Record<string, unknown>>;
@@ -409,7 +445,9 @@ export function extractSubagentSubTasks(execution: ToolExecution): SubagentSubTa
     resultsFromDetails.forEach((res, index) => {
       const agent = (typeof res.agent === 'string' && res.agent.trim())
         ? res.agent.trim()
-        : declaredList[index]?.agent ?? 'subagent';
+        : (typeof res.name === 'string' && res.name.trim())
+          ? res.name.trim()
+          : declaredList[index]?.agent ?? 'subagent';
       const task = (typeof res.task === 'string' && res.task.trim())
         ? res.task.trim()
         : declaredList[index]?.task ?? '';
