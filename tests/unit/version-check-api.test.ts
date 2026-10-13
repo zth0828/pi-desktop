@@ -219,6 +219,19 @@ describe('version-check-api', () => {
     expect(pending).toBeNull();
   });
 
+  it('correctly matches skipped version even when v-prefix is mismatched', async () => {
+    settingsApiMock.getAll.mockResolvedValue({
+      appVersionCheckLatest: '1.5.0',
+      appVersionCheckSkippedVersion: 'v1.5.0',
+    });
+
+    const status = await versionCheckApi.getStatus();
+    expect(status.app.skipped).toBe(true);
+
+    const pending = await versionCheckApi.getPendingNotice();
+    expect(pending).toBeNull();
+  });
+
   it('validates kind and latest in dismissNotice', async () => {
     const invalidLatest = await versionCheckApi.dismissNotice({ kind: 'app', latest: '  ' });
     expect(invalidLatest.success).toBe(false);
