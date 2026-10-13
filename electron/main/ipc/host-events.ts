@@ -35,12 +35,20 @@ export function sendHostEventToWebContents<M extends HostEventModule, E extends 
   if (!webContents.isDestroyed()) webContents.send(eventChannel(module, event), ...args);
 }
 
-/** 仅向指定窗口发送事件，避免跨窗口聚焦时广播给其他面板。 */
 export function sendHostEventToWindow<M extends HostEventModule, E extends HostEventName<M>>(
   win: BrowserWindow,
   module: M,
   event: E,
   ...args: HostEventArgs<M, E>
 ): void {
-  sendHostEventToWebContents(win.webContents, module, event, ...args);
+  try {
+    if (win && !(typeof win.isDestroyed === 'function' && win.isDestroyed())) {
+      const wc = win.webContents;
+      if (wc && !(typeof wc.isDestroyed === 'function' && wc.isDestroyed())) {
+        sendHostEventToWebContents(wc, module, event, ...args);
+      }
+    }
+  } catch {
+    // 忽略窗口或 webContents 处于销毁过程中的访问异常
+  }
 }

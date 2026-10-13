@@ -97,7 +97,7 @@ export const windowsApi = {
       const sourceWin = getWindowFromContext(ctx);
       // 持有窗口不是拖拽源窗口：复用持有窗口（聚焦 + 激活对应面板），
       // 不建新窗，保证同一会话全局只归一个窗口。
-      if (sourceWin?.webContents.id !== existing.webContents.id) {
+      if ((sourceWin?.id ?? sourceWin?.webContents?.id) !== (existing.id ?? existing.webContents?.id)) {
         activateAndFocusWindow(existing);
         sendHostEventToWindow(existing, 'windows', 'focusSession', { sessionPath: payload.sessionPath });
         return;

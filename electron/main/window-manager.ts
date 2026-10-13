@@ -217,8 +217,8 @@ export function claimWindowSession(webContentsId: number, sessionPath: string): 
   if (!sessionPath || typeof sessionPath !== 'string' || !sessionPath.trim()) return false;
   const record = windows.get(webContentsId);
   if (!record || record.win.isDestroyed()) return false;
-  const existing = findWindowBySession(sessionPath);
-  if (existing && existing.webContents.id !== webContentsId) return false;
+  const existing = findWindowBySession(sessionPath, { excludeWindowId: webContentsId });
+  if (existing) return false;
   record.sessionPaths.add(sessionPath);
   return true;
 }
