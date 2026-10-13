@@ -240,11 +240,13 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
     const piSkipped = Boolean(
       saved.piVersionCheckSkippedVersion &&
       piPrevious.latest &&
+      compare(currentPi, piPrevious.latest) &&
       isSameVersion(saved.piVersionCheckSkippedVersion, piPrevious.latest),
     );
     const appSkipped = Boolean(
       saved.appVersionCheckSkippedVersion &&
       appPrevious.latest &&
+      compare(currentApp, appPrevious.latest) &&
       isSameVersion(saved.appVersionCheckSkippedVersion, appPrevious.latest),
     );
     return updateStatus({
@@ -261,6 +263,7 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
     const isSkipped = Boolean(
       saved.appVersionCheckSkippedVersion &&
       appResult.latest &&
+      compare(current, appResult.latest) &&
       isSameVersion(saved.appVersionCheckSkippedVersion, appResult.latest),
     );
 
@@ -293,6 +296,7 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   const piSkipped = Boolean(
     saved.piVersionCheckSkippedVersion &&
     pi.latest &&
+    compare(pi.current, pi.latest) &&
     isSameVersion(saved.piVersionCheckSkippedVersion, pi.latest),
   );
 
@@ -310,6 +314,7 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   const skipped = Boolean(
     saved.appVersionCheckSkippedVersion &&
     appStatus.latest &&
+    compare(currentApp, appStatus.latest) &&
     isSameVersion(saved.appVersionCheckSkippedVersion, appStatus.latest),
   );
 
@@ -337,18 +342,30 @@ export const versionCheckApi = {
     const saved = await settingsApi.getAll();
     const currentPi = (await piSystemApi.detect()).pi.version;
     const currentApp = appApi.version();
-    const appHasNewer = saved.appVersionCheckLatest && compare(currentApp, saved.appVersionCheckLatest);
-    const piHasNewer = saved.piVersionCheckLatest && currentPi && compare(currentPi, saved.piVersionCheckLatest);
+
+    if (saved.appVersionCheckSkippedVersion && currentApp && parseSemver(currentApp) && !compare(currentApp, saved.appVersionCheckSkippedVersion)) {
+      saved.appVersionCheckSkippedVersion = undefined;
+      void settingsApi.set({ key: 'appVersionCheckSkippedVersion', value: undefined });
+    }
+    if (saved.piVersionCheckSkippedVersion && currentPi && parseSemver(currentPi) && !compare(currentPi, saved.piVersionCheckSkippedVersion)) {
+      saved.piVersionCheckSkippedVersion = undefined;
+      void settingsApi.set({ key: 'piVersionCheckSkippedVersion', value: undefined });
+    }
+
+    const appHasNewer = Boolean(saved.appVersionCheckLatest && compare(currentApp, saved.appVersionCheckLatest));
+    const piHasNewer = Boolean(saved.piVersionCheckLatest && currentPi && compare(currentPi, saved.piVersionCheckLatest));
     const downloadedPath = appHasNewer ? saved.appVersionCheckDownloadedPath : undefined;
     const stagedAppPath = appHasNewer ? saved.appVersionCheckStagedAppPath : undefined;
     const readyToInstall = Boolean(appHasNewer && (stagedAppPath || downloadedPath));
     const skipped = Boolean(
+      appHasNewer &&
       saved.appVersionCheckSkippedVersion &&
       saved.appVersionCheckLatest &&
       isSameVersion(saved.appVersionCheckSkippedVersion, saved.appVersionCheckLatest),
     );
 
     const piSkipped = Boolean(
+      piHasNewer &&
       saved.piVersionCheckSkippedVersion &&
       saved.piVersionCheckLatest &&
       isSameVersion(saved.piVersionCheckSkippedVersion, saved.piVersionCheckLatest),

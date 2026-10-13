@@ -252,6 +252,22 @@ describe('version-check-api', () => {
     });
   });
 
+  it('getStatus 在本地版本已达到或超越跳过版本时，不标记 skipped 且清理过期跳过配置', async () => {
+    // Current app version is '0.4.0'
+    settingsApiMock.getAll.mockResolvedValue({
+      appVersionCheckLatest: '0.4.0',
+      appVersionCheckSkippedVersion: '0.4.0',
+    });
+
+    const status = await versionCheckApi.getStatus();
+    expect(status.app.updateAvailable).toBe(false);
+    expect(status.app.skipped).toBe(false);
+    expect(settingsApiMock.set).toHaveBeenCalledWith({
+      key: 'appVersionCheckSkippedVersion',
+      value: undefined,
+    });
+  });
+
   it('validates kind and latest in dismissNotice', async () => {
     const invalidLatest = await versionCheckApi.dismissNotice({ kind: 'app', latest: '  ' });
     expect(invalidLatest.success).toBe(false);
