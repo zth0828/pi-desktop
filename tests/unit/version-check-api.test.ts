@@ -232,6 +232,26 @@ describe('version-check-api', () => {
     expect(pending).toBeNull();
   });
 
+  it('clears expired skipped app version when local version reaches it during check', async () => {
+    // Current app version is '0.4.0'
+    settingsApiMock.getAll.mockResolvedValue({
+      appVersionCheckSkippedVersion: '0.4.0',
+    });
+    hostFetchMock.hostFetch.mockResolvedValue(new Response(JSON.stringify({
+      tag_name: 'v0.5.0',
+      draft: false,
+      prerelease: false,
+      html_url: 'https://github.com/zth0828/pi-desktop/releases/tag/v0.5.0',
+      assets: [],
+    })));
+
+    await versionCheckApi.check({ force: true });
+    expect(settingsApiMock.set).toHaveBeenCalledWith({
+      key: 'appVersionCheckSkippedVersion',
+      value: undefined,
+    });
+  });
+
   it('validates kind and latest in dismissNotice', async () => {
     const invalidLatest = await versionCheckApi.dismissNotice({ kind: 'app', latest: '  ' });
     expect(invalidLatest.success).toBe(false);

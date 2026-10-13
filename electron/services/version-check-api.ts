@@ -180,7 +180,7 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   const currentPi = (await piSystemApi.detect()).pi.version;
 
   // 若本地版本已高于或等于缓存的最新版本，说明缓存已过时失效，自动清理
-  if (saved.appVersionCheckLatest && !compare(currentApp, saved.appVersionCheckLatest)) {
+  if (saved.appVersionCheckLatest && currentApp && parseSemver(currentApp) && !compare(currentApp, saved.appVersionCheckLatest)) {
     if (saved.appVersionCheckReleaseNotes) {
       void settingsApi.set({ key: 'lastReleaseNotes', value: saved.appVersionCheckReleaseNotes });
     }
@@ -200,17 +200,17 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
     void settingsApi.set({ key: 'appVersionCheckStagedAppPath', value: undefined });
   }
 
-  if (saved.appVersionCheckSkippedVersion && !compare(currentApp, saved.appVersionCheckSkippedVersion)) {
+  if (saved.appVersionCheckSkippedVersion && currentApp && parseSemver(currentApp) && !compare(currentApp, saved.appVersionCheckSkippedVersion)) {
     saved.appVersionCheckSkippedVersion = undefined;
     void settingsApi.set({ key: 'appVersionCheckSkippedVersion', value: undefined });
   }
 
-  if (saved.piVersionCheckLatest && currentPi && !compare(currentPi, saved.piVersionCheckLatest)) {
+  if (saved.piVersionCheckLatest && currentPi && parseSemver(currentPi) && !compare(currentPi, saved.piVersionCheckLatest)) {
     saved.piVersionCheckLatest = undefined;
     void settingsApi.set({ key: 'piVersionCheckLatest', value: undefined });
   }
 
-  if (saved.piVersionCheckSkippedVersion && currentPi && !compare(currentPi, saved.piVersionCheckSkippedVersion)) {
+  if (saved.piVersionCheckSkippedVersion && currentPi && parseSemver(currentPi) && !compare(currentPi, saved.piVersionCheckSkippedVersion)) {
     saved.piVersionCheckSkippedVersion = undefined;
     void settingsApi.set({ key: 'piVersionCheckSkippedVersion', value: undefined });
   }
