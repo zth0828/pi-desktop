@@ -64,6 +64,15 @@ export function extractSubagentText(result: unknown): string {
     }
     return result;
   }
+
+  if (Array.isArray(result)) {
+    const fromArray = result
+      .map((item) => extractSubagentText(item))
+      .filter(Boolean)
+      .join('\n');
+    if (fromArray) return fromArray;
+  }
+
   const fromStandard = extractResultText(result);
   if (fromStandard) return fromStandard;
 
@@ -84,7 +93,14 @@ export function extractSubagentText(result: unknown): string {
     }
     if (Array.isArray(details.results) && details.results.length > 0) {
       const outputs = details.results
-        .map((item: any) => extractSubagentText(item?.output ?? item?.text ?? item?.result ?? item?.content))
+        .map((item: any) => {
+          const direct = extractSubagentText(item?.output ?? item?.text ?? item?.result ?? item?.content);
+          if (direct) return direct;
+          if (item && typeof item === 'object') {
+            return extractSubagentTaskOutput(item);
+          }
+          return '';
+        })
         .filter(Boolean);
       if (outputs.length > 0) return outputs.join('\n\n');
     }
@@ -343,8 +359,13 @@ function extractSubagentTaskOutput(res: Record<string, unknown>, fallbackText?: 
   }
 
   // 3. 从整个总输出文本中匹配属于当前 agent 块的内容
-  if (fallbackText && typeof res.agent === 'string') {
-    const escaped = res.agent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const agentName = (typeof res.agent === 'string' && res.agent.trim())
+    ? res.agent.trim()
+    : (typeof res.name === 'string' && res.name.trim())
+      ? res.name.trim()
+      : undefined;
+  if (fallbackText && agentName) {
+    const escaped = agentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pattern = new RegExp(`###\\s*\\[${escaped}\\]\\s*(?:completed|succeeded)[\\s\\S]*?(?=###\\s*\\[|$)`, 'i');
     const matched = fallbackText.match(pattern);
     if (matched && matched[0]) {

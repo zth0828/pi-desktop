@@ -329,5 +329,61 @@ describe('subagent-tool helper', () => {
     expect(subtasks[0].task).toBe('编译二进制文件');
     expect(subtasks[0].output).toBe('二进制打包成功: dist/app');
   });
+
+  it('extractSubagentText 支持数组形式的 text block 及字符串数组提取', () => {
+    expect(extractSubagentText([
+      { type: 'text', text: '第一行输出' },
+      { type: 'text', text: '第二行输出' },
+    ])).toBe('第一行输出\n第二行输出');
+
+    expect(extractSubagentText(['段落 A', '段落 B'])).toBe('段落 A\n段落 B');
+  });
+
+  it('parseActionTraces 支持标准 block 数组格式的 toolResult 内容提取', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'toolCall',
+            id: 'call-bash-1',
+            name: 'bash',
+            arguments: { command: 'npm run build' },
+          },
+        ],
+      },
+      {
+        role: 'toolResult',
+        toolCallId: 'call-bash-1',
+        content: [
+          { type: 'text', text: 'Build completed with 0 errors' },
+        ],
+      },
+    ];
+
+    const traces = parseActionTraces(messages);
+    expect(traces).toHaveLength(1);
+    expect(traces[0].toolName).toBe('bash');
+    expect(traces[0].output).toBe('Build completed with 0 errors');
+  });
+
+  it('extractSubagentText 能从 details.results 中的 messages 提取最终输出', () => {
+    const result = {
+      details: {
+        results: [
+          {
+            name: 'reviewer',
+            task: '审查代码',
+            exitCode: 0,
+            messages: [
+              { role: 'assistant', content: '代码审查通过，无严重隐患' },
+            ],
+          },
+        ],
+      },
+    };
+
+    expect(extractSubagentText(result)).toBe('代码审查通过，无严重隐患');
+  });
 });
 
