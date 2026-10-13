@@ -213,4 +213,56 @@ describe('subagent-tool helper', () => {
     expect(subtasks[0].agent).toBe('worker');
     expect(subtasks[0].task).toBe('正在跑测试');
   });
+
+  it('parseActionTraces 支持 OpenAI 格式的 tool_call_id 与 JSON 字符串参数解析', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        tool_calls: [
+          {
+            id: 'call_openai_bash',
+            type: 'function',
+            function: {
+              name: 'bash',
+              arguments: '{"command": "pnpm test"}',
+            },
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'call_openai_bash',
+        content: 'PASS 110 tests',
+      },
+    ];
+
+    const traces = parseActionTraces(messages);
+    expect(traces).toHaveLength(1);
+    expect(traces[0].id).toBe('call_openai_bash');
+    expect(traces[0].toolName).toBe('bash');
+    expect(traces[0].summary).toBe('$ pnpm test');
+    expect(traces[0].output).toBe('PASS 110 tests');
+  });
+
+  it('extractSubagentText 支持 response 字段', () => {
+    expect(extractSubagentText({ response: 'Final response from agent' })).toBe('Final response from agent');
+  });
+
+  it('extractSubagentSubTasks 兼容单任务的 instruction 和 description 参数', () => {
+    const execution: ToolExecution = {
+      toolCallId: 'call-instruct',
+      toolName: 'subagent',
+      status: 'running',
+      args: {
+        agent: 'coder',
+        instruction: '重构并优化缓存逻辑',
+      },
+    };
+
+    const subtasks = extractSubagentSubTasks(execution);
+    expect(subtasks).toHaveLength(1);
+    expect(subtasks[0].agent).toBe('coder');
+    expect(subtasks[0].task).toBe('重构并优化缓存逻辑');
+  });
 });
+

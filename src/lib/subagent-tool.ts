@@ -19,15 +19,32 @@ export function isSubagentTool(toolName: string | undefined): boolean {
 }
 
 /**
+ * 尝试将 JSON 字符串解析为对象，以兼容 OpenAI 格式的 arguments 字符串。
+ */
+export function tryParseJson(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+/**
  * 格式化参数对象，用于卡片与面板中的参数展示。
  */
 export function formatToolArgs(args: unknown): string {
   if (args === undefined || args === null) return '';
-  if (typeof args === 'string') return args;
+  const parsed = tryParseJson(args);
+  if (typeof parsed === 'string') return parsed;
   try {
-    return JSON.stringify(args, null, 2);
+    return JSON.stringify(parsed, null, 2);
   } catch {
-    return String(args);
+    return String(parsed);
   }
 }
 
@@ -45,6 +62,7 @@ export function extractSubagentText(result: unknown): string {
     if (typeof r.text === 'string' && r.text.trim()) return r.text.trim();
     if (typeof r.message === 'string' && r.message.trim()) return r.message.trim();
     if (typeof r.summary === 'string' && r.summary.trim()) return r.summary.trim();
+    if (typeof r.response === 'string' && r.response.trim()) return r.response.trim();
     if (typeof r.output === 'string' && r.output.trim()) return r.output.trim();
     if (typeof r.result === 'string' && r.result.trim()) return r.result.trim();
     if (typeof r.content === 'string' && r.content.trim()) return r.content.trim();
@@ -105,6 +123,8 @@ export function extractSubagentProgress(execution: ToolExecution): SubagentProgr
       if (distinctAgents.length === 1) {
         agentName = distinctAgents[0];
         summary = `${agentName} ×${details.results.length}`;
+      } else if (distinctAgents.length > 1) {
+        summary = `${distinctAgents.join(', ')} (${details.results.length})`;
       }
       const failed = details.results.some((r: any) => (typeof r.exitCode === 'number' && r.exitCode !== 0) || r.error);
       if (failed) hasErrors = true;
@@ -156,8 +176,9 @@ export interface SubagentSubTask {
  * 格式化单条工具调用的单行简短摘要。
  */
 export function formatActionSummary(toolName: string, args: unknown): string {
-  if (!args || typeof args !== 'object') return toolName;
-  const a = args as Record<string, unknown>;
+  const parsedArgs = tryParseJson(args);
+  if (!parsedArgs || typeof parsedArgs !== 'object') return toolName;
+  const a = parsedArgs as Record<string, unknown>;
 
   if (toolName === 'read' && typeof a.path === 'string') {
     return `${a.path}`;
@@ -177,9 +198,9 @@ export function formatActionSummary(toolName: string, args: unknown): string {
     return `${a.path}`;
   }
 
-  const custom = toolSummary(toolName, args);
+  const custom = toolSummary(toolName, parsedArgs);
   if (custom) return custom;
-  return formatToolArgs(args).slice(0, 100);
+  return formatToolArgs(parsedArgs).slice(0, 100);
 }
 
 /**
@@ -196,7 +217,10 @@ export function parseActionTraces(messages: unknown): SubagentActionTrace[] {
       content?: unknown;
       toolCallId?: string;
       tool_use_id?: string;
+      tool_call_id?: string;
       isError?: boolean;
+      is_error?: boolean;
+      status?: unknown;
     };
     if (!msg || typeof msg !== 'object') continue;
 
@@ -221,7 +245,8 @@ export function parseActionTraces(messages: unknown): SubagentActionTrace[] {
         const toolName = item?.name ?? item?.function?.name;
         // 兼容 pi 原生 toolCall 与标准 tool_use / function call
         if (item && (item.type === 'toolCall' || item.type === 'tool_use' || item.type === 'function' || toolName) && toolName) {
-          const inputArgs = item.arguments ?? item.input ?? item.args ?? item.function?.arguments;
+          const rawArgs = item.arguments ?? item.input ?? item.args ?? item.function?.arguments;
+          const inputArgs = tryParseJson(rawArgs);
           const summary = formatActionSummary(toolName, inputArgs);
           const id = item.id || `trace-${i}-${j}`;
           const traceItem: SubagentActionTrace = {
@@ -237,10 +262,10 @@ export function parseActionTraces(messages: unknown): SubagentActionTrace[] {
         }
       }
     } else if (msg.role === 'toolResult' || msg.role === 'tool') {
-      const callId = msg.toolCallId || msg.tool_use_id;
-      if (callId && traceMap.has(callId)) {
+      const callId = msg.toolCallId || msg.tool_use_id || (msg as unknown as Record<string, unknown>).tool_call_id;
+      if (callId && typeof callId === 'string' && traceMap.has(callId)) {
         const target = traceMap.get(callId)!;
-        target.isError = Boolean(msg.isError);
+        target.isError = Boolean(msg.isError || msg.is_error || msg.status === 'error');
         const text = extractSubagentText(msg.content ?? (msg as unknown as Record<string, unknown>).output ?? (msg as unknown as Record<string, unknown>).result);
         if (text) target.output = text;
       }
@@ -334,11 +359,23 @@ export function extractSubagentSubTasks(execution: ToolExecution): SubagentSubTa
       ? args.task.trim()
       : (typeof args.prompt === 'string' && args.prompt.trim())
         ? args.prompt.trim()
-        : '';
+        : (typeof args.instruction === 'string' && args.instruction.trim())
+          ? args.instruction.trim()
+          : (typeof args.description === 'string' && args.description.trim())
+            ? args.description.trim()
+            : (typeof args.goal === 'string' && args.goal.trim())
+              ? args.goal.trim()
+              : (typeof args.message === 'string' && args.message.trim())
+                ? args.message.trim()
+                : (typeof args.input === 'string' && args.input.trim())
+                  ? args.input.trim()
+                  : '';
     if (singleTask) {
       const singleAgent = (typeof args.agent === 'string' && args.agent.trim())
         ? args.agent.trim()
-        : 'subagent';
+        : (typeof args.name === 'string' && args.name.trim())
+          ? args.name.trim()
+          : 'subagent';
       declaredList.push({ agent: singleAgent, task: singleTask });
     }
   }
