@@ -181,12 +181,18 @@ export const packagesApi = {
       return { id: payload?.id ?? '', installed: false };
     }
     const { adapter, handle, agentDir } = await getPackageManager(ctx);
-    const existingPath = resolveExistingCompanionPath(agentDir, payload.id);
+    const id = payload.id.toLowerCase();
+    const idBase = id.endsWith('s') ? id.slice(0, -1) : id;
+    const existingPath = resolveExistingCompanionPath(agentDir, payload.id)
+      ?? (idBase !== id ? resolveExistingCompanionPath(agentDir, idBase) : null);
     if (existingPath) {
       return { id: payload.id, installed: true, path: existingPath };
     }
     const pkgs = adapter.packages.list(handle);
-    const inPackages = pkgs.some((p) => p.source.toLowerCase().includes(payload.id.toLowerCase()));
+    const inPackages = pkgs.some((p) => {
+      const src = p.source.toLowerCase();
+      return src.includes(id) || (idBase !== id && src.includes(idBase));
+    });
     if (inPackages) {
       return { id: payload.id, installed: true };
     }

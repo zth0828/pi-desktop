@@ -39,7 +39,7 @@ export const useCompanionStore = create<CompanionState>((set) => ({
     try {
       const res = await hostApi.piPackages.list();
       const installed = Array.isArray(res?.packages) && res.packages.some(
-        (p) => p.name?.includes('subagent') || (typeof p.source === 'string' && p.source.includes('subagent')),
+        (p) => p.name?.toLowerCase().includes('subagent') || (typeof p.source === 'string' && p.source.toLowerCase().includes('subagent')),
       );
       set({ subagentsInstalled: installed });
       return installed;

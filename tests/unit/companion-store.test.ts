@@ -58,4 +58,14 @@ describe('useCompanionStore', () => {
     expect(state.askQuestionInstalled).toBe(false);
     expect(state.subagentsInstalled).toBe(false);
   });
+
+  it('fetchSubagentsStatus 支持大小写不敏感的 package 匹配', async () => {
+    mockListPackages.mockResolvedValueOnce({
+      packages: [{ name: 'Pi-Subagent-Extra', source: 'npm:@scope/Pi-Subagent-Extra' }],
+    });
+
+    const installed = await useCompanionStore.getState().fetchSubagentsStatus();
+    expect(installed).toBe(true);
+    expect(useCompanionStore.getState().subagentsInstalled).toBe(true);
+  });
 });
