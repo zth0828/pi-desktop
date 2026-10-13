@@ -9,8 +9,10 @@ import {
   resultDetails,
   type ToolWarning,
 } from '../../lib/tool-display';
-import { isAbsolutePath, isPathInside, normalizeDisplayPath } from '../../lib/review-diff';
+import { isAbsolutePath, isPathInside, normalizeDisplayPath, pathMapKey } from '../../lib/review-diff';
 import { FileIcon } from '../../components/FileIcon';
+import type { ReviewFileEntry } from '@shared/host-api/contract';
+import { ConfirmUndoDialog, type ConfirmUndoFile } from './ConfirmUndoDialog';
 import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 
 function DiffView({ diff }: { diff: string }) {
@@ -67,6 +69,8 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
   const openWorkspaceFile = usePaneChatStore((s) => s.openWorkspaceFile);
   const cwd = usePaneChatStore((s) => s.cwd);
   const [gitAvailable, setGitAvailable] = useState(false);
+  const [reviewFiles, setReviewFiles] = useState<ReviewFileEntry[]>([]);
+  const [confirmUndoOpen, setConfirmUndoOpen] = useState(false);
   const [revertState, setRevertState] = useState<'idle' | 'reverting' | 'done' | 'error'>('idle');
   const [revertError, setRevertError] = useState('');
   const [showAllFiles, setShowAllFiles] = useState(false);
@@ -82,6 +86,33 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
 
   const displayPath = (filePath: string) => normalizeDisplayPath(filePath, cwd);
 
+  const undoFiles: ConfirmUndoFile[] = changes.files.map((file) => {
+    const norm = displayPath(file.path);
+    const targetKey = pathMapKey(norm);
+    const reviewEntry = reviewFiles.find((rf) => pathMapKey(rf.path) === targetKey);
+    let action: 'delete' | 'revert' | 'restore';
+    if (reviewEntry?.status === 'added') {
+      action = 'delete';
+    } else if (reviewEntry?.status === 'deleted') {
+      action = 'restore';
+    } else if (reviewEntry?.status === 'modified') {
+      action = 'revert';
+    } else {
+      const execution = file.toolCallId ? toolExecutions[file.toolCallId] : undefined;
+      if (execution?.toolName === 'write' || (file.deleted === 0 && file.added > 0)) {
+        action = 'delete';
+      } else if (file.added === 0 && file.deleted > 0) {
+        action = 'restore';
+      } else {
+        action = 'revert';
+      }
+    }
+    return {
+      path: norm,
+      action,
+    };
+  });
+
   useEffect(() => {
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -92,6 +123,9 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
         .then((summary) => {
           if (!alive) return;
           setGitAvailable(summary.available);
+          if (Array.isArray(summary.files)) {
+            setReviewFiles(summary.files);
+          }
           if (!summary.available && summary.reason === 'capturing') {
             timer = setTimeout(checkSummary, 500);
           }
@@ -126,6 +160,15 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
     setRevertState('done');
   };
 
+  const handleConfirmUndo = async ({ revertFiles }: { revertFiles: boolean }) => {
+    setConfirmUndoOpen(false);
+    if (!revertFiles) {
+      setRevertState('done');
+      return;
+    }
+    await revertAll();
+  };
+
   return (
     <div className="turn-changes" data-testid="turn-changes">
       <div className="turn-changes-header">
@@ -157,7 +200,7 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
               className="turn-changes-btn"
               data-testid="turn-changes-revert"
               disabled={revertState === 'reverting'}
-              onClick={() => void revertAll()}
+              onClick={() => setConfirmUndoOpen(true)}
             >
               {revertState === 'reverting' ? t('chat.turnChanges.reverting') : t('chat.turnChanges.revert')}
             </button>
@@ -260,6 +303,14 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
           </button>
         )}
       </div>
+
+      <ConfirmUndoDialog
+        open={confirmUndoOpen}
+        files={undoFiles}
+        isReverting={revertState === 'reverting'}
+        onConfirm={handleConfirmUndo}
+        onClose={() => setConfirmUndoOpen(false)}
+      />
     </div>
   );
 }

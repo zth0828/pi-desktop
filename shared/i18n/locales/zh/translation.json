@@ -280,6 +280,16 @@
       "showLess": "收起",
       "openFile": "打开文件"
     },
+    "confirmUndo": {
+      "title": "确认撤销",
+      "description": "确认此撤销操作将执行以下变更：",
+      "revertFileChanges": "撤销文件变更",
+      "actionDelete": "删除",
+      "actionRevert": "还原",
+      "actionRestore": "恢复",
+      "cancel": "取消",
+      "confirm": "确认撤销"
+    },
     "turnSubagents": {
       "title": "子任务 ({{count}})",
       "runningCount": "{{count}} 个执行中",

@@ -151,8 +151,24 @@ test('一轮 edit+write → 聚合编辑卡（清单 + 增删统计）→ 撤销
   await expect(writeRow.locator('.turn-stat-add')).toHaveText('+1');
   await expect(writeRow.locator('.turn-stat-del')).toHaveText('-0');
 
-  // git 仓库：撤销按钮出现，批量 revertFile 后磁盘复原
+  // git 仓库：撤销按钮出现，点击弹出确认撤销弹窗
   await card.getByTestId('turn-changes-revert').click();
+  const dialog = page.getByTestId('confirm-undo-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByTestId('confirm-undo-title')).toBeVisible();
+  await expect(dialog.getByTestId('confirm-undo-file-item')).toHaveCount(2);
+
+  // 点击取消关闭弹窗，不执行文件回滚
+  await dialog.getByTestId('confirm-undo-cancel').click();
+  await expect(dialog).toBeHidden();
+  await expect(card.getByTestId('turn-changes-reverted')).toHaveCount(0);
+  expect(existsSync(path.join(repoWorkspace, 'e2e-new-file.txt'))).toBe(true);
+
+  // 再次打开并点击确认撤销，批量 revertFile 后磁盘复原
+  await card.getByTestId('turn-changes-revert').click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByTestId('confirm-undo-confirm').click();
+  await expect(dialog).toBeHidden();
   await expect(card.getByTestId('turn-changes-reverted')).toBeVisible({ timeout: 30_000 });
   expect(await readFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'utf-8')).toBe(
     'alpha\ngamma\n',
@@ -249,7 +265,9 @@ test('完成回合整体折叠过程内容，展开恢复阶段文本与工具�
   // user 消息原位（rail 锚点与 messages 下标对齐），最终文本仍完整显示；
   // 每轮最终答复保持可见，阶段文本默认不渲染。
   await expect(page.getByTestId('message-user')).toHaveCount(2);
-  await expect(page.locator('#chat-msg-0')).toContainText('USE_TOOL_EDIT');
+  const firstUserMsg = page.getByTestId('message-user').first();
+  await expect(firstUserMsg).toContainText('USE_TOOL_EDIT');
+  await expect(firstUserMsg).toHaveAttribute('id', /^chat-msg-\d+$/);
   await expect(
     page.getByTestId('message-user').filter({ hasText: 'USE_TOOL_WRITE' }),
   ).toHaveAttribute('id', /^chat-msg-\d+$/);

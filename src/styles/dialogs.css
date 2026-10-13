@@ -1002,3 +1002,231 @@
   line-height: 1.6;
   color: var(--text-secondary);
 }
+
+/* Confirm Undo 弹窗（Cursor 风格） */
+.confirm-undo-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+  backdrop-filter: blur(2px);
+  animation: confirm-undo-fade 0.15s ease-out;
+}
+
+@keyframes confirm-undo-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.confirm-undo-dialog {
+  width: min(440px, 92vw);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.08);
+  padding: 18px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: confirm-undo-pop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes confirm-undo-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.confirm-undo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.confirm-undo-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.confirm-undo-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+
+.confirm-undo-close:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.confirm-undo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.confirm-undo-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.confirm-undo-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.confirm-undo-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
+}
+
+.confirm-undo-files {
+  margin-left: 23px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  transition: opacity 0.15s ease;
+}
+
+.confirm-undo-files.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.confirm-undo-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+
+.confirm-undo-file-item:hover {
+  background: var(--bg-hover);
+}
+
+.confirm-undo-file-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.confirm-undo-file-path {
+  font-family: var(--font-mono);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.confirm-undo-file-action {
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.confirm-undo-file-action.action-delete {
+  color: var(--danger);
+}
+
+.confirm-undo-file-action.action-revert {
+  color: var(--warning);
+}
+
+.confirm-undo-file-action.action-restore {
+  color: var(--success);
+}
+
+.confirm-undo-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 10px;
+}
+
+.confirm-undo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.confirm-undo-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.confirm-undo-btn-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.confirm-undo-btn-cancel:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.confirm-undo-btn-confirm {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--accent-text);
+  padding: 6px 16px;
+}
+
+.confirm-undo-btn-confirm:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.confirm-undo-return-icon {
+  opacity: 0.8;
+}
+

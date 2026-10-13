@@ -280,6 +280,16 @@
       "showLess": "Show less",
       "openFile": "Open file"
     },
+    "confirmUndo": {
+      "title": "Confirm Undo",
+      "description": "Confirming this undo action will make the following changes:",
+      "revertFileChanges": "Revert file changes",
+      "actionDelete": "Delete",
+      "actionRevert": "Revert",
+      "actionRestore": "Restore",
+      "cancel": "Cancel",
+      "confirm": "Confirm"
+    },
     "turnSubagents": {
       "title": "Subagents ({{count}})",
       "runningCount": "{{count}} running",
