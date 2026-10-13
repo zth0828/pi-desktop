@@ -76,6 +76,10 @@ let wm: WindowManager;
 
 beforeEach(async () => {
   vi.resetModules();
+  // createAppWindow 按 VITE_DEV_SERVER_URL 分支加载 dev URL 并调用 webContents.on；
+  // 本文件只测注册表逻辑，mock 的 webContents 也没有事件方法，必须屏蔽
+  // shell 里残留的 dev 环境变量，否则带变量跑测试会误入 dev 分支而失败。
+  delete process.env.VITE_DEV_SERVER_URL;
   wm = await import('@electron/main/window-manager');
 });
 
