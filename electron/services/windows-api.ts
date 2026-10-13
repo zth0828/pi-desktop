@@ -32,6 +32,17 @@ import { hashSessionPath, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { computeCenteredExpansion, shouldRestoreExpansion } from '../utils/window-bounds';
 import { isWindowsDevicePath } from '../utils/workspace-path';
 
+/** 安全地从 context 反查活体 BrowserWindow，防范 webContents 销毁阶段的访问异常。 */
+function getWindowFromContext(ctx?: HostActionContext): BrowserWindow | null {
+  try {
+    if (!ctx?.sender || (typeof ctx.sender.isDestroyed === 'function' && ctx.sender.isDestroyed())) return null;
+    const win = BrowserWindow.fromWebContents(ctx.sender);
+    return win && !(typeof win.isDestroyed === 'function' && win.isDestroyed()) ? win : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 每窗口的居中对称展开状态：count 支持同窗口多面板各自展开工作台（只加宽一次，归零才缩回）。 */
 type ExpandRightState = {
   originalX: number;
@@ -41,25 +52,26 @@ type ExpandRightState = {
   count: number;
 };
 const expandRightStates = new Map<number, ExpandRightState>();
+const boundClosedWindows = new Set<number>();
 
 export const windowsApi = {
   /** frameless 自绘窗口控件：从发起调用的 webContents 反查窗口。 */
   minimize: (_payload?: undefined, ctx?: HostActionContext): void => {
-    if (ctx) BrowserWindow.fromWebContents(ctx.sender)?.minimize();
+    getWindowFromContext(ctx)?.minimize();
   },
   maximizeToggle: (_payload?: undefined, ctx?: HostActionContext): void => {
-    const win = ctx ? BrowserWindow.fromWebContents(ctx.sender) : null;
+    const win = getWindowFromContext(ctx);
     if (!win) return;
     if (win.isMaximized()) win.unmaximize();
     else win.maximize();
   },
   isMaximized: (_payload?: undefined, ctx?: HostActionContext): boolean => {
-    return ctx ? BrowserWindow.fromWebContents(ctx.sender)?.isMaximized() ?? false : false;
+    return getWindowFromContext(ctx)?.isMaximized() ?? false;
   },
   // 关闭必须走 win.close()：window-manager 对主窗口拦截 close → hide 到托盘；
   // 退出流程（before-quit 置 quitting）自然放行。绝不在这里调 app.quit()。
   close: (_payload?: undefined, ctx?: HostActionContext): void => {
-    if (ctx) BrowserWindow.fromWebContents(ctx.sender)?.close();
+    getWindowFromContext(ctx)?.close();
   },
   openDetached: (payload: WindowsOpenDetachedPayload): void => {
     if (!payload?.sessionPath || typeof payload.sessionPath !== 'string' || !payload.sessionPath.trim()) return;
@@ -82,7 +94,7 @@ export const windowsApi = {
     if (!Number.isFinite(payload.screenX) || !Number.isFinite(payload.screenY)) return;
     const existing = findWindowBySession(payload.sessionPath);
     if (existing) {
-      const sourceWin = ctx ? BrowserWindow.fromWebContents(ctx.sender) : null;
+      const sourceWin = getWindowFromContext(ctx);
       // 持有窗口不是拖拽源窗口：复用持有窗口（聚焦 + 激活对应面板），
       // 不建新窗，保证同一会话全局只归一个窗口。
       if (sourceWin?.webContents.id !== existing.webContents.id) {
@@ -98,6 +110,7 @@ export const windowsApi = {
       // 持有窗口（源窗口）导致拆出永远不发生，这里直接按落点几何建窗。
       const display = screen.getDisplayNearestPoint(point);
       const bounds = centerBoundsAtPoint(point, resolveWindowSize(), display.workArea);
+      prewarmSessionRuntime(payload.sessionPath, payload.cwd);
       createAppWindow({
         sessionPath: payload.sessionPath,
         cwd: payload.cwd,
@@ -153,10 +166,11 @@ export const windowsApi = {
   list: (): WindowListEntry[] => listWindows(),
 
   expandRight: (payload: WindowsExpandRightPayload, ctx?: HostActionContext): WindowsExpandRightResult => {
-    const win = ctx ? BrowserWindow.fromWebContents(ctx.sender) : null;
-    if (!win || win.isDestroyed()) return { applied: 0 };
+    const win = getWindowFromContext(ctx);
+    if (!win) return { applied: 0 };
     if (!payload || !Number.isFinite(payload.extraWidth)) return { applied: 0 };
-    const existing = expandRightStates.get(win.id);
+    const winId = win.id;
+    const existing = expandRightStates.get(winId);
     if (existing) {
       existing.count += 1;
       return { applied: 0 };
@@ -169,8 +183,14 @@ export const windowsApi = {
       payload.extraWidth,
     );
     if (applied <= 0) return { applied: 0 };
-    expandRightStates.set(win.id, { originalX: bounds.x, originalWidth: bounds.width, applied, nextX, count: 1 });
-    win.once('closed', () => expandRightStates.delete(win.id));
+    expandRightStates.set(winId, { originalX: bounds.x, originalWidth: bounds.width, applied, nextX, count: 1 });
+    if (!boundClosedWindows.has(winId)) {
+      boundClosedWindows.add(winId);
+      win.once('closed', () => {
+        expandRightStates.delete(winId);
+        boundClosedWindows.delete(winId);
+      });
+    }
     // 不传 animate 开启动画：macOS 上 animate: true 会进入 Cocoa 模态动画循环，
     // 阻塞主进程事件循环并导致 Chromium 渲染层视口与鼠标命中测试脱节卡死。
     win.setBounds({ x: nextX, y: bounds.y, width: nextWidth, height: bounds.height });
@@ -178,13 +198,14 @@ export const windowsApi = {
   },
 
   restoreExpandRight: (_payload?: undefined, ctx?: HostActionContext): void => {
-    const win = ctx ? BrowserWindow.fromWebContents(ctx.sender) : null;
-    if (!win || win.isDestroyed()) return;
-    const state = expandRightStates.get(win.id);
+    const win = getWindowFromContext(ctx);
+    if (!win) return;
+    const winId = win.id;
+    const state = expandRightStates.get(winId);
     if (!state) return;
     state.count -= 1;
     if (state.count > 0) return;
-    expandRightStates.delete(win.id);
+    expandRightStates.delete(winId);
     if (win.isMaximized() || win.isFullScreen()) return;
     const bounds = win.getBounds();
     if (!shouldRestoreExpansion(bounds.width, state.originalWidth, state.applied)) return;

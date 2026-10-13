@@ -264,6 +264,15 @@ describe('windowsApi', () => {
       expect(windowsApi.expandRight({ extraWidth: 600 })).toEqual({ applied: 0 });
       expect(() => windowsApi.restoreExpandRight()).not.toThrow();
     });
+
+    it('反复展开与恢复不会重复堆叠 closed 事件监听器', () => {
+      const win = fakeWindow(16, 1200, 680);
+      windowsApi.expandRight({ extraWidth: 600 }, ctxFor(win));
+      windowsApi.restoreExpandRight(undefined, ctxFor(win));
+      windowsApi.expandRight({ extraWidth: 600 }, ctxFor(win));
+      windowsApi.restoreExpandRight(undefined, ctxFor(win));
+      expect(win.once).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('sessionPath validation', () => {
