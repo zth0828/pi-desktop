@@ -210,13 +210,21 @@ export const packagesApi = {
           return { success: false, installed: false, error: `Bundled companion extension '${payload.id}' not found` };
         }
         mkdirSync(path.dirname(targetPath), { recursive: true });
+        const legacyJsPath = path.join(agentDir, 'extensions', `${payload.id}.js`);
+        if (existsSync(legacyJsPath)) {
+          try { unlinkSync(legacyJsPath); } catch {}
+        }
         copyFileSync(sourcePath, targetPath);
         await piRuntimeApi.reload(undefined, ctx).catch(() => {});
         return { success: true, installed: true };
       } else {
-        const existingPath = resolveExistingCompanionPath(agentDir, payload.id);
-        if (existingPath) {
-          unlinkSync(existingPath);
+        const tsPath = path.join(agentDir, 'extensions', `${payload.id}.ts`);
+        const jsPath = path.join(agentDir, 'extensions', `${payload.id}.js`);
+        if (existsSync(tsPath)) {
+          try { unlinkSync(tsPath); } catch {}
+        }
+        if (existsSync(jsPath)) {
+          try { unlinkSync(jsPath); } catch {}
         }
         await piRuntimeApi.reload(undefined, ctx).catch(() => {});
         return { success: true, installed: false };

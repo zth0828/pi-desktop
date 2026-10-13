@@ -37,10 +37,20 @@ describe('companion-package (内置伴生扩展路径与打包解析)', () => {
       mkdirSync(path.dirname(targetPath), { recursive: true });
       writeFileSync(targetPath, 'export default {};');
       expect(existsSync(targetPath)).toBe(true);
+      expect(companionInternal.resolveExistingCompanionPath(tmpDir, 'ask-question')).toBe(targetPath);
+
+      // 模拟旧版本存在 .js 文件场景
+      const legacyJsPath = path.join(tmpDir, 'extensions', 'ask-question.js');
+      writeFileSync(legacyJsPath, 'module.exports = {};');
+      expect(existsSync(legacyJsPath)).toBe(true);
 
       // 模拟移除：删除文件
       rmSync(targetPath);
       expect(existsSync(targetPath)).toBe(false);
+      // 当 .ts 被删后，resolveExistingCompanionPath 仍能发现 .js
+      expect(companionInternal.resolveExistingCompanionPath(tmpDir, 'ask-question')).toBe(legacyJsPath);
+      rmSync(legacyJsPath);
+      expect(companionInternal.resolveExistingCompanionPath(tmpDir, 'ask-question')).toBeNull();
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
