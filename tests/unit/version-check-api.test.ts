@@ -176,11 +176,17 @@ describe('version-check-api', () => {
     expect(checkResult.app.error).toBe('Network error');
   });
 
-  it('supports skipVersion and unskipVersion', async () => {
+  it('supports skipVersion and unskipVersion for app and pi', async () => {
     await versionCheckApi.skipVersion({ version: 'v1.2.0' });
     expect(settingsApiMock.set).toHaveBeenCalledWith({
       key: 'appVersionCheckSkippedVersion',
       value: 'v1.2.0',
+    });
+
+    await versionCheckApi.skipVersion({ version: 'v2.0.0', kind: 'pi' });
+    expect(settingsApiMock.set).toHaveBeenCalledWith({
+      key: 'piVersionCheckSkippedVersion',
+      value: 'v2.0.0',
     });
 
     const emptySkip = await versionCheckApi.skipVersion({ version: '   ' });
@@ -192,6 +198,25 @@ describe('version-check-api', () => {
       key: 'appVersionCheckSkippedVersion',
       value: undefined,
     });
+
+    await versionCheckApi.unskipVersion({ kind: 'pi' });
+    expect(settingsApiMock.set).toHaveBeenCalledWith({
+      key: 'piVersionCheckSkippedVersion',
+      value: undefined,
+    });
+  });
+
+  it('reflects skipped flag for pi in getStatus and suppresses pending notice when skipped', async () => {
+    settingsApiMock.getAll.mockResolvedValue({
+      piVersionCheckLatest: 'v2.5.0',
+      piVersionCheckSkippedVersion: 'v2.5.0',
+    });
+
+    const status = await versionCheckApi.getStatus();
+    expect(status.pi.skipped).toBe(true);
+
+    const pending = await versionCheckApi.getPendingNotice();
+    expect(pending).toBeNull();
   });
 
   it('validates kind and latest in dismissNotice', async () => {

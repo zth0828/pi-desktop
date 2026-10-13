@@ -1357,6 +1357,7 @@
     "bodyPi": "pi v{{version}} is now available.",
     "download": "Go to Download",
     "upgradePi": "Upgrade Pi",
+    "skipVersion": "Skip this version",
     "releaseNotes": "Release Notes",
     "dismiss": "Dismiss"
   },

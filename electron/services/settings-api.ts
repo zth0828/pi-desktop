@@ -39,6 +39,7 @@ export const settingsApi = {
       appVersionCheckStagedAppPath: store.get('appVersionCheckStagedAppPath') as string | undefined,
       appVersionCheckStagedPatchPath: store.get('appVersionCheckStagedPatchPath') as string | undefined,
       appVersionCheckSkippedVersion: store.get('appVersionCheckSkippedVersion') as string | undefined,
+      piVersionCheckSkippedVersion: store.get('piVersionCheckSkippedVersion') as string | undefined,
       appVersionCheckNoticedLatest: store.get('appVersionCheckNoticedLatest') as string | undefined,
       appVersionCheckNoticedAt: store.get('appVersionCheckNoticedAt') as number | undefined,
       piVersionCheckNoticedLatest: store.get('piVersionCheckNoticedLatest') as string | undefined,

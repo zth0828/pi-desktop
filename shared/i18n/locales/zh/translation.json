@@ -1356,6 +1356,7 @@
     "bodyPi": "pi v{{version}} 现已发布。",
     "download": "前往下载",
     "upgradePi": "前往升级",
+    "skipVersion": "跳过此版本",
     "releaseNotes": "更新日志",
     "dismiss": "忽略"
   },

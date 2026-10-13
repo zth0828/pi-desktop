@@ -151,6 +151,7 @@ export type VersionCheckStatus = {
   lastAttemptAt?: number;
   lastSuccessAt?: number;
   error?: string;
+  skipped?: boolean;
 };
 
 export type VersionCheckSnapshot = {
@@ -581,6 +582,7 @@ export type SettingsSnapshot = {
   appVersionCheckStagedAppPath?: string;
   appVersionCheckStagedPatchPath?: string;
   appVersionCheckSkippedVersion?: string;
+  piVersionCheckSkippedVersion?: string;
   appVersionCheckNoticedLatest?: string;
   appVersionCheckNoticedAt?: number;
   piVersionCheckNoticedLatest?: string;
@@ -1166,8 +1168,8 @@ export type HostApiContract = {
     dismissNotice: (payload: { kind: 'app' | 'pi'; latest: string }) => HostSuccess;
     checkVersionJump: () => VersionJumpInfo;
     dismissVersionJump: () => HostSuccess;
-    skipVersion: (payload: { version: string }) => HostSuccess;
-    unskipVersion: () => HostSuccess;
+    skipVersion: (payload: { version: string; kind?: 'app' | 'pi' }) => HostSuccess;
+    unskipVersion: (payload?: { kind?: 'app' | 'pi' }) => HostSuccess;
   };
   appUpdate: {
     download: (payload?: { silent?: boolean }) => AppUpdateDownloadResult;

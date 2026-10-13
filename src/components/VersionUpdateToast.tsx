@@ -42,6 +42,13 @@ export function VersionUpdateToast({ onNavigate }: { onNavigate: (page: AppPageI
     if (info) void hostApi.versionCheck.dismissNotice({ kind: info.kind, latest: info.latest });
   };
 
+  const handleSkip = async () => {
+    if (info) {
+      await hostApi.versionCheck.skipVersion(info.latest, info.kind).catch(() => {});
+      dismiss();
+    }
+  };
+
   if (!info || dismissed) return null;
 
   const versionTag = info.latest.replace(/^v/, '');
@@ -91,6 +98,13 @@ export function VersionUpdateToast({ onNavigate }: { onNavigate: (page: AppPageI
           }}
         >
           {t(info.kind === 'app' ? 'versionUpdate.download' : 'versionUpdate.upgradePi')}
+        </button>
+        <button
+          className="pill"
+          data-testid="version-update-skip"
+          onClick={handleSkip}
+        >
+          {t('versionUpdate.skipVersion')}
         </button>
         {info.releaseUrl && (
           <button

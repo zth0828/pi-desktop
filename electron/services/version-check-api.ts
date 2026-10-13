@@ -220,9 +220,19 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   });
 
   if (!piDue && !appDue) {
+    const piSkipped = Boolean(
+      saved.piVersionCheckSkippedVersion &&
+      piPrevious.latest &&
+      saved.piVersionCheckSkippedVersion === piPrevious.latest,
+    );
+    const appSkipped = Boolean(
+      saved.appVersionCheckSkippedVersion &&
+      appPrevious.latest &&
+      saved.appVersionCheckSkippedVersion === appPrevious.latest,
+    );
     return updateStatus({
-      pi: { ...piPrevious, current: currentPi, updateAvailable: compare(currentPi, piPrevious.latest) },
-      app: { ...appPrevious, current: currentApp, updateAvailable: compare(currentApp, appPrevious.latest), downloadedPath: saved.appVersionCheckDownloadedPath },
+      pi: { ...piPrevious, current: currentPi, updateAvailable: compare(currentPi, piPrevious.latest), skipped: piSkipped },
+      app: { ...appPrevious, current: currentApp, updateAvailable: compare(currentApp, appPrevious.latest), downloadedPath: saved.appVersionCheckDownloadedPath, skipped: appSkipped },
     });
   }
 
@@ -263,7 +273,13 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   const pi = await (piDue ? checkPi(piPrevious, now) : Promise.resolve(piPrevious));
   const appStatus = await appStatusPromise;
 
-  if (isNoticePending({ current: pi.current, latest: pi.latest, noticedLatest: saved.piVersionCheckNoticedLatest, noticedAt: saved.piVersionCheckNoticedAt, now })) {
+  const piSkipped = Boolean(
+    saved.piVersionCheckSkippedVersion &&
+    pi.latest &&
+    saved.piVersionCheckSkippedVersion === pi.latest,
+  );
+
+  if (!piSkipped && isNoticePending({ current: pi.current, latest: pi.latest, noticedLatest: saved.piVersionCheckNoticedLatest, noticedAt: saved.piVersionCheckNoticedAt, now })) {
     sendHostEvent('versionCheck', 'updateAvailable', {
       current: pi.current ?? '',
       latest: pi.latest!,
@@ -281,7 +297,10 @@ async function performCheck(force: boolean): Promise<VersionCheckSnapshot> {
   );
 
   return updateStatus({
-    pi,
+    pi: {
+      ...pi,
+      skipped: piSkipped,
+    },
     app: {
       ...appStatus,
       downloadedPath,
@@ -312,6 +331,12 @@ export const versionCheckApi = {
       saved.appVersionCheckSkippedVersion === saved.appVersionCheckLatest,
     );
 
+    const piSkipped = Boolean(
+      saved.piVersionCheckSkippedVersion &&
+      saved.piVersionCheckLatest &&
+      saved.piVersionCheckSkippedVersion === saved.piVersionCheckLatest,
+    );
+
     return updateStatus({
       pi: {
         current: currentPi,
@@ -320,6 +345,7 @@ export const versionCheckApi = {
         lastAttemptAt: saved.piVersionCheckLastAttemptAt,
         lastSuccessAt: saved.piVersionCheckLastSuccessAt,
         error: saved.piVersionCheckError,
+        skipped: piSkipped,
       },
       app: {
         current: currentApp,
@@ -358,7 +384,12 @@ export const versionCheckApi = {
       };
     }
     const piCurrent = (await piSystemApi.detect()).pi.version;
-    if (isNoticePending({ current: piCurrent, latest: saved.piVersionCheckLatest, noticedLatest: saved.piVersionCheckNoticedLatest, noticedAt: saved.piVersionCheckNoticedAt, now })) {
+    const isPiSkipped = Boolean(
+      saved.piVersionCheckSkippedVersion &&
+      saved.piVersionCheckLatest &&
+      saved.piVersionCheckSkippedVersion === saved.piVersionCheckLatest,
+    );
+    if (!isPiSkipped && isNoticePending({ current: piCurrent, latest: saved.piVersionCheckLatest, noticedLatest: saved.piVersionCheckNoticedLatest, noticedAt: saved.piVersionCheckNoticedAt, now })) {
       return { current: piCurrent ?? '', latest: saved.piVersionCheckLatest!, kind: 'pi' as const };
     }
     return null;
@@ -400,14 +431,24 @@ export const versionCheckApi = {
     await settingsApi.set({ key: 'lastReleaseNotes', value: undefined });
     return { success: true };
   },
-  skipVersion: async (payload: { version: string }) => {
+  skipVersion: async (payload: { version: string; kind?: 'app' | 'pi' }) => {
     const version = typeof payload?.version === 'string' ? payload.version.trim() : '';
     if (!version) return { success: false, error: 'invalid-version' };
-    await settingsApi.set({ key: 'appVersionCheckSkippedVersion', value: version });
+    const kind = payload?.kind ?? 'app';
+    if (kind === 'pi') {
+      await settingsApi.set({ key: 'piVersionCheckSkippedVersion', value: version });
+    } else {
+      await settingsApi.set({ key: 'appVersionCheckSkippedVersion', value: version });
+    }
     return { success: true };
   },
-  unskipVersion: async () => {
-    await settingsApi.set({ key: 'appVersionCheckSkippedVersion', value: undefined });
+  unskipVersion: async (payload?: { kind?: 'app' | 'pi' }) => {
+    const kind = payload?.kind ?? 'app';
+    if (kind === 'pi') {
+      await settingsApi.set({ key: 'piVersionCheckSkippedVersion', value: undefined });
+    } else {
+      await settingsApi.set({ key: 'appVersionCheckSkippedVersion', value: undefined });
+    }
     return { success: true };
   },
 };

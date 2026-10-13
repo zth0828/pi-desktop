@@ -57,8 +57,10 @@ function createHostApi(sessionPath?: string) {
     dismissNotice: (payload: { kind: 'app' | 'pi'; latest: string }) => invoke('versionCheck', 'dismissNotice', payload),
     checkVersionJump: () => invoke('versionCheck', 'checkVersionJump'),
     dismissVersionJump: () => invoke('versionCheck', 'dismissVersionJump'),
-    skipVersion: (version: string) => invoke('versionCheck', 'skipVersion', { version }),
-    unskipVersion: () => invoke('versionCheck', 'unskipVersion'),
+    skipVersion: (version: string, kind?: 'app' | 'pi') =>
+      invoke('versionCheck', 'skipVersion', { version, kind }),
+    unskipVersion: (kind?: 'app' | 'pi') =>
+      invoke('versionCheck', 'unskipVersion', kind ? { kind } : undefined),
   },
   appUpdate: {
     download: (silent?: boolean) => invoke('appUpdate', 'download', silent ? { silent } : undefined),

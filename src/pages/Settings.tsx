@@ -928,6 +928,11 @@ export default function SettingsPage() {
                       ? `${t('status.latestAvailable', { version: versionStatus.pi.latest })}`
                       : t('status.ready', { version: env?.pi.version ?? '?' })}
                   </span>
+                  {versionStatus?.pi.skipped && (
+                    <span className="settings-version-badge settings-badge-skipped">
+                      {t('settings.version.skippedBadge')}
+                    </span>
+                  )}
                 </div>
                 <div className="settings-row-desc">
                   <div>
@@ -952,6 +957,18 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="pill-group">
+              {versionStatus?.pi.skipped && (
+                <button
+                  className="pill"
+                  data-testid="settings-pi-unskip"
+                  onClick={async () => {
+                    await hostApi.versionCheck.unskipVersion('pi');
+                    setVersionStatus(await hostApi.versionCheck.getStatus());
+                  }}
+                >
+                  {t('settings.version.unskip')}
+                </button>
+              )}
               <button className="pill" data-testid="settings-recheck" onClick={() => void detect(true)}>
                 {t('onboarding.recheck')}
               </button>
