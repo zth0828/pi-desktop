@@ -95,9 +95,16 @@ export function resolveWindowSession(webContentsId: number): string | null {
 
 export function findWindowBySession(sessionPath: string, options: { detachedOnly?: boolean; excludeWindowId?: number } = {}): BrowserWindow | null {
   if (!sessionPath || typeof sessionPath !== 'string' || !sessionPath.trim()) return null;
+  const excludedWin = options.excludeWindowId != null
+    ? (windows.get(options.excludeWindowId)?.win ?? Array.from(windows.values()).find((r) => !r.win.isDestroyed() && r.win.id === options.excludeWindowId)?.win)
+    : null;
   for (const [windowId, record] of windows.entries()) {
     if (record.win.isDestroyed()) continue;
-    if (options.excludeWindowId != null && (options.excludeWindowId === windowId || (typeof record.win.id === 'number' && options.excludeWindowId === record.win.id))) continue;
+    if (excludedWin) {
+      if (record.win === excludedWin) continue;
+    } else if (options.excludeWindowId != null) {
+      if (options.excludeWindowId === windowId || (typeof record.win.id === 'number' && options.excludeWindowId === record.win.id)) continue;
+    }
     if (options.detachedOnly && record.isMain) continue;
     if (record.sessionPath && samePath(record.sessionPath, sessionPath)) return record.win;
     if ([...record.sessionPaths].some((candidate) => samePath(candidate, sessionPath))) return record.win;

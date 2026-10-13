@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 class FakeBrowserWindow {
   static sequence = 0;
+  id = ++FakeBrowserWindow.sequence;
   webContents = { id: ++FakeBrowserWindow.sequence };
   private listeners = new Map<string, Array<() => void>>();
   destroyed = false;
@@ -108,6 +109,21 @@ describe('window-manager registry', () => {
     expect(wm.claimWindowSession(first.webContents.id, '/tmp/session-claim.jsonl')).toBe(true);
     expect(wm.findWindowBySession('/tmp/session-claim.jsonl')).toBe(first);
     expect(wm.claimWindowSession(second.webContents.id, '/tmp/session-claim.jsonl')).toBe(false);
+  });
+
+  it('findWindowBySession 排除窗口时，不会因 webContents.id 与他窗 win.id 数值相同而发生误排除', () => {
+    const winA = fakeWindow();
+    const winB = fakeWindow();
+    winA.webContents.id = 2;
+    winA.id = 1;
+    winB.webContents.id = 3;
+    winB.id = 2;
+
+    wm.registerWindow(winA as never);
+    wm.registerWindow(winB as never);
+    wm.bindWindowSession(winB.webContents.id, '/tmp/session-b.jsonl');
+
+    expect(wm.findWindowBySession('/tmp/session-b.jsonl', { excludeWindowId: winA.webContents.id })).toBe(winB);
   });
 
   it('窗口 destroyed 时自动从注册表清除', () => {
