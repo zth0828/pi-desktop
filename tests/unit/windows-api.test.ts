@@ -305,5 +305,26 @@ describe('windowsApi', () => {
         undefined,
       );
     });
+
+    it('focusIfOpen 与 setSessions 在 sender 销毁时不抛出异常', () => {
+      mocks.findWindowBySession.mockReturnValue(null);
+      const destroyedSender = {
+        isDestroyed: () => true,
+        get id() {
+          throw new Error('Object has been destroyed');
+        },
+      };
+      expect(windowsApi.focusIfOpen(
+        { sessionPath: '/tmp/missing.jsonl' },
+        { sender: destroyedSender } as never,
+      )).toBe(false);
+
+      expect(() => {
+        windowsApi.setSessions(
+          { sessionPaths: ['/tmp/valid.jsonl'] },
+          { sender: destroyedSender } as never,
+        );
+      }).not.toThrow();
+    });
   });
 });

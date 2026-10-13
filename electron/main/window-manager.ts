@@ -97,7 +97,7 @@ export function findWindowBySession(sessionPath: string, options: { detachedOnly
   if (!sessionPath || typeof sessionPath !== 'string' || !sessionPath.trim()) return null;
   for (const [windowId, record] of windows.entries()) {
     if (record.win.isDestroyed()) continue;
-    if (options.excludeWindowId === windowId) continue;
+    if (options.excludeWindowId != null && (options.excludeWindowId === windowId || (typeof record.win.id === 'number' && options.excludeWindowId === record.win.id))) continue;
     if (options.detachedOnly && record.isMain) continue;
     if (record.sessionPath && samePath(record.sessionPath, sessionPath)) return record.win;
     if ([...record.sessionPaths].some((candidate) => samePath(candidate, sessionPath))) return record.win;

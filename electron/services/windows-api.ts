@@ -43,6 +43,16 @@ function getWindowFromContext(ctx?: HostActionContext): BrowserWindow | null {
   }
 }
 
+/** 安全地从 context 提取活体 webContents 的 id，防范已销毁对象的访问抛错。 */
+function getWebContentsIdFromContext(ctx?: HostActionContext): number | null {
+  try {
+    if (!ctx?.sender || (typeof ctx.sender.isDestroyed === 'function' && ctx.sender.isDestroyed())) return null;
+    return typeof ctx.sender.id === 'number' ? ctx.sender.id : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 每窗口的居中对称展开状态：count 支持同窗口多面板各自展开工作台（只加宽一次，归零才缩回）。 */
 type ExpandRightState = {
   originalX: number;
@@ -97,7 +107,19 @@ export const windowsApi = {
       const sourceWin = getWindowFromContext(ctx);
       // 持有窗口不是拖拽源窗口：复用持有窗口（聚焦 + 激活对应面板），
       // 不建新窗，保证同一会话全局只归一个窗口。
-      if ((sourceWin?.id ?? sourceWin?.webContents?.id) !== (existing.id ?? existing.webContents?.id)) {
+      let isSameWindow = false;
+      try {
+        isSameWindow = Boolean(
+          sourceWin && existing && (
+            sourceWin === existing ||
+            (typeof sourceWin.id === 'number' && typeof existing.id === 'number' && sourceWin.id === existing.id) ||
+            (sourceWin.webContents?.id != null && existing.webContents?.id != null && sourceWin.webContents.id === existing.webContents.id)
+          ),
+        );
+      } catch {
+        isSameWindow = false;
+      }
+      if (!isSameWindow) {
         activateAndFocusWindow(existing);
         sendHostEventToWindow(existing, 'windows', 'focusSession', { sessionPath: payload.sessionPath });
         return;
@@ -145,23 +167,25 @@ export const windowsApi = {
   focusIfOpen: (payload: WindowsFocusPayload, ctx?: HostActionContext): boolean => {
     if (!payload?.sessionPath || typeof payload.sessionPath !== 'string' || !payload.sessionPath.trim()) return false;
     if (isWindowsDevicePath(payload.sessionPath)) return false;
-    const win = findWindowBySession(payload.sessionPath, ctx ? { excludeWindowId: ctx.sender.id } : {});
+    const senderId = getWebContentsIdFromContext(ctx);
+    const win = findWindowBySession(payload.sessionPath, senderId != null ? { excludeWindowId: senderId } : {});
     if (win) {
       activateAndFocusWindow(win);
       sendHostEventToWindow(win, 'windows', 'focusSession', { sessionPath: payload.sessionPath });
       return true;
     }
-    if (ctx) claimWindowSession(ctx.sender.id, payload.sessionPath);
+    if (senderId != null) claimWindowSession(senderId, payload.sessionPath);
     return false;
   },
   setSessions: (payload: WindowsSetSessionsPayload, ctx?: HostActionContext): void => {
-    if (!ctx) return;
+    const senderId = getWebContentsIdFromContext(ctx);
+    if (senderId == null) return;
     const rawPaths = Array.isArray(payload?.sessionPaths) ? payload.sessionPaths : [];
     const paths = rawPaths.filter((p): p is string => typeof p === 'string' && p.trim().length > 0 && !isWindowsDevicePath(p));
     const active = typeof payload?.activeSessionPath === 'string' && payload.activeSessionPath.trim().length > 0 && !isWindowsDevicePath(payload.activeSessionPath)
       ? payload.activeSessionPath
       : undefined;
-    setWindowSessions(ctx.sender.id, paths, active);
+    setWindowSessions(senderId, paths, active);
   },
   list: (): WindowListEntry[] => listWindows(),
 
