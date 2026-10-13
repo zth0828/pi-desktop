@@ -4,6 +4,7 @@ import type { MouseEvent } from 'react';
 import type { PiPackageDetail } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { formatRelativeTime } from '../lib/session-format';
+import DOMPurify from 'dompurify';
 
 type PackageDetailProps = {
   detail?: PiPackageDetail;
@@ -142,7 +143,7 @@ export default function PackageDetail({
               <div
                 className="package-readme-rich-text"
                 onClick={handleReadmeClick}
-                dangerouslySetInnerHTML={{ __html: detail.readmeHtml }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(detail.readmeHtml) }}
               />
             ) : (
               <p className="hint">{t('extensions.noReadme')}</p>
