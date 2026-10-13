@@ -72,9 +72,18 @@ function getCompanionTargetPath(agentDir: string, id: string): string {
   return path.join(agentDir, 'extensions', `${id}.ts`);
 }
 
+function resolveExistingCompanionPath(agentDir: string, id: string): string | null {
+  const tsPath = path.join(agentDir, 'extensions', `${id}.ts`);
+  if (existsSync(tsPath)) return tsPath;
+  const jsPath = path.join(agentDir, 'extensions', `${id}.js`);
+  if (existsSync(jsPath)) return jsPath;
+  return null;
+}
+
 export const companionInternal = {
   getBundledCompanionSource,
   getCompanionTargetPath,
+  resolveExistingCompanionPath,
 };
 
 async function getPackageManager(ctx?: HostActionContext): Promise<{
@@ -171,10 +180,17 @@ export const packagesApi = {
     if (!payload?.id || typeof payload.id !== 'string' || !VALID_COMPANION_ID.test(payload.id)) {
       return { id: payload?.id ?? '', installed: false };
     }
-    const { agentDir } = await getPackageManager(ctx);
-    const targetPath = getCompanionTargetPath(agentDir, payload.id);
-    const installed = existsSync(targetPath);
-    return { id: payload.id, installed, path: installed ? targetPath : undefined };
+    const { adapter, handle, agentDir } = await getPackageManager(ctx);
+    const existingPath = resolveExistingCompanionPath(agentDir, payload.id);
+    if (existingPath) {
+      return { id: payload.id, installed: true, path: existingPath };
+    }
+    const pkgs = adapter.packages.list(handle);
+    const inPackages = pkgs.some((p) => p.source.toLowerCase().includes(payload.id.toLowerCase()));
+    if (inPackages) {
+      return { id: payload.id, installed: true };
+    }
+    return { id: payload.id, installed: false };
   },
 
   toggleCompanion: async (
@@ -187,7 +203,6 @@ export const packagesApi = {
     const { agentDir } = await getPackageManager(ctx);
     const targetPath = getCompanionTargetPath(agentDir, payload.id);
 
-
     try {
       if (payload.enable) {
         const sourcePath = getBundledCompanionSource(payload.id);
@@ -199,14 +214,15 @@ export const packagesApi = {
         await piRuntimeApi.reload(undefined, ctx).catch(() => {});
         return { success: true, installed: true };
       } else {
-        if (existsSync(targetPath)) {
-          unlinkSync(targetPath);
+        const existingPath = resolveExistingCompanionPath(agentDir, payload.id);
+        if (existingPath) {
+          unlinkSync(existingPath);
         }
         await piRuntimeApi.reload(undefined, ctx).catch(() => {});
         return { success: true, installed: false };
       }
     } catch (err) {
-      return { success: false, installed: existsSync(targetPath), error: toError(err) };
+      return { success: false, installed: Boolean(resolveExistingCompanionPath(agentDir, payload.id)), error: toError(err) };
     }
   },
 };

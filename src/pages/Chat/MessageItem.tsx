@@ -18,6 +18,7 @@ import { ToolCallCard } from './ToolCallCard';
 import { renderUserMessageWithChips } from './chat-message/user-mentions';
 import { isPromptingForChoices } from './chat-message/companion-choice';
 import { isSuggestingSubagent } from './chat-message/subagent-detect';
+import { isSubagentTool } from '../../lib/subagent-tool';
 
 /**
  * 技能指令折叠块：用户指定技能发送时展开的说明书与规则。
@@ -253,6 +254,9 @@ function MessageItemView({
   const subagentsLoading = useCompanionStore((s) => s.subagentsLoading);
   const installSubagents = useCompanionStore((s) => s.installSubagents);
   const [subagentsToast, setSubagentsToast] = useState(false);
+
+  const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
+  const hasSubagentsInSession = Object.values(toolExecutions).some((ex) => isSubagentTool(ex?.toolName));
 
   const handleEnableCompanion = async () => {
     const ok = await toggleCompanion('ask-question', true);
@@ -619,7 +623,7 @@ function MessageItemView({
           )}
         </div>
       )}
-      {showTail && ((companionInitialized && !subagentsInstalled) || subagentsToast) && isSuggestingSubagent(plainText) && (
+      {showTail && ((companionInitialized && !subagentsInstalled && !hasSubagentsInSession) || subagentsToast) && isSuggestingSubagent(plainText) && (
         <div className="companion-choice-hint subagent-install-hint" data-testid="subagent-install-hint">
           <div className="companion-choice-hint-content">
             <Bot size={14} className="companion-choice-hint-icon" />
