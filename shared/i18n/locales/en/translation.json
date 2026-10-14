@@ -532,9 +532,17 @@
     },
     "sessionCwdMissing": {
       "title": "Working Directory Missing",
-      "message": "The working directory recorded for this session does not exist: {{sessionCwd}}. Continue in the current working directory {{fallbackCwd}}?",
-      "confirm": "Continue",
-      "cancel": "Cancel"
+      "description": "The working directory for this session was moved or no longer exists. You can locate the new directory to resume, or open in the current workspace:",
+      "originalCwd": "Original Directory (Not Found)",
+      "currentCwd": "Current Window Workspace",
+      "chooseNew": "Locate New Directory…",
+      "chooseDirectoryTitle": "Select new working directory for session",
+      "continueInCurrent": "Open in Current Workspace",
+      "notFound": "Not found",
+      "current": "Current",
+      "confirm": "Open in Current Workspace",
+      "cancel": "Cancel",
+      "message": "The working directory recorded for this session does not exist: {{sessionCwd}}. Continue in the current working directory {{fallbackCwd}}?"
     },
     "modelMenu": {
       "model": "Model",

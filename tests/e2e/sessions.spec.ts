@@ -973,12 +973,14 @@ test('项目目录删除/移动后：打开旧会话弹出恢复对话框，确�
     await expect(row).toHaveCount(1, { timeout: 15_000 });
     await row.locator('.session-row-main').click();
 
-    // 4. 断言弹出恢复对话框，包含旧路径
+    // 4. 断言弹出恢复对话框，包含旧路径与新选目录入口
     const dialog = page2.getByTestId('session-cwd-missing-dialog');
     await expect(dialog).toBeVisible({ timeout: 15_000 });
     await expect(page2.getByTestId('session-cwd-missing-message')).toContainText(dirA);
+    await expect(page2.getByTestId('session-cwd-missing-choose')).toBeVisible();
+    await expect(page2.getByTestId('session-cwd-missing-cancel')).toBeVisible();
 
-    // 5. 点击继续恢复
+    // 5. 点击在当前工作区恢复
     await page2.getByTestId('session-cwd-missing-confirm').click();
     await expect(dialog).toHaveCount(0);
 
