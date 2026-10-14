@@ -192,7 +192,9 @@
       "lockedTooltip": "已锁定工作区：{{path}}（点击在文件管理器中定位）",
       "chooseTooltip": "当前工作区：{{path}}（点击切换工作区）",
       "lockedAria": "已锁定工作区 {{path}}，点击在文件管理器中定位",
-      "chooseAria": "当前工作区 {{path}}，点击选择新工作区"
+      "chooseAria": "当前工作区 {{path}}，点击选择新工作区",
+      "scratchpadGroup": "草稿箱 (No Project)",
+      "scratchpadDesc": "临时草稿沙箱，未关联具体工程"
     },
     "tool": {
       "running": "执行中",

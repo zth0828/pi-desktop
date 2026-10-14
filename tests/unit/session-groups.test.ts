@@ -85,4 +85,18 @@ describe('groupByProject', () => {
     const groups = groupByProject(sessions);
     expect(groups).toHaveLength(0);
   });
+
+  it('草稿沙箱会话（~/.pi/scratchpad/*）自动聚拢到 __scratchpad__ 分组并优先置顶', () => {
+    const sessions: PiSessionRow[] = [
+      mockSession({ id: 'proj-1', cwd: '/workspace/normal-project', messageCount: 1, modified: '2026-10-14T10:00:00.000Z' }),
+      mockSession({ id: 'draft-1', cwd: '/Users/test/.pi/scratchpad/s_1', messageCount: 2, modified: '2026-10-14T08:00:00.000Z' }),
+      mockSession({ id: 'draft-2', cwd: 'C:\\Users\\test\\.pi\\scratchpad\\s_2', messageCount: 3, modified: '2026-10-14T09:00:00.000Z' }),
+    ];
+    const groups = groupByProject(sessions);
+    expect(groups).toHaveLength(2);
+    // 草稿箱始终排在最前面
+    expect(groups[0].name).toBe('__scratchpad__');
+    expect(groups[0].sessions).toHaveLength(2);
+    expect(groups[1].name).toBe('normal-project');
+  });
 });

@@ -192,7 +192,9 @@
       "lockedTooltip": "Workspace locked: {{path}} (click to reveal in file manager)",
       "chooseTooltip": "Current workspace: {{path}} (click to change workspace)",
       "lockedAria": "Workspace locked: {{path}}, click to reveal in file manager",
-      "chooseAria": "Current workspace: {{path}}, click to choose another workspace"
+      "chooseAria": "Current workspace: {{path}}, click to choose another workspace",
+      "scratchpadGroup": "Scratchpad (No Project)",
+      "scratchpadDesc": "Temporary sandbox, not attached to any project"
     },
     "tool": {
       "running": "running",

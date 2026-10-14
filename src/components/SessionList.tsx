@@ -8,6 +8,7 @@ import {
   ArchiveRestore,
   Check,
   Copy,
+  FileEdit,
   Folder,
   FolderOpen,
   GitFork,
@@ -23,7 +24,7 @@ import { hostApi } from '../lib/host-api';
 import { pushGlobalError } from '../stores/global-errors';
 import { formatErrorMessage } from '../lib/error-formatter';
 import { onHostEvent } from '../lib/host-events';
-import { getProjectName, groupByProject, type ProjectGroup } from '../lib/session-groups';
+import { getProjectName, groupByProject, SCRATCHPAD_GROUP_KEY, type ProjectGroup } from '../lib/session-groups';
 import { sessionDisplayTitle } from '../lib/session-format';
 import {
   clearSessionDragPayload,
@@ -678,28 +679,34 @@ export function SessionList({ onOpenChat }: SessionListProps) {
           <button
             className="session-group-header"
             data-testid={`${archivedOnly ? 'archived-' : ''}session-group-header-${group.name}`}
-            title={group.cwd}
+            title={group.name === SCRATCHPAD_GROUP_KEY ? t('chat.workspace.scratchpadDesc') : group.cwd}
             aria-expanded={!isCollapsed}
             onClick={() => setCollapsed((prev) => ({ ...prev, [groupKey]: !isCollapsed }))}
           >
             {archivedOnly ? (
               <Archive size={14} className="session-group-icon" />
+            ) : group.name === SCRATCHPAD_GROUP_KEY ? (
+              <FileEdit size={14} className="session-group-icon" />
             ) : isCollapsed ? (
               <Folder size={14} className="session-group-icon" />
             ) : (
               <FolderOpen size={14} className="session-group-icon open" />
             )}
-            <span className="session-group-name">{group.name}</span>
+            <span className="session-group-name">
+              {group.name === SCRATCHPAD_GROUP_KEY ? t('chat.workspace.scratchpadGroup') : group.name}
+            </span>
             <span className="session-group-count">{visibleSessions.length}</span>
           </button>
-          <button
-            className="session-menu-trigger"
-            data-testid={`${archivedOnly ? 'archived-' : ''}session-group-menu-${group.name}`}
-            aria-label={t('sessions.projectMenu')}
-            onClick={(event) => openMenuFromTrigger(event, groupKey, PROJECT_MENU_HEIGHT)}
-          >
-            <MoreHorizontal size={15} />
-          </button>
+          {group.name !== SCRATCHPAD_GROUP_KEY && (
+            <button
+              className="session-menu-trigger"
+              data-testid={`${archivedOnly ? 'archived-' : ''}session-group-menu-${group.name}`}
+              aria-label={t('sessions.projectMenu')}
+              onClick={(event) => openMenuFromTrigger(event, groupKey, PROJECT_MENU_HEIGHT)}
+            >
+              <MoreHorizontal size={15} />
+            </button>
+          )}
           {menuOpen && menuPosition && createPortal(
             <div
               className="session-context-menu project-context-menu"

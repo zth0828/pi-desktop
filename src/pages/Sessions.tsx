@@ -7,6 +7,7 @@ import {
   ChevronUp,
   ExternalLink,
   FileCheck,
+  FileEdit,
   Folder,
   FolderOpen,
   Pin,
@@ -15,7 +16,7 @@ import {
 import type { PiSessionExportInfo, PiSessionExportRecord, PiSessionRow } from '@shared/host-api/contract';
 import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
-import { groupByProject } from '../lib/session-groups';
+import { groupByProject, SCRATCHPAD_GROUP_KEY } from '../lib/session-groups';
 import { formatRelativeTime, sessionDisplayTitle } from '../lib/session-format';
 import { formatErrorMessage } from '../lib/error-formatter';
 import { panesStore } from '../stores/panes-default';
@@ -662,12 +663,12 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
                       size={14}
                       className={`session-chevron${isCollapsed ? ' collapsed' : ''}`}
                     />
-                    <Folder size={14} />
-                    <span className="session-project-name" title={group.cwd}>
-                      {group.name}
+                    {group.name === SCRATCHPAD_GROUP_KEY ? <FileEdit size={14} /> : <Folder size={14} />}
+                    <span className="session-project-name" title={group.name === SCRATCHPAD_GROUP_KEY ? t('chat.workspace.scratchpadDesc') : group.cwd}>
+                      {group.name === SCRATCHPAD_GROUP_KEY ? t('chat.workspace.scratchpadGroup') : group.name}
                     </span>
                     <span className="session-project-path hint" title={group.cwd}>
-                      {group.cwd}
+                      {group.name === SCRATCHPAD_GROUP_KEY ? t('chat.workspace.scratchpadDesc') : group.cwd}
                     </span>
                     <span className="session-project-count">
                       {t('sessions.projectCount', { count: group.sessions.length })}
