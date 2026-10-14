@@ -1,7 +1,7 @@
 // 侧栏项目分组 + 跨项目切换会话的 E2E。
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { expect, test } from './fixtures/electron';
@@ -222,3 +222,89 @@ test('大量会话按项目分批显示，侧栏可独立滚动', async ({ launc
   expect(bottomMenuBox).not.toBeNull();
   expect(bottomMenuBox!.y + bottomMenuBox!.height).toBeLessThanOrEqual(viewport.height);
 });
+
+async function seedSessionInScratchpad(text: string, homeDir: string) {
+  const { piPackageRoot } = piTestEnv();
+  const entry = path.join(piPackageRoot, 'dist/index.js');
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  const sdk = (await import(pathToFileURL(entry).href)) as typeof import('@earendil-works/pi-coding-agent');
+  const sessionModulePath = path.join(
+    piPackageRoot,
+    'dist/core/session-manager.js',
+  );
+  const sessionModule = (await import(pathToFileURL(sessionModulePath).href)) as {
+    getDefaultSessionDir: (targetCwd: string, targetAgentDir?: string) => string;
+  };
+  const scratchpadDir = path.join(homeDir, '.pi', 'scratchpad', 's_e2e_test');
+  await mkdir(scratchpadDir, { recursive: true });
+  const sessionDir = sessionModule.getDefaultSessionDir(scratchpadDir, agentDir);
+  const session = sdk.SessionManager.create(scratchpadDir, sessionDir);
+  session.appendMessage({
+    role: 'user',
+    content: [{ type: 'text', text }],
+    timestamp: Date.now(),
+  });
+  session.appendMessage({
+    role: 'assistant',
+    content: [{ type: 'text', text: 'seeded scratchpad reply' }],
+    api: 'openai-completions',
+    provider: 'mock',
+    model: 'mock-1',
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: 'stop',
+    timestamp: Date.now(),
+  });
+  session.appendSessionInfo(text);
+  return scratchpadDir;
+}
+
+test('草稿箱 (No Project) 会话独立聚合置顶，进入后展示草稿标识及保存为项目按钮', async ({ launchElectronApp, homeDir }) => {
+  const scratchpadDir = await seedSessionInScratchpad('临时想法草稿测试', homeDir);
+
+  const app = await launchElectronApp({
+    withPi: true,
+    agentDir,
+    seedSettings: { workspaceCwd: workspaceA },
+  });
+  const page = await app.firstWindow();
+  await expect(
+    page.getByTestId('model-select').or(page.getByTestId('model-badge')).first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  // 1. 验证侧栏出现置顶的草稿箱分组，且不含项目操作菜单
+  const scratchpadHeader = page.getByTestId('session-group-header-__scratchpad__');
+  await expect(scratchpadHeader).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('session-group-menu-__scratchpad__')).toHaveCount(0);
+
+  // 2. 展开草稿箱并点击进入该会话
+  if ((await scratchpadHeader.getAttribute('aria-expanded')) === 'false') {
+    await scratchpadHeader.click();
+  }
+  const scratchpadSession = page.getByText('临时想法草稿测试');
+  await expect(scratchpadSession).toBeVisible();
+  await scratchpadSession.click();
+
+  // 3. 等待切换到草稿箱会话（消息恢复呈现）
+  await expect(page.getByTestId('message-user').first()).toContainText('临时想法草稿测试', {
+    timeout: 15_000,
+  });
+
+  // 4. 验证聊天区工作区胶囊显示为 No Project (草稿沙箱)
+  const workspaceChip = page.getByTestId('chat-workspace');
+  await expect(workspaceChip).toBeVisible();
+  await expect(workspaceChip).toHaveClass(/scratchpad/);
+
+  // 5. 验证已有消息的锁定态下，出现「保存为项目」按钮
+  const convertBtn = page.getByTestId('convert-to-project');
+  await expect(convertBtn).toBeVisible();
+
+  await rm(scratchpadDir, { recursive: true, force: true }).catch(() => {});
+});
+
