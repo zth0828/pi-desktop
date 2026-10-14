@@ -157,6 +157,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
       return;
     }
     void hostApi.settings.set('workspaceCwd', targetCwd);
+    void chatStore.getState().switchSession(boundSessionPath, targetCwd);
   };
 
   const handleSelectProject = (selectedCwd: string) => {

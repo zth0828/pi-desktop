@@ -39,6 +39,7 @@ import {
   createSessionRuntime,
   createSessionRuntimeForWindow,
   detachRuntimesFromSessionFile,
+  disposeRuntime,
   getActiveRuntime,
   getLiveSessionRows,
   getRuntimeForSession,
@@ -1056,7 +1057,13 @@ export const sessionsApi = {
     // 4. 持久化 workspaceCwd
     await commitWorkspaceCwd(targetCwd);
 
-    // 5. 重新 switch 到该会话与新目录
+    // 5. 若原会话在内存中已有绑定在旧沙箱的 live runtime，将其释放以强制按 targetCwd 重建
+    const existingRuntime = getRuntimeForSession(sourceSessionFile);
+    if (existingRuntime) {
+      disposeRuntime(existingRuntime);
+    }
+
+    // 6. 重新 switch 到该会话与新目录
     const switchRes = await serializeSessionOp(sourceSessionFile, () =>
       switchSessionImpl({ path: sourceSessionFile, cwd: targetCwd }, ctx),
     );

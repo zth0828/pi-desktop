@@ -356,7 +356,7 @@ function clearPendingDisposeTimer(runtime: ActiveRuntime): void {
   }
 }
 
-function disposeRuntime(runtime: ActiveRuntime): void {
+export function disposeRuntime(runtime: ActiveRuntime): void {
   clearPendingDisposeTimer(runtime);
   runtime.unsubscribe();
   cancelPendingUiForContext({ sessionId: runtime.sessionId, generation: runtime.generation });
