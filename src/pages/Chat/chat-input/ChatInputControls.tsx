@@ -19,6 +19,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import { DEFAULT_CONTEXT_WINDOW, type PiModelRow } from '@shared/host-api/contract';
+import { hostApi } from '../../../lib/host-api';
 import { formatCost, formatHitRate } from '../../../lib/usage-stats';
 import {
   formatPercent,
@@ -33,6 +34,7 @@ import {
 export interface ChatInputControlsProps {
   cwd: string;
   onChooseWorkspace: () => Promise<void>;
+  workspaceLocked?: boolean;
   composerMenuRef: RefObject<HTMLDivElement | null>;
   composerMenuOpen: boolean;
   setComposerMenuOpen: (open: boolean | ((open: boolean) => boolean)) => void;
@@ -109,6 +111,7 @@ export interface ChatInputControlsProps {
 export function ChatInputControls({
   cwd,
   onChooseWorkspace,
+  workspaceLocked = false,
   composerMenuRef,
   composerMenuOpen,
   setComposerMenuOpen,
@@ -336,14 +339,22 @@ export function ChatInputControls({
       </div>
       <button
         type="button"
-        className="context-chip workspace-chip"
+        className={`context-chip workspace-chip${workspaceLocked ? ' locked' : ''}`}
         data-testid="chat-workspace"
+        data-locked={workspaceLocked ? 'true' : undefined}
         title={cwd}
-        onClick={() => void onChooseWorkspace()}
+        aria-label={workspaceLocked ? t('chat.workspace.lockedAria', { path: cwd }) : t('chat.workspace.chooseAria', { path: cwd })}
+        onClick={() => {
+          if (workspaceLocked) {
+            void hostApi.shell.showInFolder(cwd);
+          } else {
+            void onChooseWorkspace();
+          }
+        }}
       >
         <Folder size={15} />
         <span>{cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd}</span>
-        <ChevronDown size={13} />
+        {!workspaceLocked && <ChevronDown size={13} />}
       </button>
       {gitBranch && (
         <div className="git-branch-wrap" ref={branchMenuRef}>

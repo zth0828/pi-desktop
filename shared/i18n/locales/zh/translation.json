@@ -188,7 +188,11 @@
       "choose": "选择目录",
       "change": "更换",
       "riskyHome": "用户主目录不能作为工作区（agent 会扫描/触碰你的全部个人文件）。请选择一个项目目录。",
-      "riskyRoot": "磁盘根目录不能作为工作区。请选择一个项目目录。"
+      "riskyRoot": "磁盘根目录不能作为工作区。请选择一个项目目录。",
+      "lockedTooltip": "已锁定工作区：{{path}}（点击在文件管理器中定位）",
+      "chooseTooltip": "当前工作区：{{path}}（点击切换工作区）",
+      "lockedAria": "已锁定工作区 {{path}}，点击在文件管理器中定位",
+      "chooseAria": "当前工作区 {{path}}，点击选择新工作区"
     },
     "tool": {
       "running": "执行中",

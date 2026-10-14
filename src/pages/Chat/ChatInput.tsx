@@ -1635,6 +1635,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
         <ChatInputControls
           cwd={cwd}
           onChooseWorkspace={onChooseWorkspace}
+          workspaceLocked={messages.length > 0}
           composerMenuRef={composerMenuRef}
           composerMenuOpen={composerMenuOpen}
           setComposerMenuOpen={setComposerMenuOpen}

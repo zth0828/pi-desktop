@@ -306,6 +306,15 @@
   white-space: nowrap;
 }
 
+.workspace-chip.locked {
+  cursor: pointer;
+  opacity: 0.92;
+}
+
+.workspace-chip.locked:hover {
+  opacity: 1;
+}
+
 /* 当前 git 分支 chip（工作区选择右侧，只读展示，不可点击） */
 .git-branch-chip {
   color: var(--accent);

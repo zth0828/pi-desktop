@@ -188,7 +188,11 @@
       "choose": "Choose folder",
       "change": "Change",
       "riskyHome": "The user home directory cannot be used as a workspace (the agent would scan or touch all your personal files). Pick a project directory instead.",
-      "riskyRoot": "The filesystem root cannot be used as a workspace. Pick a project directory instead."
+      "riskyRoot": "The filesystem root cannot be used as a workspace. Pick a project directory instead.",
+      "lockedTooltip": "Workspace locked: {{path}} (click to reveal in file manager)",
+      "chooseTooltip": "Current workspace: {{path}} (click to change workspace)",
+      "lockedAria": "Workspace locked: {{path}}, click to reveal in file manager",
+      "chooseAria": "Current workspace: {{path}}, click to choose another workspace"
     },
     "tool": {
       "running": "running",
