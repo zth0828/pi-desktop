@@ -16,6 +16,7 @@ import type {
 import { sendHostEvent } from '../main/ipc/host-events';
 import { loadPiAdapter } from './pi-adapter';
 import { isWindowsDevicePath } from '../utils/workspace-path';
+import { isScratchpadPath } from '../utils/scratchpad';
 
 type PendingTrustRequest = {
   payload: PiTrustRequestPayload;
@@ -42,6 +43,9 @@ export function requestTrustSelection(
   title: string,
   options: string[],
 ): Promise<string | undefined> {
+  if (isScratchpadPath(cwd)) {
+    return Promise.resolve(options[0] ?? 'Trust');
+  }
   const requestId = randomUUID();
   const payload: PiTrustRequestPayload = { requestId, cwd, title, options };
   return new Promise((resolve) => {

@@ -58,4 +58,18 @@ describe('projectTrustApi', () => {
     expect(nullRes.success).toBe(true);
     expect(mockSet).toHaveBeenCalledWith('/repo', null);
   });
+
+  it('草稿沙箱目录直接自动信任并返回 Trust，不向渲染层抛出选择弹窗', async () => {
+    const { requestTrustSelection } = await import('../../electron/services/project-trust');
+    const { ensureScratchpadSessionDir } = await import('../../electron/utils/scratchpad');
+    const scratchpadCwd = await ensureScratchpadSessionDir('test_trust_bypass');
+
+    const res = await requestTrustSelection(scratchpadCwd, 'Trust this folder?', [
+      'Trust',
+      'Do not trust',
+    ]);
+    expect(res).toBe('Trust');
+    expect(projectTrustApi.listPending()).toHaveLength(0);
+  });
 });
+

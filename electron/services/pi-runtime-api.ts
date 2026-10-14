@@ -88,6 +88,7 @@ import { timingMark } from '../utils/timing';
 import { safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
 import { riskyWorkspaceReason } from '../utils/workspace-safety';
 import { isWindowsDevicePath } from '../utils/workspace-path';
+import { isScratchpadPath } from '../utils/scratchpad';
 import {
   compatibilityFailure,
   loadPiAdapter,
@@ -912,15 +913,19 @@ async function createRuntime(
     appendSystemPrompt: (base) => [...base, desktopWorkspaceInstructions(cwd)],
     getProjectTrust: (effectiveCwd) => projectTrustByCwd.get(effectiveCwd),
     setProjectTrust: (effectiveCwd, trusted) => projectTrustByCwd.set(effectiveCwd, trusted),
-    resolveTrust: async ({ cwd: effectiveCwd, trustStore, defaultProjectTrust, extensionsResult, onExtensionError }) =>
-      resolveProjectTrusted({
+    resolveTrust: async ({ cwd: effectiveCwd, trustStore, defaultProjectTrust, extensionsResult, onExtensionError }) => {
+      if (isScratchpadPath(effectiveCwd)) {
+        return true;
+      }
+      return resolveProjectTrusted({
         cwd: effectiveCwd,
         trustStore,
         defaultProjectTrust,
         extensionsResult,
         projectTrustContext: createShellTrustContext(effectiveCwd),
         onExtensionError,
-      }),
+      });
+    },
   });
   timingMark('runtime:session-runtime-created');
   const settingsHandle = adapterRuntime.settings;
