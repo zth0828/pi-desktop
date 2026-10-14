@@ -868,6 +868,10 @@ export type PiSessionPathPayload = {
 };
 export type PiSessionPinPayload = PiSessionPathPayload & { pinned: boolean };
 export type PiSessionArchivePayload = PiSessionPathPayload & { archived: boolean };
+export type PiSessionConvertToProjectPayload = {
+  sessionPath: string;
+  targetCwd: string;
+};
 
 export type PiSessionCwdMissingDetail = {
   sessionCwd: string;
@@ -1287,6 +1291,10 @@ export type HostApiContract = {
     exportHtml: (payload: PiSessionPathPayload) => PiSessionExportResult;
     /** 系统统一导出目录 + 最近成功导出路径。 */
     getExportInfo: () => PiSessionExportInfo;
+    /** 将草稿沙箱会话转为正式项目会话（搬移文件、改写 cwd、重新绑定）。 */
+    convertToProject: (payload: PiSessionConvertToProjectPayload) => HostSuccess;
+    /** 获取或分配一个新的草稿沙箱目录（~/.pi/scratchpad/s_<id>）。 */
+    getScratchpadDir: () => { dir: string };
   };
   settings: {
     getAll: () => SettingsSnapshot;

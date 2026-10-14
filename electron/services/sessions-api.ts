@@ -3,12 +3,13 @@
 // 删除 pi 无 SDK API（已确认），对齐 pi `/resume`：优先移入系统废纸篓。
 // 会话替换后必须 afterSessionReplaced（重订阅 + 重绑扩展 + 推 sessionReplaced）。
 import { existsSync, statSync } from 'node:fs';
-import { readFile, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { shell } from 'electron';
 import { sendHostEvent } from '../main/ipc/host-events';
 import type {
   HostSuccess,
+  PiSessionConvertToProjectPayload,
   PiSessionExportInfo,
   PiSessionExportRecord,
   PiSessionExportResult,
@@ -25,6 +26,8 @@ import type {
   PiSessionSearchRow,
   PiSessionSwitchResult,
 } from '@shared/host-api/contract';
+import { cleanScratchpadSessionDir, ensureScratchpadSessionDir, isScratchpadPath } from '../utils/scratchpad';
+import { riskyWorkspaceReason } from '../utils/workspace-safety';
 
 import {
   afterSessionReplaced,
@@ -878,6 +881,9 @@ export const sessionsApi = {
           store.set('sessionExportRecords', records);
         }
       } catch {}
+      if (sessionCwd && isScratchpadPath(sessionCwd)) {
+        await cleanScratchpadSessionDir(sessionCwd);
+      }
       return { success: true };
     } catch (err) {
       writePiDiagnostic({
@@ -1003,5 +1009,68 @@ export const sessionsApi = {
       recentRecords,
       records: validRecords,
     };
+  },
+
+  convertToProject: async (
+    payload: PiSessionConvertToProjectPayload,
+    ctx?: HostActionContext,
+  ): Promise<HostSuccess> => {
+    if (!payload?.sessionPath || !payload?.targetCwd) {
+      return { success: false, error: 'invalid session path or target cwd' };
+    }
+    const targetCwd = stripWindowsExtendedPrefix(payload.targetCwd.trim());
+    if (isWindowsDevicePath(targetCwd)) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
+    const risky = riskyWorkspaceReason(targetCwd);
+    if (risky) {
+      return { success: false, error: `risky-workspace-${risky}` };
+    }
+    const sourceSessionFile = stripWindowsExtendedPrefix(path.resolve(payload.sessionPath));
+    if (!existsSync(sourceSessionFile)) {
+      return { success: false, error: 'session file not found' };
+    }
+    await mkdir(targetCwd, { recursive: true });
+
+    // 1. 读取原会话的 cwd
+    const originCwd = await sessionHeaderCwd(sourceSessionFile);
+
+    // 2. 如果原 cwd 是 scratchpad 沙箱，把沙箱内的代码文件拷贝到 targetCwd
+    if (originCwd && isScratchpadPath(originCwd) && existsSync(originCwd)) {
+      try {
+        const entries = await readdir(originCwd, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.name === '.gitignore' || entry.name === 'node_modules') continue;
+          const srcPath = path.join(originCwd, entry.name);
+          const destPath = path.join(targetCwd, entry.name);
+          await cp(srcPath, destPath, { recursive: true, force: false }).catch(() => {});
+        }
+      } catch {
+        // ignore copy errors
+      }
+    }
+
+    // 3. 更新 session 文件 header 的 cwd
+    await updateSessionHeaderCwd(sourceSessionFile, targetCwd);
+
+    // 4. 持久化 workspaceCwd
+    await commitWorkspaceCwd(targetCwd);
+
+    // 5. 重新 switch 到该会话与新目录
+    const switchRes = await serializeSessionOp(sourceSessionFile, () =>
+      switchSessionImpl({ path: sourceSessionFile, cwd: targetCwd }, ctx),
+    );
+    if (!switchRes.success) {
+      return switchRes;
+    }
+
+    sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'convertToProject' });
+    return { success: true };
+  },
+
+  getScratchpadDir: async (): Promise<{ dir: string }> => {
+    const sessionKey = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const dir = await ensureScratchpadSessionDir(sessionKey);
+    return { dir };
   },
 };

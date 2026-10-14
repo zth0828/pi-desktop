@@ -170,6 +170,9 @@ function createHostApi(sessionPath?: string) {
     exportHtml: (path: string, options?: { cwd?: string; title?: string; id?: string }) =>
       invoke('piSessions', 'exportHtml', { path, ...options }),
     getExportInfo: () => invoke('piSessions', 'getExportInfo'),
+    convertToProject: (sessionPath: string, targetCwd: string) =>
+      invoke('piSessions', 'convertToProject', { sessionPath, targetCwd }),
+    getScratchpadDir: () => invoke('piSessions', 'getScratchpadDir'),
   },
   piSkills: {
     list: () => invoke('piSkills', 'list'),
