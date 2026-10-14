@@ -194,7 +194,15 @@
       "lockedAria": "Workspace locked: {{path}}, click to reveal in file manager",
       "chooseAria": "Current workspace: {{path}}, click to choose another workspace",
       "scratchpadGroup": "Scratchpad (No Project)",
-      "scratchpadDesc": "Temporary sandbox, not attached to any project"
+      "scratchpadDesc": "Temporary sandbox, not attached to any project",
+      "noProject": "No Project",
+      "noProjectDesc": "Scratchpad / General Chat",
+      "convertToProject": "Save as Project",
+      "convertToProjectTooltip": "Convert current scratchpad and conversation to a formal project",
+      "chooseTargetFolder": "Select destination project folder",
+      "searchProjects": "Search projects…",
+      "openOtherFolder": "Open another local folder…",
+      "convertSuccess": "Successfully converted to project"
     },
     "tool": {
       "running": "running",

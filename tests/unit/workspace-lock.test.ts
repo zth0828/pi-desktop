@@ -37,4 +37,23 @@ describe('workspace-lock (已有消息的工作区锁定与防误触)', () => {
     expect(showInFolder).not.toHaveBeenCalled();
     expect(onChooseWorkspace).toHaveBeenCalled();
   });
+
+  it('草稿沙箱在已有消息时显示「保存为项目」入口，普通项目或空白草稿不显示', () => {
+    const shouldShowConvert = (isScratchpad: boolean, workspaceLocked: boolean) => {
+      return isScratchpad && workspaceLocked;
+    };
+
+    // 草稿箱已有消息：显示
+    expect(shouldShowConvert(true, true)).toBe(true);
+
+    // 草稿箱空白会话：不显示（未锁定，直接在下拉框切换或选择）
+    expect(shouldShowConvert(true, false)).toBe(false);
+
+    // 普通项目已有消息：不显示
+    expect(shouldShowConvert(false, true)).toBe(false);
+
+    // 普通项目空白会话：不显示
+    expect(shouldShowConvert(false, false)).toBe(false);
+  });
 });
+

@@ -194,7 +194,15 @@
       "lockedAria": "已锁定工作区 {{path}}，点击在文件管理器中定位",
       "chooseAria": "当前工作区 {{path}}，点击选择新工作区",
       "scratchpadGroup": "草稿箱 (No Project)",
-      "scratchpadDesc": "临时草稿沙箱，未关联具体工程"
+      "scratchpadDesc": "临时草稿沙箱，未关联具体工程",
+      "noProject": "No Project",
+      "noProjectDesc": "临时草稿 / 自由问答",
+      "convertToProject": "保存为项目",
+      "convertToProjectTooltip": "将当前草稿及对话迁移保存为正式本地工程",
+      "chooseTargetFolder": "选择目标工程文件夹",
+      "searchProjects": "搜索项目…",
+      "openOtherFolder": "打开本地其他目录…",
+      "convertSuccess": "已成功转为正式项目"
     },
     "tool": {
       "running": "执行中",

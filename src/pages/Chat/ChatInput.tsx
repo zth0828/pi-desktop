@@ -14,6 +14,9 @@ import { onHostEvent } from '../../lib/host-events';
 import { formatModelRefreshSummary } from '@shared/provider-catalog';
 import { cacheHitRate, formatCost } from '../../lib/usage-stats';
 import { sessionTitleFromQuestion } from '../../lib/session-title';
+import { pushGlobalError } from '../../stores/global-errors';
+import { formatErrorMessage } from '../../lib/error-formatter';
+import { getProjectName, isScratchpadCwd } from '../../lib/session-groups';
 import { FileIcon } from '../../components/FileIcon';
 import { usePaneChatStore, usePaneChatStoreApi, usePaneHostApi } from './chat-store-context';
 import { ImageLightbox } from './ImageLightbox';
@@ -125,6 +128,47 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const [planInstallOpen, setPlanInstallOpen] = useState(false);
+
+  const boundSessionPath = usePaneChatStore((s) => s.boundSessionPath);
+  const [recentProjects, setRecentProjects] = useState<Array<{ cwd: string; name: string }>>([]);
+
+  useEffect(() => {
+    void hostApi.piSessions.listAll().then((r) => {
+      const projs: Array<{ cwd: string; name: string }> = [];
+      const seen = new Set<string>();
+      for (const s of r.sessions) {
+        if (!s.cwd || isScratchpadCwd(s.cwd) || seen.has(s.cwd)) continue;
+        seen.add(s.cwd);
+        projs.push({ cwd: s.cwd, name: getProjectName(s.cwd) });
+        if (projs.length >= 6) break;
+      }
+      setRecentProjects(projs);
+    }).catch(() => {});
+  }, [sessionId]);
+
+  const handleConvertToProject = async () => {
+    if (!boundSessionPath) return;
+    const result = await hostApi.dialog.openDirectory(t('chat.workspace.chooseTargetFolder'));
+    if (result.canceled || !result.filePaths[0]) return;
+    const targetCwd = result.filePaths[0];
+    const res = await hostApi.piSessions.convertToProject(boundSessionPath, targetCwd);
+    if (!res.success) {
+      pushGlobalError(formatErrorMessage(res.error, t) ?? res.error ?? t('sessions.actionFailedPlain'));
+      return;
+    }
+    void hostApi.settings.set('workspaceCwd', targetCwd);
+  };
+
+  const handleSelectProject = (selectedCwd: string) => {
+    void chatStore.getState().start?.(selectedCwd);
+  };
+
+  const handleSelectNoProject = async () => {
+    const res = await hostApi.piSessions.getScratchpadDir();
+    if (res?.dir) {
+      void chatStore.getState().start?.(res.dir);
+    }
+  };
 
   const isPlanActive = Boolean(
     extensionUi?.statuses.some((s) => s.key.toLowerCase().includes('plan')) ||
@@ -1636,6 +1680,10 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
           cwd={cwd}
           onChooseWorkspace={onChooseWorkspace}
           workspaceLocked={messages.length > 0}
+          onConvertToProject={handleConvertToProject}
+          recentProjects={recentProjects}
+          onSelectProject={handleSelectProject}
+          onSelectNoProject={handleSelectNoProject}
           composerMenuRef={composerMenuRef}
           composerMenuOpen={composerMenuOpen}
           setComposerMenuOpen={setComposerMenuOpen}

@@ -1,4 +1,4 @@
-import type { RefObject } from 'react';
+import { useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowUp,
@@ -9,8 +9,10 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleGauge,
+  FileEdit,
   Folder,
   GitBranch,
+  Package,
   Paperclip,
   Plus,
   RefreshCw,
@@ -21,6 +23,8 @@ import {
 import { DEFAULT_CONTEXT_WINDOW, type PiModelRow } from '@shared/host-api/contract';
 import { hostApi } from '../../../lib/host-api';
 import { formatCost, formatHitRate } from '../../../lib/usage-stats';
+import { isScratchpadCwd } from '../../../lib/session-groups';
+import { WorkspaceDropdown } from './WorkspaceDropdown';
 import {
   formatPercent,
   formatTokenK,
@@ -35,6 +39,10 @@ export interface ChatInputControlsProps {
   cwd: string;
   onChooseWorkspace: () => Promise<void>;
   workspaceLocked?: boolean;
+  onConvertToProject?: () => Promise<void>;
+  recentProjects?: Array<{ cwd: string; name: string }>;
+  onSelectProject?: (cwd: string) => void;
+  onSelectNoProject?: () => void;
   composerMenuRef: RefObject<HTMLDivElement | null>;
   composerMenuOpen: boolean;
   setComposerMenuOpen: (open: boolean | ((open: boolean) => boolean)) => void;
@@ -112,6 +120,10 @@ export function ChatInputControls({
   cwd,
   onChooseWorkspace,
   workspaceLocked = false,
+  onConvertToProject,
+  recentProjects,
+  onSelectProject,
+  onSelectNoProject,
   composerMenuRef,
   composerMenuOpen,
   setComposerMenuOpen,
@@ -185,6 +197,8 @@ export function ChatInputControls({
   modelRefreshToast,
 }: ChatInputControlsProps) {
   const { t } = useTranslation();
+  const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
+  const isScratchpad = isScratchpadCwd(cwd);
 
   const maxContextWindow = selectedModel?.contextWindow ?? model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
   const presets = getContextPresetsForModel(maxContextWindow);
@@ -337,25 +351,52 @@ export function ChatInputControls({
           <Brain size={14} />
         </button>
       </div>
-      <button
-        type="button"
-        className={`context-chip workspace-chip${workspaceLocked ? ' locked' : ''}`}
-        data-testid="chat-workspace"
-        data-locked={workspaceLocked ? 'true' : undefined}
-        title={cwd}
-        aria-label={workspaceLocked ? t('chat.workspace.lockedAria', { path: cwd }) : t('chat.workspace.chooseAria', { path: cwd })}
-        onClick={() => {
-          if (workspaceLocked) {
-            void hostApi.shell.showInFolder(cwd);
-          } else {
-            void onChooseWorkspace();
-          }
-        }}
-      >
-        <Folder size={15} />
-        <span>{cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd}</span>
-        {!workspaceLocked && <ChevronDown size={13} />}
-      </button>
+      <div className="workspace-wrap">
+        <button
+          type="button"
+          className={`context-chip workspace-chip${workspaceLocked ? ' locked' : ''}${isScratchpad ? ' scratchpad' : ''}`}
+          data-testid="chat-workspace"
+          data-locked={workspaceLocked ? 'true' : undefined}
+          title={cwd}
+          aria-label={workspaceLocked ? t('chat.workspace.lockedAria', { path: cwd }) : t('chat.workspace.chooseAria', { path: cwd })}
+          onClick={() => {
+            if (workspaceLocked) {
+              void hostApi.shell.showInFolder(cwd);
+            } else {
+              setWorkspaceDropdownOpen((prev) => !prev);
+            }
+          }}
+        >
+          {isScratchpad ? <FileEdit size={14} /> : <Folder size={15} />}
+          <span>{isScratchpad ? t('chat.workspace.noProject') : (cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd)}</span>
+          {!workspaceLocked && <ChevronDown size={13} />}
+        </button>
+
+        {isScratchpad && workspaceLocked && onConvertToProject && (
+          <button
+            type="button"
+            className="context-chip workspace-convert-chip"
+            data-testid="convert-to-project"
+            title={t('chat.workspace.convertToProjectTooltip')}
+            onClick={() => void onConvertToProject()}
+          >
+            <Package size={14} />
+            <span>{t('chat.workspace.convertToProject')}</span>
+          </button>
+        )}
+
+        {!workspaceLocked && (
+          <WorkspaceDropdown
+            open={workspaceDropdownOpen}
+            onClose={() => setWorkspaceDropdownOpen(false)}
+            currentCwd={cwd}
+            recentProjects={recentProjects ?? []}
+            onSelectProject={(selectedCwd) => onSelectProject?.(selectedCwd)}
+            onOpenDirectory={() => void onChooseWorkspace()}
+            onSelectNoProject={() => onSelectNoProject?.()}
+          />
+        )}
+      </div>
       {gitBranch && (
         <div className="git-branch-wrap" ref={branchMenuRef}>
           {canSwitchBranch ? (
