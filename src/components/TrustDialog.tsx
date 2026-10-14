@@ -9,39 +9,71 @@ import { hostApi } from '../lib/host-api';
 import { onHostEvent } from '../lib/host-events';
 import { isScratchpadCwd } from '../lib/session-groups';
 
-/** pi getProjectTrustOptions 的英文 label → 本地化文案；结构变化时回退原文。 */
-function useOptionLabel() {
-  const { t } = useTranslation();
-  return (label: string): string => {
-    if (label === 'Trust') return t('trust.options.trust');
-    const parent = /^Trust parent folder \((.*)\)$/.exec(label);
-    if (parent) return t('trust.options.trustParent', { path: parent[1] });
-    if (label === 'Trust (this session only)') return t('trust.options.trustSession');
-    if (label === 'Do not trust') return t('trust.options.distrust');
-    if (label === 'Do not trust (this session only)') return t('trust.options.distrustSession');
-    return label;
-  };
+interface OptionMeta {
+  kind: 'primary' | 'parent' | 'session' | 'distrust' | 'distrust-session' | 'default';
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  tooltip?: string;
 }
 
-function getOptionMeta(opt: string) {
-  if (opt === 'Trust') {
-    return { kind: 'primary', icon: <ShieldCheck size={16} /> };
-  }
-  if (opt.startsWith('Trust parent folder')) {
-    return { kind: 'parent', icon: <FolderCheck size={16} /> };
-  }
-  if (opt.includes('this session only') && opt.startsWith('Trust')) {
-    return { kind: 'session', icon: <Clock size={16} /> };
-  }
-  if (opt.startsWith('Do not trust')) {
-    return { kind: 'danger', icon: <ShieldX size={16} /> };
-  }
-  return { kind: 'default', icon: <ShieldAlert size={16} /> };
+function useOptionMeta() {
+  const { t } = useTranslation();
+  return (opt: string): OptionMeta => {
+    if (opt === 'Trust') {
+      return {
+        kind: 'primary',
+        icon: <ShieldCheck size={16} />,
+        title: t('trust.options.trust'),
+        subtitle: t('trust.options.trustSub'),
+      };
+    }
+    const parent = /^Trust parent folder \((.*)\)$/.exec(opt);
+    if (parent) {
+      const parentPath = parent[1];
+      return {
+        kind: 'parent',
+        icon: <FolderCheck size={16} />,
+        title: t('trust.options.trustParent'),
+        subtitle: t('trust.options.trustParentSub', { path: parentPath }),
+        tooltip: parentPath,
+      };
+    }
+    if (opt.includes('this session only') && opt.startsWith('Trust')) {
+      return {
+        kind: 'session',
+        icon: <Clock size={16} />,
+        title: t('trust.options.trustSession'),
+        subtitle: t('trust.options.trustSessionSub'),
+      };
+    }
+    if (opt === 'Do not trust') {
+      return {
+        kind: 'distrust',
+        icon: <ShieldX size={16} />,
+        title: t('trust.options.distrust'),
+        subtitle: t('trust.options.distrustSub'),
+      };
+    }
+    if (opt === 'Do not trust (this session only)') {
+      return {
+        kind: 'distrust-session',
+        icon: <ShieldAlert size={16} />,
+        title: t('trust.options.distrustSession'),
+        subtitle: t('trust.options.distrustSessionSub'),
+      };
+    }
+    return {
+      kind: 'default',
+      icon: <ShieldAlert size={16} />,
+      title: opt,
+    };
+  };
 }
 
 export function TrustDialog() {
   const { t } = useTranslation();
-  const optionLabel = useOptionLabel();
+  const getOptionMeta = useOptionMeta();
   const [requests, setRequests] = useState<PiTrustRequestPayload[]>([]);
 
   useEffect(() => {
@@ -146,13 +178,21 @@ export function TrustDialog() {
                 <button
                   key={opt}
                   type="button"
-                  className={`trust-option ${meta.kind}`}
+                  className={`trust-option opt-${meta.kind}`}
                   data-testid="trust-option"
                   onClick={() => choose(opt)}
                 >
                   <span className="trust-option-icon">{meta.icon}</span>
                   <div className="trust-option-content">
-                    <span className="trust-option-label">{optionLabel(opt)}</span>
+                    <span className="trust-option-label">{meta.title}</span>
+                    {meta.subtitle && (
+                      <span
+                        className="trust-option-sub"
+                        title={meta.tooltip || meta.subtitle}
+                      >
+                        {meta.subtitle}
+                      </span>
+                    )}
                   </div>
                   <span className="trust-option-shortcut">{idx + 1}</span>
                 </button>

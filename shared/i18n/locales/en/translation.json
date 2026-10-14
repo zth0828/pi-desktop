@@ -1382,11 +1382,16 @@
     "title": "Trust this project folder?",
     "description": "Trusting allows pi to load the project's .pi settings and resources, install missing project packages, and execute project extensions.",
     "options": {
-      "trust": "Trust",
-      "trustParent": "Trust parent folder ({{path}})",
+      "trust": "Trust Project",
+      "trustSub": "Allow full access to project settings and extensions",
+      "trustParent": "Trust Parent Folder",
+      "trustParentSub": "Parent folder: {{path}}",
       "trustSession": "Trust (this session only)",
+      "trustSessionSub": "Temporary access until the window closes",
       "distrust": "Do not trust",
-      "distrustSession": "Do not trust (this session only)"
+      "distrustSub": "Disable project extensions and custom settings",
+      "distrustSession": "Do not trust (this session only)",
+      "distrustSessionSub": "Ask again on the next session"
     }
   },
   "versionUpdate": {

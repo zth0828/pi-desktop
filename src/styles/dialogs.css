@@ -1371,7 +1371,7 @@
 }
 
 .trust-card {
-  width: min(500px, 92vw);
+  width: min(520px, 92vw);
   background: var(--bg-raised);
   border: 1px solid var(--border-strong, var(--border));
   border-radius: 16px;
@@ -1379,6 +1379,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  isolation: isolate;
   animation: trust-scale-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1442,6 +1443,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: var(--bg-raised);
 }
 
 .trust-path-card {
@@ -1479,16 +1481,16 @@
 .trust-options {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   margin-top: 4px;
 }
 
 .trust-option {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 9px 12px;
+  padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg);
@@ -1503,40 +1505,51 @@
   border-color: var(--border-strong, var(--text-tertiary));
 }
 
-.trust-option.primary {
+.trust-option.opt-primary {
   background: color-mix(in srgb, var(--accent) 8%, var(--bg));
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 
-.trust-option.primary:hover {
+.trust-option.opt-primary:hover {
   background: color-mix(in srgb, var(--accent) 14%, var(--bg));
   border-color: var(--accent);
 }
 
-.trust-option.primary .trust-option-icon {
+.trust-option.opt-primary .trust-option-icon {
   color: var(--accent);
 }
 
-.trust-option.primary .trust-option-label {
-  font-weight: 500;
+.trust-option.opt-primary .trust-option-label {
+  font-weight: 600;
   color: var(--text);
 }
 
-.trust-option.danger {
+.trust-option.opt-parent .trust-option-icon {
+  color: var(--accent);
+}
+
+.trust-option.opt-distrust,
+.trust-option.opt-distrust-session {
   color: var(--text-secondary);
 }
 
-.trust-option.danger:hover {
+.trust-option.opt-distrust:hover,
+.trust-option.opt-distrust-session:hover {
   background: color-mix(in srgb, var(--danger, #ef4444) 6%, var(--bg));
   border-color: color-mix(in srgb, var(--danger, #ef4444) 35%, var(--border));
 }
 
-.trust-option.danger .trust-option-icon {
+.trust-option.opt-distrust .trust-option-icon {
   color: var(--text-tertiary);
 }
 
-.trust-option.danger:hover .trust-option-icon {
+.trust-option.opt-distrust:hover .trust-option-icon,
+.trust-option.opt-distrust-session:hover .trust-option-icon {
   color: var(--danger, #ef4444);
+}
+
+.trust-option.opt-distrust-session .trust-option-icon {
+  color: var(--text-tertiary);
 }
 
 .trust-option-icon {
@@ -1549,11 +1562,28 @@
 .trust-option-content {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
 }
 
 .trust-option-label {
-  font-size: 13px;
+  display: block;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.35;
   color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trust-option-sub {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1561,10 +1591,17 @@
 
 .trust-option-shortcut {
   flex-shrink: 0;
+  margin-left: 8px;
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 11px;
   font-weight: 600;
+  font-family: var(--font-mono);
   color: var(--text-muted, var(--text-tertiary));
-  padding: 1px 6px;
+  padding: 0 5px;
   border-radius: 4px;
   background: var(--bg-sunken);
   border: 1px solid var(--border);
