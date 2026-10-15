@@ -261,6 +261,12 @@ function createHostApi(sessionPath?: string) {
     revertFile: (path: string) => invoke('review', 'revertFile', { path }),
     revertHunk: (path: string, patch: string) =>
       invoke('review', 'revertHunk', { path, patch }),
+    captureTurnCheckpoint: (turnIndex: number) =>
+      invoke('review', 'captureTurnCheckpoint', { turnIndex }),
+    getTurnChanges: (turnIndex: number) =>
+      invoke('review', 'getTurnChanges', { turnIndex }),
+    revertToTurnCheckpoint: (turnIndex: number) =>
+      invoke('review', 'revertToTurnCheckpoint', { turnIndex }),
   },
   workspace: {
     listChildren: (path = '') => invoke('workspace', 'listChildren', { path }),

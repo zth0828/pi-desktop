@@ -15,6 +15,12 @@ import type {
   ReviewRevertFilePayload,
   ReviewRevertHunkPayload,
   ReviewSummaryResult,
+  ReviewTurnCheckpointPayload,
+  ReviewTurnCheckpointResult,
+  ReviewGetTurnChangesPayload,
+  ReviewGetTurnChangesResult,
+  ReviewRevertTurnPayload,
+  ReviewRevertTurnResult,
 } from '@shared/host-api/contract';
 import { resolveRuntimeForContext, type ActiveRuntime } from './pi-runtime-api';
 import type { HostActionContext } from '../main/ipc/host-contract';
@@ -209,6 +215,33 @@ const baselines = new Map<string, Baseline>();
 const capturingCwds = new Set<string>();
 const baselineFailures = new Map<string, string>();
 
+/**
+ * 轮次影子快照映射：sessionKey -> (turnIndex -> treeHash)。
+ * 零 commit / 零 branch 污染，仅存储 git write-tree 的 40 位哈希指针。
+ */
+const turnCheckpoints = new Map<string, Map<number, string>>();
+
+export async function captureTurnCheckpointForActive(
+  active: ActiveRuntime,
+  turnIndex: number,
+): Promise<string | null> {
+  const base = currentBaseline(active);
+  if (!base || hasCapturingCwd(active.cwd)) return null;
+  try {
+    const tree = await snapshotTree(active.cwd, base.gitEnv, base.ref);
+    const sessionKey = active.sessionId ?? active.cwd;
+    let sessionMap = turnCheckpoints.get(sessionKey);
+    if (!sessionMap) {
+      sessionMap = new Map<number, string>();
+      turnCheckpoints.set(sessionKey, sessionMap);
+    }
+    sessionMap.set(turnIndex, tree);
+    return tree;
+  } catch {
+    return null;
+  }
+}
+
 function findBaseline(cwd: string): Baseline | null {
   for (const [key, base] of baselines.entries()) {
     if (samePath(key, cwd)) return base;
@@ -313,6 +346,7 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
 /** runtime 销毁（cwd 切换）时清掉旧 baseline，避免串项目。 */
 export function clearReviewBaseline(): void {
   disposeBaseline();
+  turnCheckpoints.clear();
   capturingCwds.clear();
   baselineFailures.clear();
 }
@@ -558,6 +592,126 @@ export const reviewApi = {
       }
       if (apply.code !== 0) return { success: false, error: apply.stderr.trim() || 'git apply failed' };
       return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /** 轮次影子快照：记录发问时的 git write-tree 裸对象树哈希。 */
+  captureTurnCheckpoint: async (
+    payload: ReviewTurnCheckpointPayload,
+    ctx?: HostActionContext,
+  ): Promise<ReviewTurnCheckpointResult> => {
+    const active = resolveRuntimeForContext(ctx);
+    if (!active) return { success: false, error: 'not-started' };
+    if (hasCapturingCwd(active.cwd)) {
+      return { success: false, error: 'baseline is capturing' };
+    }
+    const base = currentBaseline(active);
+    if (!base) return { success: false, error: 'no-baseline' };
+    const turnIndex = typeof payload?.turnIndex === 'number' ? payload.turnIndex : 0;
+    const sessionKey = active.sessionId ?? active.cwd;
+    try {
+      const tree = await snapshotTree(active.cwd, base.gitEnv, base.ref);
+      let sessionMap = turnCheckpoints.get(sessionKey);
+      if (!sessionMap) {
+        sessionMap = new Map<number, string>();
+        turnCheckpoints.set(sessionKey, sessionMap);
+      }
+      sessionMap.set(turnIndex, tree);
+      return { success: true, checkpointHash: tree };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+
+  /** 查询自指定轮次发问以来的磁盘改动文件清单与行数统计。 */
+  getTurnChanges: async (
+    payload: ReviewGetTurnChangesPayload,
+    ctx?: HostActionContext,
+  ): Promise<ReviewGetTurnChangesResult> => {
+    const active = resolveRuntimeForContext(ctx);
+    if (!active) return { available: false, reason: 'not-started', files: [] };
+    if (hasCapturingCwd(active.cwd)) {
+      return { available: false, reason: 'capturing', files: [] };
+    }
+    const base = currentBaseline(active);
+    if (!base) return { available: false, reason: 'no-baseline', files: [] };
+    const turnIndex = typeof payload?.turnIndex === 'number' ? payload.turnIndex : 0;
+    const sessionKey = active.sessionId ?? active.cwd;
+    const sessionMap = turnCheckpoints.get(sessionKey);
+    const targetRef = sessionMap?.get(turnIndex) ?? (turnIndex === 0 ? base.ref : undefined);
+    if (!targetRef) {
+      return { available: false, reason: 'no-checkpoint', files: [] };
+    }
+    try {
+      const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
+      const [statuses, stats, conflicts] = await Promise.all([
+        diffNameStatus(active.cwd, targetRef, cur, base.gitEnv),
+        diffNumstat(active.cwd, targetRef, cur, base.gitEnv),
+        conflictPaths(active.cwd, base),
+      ]);
+      for (const p of conflicts) statuses.set(p, 'conflicted');
+      const files: ReviewFileEntry[] = [];
+      for (const [p, status] of statuses) {
+        const s = stats.get(p) ?? { added: 0, deleted: 0 };
+        files.push({ path: p, status, added: s.added, deleted: s.deleted });
+      }
+      files.sort((a, b) => a.path.localeCompare(b.path));
+      return { available: true, files };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { available: false, reason: `git-error:${msg}`, files: [] };
+    }
+  },
+
+  /** 还原至指定轮次的影子快照（git apply -R 精确回滚，零 commit 污染）。 */
+  revertToTurnCheckpoint: async (
+    payload: ReviewRevertTurnPayload,
+    ctx?: HostActionContext,
+  ): Promise<ReviewRevertTurnResult> => {
+    const active = resolveRuntimeForContext(ctx);
+    if (!active) return { success: false, error: 'not-started' };
+    if (hasCapturingCwd(active.cwd)) {
+      return { success: false, error: 'baseline is capturing' };
+    }
+    const base = currentBaseline(active);
+    if (!base) return { success: false, error: 'no-baseline' };
+    const turnIndex = typeof payload?.turnIndex === 'number' ? payload.turnIndex : 0;
+    const sessionKey = active.sessionId ?? active.cwd;
+    const sessionMap = turnCheckpoints.get(sessionKey);
+    const targetRef = sessionMap?.get(turnIndex) ?? (turnIndex === 0 ? base.ref : undefined);
+    if (!targetRef) {
+      return { success: false, error: 'no-checkpoint' };
+    }
+    try {
+      const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
+      const conflicts = await conflictPaths(active.cwd, base);
+      const diff = await runGit(active.cwd, ['diff', '--no-renames', targetRef, cur], { env: base.gitEnv });
+      if (diff.code !== 0) throw new Error(diff.stderr.trim() || 'git diff failed');
+      if (!diff.stdout.trim()) {
+        return { success: true, revertedFiles: [] };
+      }
+      const statuses = await diffNameStatus(active.cwd, targetRef, cur, base.gitEnv);
+      const changedPaths = [...statuses.keys()];
+      for (const p of changedPaths) {
+        if (conflicts.has(p)) {
+          return { success: false, error: 'conflicted files cannot be reverted' };
+        }
+      }
+      let apply = await runGit(active.cwd, ['apply', '-R'], { env: base.gitEnv, input: diff.stdout });
+      if (apply.code !== 0) {
+        apply = await runGit(active.cwd, ['apply', '-R', '--ignore-space-change'], { env: base.gitEnv, input: diff.stdout });
+      }
+      if (apply.code !== 0) {
+        return { success: false, error: apply.stderr.trim() || 'git apply failed' };
+      }
+      if (sessionMap) {
+        for (const k of sessionMap.keys()) {
+          if (k > turnIndex) sessionMap.delete(k);
+        }
+      }
+      return { success: true, revertedFiles: changedPaths };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
     }

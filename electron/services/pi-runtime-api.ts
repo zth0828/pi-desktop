@@ -80,7 +80,7 @@ import {
   resetExtensionUiState,
   resolveUiResponse,
 } from './extension-ui';
-import { captureReviewBaseline, clearReviewBaseline } from './review-api';
+import { captureReviewBaseline, clearReviewBaseline, captureTurnCheckpointForActive } from './review-api';
 import { noteRunEnded, noteRunStarted } from './power-save';
 import { createShellTrustContext, resolveProjectTrusted } from './project-trust';
 import { settingsApi } from './settings-api';
@@ -1385,6 +1385,9 @@ export const piRuntimeApi = {
     const pendingPrompt = { requestId, phase: 'accepted' as const };
     active.pendingPrompts.push(pendingPrompt);
     try {
+      const userTurnIndex = session.messages?.filter((m) => (m as { role?: string })?.role === 'user').length ?? 0;
+      void captureTurnCheckpointForActive(active, userTurnIndex);
+
       // @path 就地展开为 <file> 块（pi file-processor 语义；图片转 images 通道）
       const expanded = await expandFileReferences(payload.text, active.cwd);
       const staged = (payload.images ?? []) as unknown[];

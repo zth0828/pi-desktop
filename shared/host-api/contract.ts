@@ -498,6 +498,22 @@ export type ReviewRevertFilePayload = { path: string };
 /** hunk 级回滚：渲染层把 diff 解析成 hunk、重建只含该 hunk 的合法 unified diff，main 侧 git apply -R */
 export type ReviewRevertHunkPayload = { path: string; patch: string };
 
+/** 轮次影子快照请求体与返回 */
+export type ReviewTurnCheckpointPayload = { turnIndex: number };
+export type ReviewTurnCheckpointResult = HostSuccess & { checkpointHash?: string };
+
+export type ReviewGetTurnChangesPayload = { turnIndex: number };
+export type ReviewGetTurnChangesResult = {
+  available: boolean;
+  reason?: string;
+  files: ReviewFileEntry[];
+};
+
+export type ReviewRevertTurnPayload = { turnIndex: number };
+export type ReviewRevertTurnResult = HostSuccess & {
+  revertedFiles?: string[];
+};
+
 // —— workspace：活动 runtime cwd 内的安全文件浏览与预览 ——
 
 export type WorkspaceEntry = {
@@ -1424,6 +1440,12 @@ export type HostApiContract = {
     revertFile: (payload: ReviewRevertFilePayload) => HostSuccess;
     /** hunk 级回滚：git apply -R 渲染层重建的单 hunk patch；apply 失败返回错误。 */
     revertHunk: (payload: ReviewRevertHunkPayload) => HostSuccess;
+    /** 轮次影子快照：记录发问时的 git write-tree 裸对象树哈希。 */
+    captureTurnCheckpoint: (payload: ReviewTurnCheckpointPayload) => ReviewTurnCheckpointResult;
+    /** 查询自指定轮次以来的改动文件清单与行数统计。 */
+    getTurnChanges: (payload: ReviewGetTurnChangesPayload) => ReviewGetTurnChangesResult;
+    /** 还原至指定轮次的影子快照（git apply -R 精确回滚，零 commit 污染）。 */
+    revertToTurnCheckpoint: (payload: ReviewRevertTurnPayload) => ReviewRevertTurnResult;
   };
   notify: {
     /** 渲染层上报可通知事件；main 按 settings.notifyMode + 窗口焦点决定是否弹系统通知。 */

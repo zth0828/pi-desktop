@@ -191,6 +191,20 @@ describe('review baseline guards and non-blocking capture', () => {
       expect(devicePath.success).toBe(false);
       expect(devicePath.error).toBe('device paths are not allowed');
     });
+
+    it('captureTurnCheckpoint, getTurnChanges, revertToTurnCheckpoint 未启动时安全拦截', async () => {
+      const captureRes = await reviewApi.captureTurnCheckpoint({ turnIndex: 0 });
+      expect(captureRes.success).toBe(false);
+      expect(captureRes.error).toBe('not-started');
+
+      const getChangesRes = await reviewApi.getTurnChanges({ turnIndex: 0 });
+      expect(getChangesRes.available).toBe(false);
+      expect(getChangesRes.reason).toBe('not-started');
+
+      const revertRes = await reviewApi.revertToTurnCheckpoint({ turnIndex: 0 });
+      expect(revertRes.success).toBe(false);
+      expect(revertRes.error).toBe('not-started');
+    });
   });
 });
 
