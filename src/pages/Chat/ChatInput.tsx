@@ -42,6 +42,8 @@ import { composerAttachmentsCache } from './chat-input/composer-attachments-cach
 import { computeModePrefix, hasPlanCommandPrefix } from './chat-input/mode-prefix';
 import { useInputHistory } from './chat-input/useInputHistory';
 import { ContextWarningBar } from './chat-input/ContextWarningBar';
+import { HistoricalBranchBanner } from './chat-input/HistoricalBranchBanner';
+import { groupLogicalTurns } from '../../lib/turn-changes';
 import { ChatInputAttachments } from './chat-input/ChatInputAttachments';
 import { ChatInputMentionsPopup } from './chat-input/ChatInputMentionsPopup';
 import { ChatInputSlashPopup } from './chat-input/ChatInputSlashPopup';
@@ -82,6 +84,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
   const abort = usePaneChatStore((s) => s.abort);
   const newSession = usePaneChatStore((s) => s.newSession);
   const setTreeOpen = usePaneChatStore((s) => s.setTreeOpen);
+  const navigateTo = usePaneChatStore((s) => s.navigateTo);
   const inputDraft = usePaneChatStore((s) => s.inputDraft);
   const value = usePaneChatStore((s) => s.composerText);
   const attachments = usePaneChatStore((s) => s.composerAttachments);
@@ -128,6 +131,36 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const [planInstallOpen, setPlanInstallOpen] = useState(false);
+  const [treeLeafState, setTreeLeafState] = useState<{
+    currentLeafId: string | null;
+    latestLeafId: string | null;
+  }>({ currentLeafId: null, latestLeafId: null });
+
+  useEffect(() => {
+    let alive = true;
+    if (isStreaming) return;
+    paneApi.piRuntime
+      .getTree()
+      .then((res) => {
+        if (!alive) return;
+        setTreeLeafState({
+          currentLeafId: res.currentLeafId ?? null,
+          latestLeafId: res.latestLeafId ?? null,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [paneApi, sessionId, generation, isStreaming, messages.length]);
+
+  const logicalTurns = useMemo(() => groupLogicalTurns(messages), [messages]);
+  const currentTurnNumber = Math.max(1, logicalTurns.length);
+  const isHistoricalNode = Boolean(
+    treeLeafState.currentLeafId &&
+    treeLeafState.latestLeafId &&
+    treeLeafState.currentLeafId !== treeLeafState.latestLeafId
+  );
 
   const boundSessionPath = usePaneChatStore((s) => s.boundSessionPath);
   const [recentProjects, setRecentProjects] = useState<Array<{ cwd: string; name: string }>>([]);
@@ -1482,6 +1515,17 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
         compacting={compacting}
         onCompact={() => void paneApi.piRuntime.compact()}
       />
+      {isHistoricalNode && (
+        <HistoricalBranchBanner
+          turnNumber={currentTurnNumber}
+          onReturnToLatest={() => {
+            if (treeLeafState.latestLeafId) {
+              void navigateTo(treeLeafState.latestLeafId);
+            }
+          }}
+          onOpenTree={() => setTreeOpen(true)}
+        />
+      )}
       <div
         className="chat-input-card chat-input-composer"
         onDragOver={(e) => {
