@@ -17,7 +17,9 @@ vi.mock('react-i18next', () => ({
     t: (key: string) => {
       const dict: Record<string, string> = {
         'chat.confirmUndo.title': '确认撤销',
+        'chat.confirmUndo.historicalTitle': '确认时光倒流',
         'chat.confirmUndo.description': '确认此撤销操作将执行以下变更：',
+        'chat.confirmUndo.historicalDescription': '您正在回退至第 2 轮发问，检测到该轮及后续产生了代码修改：',
         'chat.confirmUndo.revertModifiedFiles': '恢复物理文件改动',
         'chat.confirmUndo.revertFilesHint': '还原磁盘上的物理文件改动',
         'chat.confirmUndo.rewindConversation': '同时将对话历史退回至发问前',
@@ -76,6 +78,21 @@ describe('ConfirmUndoDialog UI rendering', () => {
     expect(html).toContain('data-testid="confirm-undo-files-only"');
     expect(html).toContain('data-testid="confirm-undo-conversation-only"');
     expect(html).toContain('data-testid="confirm-undo-full"');
+  });
+
+  it('renders historical turn title and description when isHistoricalTurn is true', () => {
+    const html = renderToStaticMarkup(
+      <ConfirmUndoDialog
+        open={true}
+        files={mockFiles}
+        targetTurnIndex={1}
+        isHistoricalTurn={true}
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+    expect(html).toContain('确认时光倒流');
+    expect(html).toContain('您正在回退至第 2 轮发问');
   });
 });
 

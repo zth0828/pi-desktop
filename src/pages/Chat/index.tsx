@@ -28,6 +28,7 @@ import { TreeDialog } from './TreeDialog';
 import { SessionCwdMissingDialog } from './SessionCwdMissingDialog';
 import { TurnChangesCard } from './TurnChangesCard';
 import { TurnSubagentsCard } from './TurnSubagentsCard';
+import { ConfirmUndoDialog } from './ConfirmUndoDialog';
 import { isSubagentTool } from '../../lib/subagent-tool';
 
 function SessionTitleBar({ onClosePane }: { onClosePane?: () => void }) {
@@ -283,6 +284,10 @@ export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary,
   const sessionId = usePaneChatStore((s) => s.sessionId);
   const workspaceVisible = usePaneChatStore((s) => s.workspaceOpen || s.reviewOpen);
   const transcriptSyncing = usePaneChatStore((s) => s.transcriptSyncing);
+  const confirmUndoDialog = usePaneChatStore((s) => s.confirmUndoDialog);
+  const confirmUndoReverting = usePaneChatStore((s) => s.confirmUndoReverting);
+  const closeConfirmUndo = usePaneChatStore((s) => s.closeConfirmUndo);
+  const executeConfirmUndo = usePaneChatStore((s) => s.executeConfirmUndo);
   const start = usePaneChatStore((s) => s.start);
   const switchSession = usePaneChatStore((s) => s.switchSession);
   // 独立会话窗口的 attach 目标由 PaneLayout 顶层读取一次后通过 prop 传入（
@@ -1264,6 +1269,15 @@ export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary,
       <TreeDialog />
       <SessionCwdMissingDialog />
       <ReviewPanel active={active} />
+      <ConfirmUndoDialog
+        open={Boolean(confirmUndoDialog?.open)}
+        files={confirmUndoDialog?.files ?? []}
+        targetTurnIndex={confirmUndoDialog?.targetTurnIndex}
+        isHistoricalTurn={confirmUndoDialog?.isHistoricalTurn}
+        isReverting={confirmUndoReverting}
+        onConfirm={(options) => void executeConfirmUndo(options)}
+        onClose={closeConfirmUndo}
+      />
     </div>
   );
 }

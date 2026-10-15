@@ -11,6 +11,8 @@ export interface ConfirmUndoFile {
 export interface ConfirmUndoDialogProps {
   open: boolean;
   files: ConfirmUndoFile[];
+  targetTurnIndex?: number;
+  isHistoricalTurn?: boolean;
   onConfirm: (options: { revertFiles: boolean; rewindConversation: boolean }) => void | Promise<void>;
   onClose: () => void;
   isReverting?: boolean;
@@ -19,6 +21,8 @@ export interface ConfirmUndoDialogProps {
 export function ConfirmUndoDialog({
   open,
   files,
+  targetTurnIndex,
+  isHistoricalTurn,
   onConfirm,
   onClose,
   isReverting = false,
@@ -74,7 +78,7 @@ export function ConfirmUndoDialog({
             className="confirm-undo-title"
             data-testid="confirm-undo-title"
           >
-            {t('chat.confirmUndo.title')}
+            {isHistoricalTurn ? t('chat.confirmUndo.historicalTitle') : t('chat.confirmUndo.title')}
           </h3>
           <button
             type="button"
@@ -89,7 +93,9 @@ export function ConfirmUndoDialog({
 
         <div className="confirm-undo-body">
           <p className="confirm-undo-desc" data-testid="confirm-undo-desc">
-            {t('chat.confirmUndo.description')}
+            {isHistoricalTurn && targetTurnIndex !== undefined
+              ? t('chat.confirmUndo.historicalDescription', { turn: targetTurnIndex + 1 })
+              : t('chat.confirmUndo.description')}
           </p>
 
           <label className="confirm-undo-checkbox-label">

@@ -302,7 +302,9 @@
     },
     "confirmUndo": {
       "title": "确认撤销",
+      "historicalTitle": "确认时光倒流",
       "description": "确认此撤销操作将执行以下变更：",
+      "historicalDescription": "您正在回退至第 {{turn}} 轮发问，检测到该轮及后续产生了代码修改：",
       "revertFileChanges": "撤销文件变更",
       "revertModifiedFiles": "恢复物理文件改动",
       "revertFilesHint": "还原磁盘上的物理文件改动；若取消勾选，将完整保留当前修改后的文件代码。",

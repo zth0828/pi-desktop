@@ -302,7 +302,9 @@
     },
     "confirmUndo": {
       "title": "Confirm Undo",
+      "historicalTitle": "Confirm Time Travel",
       "description": "Confirming this undo action will make the following changes:",
+      "historicalDescription": "You are rewinding to Turn {{turn}}. Code modifications were detected in this and subsequent turns:",
       "revertFileChanges": "Revert file changes",
       "revertModifiedFiles": "Revert modified files",
       "revertFilesHint": "Revert physical file changes on disk. If unchecked, modified code will be kept.",

@@ -13,6 +13,7 @@ import type {
   PiRuntimeNavigateResult,
   PiRuntimeStateResult,
   PiUiRequestPayload,
+  ReviewFileEntry,
 } from '@shared/host-api/contract';
 import { hostApi, scopedHostApi, type HostApi } from '../lib/host-api';
 import type { HostInvokeError } from '@shared/host-api/errors';
@@ -33,6 +34,16 @@ import {
   type ToolExecution,
 } from '../lib/chat-types';
 import { normalizeDisplayPath } from '../lib/review-diff';
+import { groupLogicalTurns, collectTurnChanges } from '../lib/turn-changes';
+import type { ConfirmUndoFile } from '../pages/Chat/ConfirmUndoDialog';
+
+export type ConfirmUndoState = {
+  open: boolean;
+  entryId: string;
+  targetTurnIndex: number;
+  isHistoricalTurn: boolean;
+  files: ConfirmUndoFile[];
+};
 
 /** 自动重试状态（auto_retry_start；startedAt 用于按 delayMs 本地倒计时） */
 export type RetryState = {
@@ -155,8 +166,14 @@ export type ChatState = {
   reviewFileRequest: { path?: string; nonce: number } | null;
   /** fork/跳分支后回填输入框的文本与附件（nonce 保证同文本也触发） */
   inputDraft: { text: string; attachments?: ComposerAttachment[]; nonce: number } | null;
-  /** 流式中点击编辑历史消息时挂起的目标 entryId，等 run.ended 后触发 fork */
+  /** 流式中点击编辑历史消息时挂起的目标 entryId，等 run.ended 后触发重发 */
   pendingEditEntryId: string | null;
+  /** 流式中点击分叉时挂起的目标 entryId，等 run.ended 后触发 fork */
+  pendingForkEntryId: string | null;
+  /** 时光倒流/撤销修改确认对话框状态 */
+  confirmUndoDialog: ConfirmUndoState | null;
+  /** 是否正在执行撤销回退（禁用按钮） */
+  confirmUndoReverting: boolean;
   /** 扩展 UI 请求队列（ctx.ui.confirm/select/input）；同一时间通常只有一个，设计上按队列 */
   uiRequests: PiUiRequestPayload[];
   /** pi 扩展可序列化 UI 快照（状态、working 文案、文本 widget）。 */
@@ -199,8 +216,14 @@ export type ChatState = {
   dismissStartError: () => void;
   /** 消息级 fork：从指定 user 消息分叉新会话（sessionReplaced 事件负责刷新列表） */
   forkFrom: (entryId: string) => Promise<void>;
-  /** 编辑并重发：空闲时直接 fork + 回填；流式中先 abort 等 run 结束后 fork + 回填 */
+  /** 编辑并重发：按需弹出 ConfirmUndoDialog 确认还原代码，并退回对话回填输入框 */
   editMessage: (entryId: string) => Promise<void>;
+  /** 打开撤销确认弹窗 */
+  openConfirmUndo: (dialogState: ConfirmUndoState) => void;
+  /** 关闭撤销确认弹窗 */
+  closeConfirmUndo: () => void;
+  /** 执行撤销确认动作 */
+  executeConfirmUndo: (options: { revertFiles: boolean; rewindConversation: boolean }) => Promise<void>;
   /** 跳分支：同会话文件内移动 leaf（navigateTree 后 main 推全量状态刷新） */
   navigateTo: (
     targetId: string,
@@ -493,6 +516,9 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       reviewFileRequest: null,
       inputDraft: null,
       pendingEditEntryId: null,
+      pendingForkEntryId: null,
+      confirmUndoDialog: null,
+      confirmUndoReverting: false,
       uiRequests: [],
       extensionUi: undefined,
       transcriptSyncing: false,
@@ -776,11 +802,12 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       forkFrom: async (entryId) => {
         const s = get();
         if (s.isStreaming || s.running) {
-          set({ pendingEditEntryId: entryId });
+          set({ pendingForkEntryId: entryId, pendingEditEntryId: entryId });
           try {
             await s.abort();
           } catch (err) {
             set({
+              pendingForkEntryId: null,
               pendingEditEntryId: null,
               runtimeError: err instanceof Error ? err.message : String(err),
             });
@@ -816,7 +843,122 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
       },
 
       editMessage: async (entryId) => {
-        await get().forkFrom(entryId);
+        const s = get();
+        if (s.isStreaming || s.running) {
+          set({ pendingEditEntryId: entryId, pendingForkEntryId: null });
+          try {
+            await s.abort();
+          } catch (err) {
+            set({
+              pendingEditEntryId: null,
+              pendingForkEntryId: null,
+              runtimeError: err instanceof Error ? err.message : String(err),
+            });
+          }
+          return;
+        }
+
+        const messages = s.messages;
+        const targetIndex = messages.findIndex((m) => m.entryId === entryId);
+        if (targetIndex === -1) {
+          await get().navigateTo(entryId);
+          return;
+        }
+
+        const logicalTurns = groupLogicalTurns(messages);
+        const targetTurnIndex = logicalTurns.findIndex((t) => t.startIndex === targetIndex);
+        if (targetTurnIndex === -1) {
+          await get().navigateTo(entryId);
+          return;
+        }
+
+        // 收集从目标轮次到当前最新的全部工具执行
+        const affectedTurns = logicalTurns.slice(targetTurnIndex);
+        const affectedToolCallIds = affectedTurns.flatMap((t) => t.toolCallIds);
+        const localChanges = collectTurnChanges(s.toolExecutions, affectedToolCallIds);
+
+        let backendFiles: ReviewFileEntry[] = [];
+        try {
+          const res = await api().review.getTurnChanges(targetTurnIndex);
+          if (res.available && Array.isArray(res.files)) {
+            backendFiles = res.files;
+          }
+        } catch {
+          // backend review 不可用或未实现时，忽略并依赖前端本地统计
+        }
+
+        const fileMap = new Map<string, ConfirmUndoFile>();
+        for (const f of localChanges.files) {
+          let action: ConfirmUndoFile['action'] = 'revert';
+          if (f.added > 0 && f.deleted === 0) action = 'delete';
+          else if (f.added === 0 && f.deleted > 0) action = 'restore';
+          fileMap.set(f.path, { path: f.path, action });
+        }
+        for (const bf of backendFiles) {
+          let action: ConfirmUndoFile['action'] = 'revert';
+          if (bf.status === 'added') action = 'delete';
+          else if (bf.status === 'deleted') action = 'restore';
+          fileMap.set(bf.path, { path: bf.path, action });
+        }
+
+        const combinedFiles = [...fileMap.values()];
+
+        // 场景 A：无代码变动，零弹窗直达！原发问词退回输入框并聚焦
+        if (combinedFiles.length === 0) {
+          await get().navigateTo(entryId);
+          return;
+        }
+
+        // 场景 B：有代码变动，弹出多维安全确认弹窗
+        set({
+          confirmUndoDialog: {
+            open: true,
+            entryId,
+            targetTurnIndex,
+            isHistoricalTurn: targetTurnIndex < logicalTurns.length - 1,
+            files: combinedFiles,
+          },
+        });
+      },
+
+      openConfirmUndo: (dialogState) => {
+        set({ confirmUndoDialog: dialogState });
+      },
+
+      closeConfirmUndo: () => {
+        set({ confirmUndoDialog: null });
+      },
+
+      executeConfirmUndo: async (options) => {
+        const dialog = get().confirmUndoDialog;
+        if (!dialog) return;
+        set({ confirmUndoReverting: true });
+        try {
+          if (options.revertFiles) {
+            let revertedViaCheckpoint = false;
+            try {
+              const res = await api().review.revertToTurnCheckpoint(dialog.targetTurnIndex);
+              if (res.success) {
+                revertedViaCheckpoint = true;
+              }
+            } catch {
+              // fallback
+            }
+            if (!revertedViaCheckpoint) {
+              for (const file of dialog.files) {
+                await api().review.revertFile(file.path);
+              }
+            }
+          }
+          if (options.rewindConversation && dialog.entryId) {
+            await get().navigateTo(dialog.entryId);
+          }
+          set({ confirmUndoDialog: null });
+        } catch (err) {
+          set({ runtimeError: err instanceof Error ? err.message : String(err) });
+        } finally {
+          set({ confirmUndoReverting: false });
+        }
       },
 
       navigateTo: async (targetId, options) => {
@@ -1002,10 +1144,14 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
               set({ bashDraft: null });
               void get().refreshMessages();
             }
+            const pendingFork = get().pendingForkEntryId;
             const pendingEdit = get().pendingEditEntryId;
-            if (pendingEdit) {
+            if (pendingFork) {
+              set({ pendingForkEntryId: null, pendingEditEntryId: null });
+              void get().forkFrom(pendingFork);
+            } else if (pendingEdit) {
               set({ pendingEditEntryId: null });
-              void get().forkFrom(pendingEdit);
+              void get().editMessage(pendingEdit);
             }
             void api().piRuntime.getUsage().then((usage) => {
               if (usage?.latestTurn && get().generation === envelope.generation && get().runStartedAt === null && get().turnStats === null) {
