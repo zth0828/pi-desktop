@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, GitBranch, RotateCcw } from 'lucide-react';
 import { collectTurnChanges } from '../../lib/turn-changes';
 import {
   collectToolWarnings,
@@ -11,7 +11,7 @@ import {
 } from '../../lib/tool-display';
 import { isAbsolutePath, isPathInside, normalizeDisplayPath, pathMapKey } from '../../lib/review-diff';
 import { FileIcon } from '../../components/FileIcon';
-import type { ReviewFileEntry } from '@shared/host-api/contract';
+import type { PiRuntimeTreeNode, ReviewFileEntry } from '@shared/host-api/contract';
 import { ConfirmUndoDialog, type ConfirmUndoFile } from './ConfirmUndoDialog';
 import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
 
@@ -56,27 +56,44 @@ function ToolWarnings({ warnings }: { warnings: ToolWarning[] }) {
   );
 }
 
+export interface TurnChangesCardProps {
+  toolCallIds: string[];
+  userEntryId?: string;
+  turnIndex?: number;
+  branchCount?: number;
+}
+
 /**
  * 聚合编辑卡（Codex「已编辑 N 个文件 +x -y」范式）：一轮对话结束后在该轮尾部展示
  * 成功的 edit/write 汇总。「撤销」通过 review baseline 回滚该工具改动；
- * 「审核」打开完整 Review 面板。支持点击单行内嵌展开行级 Diff。
+ * 「审核」打开完整 Review 面板。支持点击单行内嵌展开行级 Diff 与单文件撤销。
  */
-export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) {
+export function TurnChangesCardView({ toolCallIds, userEntryId, turnIndex, branchCount }: TurnChangesCardProps) {
   const { t } = useTranslation();
   const paneApi = usePaneHostApi();
   const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
   const openReviewFile = usePaneChatStore((s) => s.openReviewFile);
   const openWorkspaceFile = usePaneChatStore((s) => s.openWorkspaceFile);
+  const setTreeOpen = usePaneChatStore((s) => s.setTreeOpen);
+  const navigateTo = usePaneChatStore((s) => s.navigateTo);
   const cwd = usePaneChatStore((s) => s.cwd);
-  const [gitAvailable, setGitAvailable] = useState(false);
+  const [gitAvailable, setGitAvailable] = useState(true);
   const [reviewFiles, setReviewFiles] = useState<ReviewFileEntry[]>([]);
+  const [treeNodes, setTreeNodes] = useState<PiRuntimeTreeNode[]>([]);
   const [confirmUndoOpen, setConfirmUndoOpen] = useState(false);
   const [revertState, setRevertState] = useState<'idle' | 'reverting' | 'done' | 'error'>('idle');
   const [revertError, setRevertError] = useState('');
+  const [revertingPath, setRevertingPath] = useState<string | null>(null);
+  const [revertedFiles, setRevertedFiles] = useState<Set<string>>(new Set());
   const [showAllFiles, setShowAllFiles] = useState(false);
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
 
   const changes = collectTurnChanges(toolExecutions, toolCallIds);
+  const activeFiles = changes.files.filter((file) => !revertedFiles.has(file.path));
+  const remainingAdded = activeFiles.reduce((sum, f) => sum + f.added, 0);
+  const remainingDeleted = activeFiles.reduce((sum, f) => sum + f.deleted, 0);
+  const isFullyReverted = revertState === 'done' || (changes.files.length > 0 && activeFiles.length === 0);
+
   const visibleFiles = showAllFiles ? changes.files : changes.files.slice(0, 5);
   const hiddenCount = changes.files.length - visibleFiles.length;
   const allFilesInWorkspace = changes.files.every((file) => {
@@ -86,7 +103,7 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
 
   const displayPath = (filePath: string) => normalizeDisplayPath(filePath, cwd);
 
-  const undoFiles: ConfirmUndoFile[] = changes.files.map((file) => {
+  const undoFiles: ConfirmUndoFile[] = activeFiles.map((file) => {
     const norm = displayPath(file.path);
     const targetKey = pathMapKey(norm);
     const reviewEntry = reviewFiles.find((rf) => pathMapKey(rf.path) === targetKey);
@@ -135,6 +152,14 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
 
     checkSummary();
 
+    paneApi.piRuntime
+      .getTree()
+      .then((res) => {
+        if (!alive) return;
+        setTreeNodes(res.nodes ?? []);
+      })
+      .catch(() => {});
+
     return () => {
       alive = false;
       if (timer) clearTimeout(timer);
@@ -143,30 +168,66 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
 
   if (changes.files.length === 0) return null;
 
+  const userNode = userEntryId ? treeNodes.find((n) => n.id === userEntryId) : undefined;
+  const branchRoutesCount = branchCount ?? (userNode?.branchCount ?? 1);
+  const turnNumber = (turnIndex ?? 0) + 1;
+
   const toggleFile = (path: string) => {
     setExpandedFiles((prev) => ({ ...prev, [path]: !prev[path] }));
+  };
+
+  const handleRevertSingleFile = async (filePath: string) => {
+    setRevertingPath(filePath);
+    try {
+      const result = await paneApi.review.revertFile(filePath);
+      if (result.success) {
+        setRevertedFiles((prev) => {
+          const next = new Set(prev);
+          next.add(filePath);
+          if (next.size >= changes.files.length) {
+            setRevertState('done');
+          }
+          return next;
+        });
+      } else {
+        setRevertError(result.error ?? '');
+        setRevertState('error');
+      }
+    } catch (err) {
+      setRevertError(String(err));
+      setRevertState('error');
+    } finally {
+      setRevertingPath(null);
+    }
   };
 
   const revertAll = async () => {
     setRevertState('reverting');
     for (const file of changes.files) {
+      if (revertedFiles.has(file.path)) continue;
       const result = await paneApi.review.revertFile(file.path);
       if (!result.success) {
         setRevertState('error');
         setRevertError(result.error ?? '');
         return;
       }
+      setRevertedFiles((prev) => new Set([...prev, file.path]));
     }
     setRevertState('done');
   };
 
-  const handleConfirmUndo = async ({ revertFiles }: { revertFiles: boolean }) => {
+  const handleConfirmUndo = async (options: { revertFiles: boolean; rewindConversation: boolean }) => {
     setConfirmUndoOpen(false);
-    if (!revertFiles) {
-      setRevertState('done');
-      return;
+    if (options.revertFiles) {
+      await revertAll();
     }
-    await revertAll();
+    if (options.rewindConversation && userEntryId) {
+      if (navigateTo) {
+        await navigateTo(userEntryId);
+      } else {
+        await paneApi.piRuntime.navigateTree(userEntryId);
+      }
+    }
   };
 
   return (
@@ -191,11 +252,30 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
           title={t('chat.turnChanges.viewChanges')}
           onClick={() => openReviewFile(changes.files[0]?.path)}
         >
-          <span className="turn-stat-add">+{changes.added}</span>
-          <span className="turn-stat-del">-{changes.deleted}</span>
+          <span className="turn-stat-add">+{remainingAdded}</span>
+          <span className="turn-stat-del">-{remainingDeleted}</span>
         </button>
+
+        {branchRoutesCount > 1 ? (
+          <button
+            type="button"
+            className="turn-changes-branches-btn"
+            data-testid="turn-changes-branches"
+            title={t('chat.turnChanges.viewBranchRoutes')}
+            onClick={() => setTreeOpen(true)}
+          >
+            <GitBranch size={12} />
+            <span>{t('chat.turnChanges.branchRoutes', { count: branchRoutesCount })}</span>
+            <span className="turn-changes-branch-action">{t('chat.turnChanges.viewBranchRoutes')}</span>
+          </button>
+        ) : (
+          <span className="turn-changes-snapshot" data-testid="turn-changes-snapshot">
+            {t('chat.turnChanges.snapshot', { n: turnNumber })}
+          </span>
+        )}
+
         <span className="turn-changes-actions">
-          {gitAvailable && allFilesInWorkspace && revertState !== 'done' && (
+          {gitAvailable && allFilesInWorkspace && !isFullyReverted && (
             <button
               className="turn-changes-btn"
               data-testid="turn-changes-revert"
@@ -205,7 +285,7 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
               {revertState === 'reverting' ? t('chat.turnChanges.reverting') : t('chat.turnChanges.revert')}
             </button>
           )}
-          {revertState === 'done' && (
+          {isFullyReverted && (
             <span className="turn-changes-reverted" data-testid="turn-changes-reverted">
               {t('chat.turnChanges.reverted')}
             </span>
@@ -239,6 +319,7 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
           const writeContent = typeof writeRaw === 'string' && writeRaw.trim().length > 0 ? writeRaw : null;
           const warnings = collectToolWarnings(details);
           const isExpanded = Boolean(expandedFiles[file.path]);
+          const isFileReverted = revertedFiles.has(file.path);
 
           return (
             <div className="turn-changes-file-item" key={file.path}>
@@ -274,6 +355,32 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
                   <span className="turn-stat-add">+{file.added}</span>
                   <span className="turn-stat-del">-{file.deleted}</span>
                 </button>
+
+                {isFileReverted ? (
+                  <span
+                    className="turn-changes-file-reverted"
+                    data-testid="turn-changes-file-reverted"
+                  >
+                    <Check size={12} />
+                    <span>{t('chat.turnChanges.fileReverted')}</span>
+                  </span>
+                ) : gitAvailable && (
+                  <button
+                    type="button"
+                    className="turn-changes-inline-revert"
+                    data-testid="turn-changes-file-revert"
+                    title={t('chat.turnChanges.revertFileTooltip')}
+                    disabled={revertState === 'reverting' || revertingPath === file.path}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleRevertSingleFile(file.path);
+                    }}
+                  >
+                    <RotateCcw size={12} />
+                    <span>{t('chat.turnChanges.revertFile')}</span>
+                  </button>
+                )}
+
                 <span className="turn-changes-chevron">
                   {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                 </span>
@@ -318,5 +425,8 @@ export function TurnChangesCardView({ toolCallIds }: { toolCallIds: string[] }) 
 // toolCallIds 来自 groupLogicalTurns 的 useMemo 重算（每次 messages 变化
 // 都产生新数组），按元素浅比较保证 memo 不被击穿；卡片自身已按 id 订阅 toolExecutions。
 export const TurnChangesCard = memo(TurnChangesCardView, (prev, next) =>
-  prev.toolCallIds.length === next.toolCallIds.length
+  prev.userEntryId === next.userEntryId
+  && prev.turnIndex === next.turnIndex
+  && prev.toolCallIds.length === next.toolCallIds.length
   && prev.toolCallIds.every((id, i) => id === next.toolCallIds[i]));
+

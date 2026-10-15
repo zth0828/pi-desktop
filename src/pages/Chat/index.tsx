@@ -745,6 +745,8 @@ export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary,
     const isLongSession = displayMessages.length > 40;
     const isHistoricalTurn = isLongSession && turnIndex < logicalTurns.length - 1;
     const finalIndex = turnFinalResponseIndex(displayMessages, turn);
+    const userMessage = displayMessages[turn.startIndex];
+    const userEntryId = userMessage?.entryId;
     const completed = isTurnCompleted(
       displayMessages,
       turn,
@@ -818,7 +820,13 @@ export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary,
               <span className="cursor-blink">▍</span>
             </div>
           )}
-          {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
+          {hasEdits && (
+            <TurnChangesCard
+              toolCallIds={turn.toolCallIds}
+              userEntryId={userEntryId}
+              turnIndex={turnIndex}
+            />
+          )}
           {hasSubagents && <TurnSubagentsCard toolCallIds={turn.toolCallIds} />}
         </Fragment>
       );
@@ -910,7 +918,13 @@ export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary,
               )}
             </section>
           )}
-          {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
+          {hasEdits && (
+            <TurnChangesCard
+              toolCallIds={turn.toolCallIds}
+              userEntryId={userEntryId}
+              turnIndex={turnIndex}
+            />
+          )}
           {hasSubagents && <TurnSubagentsCard toolCallIds={turn.toolCallIds} />}
         </Fragment>
       );
@@ -1026,7 +1040,13 @@ export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary,
           sessionCacheHitRate={finalIndex === latestFinalResponseIndex ? sessionCacheHitRate : null}
           enableViewportCheck={isHistoricalTurn}
         />
-        {hasEdits && <TurnChangesCard toolCallIds={turn.toolCallIds} />}
+        {hasEdits && (
+          <TurnChangesCard
+            toolCallIds={turn.toolCallIds}
+            userEntryId={userEntryId}
+            turnIndex={turnIndex}
+          />
+        )}
         {hasSubagents && <TurnSubagentsCard toolCallIds={turn.toolCallIds} />}
       </Fragment>
     );

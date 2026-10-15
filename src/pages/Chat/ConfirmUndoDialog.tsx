@@ -11,7 +11,7 @@ export interface ConfirmUndoFile {
 export interface ConfirmUndoDialogProps {
   open: boolean;
   files: ConfirmUndoFile[];
-  onConfirm: (options: { revertFiles: boolean }) => void | Promise<void>;
+  onConfirm: (options: { revertFiles: boolean; rewindConversation: boolean }) => void | Promise<void>;
   onClose: () => void;
   isReverting?: boolean;
 }
@@ -25,10 +25,12 @@ export function ConfirmUndoDialog({
 }: ConfirmUndoDialogProps) {
   const { t } = useTranslation();
   const [revertFiles, setRevertFiles] = useState(true);
+  const [rewindConversation, setRewindConversation] = useState(true);
 
   useEffect(() => {
     if (open) {
       setRevertFiles(true);
+      setRewindConversation(true);
     }
   }, [open]);
 
@@ -42,13 +44,13 @@ export function ConfirmUndoDialog({
         // 允许按 Enter 快速确认（如果在按钮外按回车）
         e.preventDefault();
         if (!isReverting) {
-          void onConfirm({ revertFiles });
+          void onConfirm({ revertFiles, rewindConversation });
         }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, revertFiles, isReverting, onConfirm, onClose]);
+  }, [open, revertFiles, rewindConversation, isReverting, onConfirm, onClose]);
 
   if (!open) return null;
 
@@ -98,8 +100,9 @@ export function ConfirmUndoDialog({
               checked={revertFiles}
               onChange={(e) => setRevertFiles(e.target.checked)}
             />
-            <span>{t('chat.confirmUndo.revertFileChanges')}</span>
+            <span>{t('chat.confirmUndo.revertModifiedFiles')}</span>
           </label>
+          <div className="confirm-undo-hint">{t('chat.confirmUndo.revertFilesHint')}</div>
 
           <div
             className={`confirm-undo-files ${!revertFiles ? 'is-disabled' : ''}`}
@@ -138,6 +141,22 @@ export function ConfirmUndoDialog({
               );
             })}
           </div>
+
+          <label className="confirm-undo-checkbox-label" style={{ marginTop: 12 }}>
+            <input
+              type="checkbox"
+              className="confirm-undo-checkbox"
+              data-testid="confirm-undo-rewind-checkbox"
+              checked={rewindConversation}
+              onChange={(e) => setRewindConversation(e.target.checked)}
+            />
+            <span>{t('chat.confirmUndo.rewindConversation')}</span>
+          </label>
+          <div className="confirm-undo-hint">{t('chat.confirmUndo.rewindConversationHint')}</div>
+
+          <div className="confirm-undo-git-protection" data-testid="confirm-undo-git-protection">
+            <span>{t('chat.confirmUndo.gitProtectionNotice')}</span>
+          </div>
         </div>
 
         <div className="confirm-undo-footer">
@@ -152,12 +171,30 @@ export function ConfirmUndoDialog({
           </button>
           <button
             type="button"
-            className="confirm-undo-btn confirm-undo-btn-confirm"
-            data-testid="confirm-undo-confirm"
+            className="confirm-undo-btn confirm-undo-btn-secondary"
+            data-testid="confirm-undo-files-only"
             disabled={isReverting}
-            onClick={() => void onConfirm({ revertFiles })}
+            onClick={() => void onConfirm({ revertFiles: true, rewindConversation: false })}
           >
-            <span>{t('chat.confirmUndo.confirm')}</span>
+            {t('chat.confirmUndo.onlyFiles')}
+          </button>
+          <button
+            type="button"
+            className="confirm-undo-btn confirm-undo-btn-secondary"
+            data-testid="confirm-undo-conversation-only"
+            disabled={isReverting}
+            onClick={() => void onConfirm({ revertFiles: false, rewindConversation: true })}
+          >
+            {t('chat.confirmUndo.onlyConversation')}
+          </button>
+          <button
+            type="button"
+            className="confirm-undo-btn confirm-undo-btn-confirm confirm-undo-btn-full"
+            data-testid="confirm-undo-full"
+            disabled={isReverting}
+            onClick={() => void onConfirm({ revertFiles: true, rewindConversation: true })}
+          >
+            <span>{t('chat.confirmUndo.fullUndo')}</span>
             <CornerDownLeft size={13} className="confirm-undo-return-icon" />
           </button>
         </div>
