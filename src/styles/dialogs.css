@@ -561,6 +561,78 @@
   color: var(--text);
 }
 
+/* 历史节点微提示条（输入框上方感知条） */
+.historical-branch-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  font-size: 12px;
+  animation: confirm-undo-fade 0.15s ease-out;
+}
+
+.historical-branch-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historical-branch-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.historical-branch-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.historical-branch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.historical-branch-btn-tree {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.historical-branch-btn-tree:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.historical-branch-btn-latest {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--accent-text);
+  font-weight: 500;
+}
+
+.historical-branch-btn-latest:hover {
+  filter: brightness(1.08);
+}
+
 .chat-message-placeholder {
   display: flex;
   flex-direction: column;
@@ -1228,6 +1300,52 @@
 
 .confirm-undo-return-icon {
   opacity: 0.8;
+}
+
+.confirm-undo-hint {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  margin-left: 23px;
+  margin-top: 2px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.confirm-undo-git-protection {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  line-height: 1.4;
+}
+
+.confirm-undo-btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.confirm-undo-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.confirm-undo-btn-full {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--accent-text);
+  font-weight: 500;
+}
+
+.confirm-undo-btn-full:hover:not(:disabled) {
+  filter: brightness(1.08);
 }
 
 /* 工作目录不存在弹窗 */

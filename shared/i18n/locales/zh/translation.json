@@ -292,17 +292,36 @@
       "viewChanges": "查看更改",
       "showMore": "再显示 {{count}} 个文件",
       "showLess": "收起",
-      "openFile": "打开文件"
+      "openFile": "打开文件",
+      "revertFile": "撤销此文件",
+      "revertFileTooltip": "撤销该文件本轮修改",
+      "fileReverted": "已复原",
+      "snapshot": "Turn {{n}} 快照",
+      "branchRoutes": "🌿 {{count}} 条分支路线",
+      "viewBranchRoutes": "查看 ▾"
     },
     "confirmUndo": {
       "title": "确认撤销",
       "description": "确认此撤销操作将执行以下变更：",
       "revertFileChanges": "撤销文件变更",
+      "revertModifiedFiles": "恢复物理文件改动",
+      "revertFilesHint": "还原磁盘上的物理文件改动；若取消勾选，将完整保留当前修改后的文件代码。",
+      "rewindConversation": "同时将对话历史退回至发问前",
+      "rewindConversationHint": "放弃本轮模型答复，分支退回发问前，并将提问词恢复到输入框",
+      "gitProtectionNotice": "🛡️ Git 保护：仅还原工作区未提交文件，绝不产生 git revert 提交或修改 commit 历史。",
       "actionDelete": "删除",
       "actionRevert": "还原",
       "actionRestore": "恢复",
       "cancel": "取消",
-      "confirm": "确认撤销"
+      "confirm": "确认撤销",
+      "onlyFiles": "仅撤销文件",
+      "onlyConversation": "仅回退对话",
+      "fullUndo": "彻底回退本轮"
+    },
+    "historicalBanner": {
+      "previewing": "🌿 正在从 Turn {{turn}} 历史节点预览（发送新消息将从此处自动分叉为新分支）",
+      "returnToLatest": "回到最新 ❯❯",
+      "branchMap": "分支路线图 ▾"
     },
     "turnSubagents": {
       "title": "子任务 ({{count}})",

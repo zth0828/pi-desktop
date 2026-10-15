@@ -292,17 +292,36 @@
       "viewChanges": "View changes",
       "showMore": "Show {{count}} more files",
       "showLess": "Show less",
-      "openFile": "Open file"
+      "openFile": "Open file",
+      "revertFile": "Revert file",
+      "revertFileTooltip": "Revert changes to this file in this turn",
+      "fileReverted": "Reverted",
+      "snapshot": "Turn {{n}} Snapshot",
+      "branchRoutes": "🌿 {{count}} Branch Routes",
+      "viewBranchRoutes": "View ▾"
     },
     "confirmUndo": {
       "title": "Confirm Undo",
       "description": "Confirming this undo action will make the following changes:",
       "revertFileChanges": "Revert file changes",
+      "revertModifiedFiles": "Revert modified files",
+      "revertFilesHint": "Revert physical file changes on disk. If unchecked, modified code will be kept.",
+      "rewindConversation": "Rewind conversation turn",
+      "rewindConversationHint": "Discard model reply for this turn, rewind branch to before prompt, and restore prompt to composer",
+      "gitProtectionNotice": "🛡️ Git Protection: Only restores uncommitted working tree files. Never creates git revert commits or alters Git history.",
       "actionDelete": "Delete",
       "actionRevert": "Revert",
       "actionRestore": "Restore",
       "cancel": "Cancel",
-      "confirm": "Confirm"
+      "confirm": "Confirm",
+      "onlyFiles": "Revert Files Only",
+      "onlyConversation": "Rewind Chat Only",
+      "fullUndo": "Fully Rewind Turn"
+    },
+    "historicalBanner": {
+      "previewing": "🌿 Previewing from Turn {{turn}} history (sending a message will fork into a new branch)",
+      "returnToLatest": "Go to Latest ❯❯",
+      "branchMap": "Branch Tree ▾"
     },
     "turnSubagents": {
       "title": "Subagents ({{count}})",
