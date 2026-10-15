@@ -360,8 +360,16 @@ export type PiRuntimeTreeNode = {
   label?: string;
   isLeaf: boolean;
   onCurrentPath: boolean;
+  /** 该节点子树包含的叶子分支数（>=2 表示从此节点或其下游产生了多条路线） */
+  branchCount?: number;
 };
-export type PiRuntimeTreeResult = { nodes: PiRuntimeTreeNode[] };
+export type PiRuntimeTreeResult = {
+  nodes: PiRuntimeTreeNode[];
+  /** 当前活动叶子节点 entry id */
+  currentLeafId?: string | null;
+  /** 全树最新（最后创建）叶子节点 entry id */
+  latestLeafId?: string | null;
+};
 export type PiRuntimeNavigatePayload = {
   targetId: string;
   /** 离开当前分支前是否先摘要被弃分支（TUI 跳分支询问的 summarize 选项）。 */

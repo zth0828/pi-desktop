@@ -1624,9 +1624,61 @@ export const piRuntimeApi = {
       onPath.add(cursor);
       cursor = sm.getEntry(cursor)?.parentId ?? null;
     }
+
+    const countTreeLeaves = (node: PiSessionTreeNode): number => {
+      if (!node.children || node.children.length === 0) return 1;
+      let count = 0;
+      for (const child of node.children) {
+        count += countTreeLeaves(child);
+      }
+      return count;
+    };
+
+    const collectAllTreeLeaves = (list: PiSessionTreeNode[]): PiSessionTreeNode[] => {
+      const leaves: PiSessionTreeNode[] = [];
+      const visit = (node: PiSessionTreeNode) => {
+        if (!node.children || node.children.length === 0) {
+          leaves.push(node);
+        } else {
+          for (const child of node.children) {
+            visit(child);
+          }
+        }
+      };
+      for (const node of list) {
+        visit(node);
+      }
+      return leaves;
+    };
+
+    const parseEntryTimestamp = (ts: unknown): number => {
+      if (typeof ts === 'number' && Number.isFinite(ts)) return ts;
+      if (typeof ts === 'string') {
+        const parsed = Date.parse(ts);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+      return 0;
+    };
+
+    const rawTree = session.getTree();
+    const allLeaves = collectAllTreeLeaves(rawTree);
+    let latestLeafId: string | null = leafId;
+    if (allLeaves.length > 0) {
+      let maxTime = -Infinity;
+      let latestNode = allLeaves[0];
+      for (const leaf of allLeaves) {
+        const t = parseEntryTimestamp(leaf.entry?.timestamp);
+        if (t >= maxTime) {
+          maxTime = t;
+          latestNode = leaf;
+        }
+      }
+      latestLeafId = latestNode.entry?.id ?? leafId;
+    }
+
     const nodes: PiRuntimeTreeNode[] = [];
     const walk = (list: PiSessionTreeNode[], depth: number) => {
-    for (const node of list) {
+      for (const node of list) {
         const summary = treeEntrySummary(node.entry);
         if (summary) {
           nodes.push({
@@ -1637,14 +1689,19 @@ export const piRuntimeApi = {
             label: node.label,
             isLeaf: node.entry.id === leafId,
             onCurrentPath: node.entry.id ? onPath.has(node.entry.id) : false,
+            branchCount: countTreeLeaves(node),
           });
         }
         // 被跳过的节点不占用缩进深度
         walk(node.children, summary ? depth + 1 : depth);
       }
     };
-    walk(session.getTree(), 0);
-    return { nodes };
+    walk(rawTree, 0);
+    return {
+      nodes,
+      currentLeafId: leafId,
+      latestLeafId,
+    };
   },
 
   /** 分支跳转（TUI /tree）：同会话文件内移动 leaf，session 对象不变，推全量状态刷新列表。 */
