@@ -167,7 +167,7 @@ test('一轮 edit+write → 聚合编辑卡（清单 + 增删统计）→ 撤销
   // 再次打开并点击确认撤销，批量 revertFile 后磁盘复原
   await card.getByTestId('turn-changes-revert').click();
   await expect(dialog).toBeVisible();
-  await dialog.getByTestId('confirm-undo-confirm').click();
+  await dialog.getByTestId('confirm-undo-full').or(dialog.getByTestId('confirm-undo-confirm')).first().click();
   await expect(dialog).toBeHidden();
   await expect(card.getByTestId('turn-changes-reverted')).toBeVisible({ timeout: 30_000 });
   expect(await readFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'utf-8')).toBe(

@@ -4,6 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
     "types": ["node"],
     "strict": true,
     "noEmit": true,
@@ -17,5 +18,5 @@
       "@shared/*": ["./shared/*"]
     }
   },
-  "include": ["electron", "shared", "tests", "vite.config.ts", "vitest.config.ts"]
+  "include": ["electron", "shared", "tests", "src/types.d.ts", "vite.config.ts", "vitest.config.ts"]
 }
