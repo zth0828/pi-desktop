@@ -108,7 +108,7 @@ describe('用户消息编辑 [ ✏️ ] 与时光倒流核心逻辑 (user-messag
         {
           role: 'assistant',
           content: [
-            { type: 'toolCall', id: 'call-1', name: 'edit', args: { path: 'src/main.ts' } },
+            { type: 'toolCall', id: 'call-1', name: 'edit', arguments: { path: 'src/main.ts' } },
           ],
           timestamp: 2000,
           raw: { role: 'assistant', content: [] },
@@ -163,7 +163,7 @@ describe('用户消息编辑 [ ✏️ ] 与时光倒流核心逻辑 (user-messag
         },
         {
           role: 'assistant',
-          content: [{ type: 'toolCall', id: 'call-turn-0', name: 'write', args: { path: 'file0.ts', content: 'hello' } }],
+          content: [{ type: 'toolCall', id: 'call-turn-0', name: 'write', arguments: { path: 'file0.ts', content: 'hello' } }],
           timestamp: 2000,
           raw: { role: 'assistant', content: [] },
         },
@@ -177,7 +177,7 @@ describe('用户消息编辑 [ ✏️ ] 与时光倒流核心逻辑 (user-messag
         },
         {
           role: 'assistant',
-          content: [{ type: 'toolCall', id: 'call-turn-1', name: 'edit', args: { path: 'file1.ts' } }],
+          content: [{ type: 'toolCall', id: 'call-turn-1', name: 'edit', arguments: { path: 'file1.ts' } }],
           timestamp: 4000,
           raw: { role: 'assistant', content: [] },
         },
