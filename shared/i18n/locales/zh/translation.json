@@ -657,6 +657,7 @@
       "bashAlreadyRunning": "Bash 进程已在运行中。",
       "commandOrUrlRequired": "命令或 URL 必须填写其中一项。",
       "reviewConflictCannotRevert": "存在冲突的文件无法从审查面板还原。",
+      "turnUndoConflict": "存在冲突的文件无法还原，已保留当前工作区状态。",
       "reviewNoChanges": "没有可还原的改动。",
       "emptyPatch": "补丁内容为空。",
       "fileNotFound": "未找到指定文件。",

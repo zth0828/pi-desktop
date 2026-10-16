@@ -936,17 +936,27 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         try {
           if (options.revertFiles) {
             let revertedViaCheckpoint = false;
+            let checkpointError: string | null = null;
             try {
               const res = await api().review.revertToTurnCheckpoint(dialog.targetTurnIndex);
               if (res.success) {
                 revertedViaCheckpoint = true;
+              } else if (res.error) {
+                checkpointError = res.error;
               }
-            } catch {
-              // fallback
+            } catch (err) {
+              checkpointError = err instanceof Error ? err.message : String(err);
             }
             if (!revertedViaCheckpoint) {
-              for (const file of dialog.files) {
-                await api().review.revertFile(file.path);
+              if (checkpointError === 'conflicted files cannot be reverted') {
+                set({ runtimeError: checkpointError });
+              } else {
+                for (const file of dialog.files) {
+                  await api().review.revertFile(file.path);
+                }
+                if (checkpointError) {
+                  set({ runtimeError: checkpointError });
+                }
               }
             }
           }

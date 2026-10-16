@@ -657,6 +657,7 @@
       "bashAlreadyRunning": "A Bash process is already running.",
       "commandOrUrlRequired": "Either a command or a URL is required.",
       "reviewConflictCannotRevert": "Conflicted files cannot be reverted from Review.",
+      "turnUndoConflict": "Conflicted files cannot be reverted; current working tree state has been kept.",
       "reviewNoChanges": "No changes to revert.",
       "emptyPatch": "Empty patch.",
       "fileNotFound": "File not found.",

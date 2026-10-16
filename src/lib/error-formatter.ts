@@ -24,6 +24,7 @@ const KNOWN_ERROR_KEYS: Record<string, string> = {
   'bash already running': 'bashAlreadyRunning',
   'command or url required': 'commandOrUrlRequired',
   'conflicted files cannot be reverted from Review': 'reviewConflictCannotRevert',
+  'conflicted files cannot be reverted': 'turnUndoConflict',
   'no changes to revert': 'reviewNoChanges',
   'empty patch': 'emptyPatch',
   'file-not-found': 'fileNotFound',

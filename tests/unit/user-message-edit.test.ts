@@ -8,6 +8,7 @@ describe('用户消息编辑 [ ✏️ ] 与时光倒流核心逻辑 (user-messag
   function installBridge(options?: {
     editorText?: string;
     backendTurnFiles?: Array<{ path: string; status: 'modified' | 'added' | 'deleted'; added: number; deleted: number }>;
+    revertCheckpointResult?: { success: boolean; error?: string; revertedFiles?: string[] };
   }) {
     invokedActions = [];
     (globalThis as { window?: unknown }).window = {
@@ -35,7 +36,7 @@ describe('用户消息编辑 [ ✏️ ] 与时光倒流核心逻辑 (user-messag
             return {
               id: request.id,
               ok: true,
-              data: { success: true, revertedFiles: ['src/app.ts'] },
+              data: options?.revertCheckpointResult ?? { success: true, revertedFiles: ['src/app.ts'] },
             };
           }
           if (request.module === 'review' && request.action === 'revertFile') {
@@ -236,4 +237,32 @@ describe('用户消息编辑 [ ✏️ ] 与时光倒流核心逻辑 (user-messag
     expect(invokedActions.some((a) => a.module === 'piRuntime' && a.action === 'navigateTree')).toBe(true);
     expect(store.getState().confirmUndoDialog).toBeNull();
   });
+
+  it('场景 E：回退遇到文件冲突时中断物理还原并提示 runtimeError，不盲目覆写文件', async () => {
+    installBridge({
+      revertCheckpointResult: { success: false, error: 'conflicted files cannot be reverted' },
+    });
+    const store: ChatStore = createChatStore();
+    store.setState({
+      boundSessionId: 'session-1',
+      confirmUndoDialog: {
+        open: true,
+        entryId: 'user-entry-1',
+        targetTurnIndex: 0,
+        isHistoricalTurn: false,
+        files: [{ path: 'conflicted.ts', action: 'revert' }],
+      },
+    });
+
+    await store.getState().executeConfirmUndo({ revertFiles: true, rewindConversation: true });
+
+    // 冲突时不盲目执行 revertFile
+    expect(invokedActions.some((a) => a.module === 'review' && a.action === 'revertFile')).toBe(false);
+    // 错误信息被记录在 runtimeError 中以供界面提示
+    expect(store.getState().runtimeError).toBe('conflicted files cannot be reverted');
+    // 对话树依然回退
+    expect(invokedActions.some((a) => a.module === 'piRuntime' && a.action === 'navigateTree')).toBe(true);
+    expect(store.getState().confirmUndoDialog).toBeNull();
+  });
 });
+
