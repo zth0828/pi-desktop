@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   captureReviewBaseline,
+  captureTurnCheckpointForActive,
   clearReviewBaseline,
   isCapturingReviewBaseline,
   normalizeGitRelPath,
@@ -204,6 +205,39 @@ describe('review baseline guards and non-blocking capture', () => {
       const revertRes = await reviewApi.revertToTurnCheckpoint({ turnIndex: 0 });
       expect(revertRes.success).toBe(false);
       expect(revertRes.error).toBe('not-started');
+    });
+
+    it('captureTurnCheckpointForActive 在从历史轮次发问时清理其后的过期快照映射', async () => {
+      clearReviewBaseline();
+      const tempDir = await mkdtemp(path.join(tmpdir(), 'pi-test-checkpoint-prune-'));
+      try {
+        await writeFile(path.join(tempDir, 'init.txt'), 'hello');
+        await captureReviewBaseline(tempDir);
+
+        const mockActive = {
+          cwd: tempDir,
+          sessionId: 'session-prune-test',
+        } as unknown as import('../../electron/services/pi-runtime-api').ActiveRuntime;
+
+        // 模拟第 0、1、2 轮捕获快照
+        await captureTurnCheckpointForActive(mockActive, 0);
+        await captureTurnCheckpointForActive(mockActive, 1);
+        await captureTurnCheckpointForActive(mockActive, 2);
+
+        // 用户回退到第 1 轮重新发问：捕获第 1 轮新快照，应清理第 2 轮的过期快照
+        await writeFile(path.join(tempDir, 'modified.txt'), 'turn 1 new prompt');
+        const hash1 = await captureTurnCheckpointForActive(mockActive, 1);
+        expect(hash1).toBeTruthy();
+
+        // 校验后续状态
+        const context = {
+          sessionFile: 'test.json',
+          sessionId: 'session-prune-test',
+        } as unknown as import('../../electron/main/ipc/host-contract').HostActionContext;
+      } finally {
+        clearReviewBaseline();
+        await rm(tempDir, { recursive: true, force: true });
+      }
     });
   });
 });

@@ -235,6 +235,9 @@ export async function captureTurnCheckpointForActive(
       sessionMap = new Map<number, string>();
       turnCheckpoints.set(sessionKey, sessionMap);
     }
+    for (const k of sessionMap.keys()) {
+      if (k > turnIndex) sessionMap.delete(k);
+    }
     sessionMap.set(turnIndex, tree);
     return tree;
   } catch {
@@ -553,7 +556,7 @@ export const reviewApi = {
         return { success: false, error: 'conflicted files cannot be reverted from Review' };
       }
       const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
-      const diff = await runGit(active.cwd, ['diff', '--no-renames', base.ref, cur, '--', targetPath], { env: base.gitEnv });
+      const diff = await runGit(active.cwd, ['diff', '--binary', '--no-renames', base.ref, cur, '--', targetPath], { env: base.gitEnv });
       if (diff.code !== 0) throw new Error(diff.stderr.trim() || 'git diff failed');
       if (!diff.stdout.trim()) return { success: false, error: 'no changes to revert' };
       let apply = await runGit(active.cwd, ['apply', '-R'], { env: base.gitEnv, input: diff.stdout });
@@ -693,7 +696,7 @@ export const reviewApi = {
     try {
       const cur = await snapshotTree(active.cwd, base.gitEnv, base.ref);
       const conflicts = await conflictPaths(active.cwd, base);
-      const diff = await runGit(active.cwd, ['diff', '--no-renames', targetRef, cur], { env: base.gitEnv });
+      const diff = await runGit(active.cwd, ['diff', '--binary', '--no-renames', targetRef, cur], { env: base.gitEnv });
       if (diff.code !== 0) throw new Error(diff.stderr.trim() || 'git diff failed');
       if (!diff.stdout.trim()) {
         return { success: true, revertedFiles: [] };
