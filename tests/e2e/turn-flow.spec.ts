@@ -164,10 +164,10 @@ test('一轮 edit+write → 聚合编辑卡（清单 + 增删统计）→ 撤销
   await expect(card.getByTestId('turn-changes-reverted')).toHaveCount(0);
   expect(existsSync(path.join(repoWorkspace, 'e2e-new-file.txt'))).toBe(true);
 
-  // 再次打开并点击确认撤销，批量 revertFile 后磁盘复原
+  // 再次打开并点击仅撤销文件，批量 revertFile 后磁盘复原且卡片标记为已复原
   await card.getByTestId('turn-changes-revert').click();
   await expect(dialog).toBeVisible();
-  await dialog.getByTestId('confirm-undo-full').or(dialog.getByTestId('confirm-undo-confirm')).first().click();
+  await dialog.getByTestId('confirm-undo-files-only').or(dialog.getByTestId('confirm-undo-confirm')).first().click();
   await expect(dialog).toBeHidden();
   await expect(card.getByTestId('turn-changes-reverted')).toBeVisible({ timeout: 30_000 });
   expect(await readFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'utf-8')).toBe(
@@ -407,3 +407,35 @@ test('grep 无 path 参数（搜索整个 cwd）：工具卡不出文件预览�
   await expect(card.getByTestId('tool-preview-file')).toHaveCount(0);
   await app.close();
 });
+
+test('用户消息点击铅笔编辑 [ ✏️ ]：代码修改轮次调起确认弹窗，彻底回退后磁盘复原且提问词回填输入框', async ({
+  launchElectronApp,
+}) => {
+  await writeFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'alpha\ngamma\n');
+  const app = await launchElectronApp(launchOptions(repoWorkspace));
+  const page = await app.firstWindow();
+  await waitSessionReady(page);
+
+  await sendPrompt(page, 'USE_TOOL_EDIT now');
+  await waitToolsDone(page, 1);
+
+  expect(await readFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'utf-8')).toContain('beta');
+
+  const userMsg = page.getByTestId('message-user').first();
+  await userMsg.hover();
+  const editBtn = userMsg.getByTestId('edit-message');
+  await expect(editBtn).toBeVisible();
+  await editBtn.click();
+
+  const dialog = page.getByTestId('confirm-undo-dialog');
+  await expect(dialog).toBeVisible({ timeout: 15_000 });
+  await expect(dialog.getByTestId('confirm-undo-file-item')).toHaveCount(1);
+
+  await dialog.getByTestId('confirm-undo-full').click();
+  await expect(dialog).toBeHidden();
+
+  expect(await readFile(path.join(repoWorkspace, 'e2e-edit-target.txt'), 'utf-8')).toBe('alpha\ngamma\n');
+  await expect(page.getByTestId('chat-input')).toHaveValue('USE_TOOL_EDIT now');
+  await app.close();
+});
+
