@@ -360,6 +360,10 @@ export function clearSessionTurnCheckpoints(sessionKey?: string): void {
   turnCheckpoints.delete(sessionKey);
 }
 
+export function getSessionTurnCheckpoints(sessionKey: string): Map<number, string> | undefined {
+  return turnCheckpoints.get(sessionKey);
+}
+
 /** 调用方 runtime 的 baseline（cwd 不一致视为没有）。 */
 function currentBaseline(active: ActiveRuntime): Baseline | null {
   return findBaseline(active.cwd);
@@ -626,6 +630,9 @@ export const reviewApi = {
       if (!sessionMap) {
         sessionMap = new Map<number, string>();
         turnCheckpoints.set(sessionKey, sessionMap);
+      }
+      for (const k of sessionMap.keys()) {
+        if (k > turnIndex) sessionMap.delete(k);
       }
       sessionMap.set(turnIndex, tree);
       return { success: true, checkpointHash: tree };

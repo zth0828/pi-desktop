@@ -1093,6 +1093,8 @@ export async function afterSessionReplaced(
   const previousActive = active;
   // 旧会话挂起的扩展 UI 请求全部取消（渲染层同步移除对话框）
   cancelPendingUiForContext({ sessionId: runtime.sessionId, generation: runtime.generation });
+  const oldSessionId = options?.replacesSessionId ?? runtime.sessionId;
+  clearSessionTurnCheckpoints(oldSessionId);
   // 旧会话若在运行中被替换，其 run.ended 不会再到：兜底解除防休眠
   if (runtime.running) {
     noteRunEnded(runtime.instanceId);

@@ -6,6 +6,8 @@ import {
   captureReviewBaseline,
   captureTurnCheckpointForActive,
   clearReviewBaseline,
+  clearSessionTurnCheckpoints,
+  getSessionTurnCheckpoints,
   isCapturingReviewBaseline,
   normalizeGitRelPath,
   reviewApi,
@@ -229,11 +231,15 @@ describe('review baseline guards and non-blocking capture', () => {
         const hash1 = await captureTurnCheckpointForActive(mockActive, 1);
         expect(hash1).toBeTruthy();
 
-        // 校验后续状态
-        const context = {
-          sessionFile: 'test.json',
-          sessionId: 'session-prune-test',
-        } as unknown as import('../../electron/main/ipc/host-contract').HostActionContext;
+        // 校验后续状态：第 0 轮和第 1 轮保留，第 2 轮被清理
+        const sessionCheckpoints = getSessionTurnCheckpoints('session-prune-test');
+        expect(sessionCheckpoints?.has(0)).toBe(true);
+        expect(sessionCheckpoints?.get(1)).toBe(hash1);
+        expect(sessionCheckpoints?.has(2)).toBe(false);
+
+        // 会话销毁时清理快照映射
+        clearSessionTurnCheckpoints('session-prune-test');
+        expect(getSessionTurnCheckpoints('session-prune-test')).toBeUndefined();
       } finally {
         clearReviewBaseline();
         await rm(tempDir, { recursive: true, force: true });
