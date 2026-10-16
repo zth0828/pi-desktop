@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { TurnChangesCardView } from '../../src/pages/Chat/TurnChangesCard';
+import { TurnChangesCard, TurnChangesCardView } from '../../src/pages/Chat/TurnChangesCard';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ToolExecution } from '../../src/lib/chat-types';
 import type { PiRuntimeTreeNode, ReviewFileEntry } from '@shared/host-api/contract';
@@ -216,5 +216,30 @@ describe('TurnChangesCardView UI and Revert features', () => {
 
     expect(mockRevertAll).toHaveBeenCalledTimes(1);
     expect(mockNavigateTo).not.toHaveBeenCalled();
+  });
+
+  it('TurnChangesCard memo comparator considers branchCount and toolCallIds changes', () => {
+    const compare = (TurnChangesCard as any).compare;
+    expect(typeof compare).toBe('function');
+
+    const baseProps = {
+      toolCallIds: ['tc1', 'tc2'],
+      userEntryId: 'user-1',
+      turnIndex: 0,
+      branchCount: 1,
+      isHistoricalTurn: false,
+    };
+
+    // identical props return true
+    expect(compare(baseProps, { ...baseProps })).toBe(true);
+
+    // branchCount difference returns false
+    expect(compare(baseProps, { ...baseProps, branchCount: 2 })).toBe(false);
+
+    // userEntryId difference returns false
+    expect(compare(baseProps, { ...baseProps, userEntryId: 'user-2' })).toBe(false);
+
+    // toolCallIds difference returns false
+    expect(compare(baseProps, { ...baseProps, toolCallIds: ['tc1'] })).toBe(false);
   });
 });

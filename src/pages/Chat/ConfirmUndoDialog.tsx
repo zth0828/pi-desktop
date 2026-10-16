@@ -197,10 +197,18 @@ export function ConfirmUndoDialog({
             type="button"
             className="confirm-undo-btn confirm-undo-btn-confirm confirm-undo-btn-full"
             data-testid="confirm-undo-full"
-            disabled={isReverting}
-            onClick={() => void onConfirm({ revertFiles: true, rewindConversation: true })}
+            disabled={isReverting || (!revertFiles && !rewindConversation)}
+            onClick={() => void onConfirm({ revertFiles, rewindConversation })}
           >
-            <span>{t('chat.confirmUndo.fullUndo')}</span>
+            <span>
+              {revertFiles && rewindConversation
+                ? t('chat.confirmUndo.fullUndo')
+                : !revertFiles && rewindConversation
+                  ? t('chat.confirmUndo.onlyConversation')
+                  : revertFiles && !rewindConversation
+                    ? t('chat.confirmUndo.onlyFiles')
+                    : t('chat.confirmUndo.confirm')}
+            </span>
             <CornerDownLeft size={13} className="confirm-undo-return-icon" />
           </button>
         </div>

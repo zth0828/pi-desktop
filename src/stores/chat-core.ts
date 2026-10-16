@@ -952,7 +952,10 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
                 set({ runtimeError: checkpointError });
               } else {
                 for (const file of dialog.files) {
-                  await api().review.revertFile(file.path);
+                  const revertRes = await api().review.revertFile(file.path);
+                  if (!revertRes.success && revertRes.error) {
+                    set({ runtimeError: revertRes.error });
+                  }
                 }
                 if (checkpointError) {
                   set({ runtimeError: checkpointError });

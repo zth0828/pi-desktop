@@ -172,7 +172,7 @@ export function TurnChangesCardView({
       alive = false;
       if (timer) clearTimeout(timer);
     };
-  }, [paneApi]);
+  }, [paneApi, userEntryId]);
 
   if (changes.files.length === 0) return null;
 
@@ -459,6 +459,7 @@ export const TurnChangesCard = memo(TurnChangesCardView, (prev, next) =>
   prev.userEntryId === next.userEntryId
   && prev.turnIndex === next.turnIndex
   && prev.isHistoricalTurn === next.isHistoricalTurn
+  && prev.branchCount === next.branchCount
   && prev.toolCallIds.length === next.toolCallIds.length
   && prev.toolCallIds.every((id, i) => id === next.toolCallIds[i]));
 
