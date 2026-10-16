@@ -152,7 +152,7 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
     return () => {
       alive = false;
     };
-  }, [paneApi, sessionId, generation, isStreaming, messages.length]);
+  }, [paneApi, sessionId, generation, isStreaming, messages.length, messages[messages.length - 1]?.entryId]);
 
   const logicalTurns = useMemo(() => groupLogicalTurns(messages), [messages]);
   const currentTurnNumber = Math.max(1, logicalTurns.length);

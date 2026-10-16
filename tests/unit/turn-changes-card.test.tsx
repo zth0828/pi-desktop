@@ -6,6 +6,7 @@ import type { ToolExecution } from '../../src/lib/chat-types';
 import type { PiRuntimeTreeNode, ReviewFileEntry } from '@shared/host-api/contract';
 
 const mockReviewRevertFile = vi.fn().mockResolvedValue({ success: true });
+const mockReviewRevertToTurnCheckpoint = vi.fn().mockResolvedValue({ success: true });
 const mockReviewGetSummary = vi.fn().mockResolvedValue({
   available: true,
   files: [
@@ -34,6 +35,7 @@ vi.mock('../../src/pages/Chat/chat-store-context', () => ({
     review: {
       getSummary: mockReviewGetSummary,
       revertFile: mockReviewRevertFile,
+      revertToTurnCheckpoint: mockReviewRevertToTurnCheckpoint,
     },
     piRuntime: {
       getTree: mockGetTree,
@@ -170,25 +172,49 @@ describe('TurnChangesCardView UI and Revert features', () => {
     expect(remainingAfterBoth).toHaveLength(0);
   });
 
-  it('handleConfirmUndo triggers navigateTo with userEntryId when rewindConversation is true', async () => {
-    // Simulate calling the confirm undo handler logic
+  it('handleConfirmUndo triggers navigateTo with userEntryId when revertAll succeeds', async () => {
     const handleConfirmUndo = async (
       options: { revertFiles: boolean; rewindConversation: boolean },
       userEntryId?: string,
-      revertAllFn = vi.fn()
+      revertAllFn = vi.fn().mockResolvedValue(true)
     ) => {
+      let filesReverted = true;
       if (options.revertFiles) {
-        await revertAllFn();
+        filesReverted = await revertAllFn();
       }
+      if (!filesReverted) return;
       if (options.rewindConversation && userEntryId) {
         await mockNavigateTo(userEntryId);
       }
     };
 
-    const mockRevertAll = vi.fn().mockResolvedValue(undefined);
+    const mockRevertAll = vi.fn().mockResolvedValue(true);
     await handleConfirmUndo({ revertFiles: true, rewindConversation: true }, 'user-entry-1', mockRevertAll);
 
     expect(mockRevertAll).toHaveBeenCalledTimes(1);
     expect(mockNavigateTo).toHaveBeenCalledWith('user-entry-1');
+  });
+
+  it('handleConfirmUndo aborts navigateTo when revertAll fails (e.g. file conflict)', async () => {
+    const handleConfirmUndo = async (
+      options: { revertFiles: boolean; rewindConversation: boolean },
+      userEntryId?: string,
+      revertAllFn = vi.fn().mockResolvedValue(false)
+    ) => {
+      let filesReverted = true;
+      if (options.revertFiles) {
+        filesReverted = await revertAllFn();
+      }
+      if (!filesReverted) return;
+      if (options.rewindConversation && userEntryId) {
+        await mockNavigateTo(userEntryId);
+      }
+    };
+
+    const mockRevertAll = vi.fn().mockResolvedValue(false);
+    await handleConfirmUndo({ revertFiles: true, rewindConversation: true }, 'user-entry-1', mockRevertAll);
+
+    expect(mockRevertAll).toHaveBeenCalledTimes(1);
+    expect(mockNavigateTo).not.toHaveBeenCalled();
   });
 });

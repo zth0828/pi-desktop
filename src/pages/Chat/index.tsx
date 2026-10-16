@@ -830,6 +830,7 @@ export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary,
               toolCallIds={turn.toolCallIds}
               userEntryId={userEntryId}
               turnIndex={turnIndex}
+              isHistoricalTurn={turnIndex < logicalTurns.length - 1}
             />
           )}
           {hasSubagents && <TurnSubagentsCard toolCallIds={turn.toolCallIds} />}
@@ -928,6 +929,7 @@ export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary,
               toolCallIds={turn.toolCallIds}
               userEntryId={userEntryId}
               turnIndex={turnIndex}
+              isHistoricalTurn={turnIndex < logicalTurns.length - 1}
             />
           )}
           {hasSubagents && <TurnSubagentsCard toolCallIds={turn.toolCallIds} />}
@@ -1050,6 +1052,7 @@ export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary,
             toolCallIds={turn.toolCallIds}
             userEntryId={userEntryId}
             turnIndex={turnIndex}
+            isHistoricalTurn={turnIndex < logicalTurns.length - 1}
           />
         )}
         {hasSubagents && <TurnSubagentsCard toolCallIds={turn.toolCallIds} />}

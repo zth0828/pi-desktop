@@ -11,6 +11,7 @@ import {
 } from '../../lib/tool-display';
 import { isAbsolutePath, isPathInside, normalizeDisplayPath, pathMapKey } from '../../lib/review-diff';
 import { FileIcon } from '../../components/FileIcon';
+import { formatErrorMessage } from '../../lib/error-formatter';
 import type { PiRuntimeTreeNode, ReviewFileEntry } from '@shared/host-api/contract';
 import { ConfirmUndoDialog, type ConfirmUndoFile } from './ConfirmUndoDialog';
 import { usePaneChatStore, usePaneHostApi } from './chat-store-context';
@@ -61,6 +62,7 @@ export interface TurnChangesCardProps {
   userEntryId?: string;
   turnIndex?: number;
   branchCount?: number;
+  isHistoricalTurn?: boolean;
 }
 
 /**
@@ -68,7 +70,13 @@ export interface TurnChangesCardProps {
  * 成功的 edit/write 汇总。「撤销」通过 review baseline 回滚该工具改动；
  * 「审核」打开完整 Review 面板。支持点击单行内嵌展开行级 Diff 与单文件撤销。
  */
-export function TurnChangesCardView({ toolCallIds, userEntryId, turnIndex, branchCount }: TurnChangesCardProps) {
+export function TurnChangesCardView({
+  toolCallIds,
+  userEntryId,
+  turnIndex,
+  branchCount,
+  isHistoricalTurn,
+}: TurnChangesCardProps) {
   const { t } = useTranslation();
   const paneApi = usePaneHostApi();
   const toolExecutions = usePaneChatStore((s) => s.toolExecutions);
@@ -201,26 +209,45 @@ export function TurnChangesCardView({ toolCallIds, userEntryId, turnIndex, branc
     }
   };
 
-  const revertAll = async () => {
+  const revertAll = async (): Promise<boolean> => {
     setRevertState('reverting');
+    if (turnIndex !== undefined && paneApi.review?.revertToTurnCheckpoint) {
+      try {
+        const res = await paneApi.review.revertToTurnCheckpoint(turnIndex);
+        if (res.success) {
+          setRevertedFiles(new Set(changes.files.map((f) => f.path)));
+          setRevertState('done');
+          return true;
+        } else if (res.error === 'conflicted files cannot be reverted') {
+          setRevertState('error');
+          setRevertError(res.error);
+          return false;
+        }
+      } catch {
+        // fallback to per-file revert
+      }
+    }
     for (const file of changes.files) {
       if (revertedFiles.has(file.path)) continue;
       const result = await paneApi.review.revertFile(file.path);
       if (!result.success) {
         setRevertState('error');
         setRevertError(result.error ?? '');
-        return;
+        return false;
       }
       setRevertedFiles((prev) => new Set([...prev, file.path]));
     }
     setRevertState('done');
+    return true;
   };
 
   const handleConfirmUndo = async (options: { revertFiles: boolean; rewindConversation: boolean }) => {
     setConfirmUndoOpen(false);
+    let filesReverted = true;
     if (options.revertFiles) {
-      await revertAll();
+      filesReverted = await revertAll();
     }
+    if (!filesReverted) return;
     if (options.rewindConversation && userEntryId) {
       if (navigateTo) {
         await navigateTo(userEntryId);
@@ -301,7 +328,9 @@ export function TurnChangesCardView({ toolCallIds, userEntryId, turnIndex, branc
       </div>
       {revertState === 'error' && (
         <div className="turn-changes-error" data-testid="turn-changes-error">
-          {t('chat.turnChanges.revertFailed', { error: revertError })}
+          {t('chat.turnChanges.revertFailed', {
+            error: formatErrorMessage(revertError, t) ?? revertError,
+          })}
         </div>
       )}
       <div className="turn-changes-files">
@@ -414,6 +443,8 @@ export function TurnChangesCardView({ toolCallIds, userEntryId, turnIndex, branc
       <ConfirmUndoDialog
         open={confirmUndoOpen}
         files={undoFiles}
+        targetTurnIndex={turnIndex}
+        isHistoricalTurn={isHistoricalTurn}
         isReverting={revertState === 'reverting'}
         onConfirm={handleConfirmUndo}
         onClose={() => setConfirmUndoOpen(false)}
@@ -427,6 +458,7 @@ export function TurnChangesCardView({ toolCallIds, userEntryId, turnIndex, branc
 export const TurnChangesCard = memo(TurnChangesCardView, (prev, next) =>
   prev.userEntryId === next.userEntryId
   && prev.turnIndex === next.turnIndex
+  && prev.isHistoricalTurn === next.isHistoricalTurn
   && prev.toolCallIds.length === next.toolCallIds.length
   && prev.toolCallIds.every((id, i) => id === next.toolCallIds[i]));
 
