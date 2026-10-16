@@ -80,7 +80,12 @@ import {
   resetExtensionUiState,
   resolveUiResponse,
 } from './extension-ui';
-import { captureReviewBaseline, clearReviewBaseline, captureTurnCheckpointForActive } from './review-api';
+import {
+  captureReviewBaseline,
+  clearReviewBaseline,
+  captureTurnCheckpointForActive,
+  clearSessionTurnCheckpoints,
+} from './review-api';
 import { noteRunEnded, noteRunStarted } from './power-save';
 import { createShellTrustContext, resolveProjectTrusted } from './project-trust';
 import { settingsApi } from './settings-api';
@@ -365,6 +370,7 @@ export function disposeRuntime(runtime: ActiveRuntime): void {
     runtime.running = false;
   }
   runtime.adapter.dispose(runtime.adapterRuntime);
+  clearSessionTurnCheckpoints(runtime.sessionId ?? runtime.cwd);
   runtimes.delete(runtime);
   pendingDisposeRuntimes.delete(runtime);
   if (active === runtime) active = null;
@@ -1195,6 +1201,7 @@ export function contentSummaryText(content: unknown): string {
 function treeEntrySummary(entry: PiSessionEntry): { kind: PiRuntimeTreeNode['kind']; text: string } | null {
   if (entry.type === 'message') {
     const role = (entry.message as { role?: unknown }).role;
+    if (role === 'system') return null;
     return {
       kind: role === 'user' ? 'user' : role === 'assistant' ? 'assistant' : 'other',
       text: contentSummaryText((entry.message as { content?: unknown }).content),

@@ -351,6 +351,12 @@ export function clearReviewBaseline(): void {
   baselineFailures.clear();
 }
 
+/** 单个 session 销毁时清理该 sessionKey 的影子快照映射，防止内存微量驻留。 */
+export function clearSessionTurnCheckpoints(sessionKey?: string): void {
+  if (!sessionKey) return;
+  turnCheckpoints.delete(sessionKey);
+}
+
 /** 调用方 runtime 的 baseline（cwd 不一致视为没有）。 */
 function currentBaseline(active: ActiveRuntime): Baseline | null {
   return findBaseline(active.cwd);
