@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Copy,
@@ -33,16 +33,17 @@ import { TrustDialog } from './components/TrustDialog';
 import { VersionUpdateToast } from './components/VersionUpdateToast';
 import { VersionInstallDialog } from './components/VersionInstallDialog';
 import { VersionJumpDialog } from './components/VersionJumpDialog';
-import Onboarding from './pages/Onboarding';
 import ChatPage from './pages/Chat';
-import ModelsPage from './pages/Models';
-import SessionsPage from './pages/Sessions';
-import SettingsPage from './pages/Settings';
-import SkillsPage from './pages/Skills';
-import ExtensionsPage from './pages/Extensions';
-import McpPage from './pages/Mcp';
 import i18n from './lib/i18n';
 import { APP_PAGE_IDS, initialAppPage, type AppPageId } from '@shared/app-page';
+
+const Onboarding = lazy(() => import('./pages/Onboarding'));
+const ModelsPage = lazy(() => import('./pages/Models'));
+const SessionsPage = lazy(() => import('./pages/Sessions'));
+const SettingsPage = lazy(() => import('./pages/Settings'));
+const SkillsPage = lazy(() => import('./pages/Skills'));
+const ExtensionsPage = lazy(() => import('./pages/Extensions'));
+const McpPage = lazy(() => import('./pages/Mcp'));
 
 const PAGE_ICONS: Record<AppPageId, typeof MessageSquare> = {
   chat: MessageSquare,
@@ -370,7 +371,9 @@ export default function App() {
       <>
         {dragStrip}
         {!isMac && chrome}
-        <Onboarding />
+        <Suspense fallback={null}>
+          <Onboarding />
+        </Suspense>
       </>
     );
   }
@@ -447,12 +450,14 @@ export default function App() {
         {/* 主内容区顶部的全局错误条：侧栏等跨区域操作的失败提示，任何页面可见 */}
         <GlobalErrorBanner />
         {visitedPages.has('chat') && <div className={`page-view${page === 'chat' ? ' active' : ''}`}><ChatPage active={page === 'chat'} searchTarget={chatSearchTarget} onSearchTargetHandled={clearChatSearchTarget} /></div>}
-        {visitedPages.has('models') && <div className={`page-view${page === 'models' ? ' active' : ''}`}><ModelsPage /></div>}
-        {visitedPages.has('sessions') && <div className={`page-view${page === 'sessions' ? ' active' : ''}`}><SessionsPage active={page === 'sessions'} onOpenChat={() => navigate('chat')} /></div>}
-        {visitedPages.has('skills') && <div className={`page-view${page === 'skills' ? ' active' : ''}`}><SkillsPage /></div>}
-        {visitedPages.has('extensions') && <div className={`page-view${page === 'extensions' ? ' active' : ''}`}><ExtensionsPage /></div>}
-        {visitedPages.has('mcp') && <div className={`page-view${page === 'mcp' ? ' active' : ''}`}><McpPage /></div>}
-        {visitedPages.has('settings') && <div className={`page-view${page === 'settings' ? ' active' : ''}`}><SettingsPage /></div>}
+        <Suspense fallback={null}>
+          {visitedPages.has('models') && <div className={`page-view${page === 'models' ? ' active' : ''}`}><ModelsPage /></div>}
+          {visitedPages.has('sessions') && <div className={`page-view${page === 'sessions' ? ' active' : ''}`}><SessionsPage active={page === 'sessions'} onOpenChat={() => navigate('chat')} /></div>}
+          {visitedPages.has('skills') && <div className={`page-view${page === 'skills' ? ' active' : ''}`}><SkillsPage /></div>}
+          {visitedPages.has('extensions') && <div className={`page-view${page === 'extensions' ? ' active' : ''}`}><ExtensionsPage /></div>}
+          {visitedPages.has('mcp') && <div className={`page-view${page === 'mcp' ? ' active' : ''}`}><McpPage /></div>}
+          {visitedPages.has('settings') && <div className={`page-view${page === 'settings' ? ' active' : ''}`}><SettingsPage /></div>}
+        </Suspense>
       </main>
       <ExtensionUiNotifications />
       <TrustDialog />
