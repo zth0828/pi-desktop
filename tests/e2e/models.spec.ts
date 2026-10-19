@@ -844,7 +844,7 @@ test('Models 页：刷新把历史错值纠正为官方规格（目录值与内�
     .toEqual({
       solCtx: 272000,
       solInput: ['text'],
-      solCost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 6.25 },
+      solCost: { input: 4, output: 20, cacheRead: 0.4, cacheWrite: 5 },
       opusCtx: 1000000,
       opusMax: 128000,
       opusInput: ['text', 'image'],
