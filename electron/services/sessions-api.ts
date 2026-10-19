@@ -56,7 +56,7 @@ import {
 } from '../main/window-manager';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { settingsApi } from './settings-api';
-import { loadPiAdapter, type PiSessionCatalogPort, type PiSessionDocumentHandle } from './pi-adapter';
+import { loadPiAdapter, type PiSessionCatalogPort, type PiSessionDescriptor, type PiSessionDocumentHandle } from './pi-adapter';
 import { samePath, stripWindowsExtendedPrefix } from '../utils/same-path';
 import { isWindowsDevicePath } from '../utils/workspace-path';
 import { hashSessionPath, safeErrorFields, writePiDiagnostic } from '../utils/pi-diagnostic-log';
@@ -205,6 +205,7 @@ export const sessionMetadataCache = new Map<string, SessionMetadataCacheEntry>()
 
 export function clearSessionMetadataCache(): void {
   sessionMetadataCache.clear();
+  invalidateSessionListCache();
 }
 
 export function invalidateSessionMetadata(targetPath: string): void {
@@ -214,6 +215,7 @@ export function invalidateSessionMetadata(targetPath: string): void {
       sessionMetadataCache.delete(key);
     }
   }
+  invalidateSessionListCache();
 }
 
 function sessionManagerFor(path: string, sessions: PiSessionCatalogPort): PiSessionDocumentHandle {
@@ -581,6 +583,34 @@ async function switchSessionImpl(
   }
 }
 
+let inFlightListAll: Promise<PiSessionDescriptor[]> | null = null;
+let listAllCache: { timestamp: number; infos: PiSessionDescriptor[] } | null = null;
+const LIST_ALL_CACHE_TTL_MS = 3_000;
+
+export function invalidateSessionListCache(): void {
+  listAllCache = null;
+}
+
+async function getCachedOrFetchListAll(sessions: PiSessionCatalogPort): Promise<PiSessionDescriptor[]> {
+  const now = Date.now();
+  if (listAllCache && now - listAllCache.timestamp < LIST_ALL_CACHE_TTL_MS) {
+    return listAllCache.infos;
+  }
+  if (inFlightListAll) {
+    return inFlightListAll;
+  }
+  inFlightListAll = (async () => {
+    try {
+      const infos = await sessions.listAll();
+      listAllCache = { timestamp: Date.now(), infos };
+      return infos;
+    } finally {
+      inFlightListAll = null;
+    }
+  })();
+  return inFlightListAll;
+}
+
 export const sessionsApi = {
   list: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiSessionListResult> => {
     const cwd = await resolveCwd();
@@ -601,7 +631,7 @@ export const sessionsApi = {
 
   listAll: async (_payload?: unknown, ctx?: HostActionContext): Promise<PiSessionListResult> => {
     const adapter = await loadPiAdapter();
-    const infos = await adapter.sessions.listAll();
+    const infos = await getCachedOrFetchListAll(adapter.sessions);
     const current = ctx?.sessionPath ?? currentSessionFile();
     const liveSessions = mergeLiveSessions(infos);
     const sessions = (
@@ -618,7 +648,7 @@ export const sessionsApi = {
     const query = (payload?.query ?? '').trim();
     if (!query) return { sessions: [] };
     const adapter = await loadPiAdapter();
-    const rawInfos = await adapter.sessions.listAll();
+    const rawInfos = await getCachedOrFetchListAll(adapter.sessions);
     const infos = rawInfos.filter((info) => info.messageCount > 0);
     const current = ctx?.sessionPath ?? currentSessionFile();
     const limit = Number.isFinite(payload?.limit) ? Math.max(1, Math.min(Math.floor(payload!.limit!), 100)) : 50;
