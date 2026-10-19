@@ -1,5 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const mockSpawn = vi.fn(() => ({
+  on: vi.fn(),
+  unref: vi.fn(),
+}));
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...actual,
+    spawn: (...args: unknown[]) => mockSpawn(...args),
+  };
+});
+
 vi.mock('electron', () => ({
   app: {
     getFileIcon: vi.fn(async () => ({
@@ -62,6 +75,28 @@ describe('shell-api', () => {
       application: { id: 'app', name: 'NonExistent', path: '/non/existent/bin/code.cmd' },
     });
     expect(res.success).toBe(true);
+  });
+
+  it('openPathWith 在 Windows 下调批处理脚本时安全包裹目标路径参数', async () => {
+    mockSpawn.mockClear();
+    const origPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+    try {
+      const res = await shellApi.openPathWith({
+        path: __filename,
+        application: { id: 'app', name: 'Code', path: 'C:\\Users\\bin\\code.cmd' },
+      });
+      expect(res.success).toBe(true);
+      expect(mockSpawn).toHaveBeenCalled();
+      const lastCall = mockSpawn.mock.calls[mockSpawn.mock.calls.length - 1];
+      const args = lastCall[1] as string[];
+      expect(args[0]).toBe(`"${__filename.replace(/"/g, '""')}"`);
+      const opts = lastCall[2] as { windowsVerbatimArguments?: boolean };
+      expect(opts.windowsVerbatimArguments).toBe(true);
+    } finally {
+      Object.defineProperty(process, 'platform', { value: origPlatform, configurable: true });
+    }
   });
 
   it('openPath 与 showInFolder 剥离 Windows 扩展前缀 (\\\\?\\)', async () => {

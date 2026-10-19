@@ -186,12 +186,14 @@ async function openPathWith(payload: ShellOpenPathWithPayload): Promise<HostSucc
       const useShell = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(appPath);
       const appBin = useShell ? path.win32.basename(appPath) : appPath;
       const appCwd = useShell ? path.win32.dirname(appPath) : undefined;
-      const child = spawn(appBin, [target], {
+      const safeTarget = useShell ? `"${target.replace(/"/g, '""')}"` : target;
+      const child = spawn(appBin, [safeTarget], {
         detached: true,
         stdio: 'ignore',
         windowsHide: true,
         shell: useShell,
         cwd: appCwd,
+        windowsVerbatimArguments: useShell,
       });
       child.on('error', () => {
         // 防止启动失败抛出未捕获异常崩溃主进程
