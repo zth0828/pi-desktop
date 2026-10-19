@@ -359,10 +359,13 @@ export function ChatInput({ cwd, onChooseWorkspace, openModelMenuNonce = 0, onSe
       };
       if (compacting || transcriptSyncing) setUsage(null);
       else refreshUsage();
-      const timer = window.setInterval(refreshUsage, isStreaming || compacting || transcriptSyncing ? 400 : 1000);
+      let timer: number | undefined;
+      if (isStreaming) {
+        timer = window.setInterval(refreshUsage, 1000);
+      }
       return () => {
         disposed = true;
-        window.clearInterval(timer);
+        if (timer !== undefined) window.clearInterval(timer);
       };
     }
     setUsage(null);

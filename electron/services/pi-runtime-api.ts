@@ -389,13 +389,26 @@ function maybeDisposeRuntime(runtime: ActiveRuntime): boolean {
     pendingDisposeRuntimes.delete(runtime);
     return false;
   }
-  const sessionFile = runtime.adapterRuntime.session.view.sessionFile;
+  let sessionFile = runtime.sessionFile;
+  if (!sessionFile) {
+    try {
+      sessionFile = runtime.adapterRuntime.session.view.sessionFile;
+    } catch {
+      // ignore stale-runtime
+    }
+  }
   if (sessionFile && findWindowBySession(sessionFile) !== null) {
     clearPendingDisposeTimer(runtime);
     pendingDisposeRuntimes.delete(runtime);
     return false;
   }
-  if (runtime.running || runtime.adapterRuntime.session.view.isStreaming) {
+  let isStreaming = false;
+  try {
+    isStreaming = Boolean(runtime.adapterRuntime.session.view.isStreaming);
+  } catch {
+    // session view already stale or disposed
+  }
+  if (runtime.running || isStreaming) {
     pendingDisposeRuntimes.add(runtime);
     const mainWin = getMainWindow();
     if (mainWin && !mainWin.isDestroyed()) {
@@ -1365,22 +1378,26 @@ export const piRuntimeApi = {
   },
 
   getUsage: (_payload?: unknown, ctx?: HostActionContext): PiRuntimeUsageResult | null => {
-    const active = resolveRuntimeForContext(ctx);
-    if (!active) return null;
-    const session = active.adapterRuntime.session;
-    const stats = session.getSessionStats();
-    return {
-      context: contextUsage(active) ?? null,
-      model: modelInfo(session),
-      session: {
-        input: stats.tokens.input,
-        output: stats.tokens.output,
-        cacheRead: stats.tokens.cacheRead,
-        cacheWrite: stats.tokens.cacheWrite,
-        cost: stats.cost,
-      },
-      latestTurn: latestAssistantUsage(session),
-    };
+    try {
+      const active = resolveRuntimeForContext(ctx);
+      if (!active) return null;
+      const session = active.adapterRuntime.session;
+      const stats = session.getSessionStats();
+      return {
+        context: contextUsage(active) ?? null,
+        model: modelInfo(session),
+        session: {
+          input: stats.tokens.input,
+          output: stats.tokens.output,
+          cacheRead: stats.tokens.cacheRead,
+          cacheWrite: stats.tokens.cacheWrite,
+          cost: stats.cost,
+        },
+        latestTurn: latestAssistantUsage(session),
+      };
+    } catch {
+      return null;
+    }
   },
 
   prompt: async (payload: PiRuntimePromptPayload, ctx?: HostActionContext) => {
@@ -1816,30 +1833,34 @@ export const piRuntimeApi = {
 
   /** /session：会话信息（pi handleSessionCommand 的 getSessionStats + 会话名）。 */
   getSessionInfo: (_payload?: unknown, ctx?: HostActionContext): PiRuntimeSessionInfo | null => {
-    const active = resolveRuntimeForContext(ctx);
-    if (!active) return null;
-    const session = active.adapterRuntime.session;
-    const stats = session.getSessionStats();
-    // pi 自动命名可能把附件信封带进会话名，标题栏展示前剥离（与列表出口 toRow 一致）
-    const name = session.sessionManager.getSessionName();
-    const sessionFile = stats.sessionFile;
-    const isSaved = Boolean(sessionFile && existsSync(sessionFile));
-    return {
-      name: name ? stripAttachmentEnvelope(name) || undefined : name,
-      sessionId: stats.sessionId,
-      sessionFile,
-      isSaved,
-      model: session.model
-        ? { provider: session.model.provider, id: session.model.id, name: session.model.name }
-        : undefined,
-      totalMessages: stats.totalMessages,
-      userMessages: stats.userMessages,
-      assistantMessages: stats.assistantMessages,
-      toolCalls: stats.toolCalls,
-      toolResults: stats.toolResults,
-      tokens: { ...stats.tokens },
-      cost: stats.cost,
-    };
+    try {
+      const active = resolveRuntimeForContext(ctx);
+      if (!active) return null;
+      const session = active.adapterRuntime.session;
+      const stats = session.getSessionStats();
+      // pi 自动命名可能把附件信封带进会话名，标题栏展示前剥离（与列表出口 toRow 一致）
+      const name = session.sessionManager.getSessionName();
+      const sessionFile = stats.sessionFile;
+      const isSaved = Boolean(sessionFile && existsSync(sessionFile));
+      return {
+        name: name ? stripAttachmentEnvelope(name) || undefined : name,
+        sessionId: stats.sessionId,
+        sessionFile,
+        isSaved,
+        model: session.model
+          ? { provider: session.model.provider, id: session.model.id, name: session.model.name }
+          : undefined,
+        totalMessages: stats.totalMessages,
+        userMessages: stats.userMessages,
+        assistantMessages: stats.assistantMessages,
+        toolCalls: stats.toolCalls,
+        toolResults: stats.toolResults,
+        tokens: { ...stats.tokens },
+        cost: stats.cost,
+      };
+    } catch {
+      return null;
+    }
   },
 
   /** /reload：重载扩展/skills/prompts/主题/上下文文件（pi handleReloadCommand 语义）。 */
