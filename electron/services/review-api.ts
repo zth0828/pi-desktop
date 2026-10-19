@@ -3,7 +3,7 @@
 // 当前磁盘始终由隔离的临时 index 快照，因此 staged、unstaged、untracked 都能形成
 // 同一份 tree diff，又不会触碰真实 index/工作区。真实 index 只用于补充 unmerged 状态；
 import { spawn } from 'node:child_process';
-import { mkdtempSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path, { join } from 'node:path';
@@ -33,17 +33,59 @@ type GitResult = { code: number; stdout: string; stderr: string };
 
 const GIT_TIMEOUT_MS = 30_000;
 
+const COMMON_EXCLUDES = [
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  '.next',
+  '.nuxt',
+  'target',
+  'vendor',
+  '.venv',
+  '__pycache__',
+];
+
+let sharedExcludeFilePath: string | null = null;
+function getSharedExcludeFilePath(): string {
+  if (!sharedExcludeFilePath || !existsSync(sharedExcludeFilePath)) {
+    const p = join(tmpdir(), 'pi-desktop-git-excludes');
+    try {
+      writeFileSync(p, COMMON_EXCLUDES.join('\n') + '\n', 'utf8');
+      sharedExcludeFilePath = p;
+    } catch {
+      return '';
+    }
+  }
+  return sharedExcludeFilePath;
+}
+
+const defaultExcludesFile = getSharedExcludeFilePath();
+
 // Review 的 diff/apply 必须按字节保真：用户全局 git 可能配了 core.autocrlf=true
 // （Windows 常见），回写时会将 LF 转成 CRLF，导致还原结果与预期不符。
 // 同时禁用 core.quotepath，防止中文或非 ASCII 文件名被 Git 转义为八进制双引号字符串破坏路径映射。
-// 环境变量配置优先级最高，只影响壳内部的 git 管道，不改用户仓库配置。
+// 在设置 GIT_CONFIG_NOSYSTEM 隔离系统环境时，显式恢复 Windows 下的 core.fscache、core.preloadindex
+// 并禁用 gc.auto，避免 Windows Defender 实时拦截导致 I/O 挂起与 CPU 占用过高。
 const GIT_STABLE_ENV: NodeJS.ProcessEnv = {
   GIT_CONFIG_NOSYSTEM: '1',
-  GIT_CONFIG_COUNT: '2',
+  GIT_CONFIG_COUNT: defaultExcludesFile ? '6' : '5',
   GIT_CONFIG_KEY_0: 'core.autocrlf',
   GIT_CONFIG_VALUE_0: 'false',
   GIT_CONFIG_KEY_1: 'core.quotepath',
   GIT_CONFIG_VALUE_1: 'false',
+  GIT_CONFIG_KEY_2: 'core.fscache',
+  GIT_CONFIG_VALUE_2: 'true',
+  GIT_CONFIG_KEY_3: 'core.preloadindex',
+  GIT_CONFIG_VALUE_3: 'true',
+  GIT_CONFIG_KEY_4: 'gc.auto',
+  GIT_CONFIG_VALUE_4: '0',
+  ...(defaultExcludesFile
+    ? {
+        GIT_CONFIG_KEY_5: 'core.excludesfile',
+        GIT_CONFIG_VALUE_5: defaultExcludesFile,
+      }
+    : {}),
 };
 
 /**
@@ -58,7 +100,11 @@ async function removeDirBestEffort(dir: string): Promise<void> {
   }
 }
 
-function runGit(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; input?: string } = {}): Promise<GitResult> {
+function runGit(
+  cwd: string,
+  args: string[],
+  opts: { env?: NodeJS.ProcessEnv; input?: string; timeoutMs?: number } = {},
+): Promise<GitResult> {
   const cleanCwd = stripWindowsExtendedPrefix(cwd);
   return new Promise((resolvePromise, reject) => {
     const child = spawn('git', ['-C', cleanCwd, ...args], {
@@ -70,10 +116,11 @@ function runGit(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; in
     let stderr = '';
     child.stdout?.on('data', (d) => (stdout += String(d)));
     child.stderr?.on('data', (d) => (stderr += String(d)));
+    const timeout = opts.timeoutMs ?? GIT_TIMEOUT_MS;
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
       reject(new Error(`git ${args[0]} timed out`));
-    }, GIT_TIMEOUT_MS);
+    }, timeout);
     child.on('error', (err) => {
       clearTimeout(timer);
       reject(err);
@@ -131,7 +178,7 @@ async function scanDirectoryStats(
       continue;
     }
     for (const entry of entries) {
-      if (entry.name === '.git') continue;
+      if (entry.name === '.git' || COMMON_EXCLUDES.includes(entry.name)) continue;
       const fullPath = join(current, entry.name);
       if (entry.isDirectory() && !entry.isSymbolicLink()) {
         queue.push(fullPath);
@@ -154,7 +201,7 @@ async function scanDirectoryStats(
 
 async function checkGitRepoOversized(cwd: string, maxFiles = MAX_REVIEW_FILES): Promise<boolean> {
   try {
-    const r = await runGit(cwd, ['status', '--porcelain=v1', '-uall', '--no-renames']);
+    const r = await runGit(cwd, ['status', '--porcelain=v1', '-uall', '--no-renames'], { timeoutMs: 5_000 });
     if (r.code === 0) {
       let count = 0;
       for (const line of r.stdout.split('\n')) {
@@ -178,6 +225,7 @@ async function snapshotTree(
   cwd: string,
   gitEnv?: NodeJS.ProcessEnv,
   seedRef?: string | null,
+  opts?: { timeoutMs?: number },
 ): Promise<string> {
   if (gitEnv) {
     const stats = await scanDirectoryStats(cwd);
@@ -188,14 +236,15 @@ async function snapshotTree(
   }
   const dir = mkdtempSync(join(tmpdir(), 'pi-desktop-review-'));
   const env = { ...GHOST_IDENTITY_ENV, ...gitEnv, GIT_INDEX_FILE: join(dir, 'index') };
+  const timeoutMs = opts?.timeoutMs;
   try {
     const head = seedRef === undefined ? await headRef(cwd, gitEnv) : seedRef;
     // 以 HEAD（或空 tree）为底，add -A 叠加当前磁盘；空仓库（无 commit）走 --empty
-    const readTree = await runGit(cwd, head ? ['read-tree', head] : ['read-tree', '--empty'], { env });
+    const readTree = await runGit(cwd, head ? ['read-tree', head] : ['read-tree', '--empty'], { env, timeoutMs });
     if (readTree.code !== 0) throw new Error(readTree.stderr.trim() || 'git read-tree failed');
-    const add = await runGit(cwd, ['add', '-A'], { env });
+    const add = await runGit(cwd, ['add', '-A'], { env, timeoutMs });
     if (add.code !== 0) throw new Error(add.stderr.trim() || 'git add failed');
-    const writeTree = await runGit(cwd, ['write-tree'], { env });
+    const writeTree = await runGit(cwd, ['write-tree'], { env, timeoutMs });
     if (writeTree.code !== 0) throw new Error(writeTree.stderr.trim() || 'git write-tree failed');
     return writeTree.stdout.trim();
   } finally {
@@ -314,20 +363,27 @@ export async function captureReviewBaseline(cwd: string): Promise<void> {
       }
       ownedDir = mkdtempSync(join(tmpdir(), 'pi-desktop-review-repo-'));
       const gitDir = join(ownedDir, 'objects.git');
-      const init = await runGit(cwd, ['init', '--bare', gitDir]);
+      const init = await runGit(cwd, ['init', '--bare', gitDir], { timeoutMs: 5_000 });
       if (init.code !== 0) throw new Error(init.stderr.trim() || 'git init failed');
+      const infoDir = join(gitDir, 'info');
+      try {
+        mkdirSync(infoDir, { recursive: true });
+        writeFileSync(join(infoDir, 'exclude'), COMMON_EXCLUDES.join('\n') + '\n', 'utf8');
+      } catch {
+        // ignore
+      }
       gitEnv = { GIT_DIR: gitDir, GIT_WORK_TREE: cwd };
     }
     // Unborn Git repository compares against an empty tree. Non-Git workspaces
     // retain their complete session-start snapshot in the temporary object store.
     const tree = parent === null && !gitEnv
-      ? (await runGit(cwd, ['hash-object', '-w', '-t', 'tree', '--stdin'], { input: '' })).stdout.trim()
-      : await snapshotTree(cwd, gitEnv, parent);
+      ? (await runGit(cwd, ['hash-object', '-w', '-t', 'tree', '--stdin'], { input: '', timeoutMs: 5_000 })).stdout.trim()
+      : await snapshotTree(cwd, gitEnv, parent, { timeoutMs: 5_000 });
     if (!tree) throw new Error('git empty tree failed');
     const commit = await runGit(
       cwd,
       ['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', 'pi-desktop review baseline'],
-      { env: { ...GHOST_IDENTITY_ENV, ...gitEnv } },
+      { env: { ...GHOST_IDENTITY_ENV, ...gitEnv }, timeoutMs: 5_000 },
     );
     if (commit.code !== 0) throw new Error(commit.stderr.trim() || 'git commit-tree failed');
     baselines.set(cwd, { cwd, ref: commit.stdout.trim(), kind: gitEnv ? 'session-snapshot' : 'git-head', gitEnv, ownedDir });
