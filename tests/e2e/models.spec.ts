@@ -268,6 +268,38 @@ test('Models 页：新增供应商使用 pi auth storage，并可整项删除', 
   }).toEqual({ hasProvider: false, hasCredential: false });
 });
 
+test('Models 页：新增供应商表单只经 X / 取消 关闭，点遮罩不关且不丢录入', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('add-custom-provider').click();
+  const form = page.getByTestId('custom-provider-form');
+  const overlay = page.getByTestId('custom-provider-overlay');
+  await form.getByPlaceholder('Provider name (e.g. My LLM)').fill('Kept Provider');
+
+  // 点遮罩：弹窗保持打开，已填内容原样保留
+  const box = await overlay.boundingBox();
+  await page.mouse.click(box!.x + 8, box!.y + box!.height / 2);
+  await expect(form).toBeVisible();
+  await expect(form.getByPlaceholder('Provider name (e.g. My LLM)')).toHaveValue('Kept Provider');
+
+  // 从输入框拖选到遮罩上松开：click 的 target 会落在 overlay，不得关闭弹窗
+  const nameInput = form.getByPlaceholder('Provider name (e.g. My LLM)');
+  const inputBox = (await nameInput.boundingBox())!;
+  await page.mouse.move(inputBox.x + 4, inputBox.y + inputBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + 12, box!.y + box!.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(form).toBeVisible();
+  await expect(nameInput).toHaveValue('Kept Provider');
+
+  await form.getByRole('button', { name: 'Close' }).click();
+  await page.getByTestId('discard-confirm-button').click();
+  await expect(form).toHaveCount(0);
+});
+
 test('Models 页：重新打开新增供应商表单时字段为空', async ({ launchElectronApp }) => {
   const app = await launchElectronApp(launchOptions());
   const page = await app.firstWindow();
@@ -279,12 +311,68 @@ test('Models 页：重新打开新增供应商表单时字段为空', async ({ l
   await form.getByPlaceholder('Provider name (e.g. My LLM)').fill('Temp Provider');
   await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}/v1`);
   await form.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByTestId('discard-confirm-button').click();
 
   // 再次打开：上次填写的内容不应残留
   await page.getByTestId('add-custom-provider').click();
   await expect(form.getByPlaceholder('Provider name (e.g. My LLM)')).toHaveValue('');
   await expect(form.getByPlaceholder('baseURL')).toHaveValue('');
   await expect(form.getByTestId('probe-results')).toHaveCount(0);
+});
+
+test('Models 页：探测世代守卫防止在飞旧请求覆盖新表单', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('add-custom-provider').click();
+  const form = page.getByTestId('custom-provider-form');
+
+  await form.getByPlaceholder('baseURL').fill('http://127.0.0.1:1');
+  await form.getByTestId('probe-custom-provider').click();
+
+  await form.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByTestId('discard-confirm-button').click();
+  await expect(form).toHaveCount(0);
+
+  await page.getByTestId('add-custom-provider').click();
+  await expect(form).toBeVisible();
+  await form.getByPlaceholder('Provider name (e.g. My LLM)').fill('New Clean Provider');
+  await form.getByPlaceholder('baseURL').fill('http://example.com/v1');
+
+  await page.waitForTimeout(1000);
+  await expect(form.getByPlaceholder('Provider name (e.g. My LLM)')).toHaveValue('New Clean Provider');
+  await expect(form.getByPlaceholder('baseURL')).toHaveValue('http://example.com/v1');
+  await expect(form.getByTestId('probe-results')).toHaveCount(0);
+});
+
+test('Models 页：自定义供应商弹窗具备 a11y、初始焦点与回车 Enter 提交', async ({ launchElectronApp }) => {
+  const app = await launchElectronApp(launchOptions());
+  const page = await app.firstWindow();
+
+  await page.getByTestId('nav-models').click();
+  await expect(page.getByTestId('provider-mock')).toBeVisible({ timeout: 30_000 });
+
+  const addBtn = page.getByTestId('add-custom-provider');
+  await addBtn.click();
+  const form = page.getByTestId('custom-provider-form');
+
+  await expect(form).toHaveAttribute('role', 'dialog');
+  await expect(form).toHaveAttribute('aria-modal', 'true');
+  await expect(form.getByTestId('custom-provider-name')).toBeFocused();
+
+  await form.getByTestId('custom-provider-name').fill('Enter Submitted Provider');
+  await form.getByPlaceholder('baseURL').fill(`http://127.0.0.1:${mockPort}/v1`);
+  await form.getByTestId('probe-custom-provider').click();
+  await expect(form.getByTestId('probe-results')).toBeVisible({ timeout: 30_000 });
+
+  await form.getByTestId('custom-provider-name').press('Enter');
+
+  const added = page.getByTestId('provider-enter-submitted-provider');
+  await expect(added).toBeVisible({ timeout: 15_000 });
+
+  await expect(addBtn).toBeFocused();
 });
 
 test('Models 页：已配置模型的自定义供应商仍可编辑名称与请求协议', async ({ launchElectronApp }) => {
@@ -360,9 +448,8 @@ test('Models 页：协议探测拒绝 200 HTML，发现 /v1 并选择真实 Open
   await expect(results.locator('.probe-result-row').filter({ hasText: 'anthropic-messages' })).toContainText('Unavailable');
   await expect(form.getByTestId('custom-api-select')).toHaveValue('openai-completions');
   await expect(form.getByPlaceholder('baseURL')).toHaveValue(`http://127.0.0.1:${mockPort}/v1`);
-  await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/chat/completions`);
-  page.once('dialog', (dialog) => dialog.accept());
   await form.getByTestId('custom-api-select').selectOption('openai-responses');
+  await page.getByTestId('switch-api-confirm').click();
   await expect(form.getByTestId('custom-request-url')).toContainText(`/v1/responses`);
   // 上下文与最大输出自动管理：目录上报的用目录值；目录未上报且不在
   // pi 内置目录的（mock-2）如实显示未知（—），不再瞎写缺省规格。
