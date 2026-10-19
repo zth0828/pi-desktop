@@ -47,6 +47,7 @@ import {
   sendRuntimeStateToWindow,
   resolveRuntimeForContext,
   isSessionRunning,
+  piRuntimeApi,
 } from './pi-runtime-api';
 import {
   bindWindowSession,
@@ -539,13 +540,11 @@ async function switchSessionImpl(
   try {
     let before = getActiveRuntime();
     if (!before && targetCwd) {
-      const { piRuntimeApi } = await import('./pi-runtime-api');
       await piRuntimeApi.start({ cwd: targetCwd });
       await commitWorkspaceCwd(targetCwd);
       before = getActiveRuntime();
     }
     if (targetCwd && before && !samePath(targetCwd, before.cwd)) {
-      const { piRuntimeApi } = await import('./pi-runtime-api');
       await piRuntimeApi.start({ cwd: targetCwd });
       await commitWorkspaceCwd(targetCwd);
     }
