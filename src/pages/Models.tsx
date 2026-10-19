@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Radar, RefreshCw, X } from 'lucide-react';
 import type { PiDefaultModel, PiModelRow, PiProviderProbeResult, PiProviderRow } from '@shared/host-api/contract';
@@ -95,11 +96,16 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
 
   useEffect(() => {
     if (!editing) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setEditing(false);
+      if (e.key === 'Escape' && !e.defaultPrevented) setEditing(false);
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [editing]);
 
   const startEdit = () => {
@@ -350,19 +356,21 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
               {t('models.editProvider')}
             </button>
           )}
-          {provider.source === 'config' && editing && (
+          {provider.source === 'config' && editing && createPortal(
             <div
               className="provider-modal-overlay"
               data-testid={`provider-edit-overlay-${provider.id}`}
-              onClick={(e) => {
-                // 点遮罩关闭；表单内部点击不冒泡关闭
-                if (e.target === e.currentTarget) setEditing(false);
-              }}
             >
-              <div className="provider-modal-dialog" data-testid={`provider-edit-form-${provider.id}`}>
+              <div
+                className="provider-modal-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={`edit-provider-title-${provider.id}`}
+                data-testid={`provider-edit-form-${provider.id}`}
+              >
                 <div className="provider-modal-header">
                   <div className="provider-modal-title-group">
-                    <h3 className="provider-modal-title">{t('models.editProviderTitle')}</h3>
+                    <h3 id={`edit-provider-title-${provider.id}`} className="provider-modal-title">{t('models.editProviderTitle')}</h3>
                     <p className="provider-modal-desc">{t('models.editProviderDesc')}</p>
                   </div>
                   <button
@@ -416,7 +424,6 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                         <option key={apiType} value={apiType}>{apiType}</option>
                       ))}
                     </select>
-                    {/* 当前选中适配器的用途说明：随选项与语言即时更新 */}
                     <div
                       className="provider-field-hint"
                       data-testid={`edit-api-hint-${provider.id}`}
@@ -440,7 +447,8 @@ function ProviderRow({ provider, models, defaultModel, onChanged, onDefaultChang
                   </button>
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body,
           )}
           {provider.source === 'config' && (
             <button
@@ -601,19 +609,24 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
   const [modelIds, setModelIds] = useState('');
   const [message, setMessage] = useState<string>();
   const [probing, setProbing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [probeResult, setProbeResult] = useState<PiProviderProbeResult>();
 
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open]);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+  const [pendingApiSwitch, setPendingApiSwitch] = useState<string | null>(null);
 
-  // 每次打开都从空白开始：上次（已保存/已取消）的录入不应残留在新表单里
+  const probeGenRef = useRef(0);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const subdialogRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const triggerButtonRef = useRef<HTMLButtonElement>(null);
+
+  const isDirty = Boolean(name.trim() || baseUrl.trim() || apiKey.trim() || probeResult);
+  const canSubmit = Boolean(probeResult && name.trim() && baseUrl.trim() && modelIds.trim());
+
   const resetForm = () => {
+    probeGenRef.current += 1;
     setName('');
     setBaseUrl('');
     setApi('openai-completions');
@@ -622,44 +635,147 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
     setMessage(undefined);
     setProbeResult(undefined);
     setProbing(false);
+    setSubmitting(false);
+    setConfirmDiscardOpen(false);
+    setPendingApiSwitch(null);
+  };
+
+  const closeDialog = () => {
+    resetForm();
+    setOpen(false);
+    (triggerRef.current ?? triggerButtonRef.current)?.focus();
+  };
+
+  const requestClose = () => {
+    if (submitting) return;
+    if (isDirty) {
+      setConfirmDiscardOpen(true);
+    } else {
+      closeDialog();
+    }
   };
 
   const openForm = () => {
+    triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : triggerButtonRef.current;
     resetForm();
     setOpen(true);
   };
 
   const resetProbe = () => {
+    probeGenRef.current += 1;
+    setProbing(false);
     setProbeResult(undefined);
     setModelIds('');
+    setApi('openai-completions');
   };
 
   const selectApi = (nextApi: string) => {
     if (nextApi === api) return;
-    if (!window.confirm(t('models.switchApiConfirm', { api: nextApi }))) return;
+    if (probeResult) {
+      setPendingApiSwitch(nextApi);
+    } else {
+      setApi(nextApi);
+    }
+  };
+
+  const confirmSwitchApi = () => {
+    if (!pendingApiSwitch) return;
+    const nextApi = pendingApiSwitch;
     setApi(nextApi);
     const protocol = probeResult?.protocols.find((candidate) => candidate.api === nextApi);
     if (protocol?.resolvedBaseUrl) setBaseUrl(protocol.resolvedBaseUrl);
+    setPendingApiSwitch(null);
   };
 
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    nameInputRef.current?.focus();
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (confirmDiscardOpen || pendingApiSwitch !== null) {
+      subdialogRef.current?.querySelector<HTMLElement>('button')?.focus();
+    }
+  }, [confirmDiscardOpen, pendingApiSwitch]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented) {
+        e.preventDefault();
+        if (confirmDiscardOpen) {
+          setConfirmDiscardOpen(false);
+        } else if (pendingApiSwitch !== null) {
+          setPendingApiSwitch(null);
+        } else {
+          requestClose();
+        }
+        return;
+      }
+
+      if (e.key === 'Tab') {
+        const isSubdialog = confirmDiscardOpen || pendingApiSwitch !== null;
+        const container = isSubdialog ? subdialogRef.current : dialogRef.current;
+        if (!container) return;
+        const focusable = Array.from(
+          container.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first || !container.contains(document.activeElement)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last || !container.contains(document.activeElement)) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, confirmDiscardOpen, pendingApiSwitch, isDirty, submitting]);
+
   const probe = async () => {
+    const gen = ++probeGenRef.current;
     setProbing(true);
     setMessage(undefined);
     try {
-      const result = await hostApi.providers.probe({ baseUrl: baseUrl.trim(), apiKey: apiKey.trim() || undefined, model: modelIds.split(',')[0]?.trim() || undefined });
+      const result = await hostApi.providers.probe({
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim() || undefined,
+        model: modelIds.split(',')[0]?.trim() || undefined,
+      });
+      if (gen !== probeGenRef.current) return;
       setProbeResult(result);
       if (result.models.length > 0) setModelIds(result.models.join(', '));
       if (result.recommendedApi) setApi(result.recommendedApi);
       if (result.recommendedBaseUrl) setBaseUrl(result.recommendedBaseUrl);
     } catch (error) {
+      if (gen !== probeGenRef.current) return;
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setProbing(false);
+      if (gen === probeGenRef.current) {
+        setProbing(false);
+      }
     }
   };
 
-  // 协议验证：向服务商发送最小化生成请求（约 1 token），确认实际支持的请求协议。
   const verifyProtocols = async () => {
+    const gen = ++probeGenRef.current;
     setProbing(true);
     setMessage(undefined);
     try {
@@ -669,82 +785,98 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
         model: modelIds.split(',')[0]?.trim() || undefined,
         verifyProtocols: true,
       });
+      if (gen !== probeGenRef.current) return;
       setProbeResult(result);
       if (result.recommendedApi) setApi(result.recommendedApi);
       if (result.recommendedBaseUrl) setBaseUrl(result.recommendedBaseUrl);
     } catch (error) {
+      if (gen !== probeGenRef.current) return;
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setProbing(false);
+      if (gen === probeGenRef.current) {
+        setProbing(false);
+      }
     }
   };
 
   const submit = async () => {
-    const detectedDetails = new Map(
-      (probeResult?.modelDetails ?? []).map((model) => [model.id, model]),
-    );
-    const models = modelIds
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map((mid) => {
-        // 元数据自动管理：probe 返回的 modelDetails 已由后端用网关目录 +
-        // pi 内置官方目录回填，前端直接透传。
-        const detail = detectedDetails.get(mid);
-        return {
-          id: mid,
-          ...(detail?.contextWindow && detail.contextWindow > 0 ? { contextWindow: detail.contextWindow } : {}),
-          ...(detail?.maxTokens ? { maxTokens: detail.maxTokens } : {}),
-          ...(detail?.input ? { input: detail.input } : {}),
-          ...(detail?.thinkingLevelMap ? { thinkingLevelMap: detail.thinkingLevelMap } : {}),
-        };
+    if (submitting || probing || !canSubmit) return;
+    setSubmitting(true);
+    setMessage(undefined);
+    try {
+      const detectedDetails = new Map(
+        (probeResult?.modelDetails ?? []).map((model) => [model.id, model]),
+      );
+      const models = modelIds
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((mid) => {
+          const detail = detectedDetails.get(mid);
+          return {
+            id: mid,
+            ...(detail?.contextWindow && detail.contextWindow > 0 ? { contextWindow: detail.contextWindow } : {}),
+            ...(detail?.maxTokens ? { maxTokens: detail.maxTokens } : {}),
+            ...(detail?.input ? { input: detail.input } : {}),
+            ...(detail?.thinkingLevelMap ? { thinkingLevelMap: detail.thinkingLevelMap } : {}),
+          };
+        });
+      const result = await hostApi.providers.addCustom({
+        id: uniqueProviderId(name, existingProviderIds),
+        name: name.trim(),
+        baseUrl: baseUrl.trim(),
+        api,
+        apiKey: apiKey.trim() || undefined,
+        serverType: probeResult?.serverType,
+        models,
       });
-    const result = await hostApi.providers.addCustom({
-      // 供应商 id 由名称自动生成（slug + 去重），用户只负责命名
-      id: uniqueProviderId(name, existingProviderIds),
-      name: name.trim(),
-      baseUrl: baseUrl.trim(),
-      api,
-      apiKey: apiKey.trim() || undefined,
-      serverType: probeResult?.serverType,
-      models,
-    });
-    if (result.success) {
-      resetForm();
-      setOpen(false);
-      onAdded();
-    } else {
-      setMessage(result.error);
+      if (result.success) {
+        closeDialog();
+        onAdded();
+      } else {
+        setMessage(result.error);
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  if (!open) {
-    return (
-      <button data-testid="add-custom-provider" onClick={openForm}>
+  return (
+    <>
+      <button ref={triggerButtonRef} data-testid="add-custom-provider" onClick={openForm}>
         {t('models.addCustom')}
       </button>
-    );
-  }
-  return (
-    <div
-      className="provider-modal-overlay"
-      data-testid="custom-provider-overlay"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) setOpen(false);
-      }}
-    >
-      <div className="provider-modal-dialog" data-testid="custom-provider-form">
+      {open && createPortal(
+        <div
+          className="provider-modal-overlay"
+          data-testid="custom-provider-overlay"
+        >
+      <form
+        ref={dialogRef}
+        className="provider-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="custom-provider-title"
+        data-testid="custom-provider-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
         <div className="provider-modal-header">
           <div className="provider-modal-title-group">
-            <h3 className="provider-modal-title">{t('models.addCustomTitle')}</h3>
+            <h3 id="custom-provider-title" className="provider-modal-title">{t('models.addCustomTitle')}</h3>
             <p className="provider-modal-desc">{t('models.addCustomDesc')}</p>
           </div>
           <button
             type="button"
             className="icon-button provider-modal-close"
-            onClick={() => setOpen(false)}
+            onClick={requestClose}
             aria-label={t('models.closeDialog')}
             title={t('models.closeDialog')}
+            disabled={submitting}
           >
             <X size={16} />
           </button>
@@ -753,11 +885,13 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
           <div className="provider-field">
             <label htmlFor="custom-provider-name">{t('models.fieldName')}</label>
             <input
+              ref={nameInputRef}
               id="custom-provider-name"
               data-testid="custom-provider-name"
               placeholder={t('models.customName')}
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={submitting}
             />
             <div className="provider-field-hint">{t('models.fieldNameHint')}</div>
           </div>
@@ -771,6 +905,7 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                 setBaseUrl(e.target.value);
                 resetProbe();
               }}
+              disabled={submitting}
             />
             <div className="provider-field-hint">{t('models.fieldBaseUrlHint')}</div>
           </div>
@@ -785,6 +920,7 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                 setApiKey(e.target.value);
                 resetProbe();
               }}
+              disabled={submitting}
             />
             <div className="provider-field-hint">{t('models.fieldApiKeyHint')}</div>
           </div>
@@ -798,7 +934,7 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                 type="button"
                 className="primary probe-button"
                 data-testid="probe-custom-provider"
-                disabled={probing || !baseUrl.trim()}
+                disabled={probing || submitting || !baseUrl.trim()}
                 onClick={() => void probe()}
               >
                 <Radar size={15} />
@@ -809,7 +945,7 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                 className="outline probe-button"
                 data-testid="verify-protocols"
                 title={t('models.verifyProtocolHint')}
-                disabled={probing || !probeResult || !baseUrl.trim()}
+                disabled={probing || submitting || !probeResult || !baseUrl.trim()}
                 onClick={() => void verifyProtocols()}
               >
                 <Radar size={15} />
@@ -868,12 +1004,12 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                     data-testid="custom-api-select"
                     value={api}
                     onChange={(event) => selectApi(event.target.value)}
+                    disabled={submitting}
                   >
                     {CUSTOM_API_TYPES.map((apiType) => (
                       <option key={apiType} value={apiType}>{apiType}</option>
                     ))}
                   </select>
-                  {/* 当前选中适配器的用途说明：随选项与语言即时更新 */}
                   <div className="provider-field-hint" data-testid="custom-api-hint">
                     {t(`models.apiHint.${api}`)}
                   </div>
@@ -904,6 +1040,7 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                                   : ids.filter((id) => id !== modelId);
                                 setModelIds(next.join(', '));
                               }}
+                              disabled={submitting}
                             />
                             <span className="probe-model-id" title={modelId}>{modelId}</span>
                             <span className="probe-model-vision-slot">
@@ -937,6 +1074,7 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
                 placeholder={t('models.customModels')}
                 value={modelIds}
                 onChange={(e) => setModelIds(e.target.value)}
+                disabled={submitting}
               />
               <div className="provider-field-hint">{t('models.fieldModelsHint')}</div>
             </div>
@@ -944,19 +1082,87 @@ function CustomProviderForm({ onAdded, existingProviderIds }: { onAdded: () => v
           {message && <p className="error-text">{message}</p>}
         </div>
         <div className="provider-modal-actions">
-          <button type="button" onClick={() => setOpen(false)}>{t('models.cancel')}</button>
+          <button type="button" disabled={submitting} onClick={requestClose}>{t('models.cancel')}</button>
           <button
-            type="button"
+            type="submit"
             className="primary"
-            disabled={!probeResult || !name.trim() || !baseUrl.trim() || !modelIds.trim()}
-            onClick={() => void submit()}
+            disabled={!canSubmit || submitting || probing}
           >
-            {t('models.saveCustom')}
+            {submitting ? t('models.savingCustom') : t('models.saveCustom')}
           </button>
         </div>
-      </div>
-    </div>
-  );
+      </form>
+
+      {confirmDiscardOpen && (
+        <div
+          ref={subdialogRef}
+          className="provider-subdialog-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="discard-confirm-title"
+          data-testid="discard-confirm-dialog"
+        >
+          <div className="provider-subdialog-card">
+            <h4 id="discard-confirm-title" className="provider-subdialog-title">{t('models.discardConfirmTitle')}</h4>
+            <p className="provider-subdialog-desc">{t('models.discardConfirmDesc')}</p>
+            <div className="provider-subdialog-actions">
+              <button
+                type="button"
+                data-testid="discard-cancel-button"
+                onClick={() => setConfirmDiscardOpen(false)}
+              >
+                {t('models.discardContinueEditing')}
+              </button>
+              <button
+                type="button"
+                className="outline"
+                data-testid="discard-confirm-button"
+                onClick={closeDialog}
+              >
+                {t('models.discardConfirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingApiSwitch && (
+        <div
+          ref={subdialogRef}
+          className="provider-subdialog-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="switch-api-title"
+          data-testid="switch-api-dialog"
+        >
+          <div className="provider-subdialog-card">
+            <h4 id="switch-api-title" className="provider-subdialog-title">{t('models.switchApiTitle')}</h4>
+            <p className="provider-subdialog-desc">{t('models.switchApiConfirm', { api: pendingApiSwitch })}</p>
+            <div className="provider-subdialog-actions">
+              <button
+                type="button"
+                data-testid="switch-api-cancel"
+                onClick={() => setPendingApiSwitch(null)}
+              >
+                {t('models.cancel')}
+              </button>
+              <button
+                type="button"
+                className="primary"
+                data-testid="switch-api-confirm"
+                onClick={confirmSwitchApi}
+              >
+                {t('models.switchApiButton')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </div>,
+      document.body,
+    )}
+  </>
+);
 }
 
 export default function ModelsPage() {
