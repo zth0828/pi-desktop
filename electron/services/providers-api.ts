@@ -1140,16 +1140,26 @@ export const providersApi = {
     if (!payload?.provider || !payload?.id || typeof payload.provider !== 'string' || typeof payload.id !== 'string') {
       return { success: false, error: 'provider and id are required' };
     }
+    const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
+    if (!adapter.providers.getModel(runtime, payload.provider, payload.id)) {
+      return { success: false, error: `model not found: ${payload.provider}/${payload.id}` };
+    }
     const active = await resolveRuntimeForContextReady(ctx);
-    if (active) return piRuntimeApi.setModel(payload, ctx);
+    if (active) {
+      const setRes = await piRuntimeApi.setModel(payload, ctx);
+      if (!setRes.success) return setRes;
+    }
     try {
-      const { adapter, runtime, agentDir } = await getModelRuntime(ctx);
-      if (!adapter.providers.getModel(runtime, payload.provider, payload.id)) return { success: false, error: `model not found: ${payload.provider}/${payload.id}` };
-      const handle = adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir });
+      const handle = active
+        ? active.settingsHandle
+        : adapter.settings.open({ cwd: await resolveStandaloneCwd(), agentDir });
       adapter.settings.setDefaultModel(handle, payload);
       await adapter.settings.flush(handle);
+      await reloadRuntimeSettings();
       return { success: true };
-    } catch (err) { return { success: false, error: err instanceof Error ? err.message : String(err) }; }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
   },
 
   getRetry: async (): Promise<PiRetrySettingsResult> => {
