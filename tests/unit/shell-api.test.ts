@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const mockSpawn = vi.fn(() => ({
+const mockSpawn = vi.fn((..._args: any[]) => ({
   on: vi.fn(),
   unref: vi.fn(),
 }));
@@ -9,7 +9,7 @@ vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>();
   return {
     ...actual,
-    spawn: (...args: unknown[]) => mockSpawn(...args),
+    spawn: (...args: any[]) => mockSpawn(...args),
   };
 });
 
@@ -89,7 +89,7 @@ describe('shell-api', () => {
       });
       expect(res.success).toBe(true);
       expect(mockSpawn).toHaveBeenCalled();
-      const lastCall = mockSpawn.mock.calls[mockSpawn.mock.calls.length - 1];
+      const lastCall = mockSpawn.mock.calls[mockSpawn.mock.calls.length - 1] as any[];
       const args = lastCall[1] as string[];
       expect(args[0]).toBe(`"${__filename.replace(/"/g, '""')}"`);
       const opts = lastCall[2] as { windowsVerbatimArguments?: boolean };
