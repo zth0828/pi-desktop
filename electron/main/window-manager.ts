@@ -2,7 +2,7 @@
 // renderer 的 hostInvoke 不带 sessionId；main 经 event.sender（webContentsId）
 // 反查窗口绑定的会话，路由到对应 runtime（见 services/pi-runtime-api.ts 的
 // resolveRuntimeForContext）。窗口关闭只解绑，runtime 仍保活在 runtimes Set 里。
-import { app, BrowserWindow, nativeImage, screen } from 'electron';
+import { app, BrowserWindow, nativeImage, screen, shell } from 'electron';
 import path from 'node:path';
 import { resolveAppPageId } from '@shared/app-page';
 import { resolveAppIconPath, windowIconFormat } from '../utils/app-icon';
@@ -332,6 +332,37 @@ export function createAppWindow(options: CreateWindowOptions = {}): BrowserWindo
       nodeIntegration: false,
       sandbox: false,
     },
+  });
+
+  win.webContents.setWindowOpenHandler?.(({ url }) => {
+    try {
+      const parsed = new URL(url);
+      if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+        void shell.openExternal(url);
+      }
+    } catch {
+      // 忽略无法解析的非法 URL
+    }
+    return { action: 'deny' };
+  });
+
+  win.webContents.on?.('will-navigate', (event, navigationUrl) => {
+    if (process.env.VITE_DEV_SERVER_URL) {
+      try {
+        const target = new URL(navigationUrl);
+        const devServer = new URL(process.env.VITE_DEV_SERVER_URL);
+        const isLocalDev =
+          (target.hostname === '127.0.0.1' || target.hostname === 'localhost') &&
+          target.port === devServer.port;
+        if (isLocalDev) return;
+      } catch {
+        // 畸形 URL 拦截
+      }
+    }
+    if (navigationUrl.startsWith('file://') && navigationUrl.includes('dist/index.html')) {
+      return;
+    }
+    event.preventDefault();
   });
 
   if (process.platform !== 'darwin' && !appIcon.isEmpty()) {

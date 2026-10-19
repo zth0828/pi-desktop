@@ -4,7 +4,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 class FakeBrowserWindow {
   static sequence = 0;
   id = ++FakeBrowserWindow.sequence;
-  webContents = { id: ++FakeBrowserWindow.sequence };
+  webContents = {
+    id: ++FakeBrowserWindow.sequence,
+    windowOpenHandler: null as ((details: { url: string }) => { action: string }) | null,
+    setWindowOpenHandler(handler: (details: { url: string }) => { action: string }) {
+      this.windowOpenHandler = handler;
+    },
+    navigationListeners: [] as Array<(event: { preventDefault: () => void }, url: string) => void>,
+    on(event: string, cb: (event: { preventDefault: () => void }, url: string) => void) {
+      if (event === 'will-navigate') this.navigationListeners.push(cb);
+    },
+  };
   private listeners = new Map<string, Array<() => void>>();
   destroyed = false;
   minimized = false;
@@ -60,6 +70,7 @@ class FakeBrowserWindow {
 
 vi.mock('electron', () => ({
   BrowserWindow: FakeBrowserWindow,
+  shell: { openExternal: vi.fn() },
   nativeImage: {
     createFromPath: () => ({ isEmpty: () => false, resize: () => ({ isEmpty: () => false }) }),
   },
@@ -332,4 +343,41 @@ describe('activateAndFocusWindow 跨平台窗口唤醒', () => {
     expect(() => wm.rebindWindowSessionForWindow(win.webContents.id, '', '')).not.toThrow();
     expect(() => wm.unbindWindowSessionForWindow(win.webContents.id, '')).not.toThrow();
   });
+
+  it('createAppWindow: 注册 setWindowOpenHandler 拦截开窗，合法协议转交 shell.openExternal', async () => {
+    const { shell } = await import('electron');
+    const win = wm.createAppWindow() as unknown as FakeBrowserWindow;
+    const handler = win.webContents.windowOpenHandler;
+    expect(handler).toBeTypeOf('function');
+
+    // 默认 deny 开窗
+    const resHttp = handler!({ url: 'https://github.com' });
+    expect(resHttp).toEqual({ action: 'deny' });
+    expect(shell.openExternal).toHaveBeenCalledWith('https://github.com');
+
+    vi.mocked(shell.openExternal).mockClear();
+    const resDangerous = handler!({ url: 'javascript:alert(1)' });
+    expect(resDangerous).toEqual({ action: 'deny' });
+    expect(shell.openExternal).not.toHaveBeenCalled();
+  });
+
+  it('createAppWindow: 注册 will-navigate 拦截外部非白名单页面导航', () => {
+    const win = wm.createAppWindow() as unknown as FakeBrowserWindow;
+    const listeners = win.webContents.navigationListeners;
+    expect(listeners.length).toBeGreaterThan(0);
+
+    const preventDefault = vi.fn();
+    for (const listener of listeners) {
+      listener({ preventDefault }, 'https://malicious.com');
+    }
+    expect(preventDefault).toHaveBeenCalled();
+
+    // 允许内部 dist/index.html 本地文件
+    preventDefault.mockClear();
+    for (const listener of listeners) {
+      listener({ preventDefault }, 'file:///app/dist/index.html');
+    }
+    expect(preventDefault).not.toHaveBeenCalled();
+  });
 });
+
