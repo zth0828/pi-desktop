@@ -1,8 +1,8 @@
 import { app, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream, existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { constants, createReadStream, createWriteStream, existsSync } from 'node:fs';
+import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { unzipSync } from 'fflate';
 import type { AppUpdateDownloadResult, HostSuccess } from '@shared/host-api/contract';
@@ -408,18 +408,37 @@ export const appUpdateApi = {
           return { success: true };
         }
 
-        const targetAsarPath = path.join(process.resourcesPath, 'app.asar');
+        const resourcesDir = process.resourcesPath ?? (process.platform === 'darwin' ? path.resolve(currentExec, '../../Resources') : path.dirname(currentExec));
+        const targetAsarPath = path.join(resourcesDir, 'app.asar');
+
+        // 前置探测安装目录写入权限（例如普通用户身份运行安装在系统全局 /Applications 目录下的场景）
+        // 若无写权限，不发起静默更新并退出，改为定位展示 staged 补丁包并返回权限错误
+        try {
+          const checkTarget = existsSync(targetAsarPath) ? targetAsarPath : resourcesDir;
+          await access(checkTarget, constants.W_OK);
+        } catch {
+          shell.showItemInFolder(stagedPatchPath);
+          return { success: false, error: 'NO_WRITE_PERMISSION' };
+        }
+
         const script = [
           'OLD_PID="$1"',
           'SRC_ASAR="$2"',
           'DEST_ASAR="$3"',
           'DEST_APP="$4"',
           'STAGED_DIR="$5"',
+          'LOG_FILE="/tmp/pidesktop-patch-update.log"',
+          'echo "[$(date)] Starting patch update for PID $OLD_PID" > "$LOG_FILE"',
           'while kill -0 "$OLD_PID" 2>/dev/null; do sleep 0.05; done',
-          'cp -f "$SRC_ASAR" "$DEST_ASAR"',
-          'xattr -dr com.apple.quarantine "$DEST_APP" 2>/dev/null || true',
-          'codesign --force --deep --sign - "$DEST_APP" 2>/dev/null || true',
-          'rm -rf "$STAGED_DIR"',
+          'if cp -f "$SRC_ASAR" "$DEST_ASAR" >> "$LOG_FILE" 2>&1; then',
+          '  xattr -dr com.apple.quarantine "$DEST_APP" 2>/dev/null || true',
+          '  if ! codesign -v "$DEST_APP" 2>/dev/null; then',
+          '    codesign --force --deep --sign - "$DEST_APP" 2>/dev/null || true',
+          '  fi',
+          '  rm -rf "$STAGED_DIR"',
+          'else',
+          '  echo "[$(date)] cp failed!" >> "$LOG_FILE"',
+          'fi',
           'open -n "$DEST_APP"',
         ].join('\n');
 
