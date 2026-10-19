@@ -594,7 +594,7 @@ export const providersApi = {
       const { runtime } = await getModelRuntime(ctx);
       if (active) await adapter.providers.refresh(runtime, { allowNetwork: false });
       if (payload.apiKey) {
-        await adapter.providers.login(runtime, payload.id, 'api_key', {
+        await adapter.providers.login(runtime, trimmedId, 'api_key', {
           prompt: async () => payload.apiKey!,
           notify: () => {},
         });
@@ -627,8 +627,8 @@ export const providersApi = {
       const found = await updateConfiguredProvider(agentDir, trimmedId, (provider) => {
         if (payload.name !== undefined) provider.name = payload.name.trim() || trimmedId;
         if (payload.api !== undefined) provider.api = payload.api;
-        if (payload.baseUrl !== undefined) {
-          provider.baseUrl = normalizeBaseUrlForApi(payload.baseUrl, nextApi);
+        if (typeof payload.baseUrl === 'string' && payload.baseUrl.trim().length > 0) {
+          provider.baseUrl = normalizeBaseUrlForApi(payload.baseUrl.trim(), nextApi);
         }
       });
       if (!found) {
@@ -1008,12 +1008,20 @@ export const providersApi = {
           api: 'anthropic-messages',
           candidates: [{ url: anthropicUrl, resolvedBaseUrl: normalizeBaseUrlForApi(base, 'anthropic-messages') }],
           body: { model: findBestModelForApi('anthropic-messages'), max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] },
-          headers: { ...headers, 'anthropic-version': '2023-06-01' },
+          headers: {
+            ...headers,
+            'anthropic-version': '2023-06-01',
+            ...(payload.apiKey ? { 'x-api-key': payload.apiKey } : {}),
+          },
         },
         {
           api: 'google-generative-ai',
           candidates: [{ url: `${base}/models/${encodeURIComponent(findBestModelForApi('google-generative-ai'))}:generateContent`, resolvedBaseUrl: base }],
           body: { contents: [{ parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } },
+          headers: {
+            ...headers,
+            ...(payload.apiKey ? { 'x-goog-api-key': payload.apiKey } : {}),
+          },
         },
       ];
       const verifiedProtocols = await Promise.all(
