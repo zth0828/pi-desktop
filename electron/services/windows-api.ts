@@ -1,8 +1,9 @@
 // windows 模块：多窗口管理。
 // 窗口创建/聚焦全部委托 window-manager（窗口↔会话绑定的单一注册表）。
-import { BrowserWindow, screen } from 'electron';
+import { app, BrowserWindow, screen } from 'electron';
 import type {
   WindowListEntry,
+  WindowsConfirmClosePayload,
   WindowsExpandRightPayload,
   WindowsExpandRightResult,
   WindowsFocusPayload,
@@ -21,8 +22,11 @@ import {
   getWindowBounds,
   listWindows,
   resolveWindowSize,
+  setQuitting,
   setWindowSessions,
 } from '../main/window-manager';
+import { showTrayMinimizedNotice } from '../main/tray';
+import { getLoadedElectronStore } from '../utils/electron-store';
 import type { HostActionContext } from '../main/ipc/host-contract';
 import { sendHostEventToWindow } from '../main/ipc/host-events';
 import { prewarmSessionRuntime } from './pi-runtime-api';
@@ -82,6 +86,26 @@ export const windowsApi = {
   // 退出流程（before-quit 置 quitting）自然放行。绝不在这里调 app.quit()。
   close: (_payload?: undefined, ctx?: HostActionContext): void => {
     getWindowFromContext(ctx)?.close();
+  },
+  confirmClose: (payload: WindowsConfirmClosePayload, ctx?: HostActionContext): void => {
+    const win = getWindowFromContext(ctx);
+    if (!win) return;
+    const action = payload?.action === 'quit' ? 'quit' : 'minimize';
+    if (payload?.remember) {
+      const store = getLoadedElectronStore();
+      store?.set('closeAction', action);
+    }
+    if (action === 'quit') {
+      setQuitting(true);
+      app.quit();
+    } else {
+      win.hide();
+      if (process.platform !== 'darwin') {
+        const store = getLoadedElectronStore();
+        const zh = ((store?.get('language') as string | undefined) ?? 'zh').toLowerCase().startsWith('zh');
+        showTrayMinimizedNotice(zh);
+      }
+    }
   },
   openDetached: (payload: WindowsOpenDetachedPayload): void => {
     if (!payload?.sessionPath || typeof payload.sessionPath !== 'string' || !payload.sessionPath.trim()) return;

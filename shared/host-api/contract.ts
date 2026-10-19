@@ -614,8 +614,8 @@ export type SettingsSnapshot = {
   autoDownloadUpdate?: boolean;
   lastRunVersion?: string;
   lastReleaseNotes?: string;
-  /** 关闭主窗口时的行为：minimize=最小化/隐藏到托盘或后台（默认），quit=直接退出应用 */
-  closeAction?: 'minimize' | 'quit';
+  /** 关闭主窗口时的行为：ask=每次询问（默认），minimize=保持后台运行/最小化到系统托盘，quit=直接退出应用 */
+  closeAction?: 'ask' | 'minimize' | 'quit';
   providersLastRefreshedAt?: number;
 };
 
@@ -677,6 +677,11 @@ export type WindowListEntry = {
 export type WindowsExpandRightPayload = { extraWidth: number };
 /** 实际加宽像素（受屏幕右缘可用空间约束，可能小于请求值；无空间/最大化时为 0）。 */
 export type WindowsExpandRightResult = { applied: number };
+/** 关闭主窗口二次确认提交载荷：执行最小化到托盘/后台或退出应用，支持记住选择。 */
+export type WindowsConfirmClosePayload = {
+  action: 'minimize' | 'quit';
+  remember?: boolean;
+};
 
 // —— notify：macOS 系统通知（渲染层只上报事件，焦点判定与弹通知都在 main）——
 
@@ -861,6 +866,8 @@ export type PiSessionRow = {
   id: string;
   /** 会话所属项目目录（分组用） */
   cwd: string;
+  /** 该工作目录在本地文件系统是否存在 */
+  cwdExists?: boolean;
   name?: string;
   firstMessage: string;
   messageCount: number;
@@ -900,6 +907,18 @@ export type PiSessionConvertToProjectPayload = {
 export type PiSessionCwdMissingDetail = {
   sessionCwd: string;
   fallbackCwd: string;
+  sessionCount?: number;
+};
+
+export type PiSessionRelocateProjectPayload = {
+  oldCwd: string;
+  newCwd: string;
+};
+
+export type PiSessionRelocateProjectResult = HostSuccess & {
+  count?: number;
+  newSessionDir?: string;
+  movedPaths?: Record<string, string>;
 };
 
 export type PiSessionSwitchResult = HostSuccess & {
@@ -1319,6 +1338,8 @@ export type HostApiContract = {
     convertToProject: (payload: PiSessionConvertToProjectPayload) => HostSuccess;
     /** 获取或分配一个新的草稿沙箱目录（~/.pi/scratchpad/s_<id>）。 */
     getScratchpadDir: () => { dir: string };
+    /** 批量将属于 oldCwd 的历史会话重定向到 newCwd（改写 header、迁移 session 文件到新目录）。 */
+    relocateProject: (payload: PiSessionRelocateProjectPayload) => PiSessionRelocateProjectResult;
   };
   settings: {
     getAll: () => SettingsSnapshot;
@@ -1430,6 +1451,8 @@ export type HostApiContract = {
     /** frameless 自绘标题栏：关闭当前窗口。必须走 win.close() 复用
      * 「close→hide 到托盘」语义，绝不 app.quit()（那是托盘「退出」的职责）。 */
     close: () => void;
+    /** 二次确认关闭主窗口：根据用户在弹窗中的选择执行最小化或退出，可选记住选择并写入配置。 */
+    confirmClose: (payload: WindowsConfirmClosePayload) => void;
   };
   review: {
     /** Git HEAD 或非 Git 会话 baseline ↔ 当前磁盘快照的改动汇总。 */

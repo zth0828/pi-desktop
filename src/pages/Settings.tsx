@@ -74,7 +74,7 @@ export default function SettingsPage() {
   const [sendWith, setSendWith] = useState<SendWith>('enter');
   const [preventSleep, setPreventSleep] = useState(false);
   const [notifyUiRequest, setNotifyUiRequest] = useState(true);
-  const [closeAction, setCloseAction] = useState<'minimize' | 'quit'>('minimize');
+  const [closeAction, setCloseAction] = useState<'ask' | 'minimize' | 'quit'>('ask');
   const [platform, setPlatform] = useState('');
   const [compaction, setCompaction] = useState<PiCompactionSettings>({ reserveTokens: 16384, keepRecentTokens: 20000, enabled: true });
   const [modelWindow, setModelWindow] = useState<number>();
@@ -108,7 +108,10 @@ export default function SettingsPage() {
     void hostApi.settings.get('sendWith').then((v) => setSendWith(v === 'cmdEnter' ? 'cmdEnter' : 'enter'));
     void hostApi.settings.get('preventSleep').then((v) => setPreventSleep(v === true));
     void hostApi.settings.get('notifyUiRequest').then((v) => setNotifyUiRequest(v !== false));
-    void hostApi.settings.get('closeAction').then((v) => setCloseAction(v === 'quit' ? 'quit' : 'minimize'));
+    void hostApi.settings.get('closeAction').then((v) => {
+      if (v === 'quit' || v === 'minimize' || v === 'ask') setCloseAction(v);
+      else setCloseAction('ask');
+    });
     let compactionLoaded: PiCompactionSettings | undefined;
     const applyRecommendedCompaction = () => {
       // 未显式配置过 compaction 时，按当前模型窗口套用推荐值
@@ -364,6 +367,16 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="pill-group">
+            <button
+              data-testid="close-action-ask"
+              className={closeAction === 'ask' ? 'pill active' : 'pill'}
+              onClick={() => {
+                setCloseAction('ask');
+                void hostApi.settings.set('closeAction', 'ask');
+              }}
+            >
+              {t('settings.closeAction.ask')}
+            </button>
             <button
               data-testid="close-action-minimize"
               className={closeAction === 'minimize' ? 'pill active' : 'pill'}

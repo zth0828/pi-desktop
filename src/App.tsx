@@ -33,6 +33,7 @@ import { TrustDialog } from './components/TrustDialog';
 import { VersionUpdateToast } from './components/VersionUpdateToast';
 import { VersionInstallDialog } from './components/VersionInstallDialog';
 import { VersionJumpDialog } from './components/VersionJumpDialog';
+import { CloseConfirmDialog } from './components/CloseConfirmDialog';
 import ChatPage from './pages/Chat';
 import i18n from './lib/i18n';
 import { APP_PAGE_IDS, initialAppPage, type AppPageId } from '@shared/app-page';
@@ -374,6 +375,7 @@ export default function App() {
         <Suspense fallback={null}>
           <Onboarding />
         </Suspense>
+        <CloseConfirmDialog />
       </>
     );
   }
@@ -464,6 +466,7 @@ export default function App() {
       <VersionUpdateToast onNavigate={navigate} />
       <VersionInstallDialog />
       <VersionJumpDialog />
+      <CloseConfirmDialog />
       <SessionSearchDialog
         open={sessionSearchOpen}
         onClose={() => setSessionSearchOpen(false)}

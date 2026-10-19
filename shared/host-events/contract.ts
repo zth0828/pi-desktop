@@ -23,6 +23,8 @@ export type HostEventContract = {
   windows: {
     /** 目标窗口收到后激活包含该会话的面板。 */
     focusSession: (payload: { sessionPath: string }) => void;
+    /** 主窗口点击关闭按钮被拦截为询问模式时触发，通知渲染层弹出二次确认对话框。 */
+    closeRequested: () => void;
   };
   appUpdate: {
     progress: (payload: import('../host-api/contract').AppUpdateProgressEvent) => void;
@@ -98,6 +100,7 @@ export type HostEventArgs<
 export const HOST_EVENT_CHANNELS = {
   windows: {
     focusSession: 'windows:focus-session',
+    closeRequested: 'windows:close-requested',
   },
   appUpdate: {
     progress: 'app-update:progress',

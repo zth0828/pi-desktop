@@ -66,7 +66,7 @@ test.describe('Windows frameless 标题栏', () => {
   const launchOptions = () => ({
     withPi: true,
     agentDir,
-    seedSettings: { workspaceCwd: workspace },
+    seedSettings: { workspaceCwd: workspace, closeAction: 'minimize' },
   });
 
   /** 等会话启动（模型选择器/徽标出现 = runtime 就绪） */

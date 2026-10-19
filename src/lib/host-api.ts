@@ -10,6 +10,7 @@ import type {
   HostApiPayloadArgs,
   HostApiResult,
   SettingsSnapshot,
+  WindowsConfirmClosePayload,
 } from '@shared/host-api/contract';
 
 // createHostApi(sessionPath) 产出面板作用域 client，
@@ -173,6 +174,8 @@ function createHostApi(sessionPath?: string) {
     convertToProject: (sessionPath: string, targetCwd: string) =>
       invoke('piSessions', 'convertToProject', { sessionPath, targetCwd }),
     getScratchpadDir: () => invoke('piSessions', 'getScratchpadDir'),
+    relocateProject: (oldCwd: string, newCwd: string) =>
+      invoke('piSessions', 'relocateProject', { oldCwd, newCwd }),
   },
   piSkills: {
     list: () => invoke('piSkills', 'list'),
@@ -300,6 +303,7 @@ function createHostApi(sessionPath?: string) {
     maximizeToggle: () => invoke('windows', 'maximizeToggle'),
     isMaximized: () => invoke('windows', 'isMaximized'),
     close: () => invoke('windows', 'close'),
+    confirmClose: (payload: WindowsConfirmClosePayload) => invoke('windows', 'confirmClose', payload),
   },
   };
 }

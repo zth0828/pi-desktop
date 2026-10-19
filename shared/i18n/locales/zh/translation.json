@@ -1168,8 +1168,9 @@
     "notifyUiRequestDesc": "扩展请求确认/输入时发送系统通知（独立于上方档位）。",
     "closeAction": {
       "title": "关闭主窗口时",
-      "descMac": "选择关闭主窗口是保持在后台运行还是直接退出应用。",
-      "descOther": "选择关闭主窗口是最小化到系统托盘还是直接退出应用。",
+      "descMac": "选择关闭主窗口是每次询问、保持在后台运行还是直接退出应用。",
+      "descOther": "选择关闭主窗口是每次询问、最小化到系统托盘还是直接退出应用。",
+      "ask": "每次询问",
       "minimizeMac": "保持在后台运行",
       "minimizeOther": "最小化到系统托盘",
       "quit": "退出应用"
@@ -1458,6 +1459,19 @@
     "subtitle": "已从 v{{from}} 升级至 v{{to}}，探索最新更新与改进",
     "confirm": "开始体验",
     "noNotes": "暂无本次更新的详细说明。"
+  },
+  "closeConfirm": {
+    "title": "关闭主窗口",
+    "message": "请选择关闭主窗口时的操作：",
+    "minimizeMac": "保持在后台运行",
+    "minimizeOther": "最小化到系统托盘",
+    "minimizeDescMac": "保持在后台运行，正在进行的任务不会中断，可随时重新打开。",
+    "minimizeDescOther": "保持在后台运行，正在进行的任务不会中断，可随时重新打开。",
+    "quit": "退出应用",
+    "quitDesc": "完全结束所有进程，终止当前正在进行的任务。",
+    "remember": "记住我的选择，下次不再提示",
+    "cancel": "取消",
+    "confirm": "确定"
   },
   "tray": {
     "showMainWindow": "显示主窗口",

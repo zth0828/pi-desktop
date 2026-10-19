@@ -1169,8 +1169,9 @@
     "notifyUiRequestDesc": "Notify when an extension asks for confirmation or input (independent of the mode above).",
     "closeAction": {
       "title": "When closing main window",
-      "descMac": "Choose whether to keep running in the background or quit the application.",
-      "descOther": "Choose whether to minimize to the system tray or quit the application.",
+      "descMac": "Choose whether to ask every time, keep running in the background, or quit the application.",
+      "descOther": "Choose whether to ask every time, minimize to the system tray, or quit the application.",
+      "ask": "Ask every time",
       "minimizeMac": "Keep running in background",
       "minimizeOther": "Minimize to system tray",
       "quit": "Quit application"
@@ -1459,6 +1460,19 @@
     "subtitle": "Upgraded from v{{from}} to v{{to}}. Explore the latest updates and improvements",
     "confirm": "Get Started",
     "noNotes": "No release notes available for this update."
+  },
+  "closeConfirm": {
+    "title": "Close Main Window",
+    "message": "Choose what to do when closing the main window:",
+    "minimizeMac": "Keep running in background",
+    "minimizeOther": "Minimize to system tray",
+    "minimizeDescMac": "Keep running in the background without interrupting active tasks. Reopen anytime.",
+    "minimizeDescOther": "Keep running in the background without interrupting active tasks. Reopen anytime.",
+    "quit": "Quit application",
+    "quitDesc": "Fully terminate all processes and end any active tasks.",
+    "remember": "Remember my choice and do not ask again",
+    "cancel": "Cancel",
+    "confirm": "Confirm"
   },
   "tray": {
     "showMainWindow": "Show Main Window",
