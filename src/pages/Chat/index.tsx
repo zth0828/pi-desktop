@@ -600,10 +600,16 @@ export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary,
       void attachDetached(attachSession);
       return;
     }
-    void hostApi.settings.get('workspaceCwd').then((saved) => {
+    void hostApi.settings.get('workspaceCwd').then(async (saved) => {
       if (saved) {
         setCwd(saved);
         void start(saved);
+      } else {
+        const res = await hostApi.piSessions.getScratchpadDir();
+        if (res?.dir) {
+          setCwd(res.dir);
+          void start(res.dir);
+        }
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

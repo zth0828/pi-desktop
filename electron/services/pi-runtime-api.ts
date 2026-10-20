@@ -2,6 +2,7 @@
 // 事件映射在 shared/pi-event-map.ts（单点）。会话替换（new/switch/fork）后
 // 必须重新 subscribe + bindExtensions（SDK 约定）。
 import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import {
   mapPiSessionEvent,
   type PiEventDropCallback,
@@ -1305,6 +1306,9 @@ export const piRuntimeApi = {
     const cleanCwd = payload.cwd.trim();
     if (isWindowsDevicePath(cleanCwd)) {
       throw new Error('device paths are not allowed');
+    }
+    if (isScratchpadPath(cleanCwd) && !existsSync(cleanCwd)) {
+      await mkdir(cleanCwd, { recursive: true });
     }
     // 工作区安全：主目录/根目录不启动 runtime（覆盖启动恢复 workspaceCwd 的旧危险值）；
     // 抛出的错误码由渲染层翻译成用户可见文案。

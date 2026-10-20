@@ -509,6 +509,9 @@ async function toRowSafely(
   cwdExistsCache?: Map<string, boolean>,
 ): Promise<PiSessionRow | null> {
   try {
+    if (!existsSync(session.path) && !isSessionRunning(session.path)) {
+      return null;
+    }
     const flags = await resolveMetadataFlags(session.path, sessions);
     let cwdExists: boolean | undefined;
     if (session.cwd) {
@@ -541,7 +544,7 @@ async function toRowSafely(
  * 反而留下半切换状态（下次重启恢复到旧工作区）。
  */
 async function commitWorkspaceCwd(cwd: string | undefined): Promise<void> {
-  if (!cwd) return;
+  if (!cwd || isScratchpadPath(cwd)) return;
   try {
     await settingsApi.set({ key: 'workspaceCwd', value: cwd });
   } catch (err) {
@@ -1056,6 +1059,10 @@ export const sessionsApi = {
       } catch {}
       if (sessionCwd && isScratchpadPath(sessionCwd)) {
         await cleanScratchpadSessionDir(sessionCwd);
+        const currentWorkspace = await settingsApi.get({ key: 'workspaceCwd' });
+        if (currentWorkspace && samePath(currentWorkspace, sessionCwd)) {
+          await settingsApi.set({ key: 'workspaceCwd', value: undefined });
+        }
       }
       return { success: true };
     } catch (err) {

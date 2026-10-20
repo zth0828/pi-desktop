@@ -6,15 +6,26 @@ import { getElectronStore } from '../utils/electron-store';
 import { riskyWorkspaceReason } from '../utils/workspace-safety';
 import { stripWindowsExtendedPrefix } from '../utils/same-path';
 import { isWindowsDevicePath } from '../utils/workspace-path';
+import { isScratchpadPath } from '../utils/scratchpad';
 import { rebuildNativeMacMenu } from '../main/menu';
 import { rebuildTrayMenu } from '../main/tray';
+
+function getValidWorkspaceCwd(store: { get: (key: string) => unknown; delete: (key: string) => void }): string | undefined {
+  const val = store.get('workspaceCwd') as string | undefined;
+  if (!val) return undefined;
+  if (isScratchpadPath(val)) {
+    store.delete('workspaceCwd');
+    return undefined;
+  }
+  return val;
+}
 
 export const settingsApi = {
   getAll: async (): Promise<SettingsSnapshot> => {
     const store = await getElectronStore();
     return {
       language: store.get('language') as SettingsSnapshot['language'],
-      workspaceCwd: store.get('workspaceCwd') as string | undefined,
+      workspaceCwd: getValidWorkspaceCwd(store),
       theme: store.get('theme') as SettingsSnapshot['theme'],
       notifyMode: store.get('notifyMode') as SettingsSnapshot['notifyMode'],
       followupBehavior: store.get('followupBehavior') as SettingsSnapshot['followupBehavior'],
@@ -56,6 +67,9 @@ export const settingsApi = {
   ): Promise<SettingsSnapshot[K]> => {
     if (!payload?.key) return undefined as unknown as SettingsSnapshot[K];
     const store = await getElectronStore();
+    if (payload.key === 'workspaceCwd') {
+      return getValidWorkspaceCwd(store) as SettingsSnapshot[K];
+    }
     return store.get(payload.key) as SettingsSnapshot[K];
   },
   set: async (payload: SettingsSetPayload) => {
@@ -70,6 +84,9 @@ export const settingsApi = {
       const cleanValue = stripWindowsExtendedPrefix(payload.value.trim());
       if (isWindowsDevicePath(cleanValue)) {
         return { success: false, error: 'device paths are not allowed' };
+      }
+      if (isScratchpadPath(cleanValue)) {
+        return { success: false, error: 'scratchpad-cannot-be-workspace' };
       }
       const risky = riskyWorkspaceReason(cleanValue);
       if (risky) return { success: false, error: `risky-workspace-${risky}` };

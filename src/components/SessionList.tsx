@@ -180,7 +180,7 @@ export function SessionList({ onOpenChat }: SessionListProps) {
   }, [refresh]);
 
   useEffect(() => {
-    if (started) refreshAfterSessionChange();
+    refresh();
     const unbindSession = onHostEvent('piRuntime', 'sessionReplaced', refreshAfterSessionChange);
     const unbindRuntime = onHostEvent('piRuntime', 'runtimeStateChanged', refreshAfterSessionChange);
     // 会话页的删除/归档/重命名/分叉不会触发上面两个事件，靠此事件即时同步
@@ -191,6 +191,10 @@ export function SessionList({ onOpenChat }: SessionListProps) {
       unbindChanged();
       if (refreshTimer.current != null) window.clearTimeout(refreshTimer.current);
     };
+  }, [refresh, refreshAfterSessionChange]);
+
+  useEffect(() => {
+    if (started) refreshAfterSessionChange();
   }, [refreshAfterSessionChange, started]);
 
   useEffect(() => {
@@ -938,9 +942,9 @@ export function SessionList({ onOpenChat }: SessionListProps) {
       onDrop={onSidebarDrop}
     >
       {draggingPath && <SessionDragHint />}
-      {started && renderPinnedSection()}
-      {started && activeGroups.map((group) => renderGroup(group, false))}
-      {started && archivedGroups.length > 0 && (
+      {renderPinnedSection()}
+      {activeGroups.map((group) => renderGroup(group, false))}
+      {archivedGroups.length > 0 && (
         <div className="archived-sessions" data-testid="archived-sessions">
           <div className="archived-sessions-label">{t('sessions.archived')}</div>
           {archivedGroups.map((group) => renderGroup(group, true))}
