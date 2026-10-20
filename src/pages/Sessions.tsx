@@ -341,24 +341,20 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
     void loadExportInfo();
   }, [loadExportInfo]);
 
-  // 当会话页面激活时静默同步最新会话；仅在已有最近导出时才复查导出磁盘文件
+  // 当会话页面激活时静默同步最新会话并复查导出磁盘文件（用户可能在站外删除导出文件）
   useEffect(() => {
     if (active) {
       refreshSessions(true);
-      if (hasRecentExportsRef.current) {
-        void loadExportInfo();
-      }
+      void loadExportInfo();
     }
   }, [active, refreshSessions, loadExportInfo]);
 
-  // 当窗口获得焦点时静默刷新会话列表；仅在已有最近导出时才复查导出磁盘文件
+  // 当窗口获得焦点时静默刷新会话列表与导出状态
   useEffect(() => {
     const handleFocus = () => {
       if (active) {
         refreshSessions(true);
-        if (hasRecentExportsRef.current) {
-          void loadExportInfo();
-        }
+        void loadExportInfo();
       }
     };
     window.addEventListener('focus', handleFocus);
