@@ -179,6 +179,14 @@ test('/tree 跳分支选「摘要」：被弃分支写入 branch_summary 节点'
   await page.getByTestId('tree-summary-yes').click();
   // 摘要进行中显示等待态，完成后对话框关闭、列表切到目标分支
   await expect(page.getByTestId('tree-dialog')).toHaveCount(0, { timeout: 30_000 });
+  // TEMP-DIAG
+  const stateDiag = await page.evaluate(async () => {
+    const api = (window as unknown as { pidesktop: { hostInvoke: (r: unknown) => Promise<unknown> } }).pidesktop;
+    const res = await api.hostInvoke({ id: 'diag', module: 'piRuntime', action: 'getState', payload: {} }) as { ok: boolean; data?: { messages?: unknown[]; historyMessages?: unknown[]; sessionId?: string; isStreaming?: boolean } };
+    return { ok: res.ok, msgs: res.data?.messages?.length, hist: res.data?.historyMessages?.length, sessionId: res.data?.sessionId, isStreaming: res.data?.isStreaming };
+  }).catch((e) => String(e));
+  console.log('FORKTREE_STATE_DIAG:', JSON.stringify(stateDiag));
+  console.log('FORKTREE_LIST_DIAG:', (await page.getByTestId('message-list').innerText()).slice(0, 300));
   await expect(page.getByTestId('message-user').first()).toContainText('first question', {
     timeout: 30_000,
   });
