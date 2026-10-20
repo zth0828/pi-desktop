@@ -561,6 +561,7 @@ async function commitWorkspaceCwd(cwd: string | undefined): Promise<void> {
 /** switch 的实际执行体（经 serializeSessionOp 按目标 sessionPath 串行）。 */
 function isScratchpadCwd(cwd?: string | null): boolean {
   if (!cwd) return false;
+  if (isScratchpadPath(cwd)) return true;
   const normalized = cwd.replace(/\\/g, '/').toLowerCase();
   return normalized.includes('/.pi/scratchpad');
 }
