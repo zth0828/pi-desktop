@@ -163,8 +163,26 @@ test('/tree 跳分支选「摘要」：被弃分支写入 branch_summary 节点'
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
+  const dumpSessionEntries = async (tag: string) => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const sessRoot = path.join(agentDir, 'sessions');
+    for (const dir of await readdir(sessRoot)) {
+      for (const f of await readdir(path.join(sessRoot, dir))) {
+        const content = await readFile(path.join(sessRoot, dir, f), 'utf8').catch(() => '');
+        if (!content.includes('question')) continue;
+        const entries = content.trim().split('\n').map((l) => {
+          const e = JSON.parse(l) as { type?: string; id?: string; parentId?: string; message?: { role?: string; content?: unknown } };
+          const text = JSON.stringify(e.message?.content ?? '')?.slice(0, 30);
+          return `${e.type}/${e.message?.role ?? '-'} id=${e.id} parent=${e.parentId} ${text}`;
+        });
+        console.log(`FORKTREE_DUMP[${tag}]:`, f, '\n' + entries.join('\n'));
+      }
+    }
+  };
   await sendAndWaitReply(page, 'first question');
+  await dumpSessionEntries('after-round1');
   await sendAndWaitReply(page, 'second question');
+  await dumpSessionEntries('after-round2');
 
   // 跳到第一条分支起点并改发新消息，长出第二条分支
   await openTree(page);
@@ -172,6 +190,7 @@ test('/tree 跳分支选「摘要」：被弃分支写入 branch_summary 节点'
   await page.getByTestId('tree-summary-no').click();
   await expect(page.getByTestId('chat-input')).toHaveValue('first question', { timeout: 30_000 });
   await sendAndWaitReply(page, 'branch question');
+  await dumpSessionEntries('after-branch');
 
   // 跳回第一条分支，这次选「摘要」：被弃的 branch 分支应留下摘要节点
   await openTree(page);

@@ -222,7 +222,8 @@ test('进入历史会话 → 消息列表定位在最新消息（底部）', asy
       )
       .toBeLessThanOrEqual(30);
   } finally {
-    await rm(secondWorkspace, { recursive: true, force: true });
+    // Windows 上应用退出后文件句柄释放晚于进程结束，rmdir 需重试避免 EBUSY
+    await rm(secondWorkspace, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
   }
 });
 
