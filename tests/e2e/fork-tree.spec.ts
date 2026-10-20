@@ -187,6 +187,20 @@ test('/tree 跳分支选「摘要」：被弃分支写入 branch_summary 节点'
   }).catch((e) => String(e));
   console.log('FORKTREE_STATE_DIAG:', JSON.stringify(stateDiag));
   console.log('FORKTREE_LIST_DIAG:', (await page.getByTestId('message-list').innerText()).slice(0, 300));
+  // TEMP-DIAG：dump 会话文件 entry 结构（type/role/id/parentId）
+  const { readdir, readFile } = await import('node:fs/promises');
+  const sessRoot = path.join(agentDir, 'sessions');
+  for (const dir of await readdir(sessRoot)) {
+    for (const f of await readdir(path.join(sessRoot, dir))) {
+      const lines = (await readFile(path.join(sessRoot, dir, f), 'utf8')).trim().split('\n');
+      const entries = lines.map((l) => {
+        const e = JSON.parse(l) as { type?: string; id?: string; parentId?: string; message?: { role?: string; content?: unknown } };
+        const text = JSON.stringify(e.message?.content ?? '')?.slice(0, 40);
+        return `${e.type}/${e.message?.role ?? '-'} id=${e.id} parent=${e.parentId} ${text}`;
+      });
+      console.log('FORKTREE_FILE_DIAG:', f, '\n' + entries.join('\n'));
+    }
+  }
   await expect(page.getByTestId('message-user').first()).toContainText('first question', {
     timeout: 30_000,
   });
