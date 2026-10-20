@@ -1172,11 +1172,11 @@ export function ChatPane({ active, searchTarget, onSearchTargetHandled, primary,
         {started && <SessionTitleBar onClosePane={onClosePane} />}
         <div className="chat-message-region">
           <div className="message-list" ref={listRef} data-testid="message-list">
-            {!started && starting && (
-              <div className="chat-starting" data-testid="chat-starting">{t('chat.starting')}</div>
-            )}
-            {started && displayMessages.length === 0 && (
+            {displayMessages.length === 0 && (
               <ChatGreeting cwd={effectiveCwd} />
+            )}
+            {!started && starting && displayMessages.length > 0 && (
+              <div className="chat-starting" data-testid="chat-starting">{t('chat.starting')}</div>
             )}
             {displayMessages.slice(0, logicalTurns[0]?.startIndex ?? displayMessages.length).map((message, i) => (
               <MessageItem
