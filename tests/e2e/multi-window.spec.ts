@@ -99,7 +99,19 @@ async function openDetachedWindow(
   sessionText: string,
 ): Promise<Page> {
   const row = page.locator('.sidebar-session-row').filter({ hasText: sessionText });
-  await expect(row).toBeVisible({ timeout: 15_000 });
+  try {
+    await expect(row).toBeVisible({ timeout: 15_000 });
+  } catch (err) {
+    // TEMP-DIAG：CI 上偶发 B 会话行消失， dump 列表接口与侧栏实际内容
+    const diag = await page.evaluate(async () => {
+      const api = (window as unknown as { pidesktop: { hostInvoke: (r: unknown) => Promise<unknown> } }).pidesktop;
+      return api.hostInvoke({ id: 'diag', module: 'piSessions', action: 'listAll', payload: {} });
+    }).catch((e) => String(e));
+    console.log('MULTIWIN_LISTALL_DIAG:', JSON.stringify(diag)?.slice(0, 3000));
+    const sidebarText = await page.locator('.sidebar-sessions').innerText().catch(() => 'N/A');
+    console.log('MULTIWIN_SIDEBAR_DIAG:', sidebarText);
+    throw err;
+  }
   const sessionButton = row.locator('[data-testid^="sidebar-session-"]').first();
   const sessionTestId = await sessionButton.getAttribute('data-testid');
   const sessionId = sessionTestId?.replace('sidebar-session-', '');
