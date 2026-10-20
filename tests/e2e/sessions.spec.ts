@@ -322,18 +322,15 @@ test('导出 HTML → 按项目分类目录并在会话列表中标记已导出�
   const reExported = (await readdir(projectExportDir)).filter((name) => name.endsWith('.html'));
   expect(reExported).toHaveLength(1);
 
-  // TEMP-DIAG
-  page.on('console', (msg) => {
-    if (msg.text().startsWith('[diag]')) console.log('PAGE_CONSOLE:', msg.text());
-  });
   // 再次删除文件后切换到其他页面再切回，会话页面自动检测文件不存在并清理导出状态。
-  // 必须等 Models 页真实提交（首次访问要走 lazy chunk）：快速连点两次导航在
-  // React 事务里会被合并/中断，active 从未提交过 false，页面激活 effect 不触发。
+  // 必须等 Models 页内容真实渲染提交（首次访问走 lazy chunk）：nav 的 active class
+  // 在 Suspense 边界外提交，不代表页面子树提交；中间态未提交时 Sessions 页的
+  // active 从未提交过 false，激活 effect 不会触发。
   await rm(path.join(projectExportDir, reExported[0]));
   await page.getByTestId('nav-models').click();
-  await expect(page.getByTestId('nav-models')).toHaveClass(/active/, { timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Models' })).toBeVisible({ timeout: 15_000 });
   await page.getByTestId('nav-sessions').click();
-  await expect(page.getByTestId('nav-sessions')).toHaveClass(/active/);
+  await expect(page.getByRole('heading', { name: 'Sessions' })).toBeVisible({ timeout: 15_000 });
   // 切换回来后自动检测，无需用户点击，最近导出列表已自动清空且会话行已导出徽标消失
   await expect(page.getByTestId('sessions-recent-list')).toHaveCount(0, { timeout: 15_000 });
   await expect(row.getByTestId('session-exported')).toHaveCount(0);

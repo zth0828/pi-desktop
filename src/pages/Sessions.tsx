@@ -311,13 +311,10 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
 
   const loadExportInfo = useCallback(async () => {
     try {
-      console.log('[diag] loadExportInfo:start');
       const info = await hostApi.piSessions.getExportInfo();
-      console.log('[diag] loadExportInfo:done', info?.recentRecords?.length);
       setExportInfo(info);
       hasRecentExportsRef.current = Boolean(info?.recentRecords && info.recentRecords.length > 0);
     } catch (err) {
-      console.log('[diag] loadExportInfo:error', String(err));
       showNotice(err instanceof Error ? err.message : String(err));
     }
   }, [showNotice]);
@@ -344,10 +341,8 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
     void loadExportInfo();
   }, [loadExportInfo]);
 
-  console.log('[diag] sessions-render', active);
   // 当会话页面激活时静默同步最新会话并复查导出磁盘文件（用户可能在站外删除导出文件）
   useEffect(() => {
-    console.log('[diag] sessions-active-effect', active);
     if (active) {
       refreshSessions(true);
       void loadExportInfo();
