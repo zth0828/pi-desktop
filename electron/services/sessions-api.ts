@@ -412,6 +412,8 @@ function branchSearchableMessages(sessions: PiSessionCatalogPort, sessionPath: s
   const manager = sessions.open(sessionPath);
   for (const entry of sessions.getBranch(manager)) {
     for (const message of sessions.toContextMessages(entry)) {
+      // pi ≥1.0 的 role=system 内部消息不在渲染层展示序列里，不能占用索引
+      if ((message as { role?: unknown } | null | undefined)?.role === 'system') continue;
       // 附件信封/文件块不属于可搜索正文，命中展示时也不能带出
       texts.push(stripAttachmentEnvelope(searchableMessageText(message)));
     }
@@ -487,7 +489,7 @@ function toRow(s: {
   };
 }
 
-type SessionInfo = Parameters<typeof toRow>[0];
+type SessionInfo = Parameters<typeof toRow>[0] & { allMessagesText?: string };
 
 function mergeLiveSessions(sessions: SessionInfo[]): SessionInfo[] {
   const merged = new Map(sessions.map((session) => [session.path, session]));
@@ -792,7 +794,15 @@ export const sessionsApi = {
     if (!query) return { sessions: [] };
     const adapter = await loadPiAdapter();
     const rawInfos = await getCachedOrFetchListAll(adapter.sessions);
-    const infos = rawInfos.filter((info) => info.messageCount > 0);
+    // listAll 磁盘快照有 TTL 缓存，活动会话最新一轮可能还没反映进去；
+    // live runtime 的消息是实时数据，搜索命中以它为准（刚发完即搜的同会话场景）。
+    const liveByPath = new Map(getLiveSessionRows().map((row) => [row.path, row]));
+    const infos = mergeLiveSessions(rawInfos)
+      .map((info) => {
+        const live = liveByPath.get(info.path);
+        return live ? { ...info, firstMessage: live.firstMessage || info.firstMessage, allMessagesText: live.allMessagesText } : info;
+      })
+      .filter((info) => info.messageCount > 0);
     const current = ctx?.sessionPath ?? currentSessionFile();
     const limit = Number.isFinite(payload?.limit) ? Math.max(1, Math.min(Math.floor(payload!.limit!), 100)) : 50;
     // 搜索结果 snippet 直接展示原文，先剥离附件信封再进索引/命中
