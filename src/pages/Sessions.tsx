@@ -311,10 +311,13 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
 
   const loadExportInfo = useCallback(async () => {
     try {
+      console.log('[diag] loadExportInfo:start');
       const info = await hostApi.piSessions.getExportInfo();
+      console.log('[diag] loadExportInfo:done', info?.recentRecords?.length);
       setExportInfo(info);
       hasRecentExportsRef.current = Boolean(info?.recentRecords && info.recentRecords.length > 0);
     } catch (err) {
+      console.log('[diag] loadExportInfo:error', String(err));
       showNotice(err instanceof Error ? err.message : String(err));
     }
   }, [showNotice]);

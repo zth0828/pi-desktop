@@ -322,6 +322,10 @@ test('导出 HTML → 按项目分类目录并在会话列表中标记已导出�
   const reExported = (await readdir(projectExportDir)).filter((name) => name.endsWith('.html'));
   expect(reExported).toHaveLength(1);
 
+  // TEMP-DIAG
+  page.on('console', (msg) => {
+    if (msg.text().startsWith('[diag]')) console.log('PAGE_CONSOLE:', msg.text());
+  });
   // 再次删除文件后切换到其他页面再切回，会话页面自动检测文件不存在并清理导出状态。
   // 必须等 Models 页真实提交（首次访问要走 lazy chunk）：快速连点两次导航在
   // React 事务里会被合并/中断，active 从未提交过 false，页面激活 effect 不触发。
