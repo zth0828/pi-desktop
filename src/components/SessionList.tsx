@@ -3,6 +3,7 @@ import { useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  AlertTriangle,
   AppWindow,
   Archive,
   ArchiveRestore,
@@ -11,10 +12,12 @@ import {
   FileEdit,
   Folder,
   FolderOpen,
+  FolderSync,
   GitFork,
   MoreHorizontal,
   Pencil,
   Pin,
+  Plus,
   Trash2,
   X,
 } from 'lucide-react';
@@ -43,6 +46,7 @@ import {
 import { sessionPathsInTree } from '../stores/panes';
 import { panesStore } from '../stores/panes-default';
 import { useActiveChatStore } from '../pages/Chat/chat-store-context';
+import { getActiveChatStore } from '../stores/chat-registry';
 import { useStore } from 'zustand';
 
 type MenuPosition = { left: number; top: number };
@@ -51,7 +55,9 @@ const SESSION_PAGE_SIZE = 10;
 const MENU_WIDTH = 196;
 // 7 个菜单项（含「在独立窗口打开」）+ 分隔线的估算高度
 const SESSION_MENU_HEIGHT = 280;
-const PROJECT_MENU_HEIGHT = 48;
+const PROJECT_MENU_HEIGHT_NORMAL = 144;
+const PROJECT_MENU_HEIGHT_MISSING = 108;
+const isMac = typeof window !== 'undefined' && window.pidesktop?.platform === 'darwin';
 
 type SessionListProps = {
   onOpenChat: () => void;
@@ -364,6 +370,56 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     }
   };
 
+  const relocateProject = async (oldCwd: string) => {
+    setOpenMenu(undefined);
+    const result = await hostApi.dialog.openDirectory(
+      t('sessions.relocateProjectDialogTitle'),
+      oldCwd,
+    );
+    if (result.canceled || !result.filePaths?.[0]) return;
+    const newCwd = result.filePaths[0];
+    setBusy(true);
+    try {
+      const res = await hostApi.piSessions.relocateProject(oldCwd, newCwd);
+      if (!res.success) {
+        pushGlobalError(
+          formatErrorMessage(res.error, t) ?? t('sessions.relocateFailed', { error: res.error }),
+        );
+      } else {
+        refresh();
+      }
+    } catch {
+      pushGlobalError(t('sessions.actionFailedPlain'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startNewChatInProject = (cwd: string) => {
+    setOpenMenu(undefined);
+    void hostApi.settings.set('workspaceCwd', cwd);
+    onOpenChat();
+    const store = getActiveChatStore();
+    if (store) {
+      const state = store.getState();
+      if (state.cwd === cwd && state.started) {
+        void state.newSession();
+      } else {
+        void state.start?.(cwd);
+      }
+    }
+  };
+
+  const revealInFolder = (cwd: string) => {
+    setOpenMenu(undefined);
+    void hostApi.shell.openPath(cwd);
+  };
+
+  const copyProjectPath = (cwd: string) => {
+    setOpenMenu(undefined);
+    void hostApi.app.writeClipboard(cwd);
+  };
+
   const renderSessionRow = (session: PiSessionRow, isPinned = false) => {
     const sessionKey = `session:${session.path}`;
     const sessionMenuOpen = openMenu === sessionKey;
@@ -672,7 +728,8 @@ export function SessionList({ onOpenChat }: SessionListProps) {
         onContextMenu={(event) => {
           if ((event.target as Element).closest('.sidebar-session-row')) return;
           event.preventDefault();
-          openMenuAt(groupKey, event.clientX, event.clientY, PROJECT_MENU_HEIGHT);
+          const height = group.cwdExists === false ? PROJECT_MENU_HEIGHT_MISSING : PROJECT_MENU_HEIGHT_NORMAL;
+          openMenuAt(groupKey, event.clientX, event.clientY, height);
         }}
       >
         <div className="session-group-heading">
@@ -695,17 +752,49 @@ export function SessionList({ onOpenChat }: SessionListProps) {
             <span className="session-group-name">
               {group.name === SCRATCHPAD_GROUP_KEY ? t('chat.workspace.scratchpadGroup') : group.name}
             </span>
+            {group.name !== SCRATCHPAD_GROUP_KEY && group.cwdExists === false && (
+              <span
+                className="session-group-missing-badge"
+                data-testid={`session-group-missing-${group.name}`}
+                title={t('sessions.cwdMissingTooltip')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void relocateProject(group.cwd);
+                }}
+              >
+                <AlertTriangle size={12} />
+              </span>
+            )}
             <span className="session-group-count">{visibleSessions.length}</span>
           </button>
           {group.name !== SCRATCHPAD_GROUP_KEY && (
-            <button
-              className="session-menu-trigger"
-              data-testid={`${archivedOnly ? 'archived-' : ''}session-group-menu-${group.name}`}
-              aria-label={t('sessions.projectMenu')}
-              onClick={(event) => openMenuFromTrigger(event, groupKey, PROJECT_MENU_HEIGHT)}
-            >
-              <MoreHorizontal size={15} />
-            </button>
+            <div className={`session-group-actions${menuOpen ? ' open' : ''}`}>
+              {group.cwdExists !== false && !archivedOnly && (
+                <button
+                  className="session-menu-trigger session-group-new-chat-trigger"
+                  data-testid={`session-group-new-chat-${group.name}`}
+                  aria-label={t('sessions.newChatInProject')}
+                  title={t('sessions.newChatInProject')}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    startNewChatInProject(group.cwd);
+                  }}
+                >
+                  <Plus size={14} />
+                </button>
+              )}
+              <button
+                className="session-menu-trigger"
+                data-testid={`${archivedOnly ? 'archived-' : ''}session-group-menu-${group.name}`}
+                aria-label={t('sessions.projectMenu')}
+                onClick={(event) => {
+                  const height = group.cwdExists === false ? PROJECT_MENU_HEIGHT_MISSING : PROJECT_MENU_HEIGHT_NORMAL;
+                  openMenuFromTrigger(event, groupKey, height);
+                }}
+              >
+                <MoreHorizontal size={15} />
+              </button>
+            </div>
           )}
           {menuOpen && menuPosition && createPortal(
             <div
@@ -715,13 +804,68 @@ export function SessionList({ onOpenChat }: SessionListProps) {
               role="menu"
               style={menuPosition}
             >
-              <button
-                onClick={() => void archiveProject(group.cwd, !archivedOnly)}
-                disabled={busy || projectRunning}
-              >
-                {archivedOnly ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-                {archivedOnly ? t('sessions.unarchive') : t('sessions.archive')}
-              </button>
+              {group.cwdExists === false ? (
+                <>
+                  <button
+                    data-testid={`project-context-relocate-${group.name}`}
+                    onClick={() => void relocateProject(group.cwd)}
+                    disabled={busy || projectRunning}
+                  >
+                    <FolderSync size={14} />
+                    {t('sessions.relocateProject')}
+                  </button>
+                  <button
+                    data-testid={`project-context-copy-path-${group.name}`}
+                    onClick={() => copyProjectPath(group.cwd)}
+                  >
+                    <Copy size={14} />
+                    {t('sessions.copyProjectPath')}
+                  </button>
+                  <button
+                    data-testid={`project-context-archive-${group.name}`}
+                    onClick={() => void archiveProject(group.cwd, !archivedOnly)}
+                    disabled={busy || projectRunning}
+                  >
+                    {archivedOnly ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+                    {archivedOnly ? t('sessions.unarchive') : t('sessions.archive')}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {!archivedOnly && (
+                    <button
+                      data-testid={`project-context-new-chat-${group.name}`}
+                      onClick={() => startNewChatInProject(group.cwd)}
+                      disabled={busy}
+                    >
+                      <Plus size={14} />
+                      {t('sessions.newChatInProject')}
+                    </button>
+                  )}
+                  <button
+                    data-testid={`project-context-reveal-${group.name}`}
+                    onClick={() => revealInFolder(group.cwd)}
+                  >
+                    <FolderOpen size={14} />
+                    {isMac ? t('sessions.revealInFinder') : t('sessions.showInFolder')}
+                  </button>
+                  <button
+                    data-testid={`project-context-copy-path-${group.name}`}
+                    onClick={() => copyProjectPath(group.cwd)}
+                  >
+                    <Copy size={14} />
+                    {t('sessions.copyProjectPath')}
+                  </button>
+                  <button
+                    data-testid={`project-context-archive-${group.name}`}
+                    onClick={() => void archiveProject(group.cwd, !archivedOnly)}
+                    disabled={busy || projectRunning}
+                  >
+                    {archivedOnly ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+                    {archivedOnly ? t('sessions.unarchive') : t('sessions.archive')}
+                  </button>
+                </>
+              )}
             </div>,
             document.body,
           )}

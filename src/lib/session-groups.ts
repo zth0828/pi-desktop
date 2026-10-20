@@ -22,6 +22,8 @@ export type ProjectGroup = {
   sessions: PiSessionRow[];
   /** 组内最新 modified，用于组间排序 */
   latest: string;
+  /** 工作目录在本地文件系统是否存在 */
+  cwdExists?: boolean;
 };
 
 export function groupByProject(sessions: PiSessionRow[]): ProjectGroup[] {
@@ -39,11 +41,13 @@ export function groupByProject(sessions: PiSessionRow[]): ProjectGroup[] {
         }
         return b.modified.localeCompare(a.modified);
       });
+      const cwdExists = rows.every((r) => r.cwdExists !== false);
       return {
         cwd,
         name: cwd === SCRATCHPAD_GROUP_KEY ? SCRATCHPAD_GROUP_KEY : getProjectName(cwd),
         sessions: sortedRows,
         latest: sortedRows[0]?.modified ?? '',
+        cwdExists,
       };
     })
     .sort((a, b) => {

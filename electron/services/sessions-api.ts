@@ -10,6 +10,7 @@ import { sendHostEvent } from '../main/ipc/host-events';
 import type {
   HostSuccess,
   PiSessionConvertToProjectPayload,
+  PiSessionCwdMissingDetail,
   PiSessionExportInfo,
   PiSessionExportRecord,
   PiSessionExportResult,
@@ -19,6 +20,8 @@ import type {
   PiSessionPinPayload,
   PiSessionArchivePayload,
   PiSessionProjectArchivePayload,
+  PiSessionRelocateProjectPayload,
+  PiSessionRelocateProjectResult,
   PiSessionRenamePayload,
   PiSessionRow,
   PiSessionSearchPayload,
@@ -82,10 +85,82 @@ function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function toSessionCwdMissingResult(
+/**
+ * 智能探测丢失的工作目录可能被移动到的新位置：
+ * 1. 在已知其他有效会话中，匹配项目名（basename）相同且目录真实存在的有效路径；
+ * 2. 如果存在当前活跃工作区（fallbackCwd），推断其同级目录：path.join(path.dirname(fallbackCwd), projectName)；
+ * 3. 浅层扫描原父目录下的一级子文件夹：path.join(originalParent, subDir, projectName)。
+ */
+export async function probeSuggestedCwd(
+  storedCwd: string,
+  fallbackCwd?: string,
+  knownCwds: string[] = [],
+): Promise<string | undefined> {
+  if (!storedCwd || typeof storedCwd !== 'string') return undefined;
+  const cleanStored = stripWindowsExtendedPrefix(storedCwd.trim());
+  const projectName = path.basename(cleanStored);
+  if (!projectName || projectName === '/' || projectName === '.' || projectName === '\\') {
+    return undefined;
+  }
+
+  const isExistingDir = async (dirPath: string): Promise<boolean> => {
+    try {
+      const stats = await stat(dirPath);
+      return stats.isDirectory();
+    } catch {
+      return false;
+    }
+  };
+
+  // 1. 已知会话工作区匹配：在用户所有历史记录中找同名项目且目录存在的项
+  const uniqueKnown = Array.from(new Set(knownCwds));
+  for (const known of uniqueKnown) {
+    if (!known || typeof known !== 'string') continue;
+    const cleanKnown = stripWindowsExtendedPrefix(known.trim());
+    if (samePath(cleanKnown, cleanStored)) continue;
+    if (path.basename(cleanKnown) === projectName) {
+      if (await isExistingDir(cleanKnown)) {
+        return cleanKnown;
+      }
+    }
+  }
+
+  // 2. 启发式探测：从 fallbackCwd（例如当前打开的 .../bingking_project/FlowGate）推断
+  // 同级兄弟目录 .../bingking_project/pi-desktop
+  if (fallbackCwd && typeof fallbackCwd === 'string') {
+    const cleanFallback = stripWindowsExtendedPrefix(fallbackCwd.trim());
+    const parent = path.dirname(cleanFallback);
+    const candidate = path.join(parent, projectName);
+    if (!samePath(candidate, cleanStored) && await isExistingDir(candidate)) {
+      return candidate;
+    }
+  }
+
+  // 3. 原父目录的子目录探测（例如 ~/Desktop/*/pi-desktop）
+  try {
+    const originalParent = path.dirname(cleanStored);
+    const entries = await readdir(originalParent, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const candidate = path.join(originalParent, entry.name, projectName);
+        if (!samePath(candidate, cleanStored) && await isExistingDir(candidate)) {
+          return candidate;
+        }
+      }
+    }
+  } catch {
+    // 忽略目录不可读
+  }
+
+  return undefined;
+}
+
+async function toSessionCwdMissingResult(
   err: unknown,
   fallbackCwd?: string,
-): { sessionCwd: string; fallbackCwd: string } | null {
+  sessionCount?: number,
+  detectedCwd?: string,
+): Promise<PiSessionCwdMissingDetail | null> {
   const name = (err as { name?: string })?.name;
   const message = toError(err);
   const isMissingCwd =
@@ -106,9 +181,29 @@ function toSessionCwdMissingResult(
     if (match) detectedFallback = match[1].trim();
   }
 
+  let finalCount = sessionCount;
+  let finalDetected = detectedCwd;
+
+  if (sessionCwd && (finalCount === undefined || finalDetected === undefined)) {
+    try {
+      const adapter = await loadPiAdapter();
+      const allSessions = await getCachedOrFetchListAll(adapter.sessions);
+      if (finalCount === undefined) {
+        finalCount = allSessions.filter((s) => samePath(s.cwd, sessionCwd)).length;
+      }
+      if (finalDetected === undefined) {
+        finalDetected = await probeSuggestedCwd(sessionCwd, detectedFallback, allSessions.map((s) => s.cwd));
+      }
+    } catch {
+      // 容忍探测与计数异常
+    }
+  }
+
   return {
     sessionCwd: sessionCwd ?? '',
     fallbackCwd: detectedFallback ?? fallbackCwd ?? '',
+    ...(typeof finalCount === 'number' && finalCount > 0 ? { sessionCount: finalCount } : {}),
+    ...(finalDetected ? { detectedCwd: finalDetected } : {}),
   };
 }
 
@@ -156,12 +251,12 @@ export async function updateSessionHeaderCwd(sessionPath: string, newCwd: string
  * 会话记录的工作目录不存在时返回 SESSION_CWD_MISSING 结构化错误供前端确认恢复；
  * 其余错误维持 success:false 返回。
  */
-function switchFailure(err: unknown, fallbackCwd?: string): PiSessionSwitchResult {
+async function switchFailure(err: unknown, fallbackCwd?: string): Promise<PiSessionSwitchResult> {
   const message = toError(err);
   const modelError = toModelUnavailableError(message);
   if (modelError) throw modelError;
 
-  const cwdMissing = toSessionCwdMissingResult(err, fallbackCwd);
+  const cwdMissing = await toSessionCwdMissingResult(err, fallbackCwd);
   if (cwdMissing) {
     return {
       success: false,
@@ -371,7 +466,7 @@ function toRow(s: {
   messageCount: number;
   created: Date;
   modified: Date;
-}, current: string | undefined, archived: boolean, pinned: boolean): PiSessionRow {
+}, current: string | undefined, archived: boolean, pinned: boolean, cwdExists?: boolean): PiSessionRow {
   // 附件 XML 信封不属于标题文字：name/firstMessage 都可能带（pi 按首条消息自动命名时），
   // 列表出口统一剥离，历史脏标题在展示层一并清净
   const cleanName = s.name ? stripAttachmentEnvelope(s.name) : '';
@@ -379,6 +474,7 @@ function toRow(s: {
     path: s.path,
     id: s.id,
     cwd: s.cwd,
+    cwdExists,
     name: cleanName || undefined,
     firstMessage: stripAttachmentEnvelope(s.firstMessage),
     messageCount: s.messageCount,
@@ -410,10 +506,22 @@ async function toRowSafely(
   current: string | undefined,
   sessions: PiSessionCatalogPort,
   action: string,
+  cwdExistsCache?: Map<string, boolean>,
 ): Promise<PiSessionRow | null> {
   try {
     const flags = await resolveMetadataFlags(session.path, sessions);
-    return toRow(session, current, flags.archived, flags.pinned);
+    let cwdExists: boolean | undefined;
+    if (session.cwd) {
+      if (cwdExistsCache) {
+        if (!cwdExistsCache.has(session.cwd)) {
+          cwdExistsCache.set(session.cwd, existsSync(session.cwd));
+        }
+        cwdExists = cwdExistsCache.get(session.cwd);
+      } else {
+        cwdExists = existsSync(session.cwd);
+      }
+    }
+    return toRow(session, current, flags.archived, flags.pinned, cwdExists);
   } catch (err) {
     writePiDiagnostic({
       level: 'warning',
@@ -458,6 +566,16 @@ async function switchSessionImpl(
 
   // 若没有提供 cwdOverride，且会话记录的 cwd 不存在，直接返回 SESSION_CWD_MISSING
   if (!payload.cwdOverride && storedCwd && !existsSync(storedCwd)) {
+    let sessionCount: number | undefined;
+    let detectedCwd: string | undefined;
+    try {
+      const adapter = await loadPiAdapter();
+      const allSessions = await getCachedOrFetchListAll(adapter.sessions);
+      sessionCount = allSessions.filter((s) => samePath(s.cwd, storedCwd)).length;
+      detectedCwd = await probeSuggestedCwd(storedCwd, fallbackCwd, allSessions.map((s) => s.cwd));
+    } catch {
+      // 统计会话数/探测失败不影响主流程，留给前端回退展示
+    }
     return {
       success: false,
       error: `Stored session working directory does not exist: ${storedCwd}`,
@@ -465,6 +583,8 @@ async function switchSessionImpl(
       detail: {
         sessionCwd: storedCwd,
         fallbackCwd,
+        ...(typeof sessionCount === 'number' && sessionCount > 0 ? { sessionCount } : {}),
+        ...(detectedCwd ? { detectedCwd } : {}),
       },
     };
   }
@@ -514,7 +634,7 @@ async function switchSessionImpl(
       if (payload.cwdOverride) await updateSessionHeaderCwd(payload.path, payload.cwdOverride);
       return { success: true };
     } catch (err) {
-      return switchFailure(err, targetCwd);
+      return await switchFailure(err, targetCwd);
     }
   }
   // 当前 runtime 还被其他窗口查看时，不能在它上面原地 switch，也不能走
@@ -535,7 +655,7 @@ async function switchSessionImpl(
       await commitWorkspaceCwd(targetCwd);
       return { success: true };
     } catch (err) {
-      return switchFailure(err, targetCwd ?? current.cwd);
+      return await switchFailure(err, targetCwd ?? current.cwd);
     }
   }
   // 跨项目切换：目标会话的 cwd 与当前 runtime 不同时先重建 runtime
@@ -551,7 +671,7 @@ async function switchSessionImpl(
       await commitWorkspaceCwd(targetCwd);
     }
   } catch (err) {
-    return switchFailure(err, fallbackCwd);
+    return await switchFailure(err, fallbackCwd);
   }
   const active = getActiveRuntime();
   if (!active) return { success: false, error: 'session not started' };
@@ -579,7 +699,7 @@ async function switchSessionImpl(
     if (payload.cwdOverride) await updateSessionHeaderCwd(payload.path, payload.cwdOverride);
     return { success: true };
   } catch (err) {
-    return switchFailure(err, targetCwd ?? active.cwd);
+    return await switchFailure(err, targetCwd ?? active.cwd);
   }
 }
 
@@ -619,9 +739,10 @@ export const sessionsApi = {
     const infos = await adapter.sessions.list(cwd);
     const current = ctx?.sessionPath ?? currentSessionFile();
     const liveSessions = mergeLiveSessions(infos);
+    const cwdExistsCache = new Map<string, boolean>();
     const sessions = (
       await Promise.all(
-        liveSessions.map((s) => toRowSafely(s, current, adapter.sessions, 'list')),
+        liveSessions.map((s) => toRowSafely(s, current, adapter.sessions, 'list', cwdExistsCache)),
       )
     )
       .filter((row): row is PiSessionRow => row !== null && row.messageCount > 0)
@@ -634,9 +755,10 @@ export const sessionsApi = {
     const infos = await getCachedOrFetchListAll(adapter.sessions);
     const current = ctx?.sessionPath ?? currentSessionFile();
     const liveSessions = mergeLiveSessions(infos);
+    const cwdExistsCache = new Map<string, boolean>();
     const sessions = (
       await Promise.all(
-        liveSessions.map((s) => toRowSafely(s, current, adapter.sessions, 'listAll')),
+        liveSessions.map((s) => toRowSafely(s, current, adapter.sessions, 'listAll', cwdExistsCache)),
       )
     )
       .filter((row): row is PiSessionRow => row !== null && row.messageCount > 0)
@@ -1108,5 +1230,124 @@ export const sessionsApi = {
     const sessionKey = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const dir = await ensureScratchpadSessionDir(sessionKey);
     return { dir };
+  },
+
+  relocateProject: async (
+    payload: PiSessionRelocateProjectPayload,
+    _ctx?: HostActionContext,
+  ): Promise<PiSessionRelocateProjectResult> => {
+    if (!payload?.oldCwd || !payload?.newCwd) {
+      return { success: false, error: 'invalid oldCwd or newCwd' };
+    }
+    const oldCwd = stripWindowsExtendedPrefix(payload.oldCwd.trim());
+    const newCwd = stripWindowsExtendedPrefix(payload.newCwd.trim());
+    if (isWindowsDevicePath(oldCwd) || isWindowsDevicePath(newCwd)) {
+      return { success: false, error: 'device paths are not allowed' };
+    }
+    const risky = riskyWorkspaceReason(newCwd);
+    if (risky) {
+      return { success: false, error: `risky-workspace-${risky}` };
+    }
+    if (!existsSync(newCwd)) {
+      return { success: false, error: 'target directory does not exist' };
+    }
+    if (samePath(oldCwd, newCwd)) {
+      return { success: true, count: 0 };
+    }
+
+    const adapter = await loadPiAdapter();
+    const allInfos = await getCachedOrFetchListAll(adapter.sessions);
+    const matchingSessions = allInfos.filter((s) => samePath(s.cwd, oldCwd));
+
+    // 检查是否有任何属于该工作区的会话正在运行
+    for (const session of matchingSessions) {
+      if (isSessionRunning(session.path)) {
+        return { success: false, error: 'session is running' };
+      }
+    }
+
+    // 释放内存中绑在旧工作区路径上的空闲 runtime（确保切入时按 newCwd 重建）
+    for (const session of matchingSessions) {
+      const live = getRuntimeForSession(session.path);
+      if (live) {
+        disposeRuntime(live);
+      }
+    }
+
+    let targetSessionDir: string | undefined;
+    try {
+      targetSessionDir = adapter.sessions.getSessionDir?.(newCwd);
+    } catch {
+      // ignore
+    }
+    if (targetSessionDir) {
+      await mkdir(targetSessionDir, { recursive: true }).catch(() => {});
+    }
+
+    const movedPaths: Record<string, string> = {};
+    const oldDirsToCheck = new Set<string>();
+
+    for (const session of matchingSessions) {
+      const sourceFile = session.path;
+      if (!existsSync(sourceFile)) continue;
+
+      // 1. 安全改写会话文件的 header cwd
+      await updateSessionHeaderCwd(sourceFile, newCwd);
+
+      // 2. 若 pi session 目录不同，将 session 文件迁移到对应的目录中
+      if (targetSessionDir) {
+        const currentDir = path.dirname(sourceFile);
+        if (!samePath(currentDir, targetSessionDir)) {
+          oldDirsToCheck.add(currentDir);
+          const targetFile = path.join(targetSessionDir, path.basename(sourceFile));
+          if (!samePath(sourceFile, targetFile)) {
+            try {
+              await rename(sourceFile, targetFile);
+              movedPaths[sourceFile] = targetFile;
+              invalidateSessionMetadata(sourceFile);
+              invalidateSessionMetadata(targetFile);
+            } catch (err) {
+              writePiDiagnostic({
+                level: 'warning',
+                event: 'session.relocate-file-move-failed',
+                module: 'sessions',
+                action: 'relocateProject',
+                sessionPathHash: hashSessionPath(sourceFile),
+                ...safeErrorFields(err),
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // 3. 清理已变为空目录的旧 pi session 文件夹
+    for (const oldDir of oldDirsToCheck) {
+      try {
+        const files = await readdir(oldDir);
+        if (files.length === 0) {
+          await rmdir(oldDir).catch(() => {});
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 4. 若全局记录的当前工作区也是该旧路径，自动同步为新工作区
+    const currentWorkspaceCwd = await settingsApi.get({ key: 'workspaceCwd' });
+    if (currentWorkspaceCwd && samePath(String(currentWorkspaceCwd), oldCwd)) {
+      await commitWorkspaceCwd(newCwd);
+    }
+
+    // 5. 清除缓存并通知渲染层
+    clearSessionMetadataCache();
+    sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'relocateProject' });
+
+    return {
+      success: true,
+      count: matchingSessions.length,
+      newSessionDir: targetSessionDir,
+      movedPaths,
+    };
   },
 };

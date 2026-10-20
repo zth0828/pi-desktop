@@ -1268,6 +1268,8 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.12s ease;
 }
 
@@ -1350,7 +1352,7 @@
 
 /* 工作目录不存在弹窗 */
 .session-cwd-missing-dialog {
-  width: min(520px, 94vw);
+  width: min(560px, 94vw);
   background: var(--bg-raised);
   border: 1px solid var(--border-strong);
   border-radius: 12px;
@@ -1454,6 +1456,47 @@
   color: var(--accent);
 }
 
+.session-cwd-badge.detected {
+  background: color-mix(in srgb, var(--success, #10b981) 15%, transparent);
+  color: var(--success, #10b981);
+}
+
+.session-cwd-path-box.detected {
+  border-color: color-mix(in srgb, var(--success, #10b981) 40%, var(--border));
+}
+
+.session-cwd-mismatch-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--warning, #f59e0b);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 10%, transparent);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 25%, transparent);
+}
+
+.session-cwd-batch-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 2px;
+}
+
+.session-cwd-batch-toggle input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  margin: 0;
+}
+
 .session-cwd-missing-footer {
   display: flex;
   align-items: center;
@@ -1468,6 +1511,7 @@
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 /* 项目信任弹窗 (Trust Dialog) */

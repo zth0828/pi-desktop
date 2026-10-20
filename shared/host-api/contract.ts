@@ -908,6 +908,7 @@ export type PiSessionCwdMissingDetail = {
   sessionCwd: string;
   fallbackCwd: string;
   sessionCount?: number;
+  detectedCwd?: string;
 };
 
 export type PiSessionRelocateProjectPayload = {

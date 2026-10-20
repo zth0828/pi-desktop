@@ -158,6 +158,35 @@
   font-size: 12px;
 }
 
+.session-project-missing-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--warning, #f59e0b);
+  flex-shrink: 0;
+}
+
+.session-project-relocate {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-group-missing-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--warning, #f59e0b);
+  flex-shrink: 0;
+  margin-left: 2px;
+  cursor: pointer;
+}
+
+.session-group-missing-badge:hover {
+  transform: scale(1.15);
+}
+
 .session-project-open {
   flex-shrink: 0;
 }
@@ -2243,6 +2272,23 @@
 .session-menu-trigger:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+
+.session-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.session-group-new-chat-trigger {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.session-group-heading:hover .session-group-new-chat-trigger,
+.session-group-new-chat-trigger:focus-visible {
+  opacity: 1;
 }
 
 .sidebar-session-row {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowDown,
   ChevronDown,
   ChevronUp,
@@ -10,6 +11,7 @@ import {
   FileEdit,
   Folder,
   FolderOpen,
+  FolderSync,
   Pin,
   X,
 } from 'lucide-react';
@@ -475,6 +477,27 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
     return groups.every((g) => collapsedGroups[g.cwd]);
   }, [groups, collapsedGroups]);
 
+  const handleRelocateProject = async (oldCwd: string) => {
+    const result = await hostApi.dialog.openDirectory(
+      t('sessions.relocateProjectDialogTitle'),
+      oldCwd,
+    );
+    if (result.canceled || !result.filePaths?.[0]) return;
+    const newCwd = result.filePaths[0];
+    try {
+      const res = await hostApi.piSessions.relocateProject(oldCwd, newCwd);
+      if (!res.success) {
+        showNotice(
+          formatErrorMessage(res.error, t) ?? t('sessions.relocateFailed', { error: res.error }),
+        );
+      } else {
+        refreshSessions();
+      }
+    } catch {
+      showNotice(t('sessions.actionFailedPlain'));
+    }
+  };
+
   const toggleAllGroups = () => {
     if (allCollapsed) {
       setCollapsedGroups({});
@@ -670,21 +693,46 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
                     <span className="session-project-path hint" title={group.cwd}>
                       {group.name === SCRATCHPAD_GROUP_KEY ? t('chat.workspace.scratchpadDesc') : group.cwd}
                     </span>
+                    {group.name !== SCRATCHPAD_GROUP_KEY && group.cwdExists === false && (
+                      <span
+                        className="session-project-missing-badge"
+                        data-testid={`session-project-missing-${group.name}`}
+                        title={t('sessions.cwdMissingTooltip')}
+                      >
+                        <AlertTriangle size={13} />
+                      </span>
+                    )}
                     <span className="session-project-count">
                       {t('sessions.projectCount', { count: group.sessions.length })}
                     </span>
-                    <button
-                      className="pill session-project-open"
-                      data-testid={`session-project-open-${group.name}`}
-                      title={t('sessions.openProjectFolder')}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void runShellAction(() => hostApi.shell.openPath(group.cwd));
-                      }}
-                    >
-                      <FolderOpen size={13} />
-                      {t('sessions.openProjectFolder')}
-                    </button>
+                    {group.name !== SCRATCHPAD_GROUP_KEY && group.cwdExists === false && (
+                      <button
+                        className="pill session-project-relocate"
+                        data-testid={`session-project-relocate-${group.name}`}
+                        title={t('sessions.relocateProject')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleRelocateProject(group.cwd);
+                        }}
+                      >
+                        <FolderSync size={13} />
+                        {t('sessions.relocateProject')}
+                      </button>
+                    )}
+                    {group.name !== SCRATCHPAD_GROUP_KEY && group.cwdExists !== false && (
+                      <button
+                        className="pill session-project-open"
+                        data-testid={`session-project-open-${group.name}`}
+                        title={t('sessions.openProjectFolder')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void runShellAction(() => hostApi.shell.openPath(group.cwd));
+                        }}
+                      >
+                        <FolderOpen size={13} />
+                        {t('sessions.openProjectFolder')}
+                      </button>
+                    )}
                   </div>
                   {!isCollapsed && group.sessions.map((s) => (
                     <SessionRow

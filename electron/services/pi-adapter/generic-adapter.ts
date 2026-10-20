@@ -354,6 +354,13 @@ export function createGenericPiAdapter(input: AdapterInput): PiRuntimeAdapter {
     appendCustomEntry: (document, type, data) => getDocument(document).appendCustomEntry(type, data),
     appendSessionInfo: (document, name) => getDocument(document).appendSessionInfo(name),
     toContextMessages: (entry) => sdk.sessionEntryToContextMessages(entry as never),
+    getSessionDir: (cwd) => {
+      try {
+        return sdk.SessionManager.create(cwd).getSessionDir?.() ?? undefined;
+      } catch {
+        return undefined;
+      }
+    },
   };
 
   const settingsPort: PiSettingsPort = {

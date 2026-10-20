@@ -99,4 +99,17 @@ describe('groupByProject', () => {
     expect(groups[0].sessions).toHaveLength(2);
     expect(groups[1].name).toBe('normal-project');
   });
+
+  it('正确传递与聚合 cwdExists 状态', () => {
+    const sessions: PiSessionRow[] = [
+      mockSession({ id: 's1', cwd: '/workspace/project-valid', messageCount: 1, cwdExists: true }),
+      mockSession({ id: 's2', cwd: '/workspace/project-missing', messageCount: 1, cwdExists: false }),
+      mockSession({ id: 's3', cwd: '/workspace/project-missing', messageCount: 2, cwdExists: false }),
+    ];
+    const groups = groupByProject(sessions);
+    const validGroup = groups.find((g) => g.name === 'project-valid');
+    const missingGroup = groups.find((g) => g.name === 'project-missing');
+    expect(validGroup?.cwdExists).toBe(true);
+    expect(missingGroup?.cwdExists).toBe(false);
+  });
 });

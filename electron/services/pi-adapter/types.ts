@@ -233,6 +233,7 @@ export type PiSessionCatalogPort = {
   appendCustomEntry(document: PiSessionDocumentHandle, type: string, data: unknown): string;
   appendSessionInfo(document: PiSessionDocumentHandle, name: string): string;
   toContextMessages(entry: PiSessionEntry): unknown[];
+  getSessionDir?(cwd: string): string | undefined;
 };
 
 export type PiProviderPort = {

@@ -103,7 +103,7 @@ export type ChatState = {
   /** switchSession 失败的目标：重试按钮据此重发切换，而不是 start 新会话 */
   lastFailedSwitch: { path: string; cwd?: string } | null;
   /** 会话记录的工作目录不存在时待确认的恢复信息 */
-  sessionCwdMissing?: { sessionPath: string; sessionCwd: string; fallbackCwd: string } | null;
+  sessionCwdMissing?: { sessionPath: string; sessionCwd: string; fallbackCwd: string; sessionCount?: number; detectedCwd?: string } | null;
   cwd?: string;
   sessionId?: string;
   /**
@@ -600,6 +600,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
                 sessionPath: path,
                 sessionCwd: detail.sessionCwd,
                 fallbackCwd: detail.fallbackCwd || cwd || get().cwd || '',
+                sessionCount: detail.sessionCount,
+                detectedCwd: detail.detectedCwd,
               } : null,
             });
             return result;
@@ -632,7 +634,7 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
           const error = err instanceof Error ? err.message : String(err);
           const invokeErr = err as HostInvokeError;
           const isMissingCwd = invokeErr.code === 'SESSION_CWD_MISSING';
-          const detail = invokeErr.details as { sessionCwd?: string; fallbackCwd?: string } | undefined;
+          const detail = invokeErr.details as { sessionCwd?: string; fallbackCwd?: string; sessionCount?: number; detectedCwd?: string } | undefined;
           set({
             starting: false,
             startError: error,
@@ -642,6 +644,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
               sessionPath: path,
               sessionCwd: detail.sessionCwd ?? '',
               fallbackCwd: detail.fallbackCwd || cwd || get().cwd || '',
+              sessionCount: detail.sessionCount,
+              detectedCwd: detail.detectedCwd,
             } : null,
           });
           return { success: false, error, errorCode: invokeErr.code };
