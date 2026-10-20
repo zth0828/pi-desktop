@@ -133,6 +133,8 @@ export type ActiveRuntime = {
   pendingBashRefresh: boolean;
   unsubscribe: () => void;
   pendingPrompts: Array<{ requestId: string; phase: 'accepted' | 'started' }>;
+  /** 处于发送前准备阶段（快照/引用展开）的 prompt 数；会话原地变更前必须等其归零。 */
+  promptPreps: number;
   queuedImages: Map<string, unknown[]>;
 };
 
@@ -807,6 +809,9 @@ function bridgeSessionEvents(runtime: ActiveRuntime): () => void {
       // 防休眠挂钩（main 侧自治）：run 期间顶住休眠，重试等待保持，结束/替换解除
       if (mapped.type === 'run.started') {
         runtime.running = true;
+        // run 开始意味着会话文件已（或将）落盘新消息：废掉 listAll 的 TTL 快照，
+        // 否则侧栏在缓存窗口内读不到刚创建的会话文件，且之后没有事件再触发刷新。
+        invalidateSessionListCache();
         const pending = runtime.pendingPrompts.find((item) => item.phase === 'accepted');
         if (pending) {
           pending.phase = 'started';
@@ -819,6 +824,8 @@ function bridgeSessionEvents(runtime: ActiveRuntime): () => void {
           running: runtime.running,
         }));
       } else if (mapped.type === 'run.ended') {
+        // run 结束 = 会话文件最终落盘：废掉 listAll 的 TTL 快照，侧栏/搜索立即可见
+        if (!mapped.willRetry) invalidateSessionListCache();
         if (!mapped.willRetry) {
           const pending = runtime.pendingPrompts.find((item) => item.phase === 'started');
           if (pending) {
@@ -987,6 +994,7 @@ async function createRuntime(
     pendingBashRefresh: false,
     unsubscribe: () => {},
     pendingPrompts: [],
+    promptPreps: 0,
     queuedImages: new Map(),
   };
   active_.eventBus.on(MCP_STATUS_CHANNEL, (data) => {
@@ -1192,6 +1200,18 @@ export async function afterSessionReplaced(
     maybeDisposeRuntime(previousActive);
   }
   return state;
+}
+
+/**
+ * 会话原地变更（newSession/switch/fork）前等发送准备中的 prompt 完成提交。
+ * 准备阶段含 baseline/检查点快照与引用展开（数百毫秒级），不等的话
+ * 变更先行会让这条消息投递到替换后的新会话。超时降级放行，避免卡死。
+ */
+export async function waitForPromptPreps(runtime: ActiveRuntime, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (runtime.promptPreps > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
 }
 
 function shouldIsolateSessionReplacement(runtime: ActiveRuntime, ctx?: HostActionContext): boolean {
@@ -1436,6 +1456,12 @@ export const piRuntimeApi = {
     emitPromptLifecycle(active, 'submitted', requestId);
     const pendingPrompt = { requestId, phase: 'accepted' as const };
     active.pendingPrompts.push(pendingPrompt);
+    // 准备阶段计数：会话原地变更（newSession/switch/fork）等待其归零，
+    // 保证消息投递到发送时所见的会话，而不是替换后的新会话。
+    active.promptPreps += 1;
+    let expanded: Awaited<ReturnType<typeof expandFileReferences>>;
+    let allImages: unknown[];
+    let isBusy: boolean;
     try {
       const userTurnIndex = session.messages?.filter((m) => (m as { role?: string })?.role === 'user').length ?? 0;
       // 快照必须先于本轮工具写盘完成：异步捕获与编辑并发会把编辑后的文件
@@ -1444,9 +1470,9 @@ export const piRuntimeApi = {
       await captureTurnCheckpointForActive(active, userTurnIndex);
 
       // @path 就地展开为 <file> 块（pi file-processor 语义；图片转 images 通道）
-      const expanded = await expandFileReferences(payload.text, active.cwd);
+      expanded = await expandFileReferences(payload.text, active.cwd);
       const staged = (payload.images ?? []) as unknown[];
-      const allImages = [...expanded.images, ...staged];
+      allImages = [...expanded.images, ...staged];
 
       // 允许工作区预览用户消息中附加/展开的外部文件
       const root = normalizePreviewablePath(active.cwd);
@@ -1462,11 +1488,15 @@ export const piRuntimeApi = {
         }
       }
 
-      const isBusy = session.isStreaming || session.isRetrying;
+      isBusy = session.isStreaming || session.isRetrying;
 
       if (isBusy && allImages.length > 0) {
         active.queuedImages.set(expanded.text, allImages);
       }
+    } finally {
+      active.promptPreps -= 1;
+    }
+    try {
 
       return await new Promise<{ success: boolean; error?: string }>((resolve) => {
         let settled = false;
@@ -1607,16 +1637,11 @@ export const piRuntimeApi = {
     return serializeSessionOp(key, async () => {
       const active = resolveRuntimeForContext(ctx);
       if (!active) return { success: false, error: 'session not started' };
+      // 准备中的 prompt 先提交到当前会话，再做替换判定（提交后 isStreaming 为真，走隔离路径）。
+      await waitForPromptPreps(active);
       // 同一会话可同时显示在多个窗口。此时不能在共享 runtime 上原地
       // newSession，否则所有窗口都会收到 sessionReplaced；只为发起窗口创建新 runtime。
-      // pendingPrompts 非空 = 有 prompt 在发送前准备阶段（快照/展开），
-      // run 尚未开始但消息属于当前会话，同样必须隔离而非原地替换。
-      if (
-        active.adapterRuntime.session.isStreaming ||
-        active.running ||
-        active.pendingPrompts.length > 0 ||
-        shouldIsolateSessionReplacement(active, ctx)
-      ) {
+      if (active.adapterRuntime.session.isStreaming || active.running || shouldIsolateSessionReplacement(active, ctx)) {
         try {
           await createReplacementRuntime(active, ctx, actionId);
           invalidateSessionListCache();
@@ -1645,6 +1670,7 @@ export const piRuntimeApi = {
     return serializeSessionOp(key, async () => {
       const active = resolveRuntimeForContext(ctx);
       if (!active) return { success: false, error: 'session not started' };
+      await waitForPromptPreps(active);
       if (active.adapterRuntime.session.isStreaming) return { success: false, error: 'session is streaming' };
       let forkRuntime = active;
       let isolated = false;

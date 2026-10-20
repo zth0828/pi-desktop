@@ -51,6 +51,7 @@ import {
   resolveRuntimeForContext,
   isSessionRunning,
   piRuntimeApi,
+  waitForPromptPreps,
 } from './pi-runtime-api';
 import {
   bindWindowSession,
@@ -704,6 +705,9 @@ async function switchSessionImpl(
     return { success: true };
   }
   try {
+    // 准备中的 prompt 先提交到当前会话（提交后 isStreaming 为真，走保活路径），
+    // 否则原地 switch 会让这条消息落进切换后的会话。
+    await waitForPromptPreps(active);
     if (active.adapterRuntime.session.view.isStreaming) {
       await createSessionRuntime(targetCwd ?? active.cwd, payload.path, {
         cwdOverride: payload.cwdOverride,
