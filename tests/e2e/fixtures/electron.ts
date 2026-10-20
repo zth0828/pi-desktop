@@ -52,6 +52,20 @@ const repoRoot = resolve(process.cwd());
 const electronEntry = join(repoRoot, 'dist-electron/main/index.js');
 const nodeBinDir = path.dirname(process.execPath);
 
+// Windows 的隔离 PATH 只含 pi/node 时会连 git 一并隐藏：review baseline、
+// turn checkpoint、git 分支菜单等壳功能都要主进程 spawn('git')。
+// 从测试进程自身 PATH 解析 git 目录加回隔离 PATH（pi 隔离语义不受影响）。
+const windowsGitBinDir = (): string | null => {
+  if (process.platform !== 'win32') return null;
+  try {
+    const out = execFileSync('where', ['git'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const first = out.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
+    return first ? path.dirname(first) : null;
+  } catch {
+    return null;
+  }
+};
+
 // Windows 上只杀主进程会留下 renderer/GPU/utility 孤儿进程，继续占用
 // user-data 里的文件（DIPS 等），导致后续 rm EBUSY；必须杀整棵进程树。
 function killProcessTree(pid: number): void {
@@ -154,9 +168,11 @@ export const test = base.extend<ElectronFixtures>({
         // Windows 的 PATH 用 `;` 分隔且没有 /usr/bin:/bin；POSIX 形态的默认值在
         // Windows 上会被当成单个目录，导致 node/npm/pi 全部检测失败。
         // 懒求值：仅 withPi 场景才有 piEnv
-        const defaultUserPath = () => (process.platform === 'win32'
-          ? [piEnv!.piBinDir, nodeBinDir].join(path.delimiter)
-          : `${piEnv!.piBinDir}:${nodeBinDir}:/usr/bin:/bin`);
+        const defaultUserPath = () => {
+          if (process.platform !== 'win32') return `${piEnv!.piBinDir}:${nodeBinDir}:/usr/bin:/bin`;
+          const gitBinDir = windowsGitBinDir();
+          return [piEnv!.piBinDir, nodeBinDir, ...(gitBinDir ? [gitBinDir] : [])].join(path.delimiter);
+        };
         const app = await electron.launch({
           executablePath: electronBinaryPath,
           // darwin 直跑 node_modules 裸 Electron 时 seatbelt 沙箱初始化会 EPERM，
