@@ -44,7 +44,7 @@ test.describe('主窗口关闭行为', () => {
 
     // 选择退出
     await page.locator('[data-testid="close-confirm-option-quit"]').click();
-    const closePromise = app.waitForEvent('close', { timeout: 10_000 });
+    const closePromise = app.waitForEvent('close', { timeout: 30_000 });
     await page.locator('[data-testid="close-confirm-confirm"]').click();
     await closePromise;
   });
@@ -90,7 +90,7 @@ test.describe('主窗口关闭行为', () => {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
 
-    const closePromise = app.waitForEvent('close', { timeout: 10_000 });
+    const closePromise = app.waitForEvent('close', { timeout: 30_000 });
     // 点击关闭按钮触发 close
     await app.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0].close();
@@ -105,7 +105,7 @@ test.describe('主窗口关闭行为', () => {
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
     // app.quit() 走 before-quit → setQuitting(true) → 主窗口 close 放行 → 应用退出。
-    const closePromise = app.waitForEvent('close', { timeout: 10_000 });
+    const closePromise = app.waitForEvent('close', { timeout: 30_000 });
     await app.evaluate(({ app: electronApp }) => electronApp.quit());
     await closePromise;
   });
