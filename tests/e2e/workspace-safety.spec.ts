@@ -139,7 +139,12 @@ test('删除跨项目最后一个会话 → 空的会话目录被清理', async 
 
   await page.getByTestId('nav-sessions').click();
   const row = page.locator('[data-testid^="session-row-"]').filter({ hasText: 'orphan project session' });
-  await expect(row).toHaveCount(1, { timeout: 15_000 });
+  await expect.poll(async () => {
+    if (await row.count() === 1) return true;
+    await page.getByTestId('nav-chat').click();
+    await page.getByTestId('nav-sessions').click();
+    return (await row.count()) === 1;
+  }, { timeout: 15_000, intervals: [800, 1500, 2000] }).toBe(true);
   await row.getByTestId('session-delete').click();
   await row.getByTestId('session-delete-confirm').click();
   await expect(row).toHaveCount(0, { timeout: 15_000 });

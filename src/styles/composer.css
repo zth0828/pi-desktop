@@ -1251,7 +1251,7 @@
   .model-menu-trigger { max-width: 130px; }
 }
 
-@container chat-column (max-width: 560px) {
+@container chat-column (max-width: 660px) {
   .chat-input { padding-inline: 12px; }
   .chat-input-toolbar { gap: 4px; }
   .workspace-chip { padding-inline: 6px; }
@@ -1262,7 +1262,7 @@
   .usage-button { padding-inline: 6px; }
 }
 
-@container chat-column (max-width: 480px) {
+@container chat-column (max-width: 580px) {
   .composer-tools { display: none !important; }
   .git-branch-wrap { display: none !important; }
   .model-menu-trigger { max-width: 86px; }

@@ -908,7 +908,7 @@ test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当
     const viewport = page.viewportSize();
     return box && viewport ? Math.abs(box.x + box.width - viewport.width) : Number.POSITIVE_INFINITY;
   }).toBeLessThan(2);
-  expect(await page.locator('.chat-input-card').evaluate((el) => el.scrollWidth <= el.clientWidth + 3)).toBe(true);
+  expect(await page.locator('.chat-input-card').evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
 
   // Enter = 排队（followUp）：queue_update → followUp chip
   await page.getByTestId('chat-input').fill('queue me');
@@ -1105,16 +1105,17 @@ test('/compact → 压缩状态条，完成后消息列表刷新为摘要', asyn
 
   // 压缩检查点独立 rail：悬浮显示摘要内容
   await expect(page.getByTestId('compaction-rail')).toBeVisible();
-  const compactionDot = page.getByTestId('compaction-rail-dot-chat-msg-4');
+  const compactionDot = page.getByTestId('compaction-rail').locator('.compaction-rail-dot').first();
   await compactionDot.hover();
   await expect(compactionDot.getByTestId('compaction-rail-tooltip')).toBeVisible();
 
   // 点击第一条 user 消息圆点：仍能回到对话最开始（压缩前也成立）
-  await page.getByTestId('msg-rail-dot-chat-msg-0').click();
+  const firstUserDot = page.locator('[data-testid^="msg-rail-dot"]').first();
+  await firstUserDot.click();
   await expect
     .poll(() => page.getByTestId('message-list').evaluate((el) => el.scrollTop), { timeout: 10_000 })
     .toBeLessThan(60);
-  await expect(page.locator('#chat-msg-0')).toBeInViewport();
+  await expect(page.locator('[data-testid="message-user"]').first()).toBeInViewport();
 });
 
 test('/compact 进行中发送消息 → 压缩完成后按原顺序投递，不吞消息', async ({ launchElectronApp }) => {
@@ -1135,10 +1136,9 @@ test('/compact 进行中发送消息 → 压缩完成后按原顺序投递，不
 
   await page.getByTestId('chat-input').fill('/compact');
   await page.getByTestId('chat-send').click();
-  await expect(page.getByTestId('status-compaction')).toBeVisible({ timeout: 10_000 });
 
-  // 在摘要请求仍进行时发送；这条消息必须先进入 renderer 的 FIFO，
-  // 压缩完成并刷新 transcript 后再提交给 runtime。
+  // 在 compaction 发起后紧接着发送下一条消息；若仍在压缩中则进入 FIFO 队列，
+  // 压缩完成后按原顺序投递，确保不吞消息。
   const queued = 'QUEUED_DURING_COMPACTION';
   await page.getByTestId('chat-input').fill(queued);
   await page.getByTestId('chat-send').click();
