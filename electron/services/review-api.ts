@@ -262,6 +262,8 @@ type Baseline = {
 };
 const baselines = new Map<string, Baseline>();
 const capturingCwds = new Set<string>();
+/** 进行中的 baseline 捕获：prompt 发前必须等它落定，否则首张快照可能采进本轮编辑。 */
+const baselineCaptures = new Map<string, Promise<void>>();
 const baselineFailures = new Map<string, string>();
 
 /**
@@ -331,10 +333,32 @@ function disposeBaseline(): void {
  * 为会话建 baseline（runtime 创建时调用；同一 cwd 重复调用直接复用）。
  * 非 Git 目录使用临时 bare object store，项目目录本身不会出现 .git。
  */
-export async function captureReviewBaseline(cwd: string): Promise<void> {
-  if (!cwd || typeof cwd !== 'string' || !cwd.trim()) return;
+export function captureReviewBaseline(cwd: string): Promise<void> {
+  if (!cwd || typeof cwd !== 'string' || !cwd.trim()) return Promise.resolve();
   const cleanCwd = stripWindowsExtendedPrefix(cwd.trim());
-  if (!cleanCwd || isWindowsDevicePath(cleanCwd)) return;
+  if (!cleanCwd || isWindowsDevicePath(cleanCwd)) return Promise.resolve();
+  if (findBaseline(cwd)) return Promise.resolve();
+  for (const [key, capture] of baselineCaptures.entries()) {
+    if (samePath(key, cwd)) return capture;
+  }
+  const capture = captureReviewBaselineInner(cwd).finally(() => {
+    for (const [key, value] of [...baselineCaptures.entries()]) {
+      if (value === capture) baselineCaptures.delete(key);
+    }
+  });
+  baselineCaptures.set(cwd, capture);
+  return capture;
+}
+
+/** 等待该 cwd 进行中的 baseline 捕获落定（无进行中捕获时立即返回）。 */
+export function awaitReviewBaseline(cwd: string): Promise<void> {
+  for (const [key, capture] of baselineCaptures.entries()) {
+    if (samePath(key, cwd)) return capture;
+  }
+  return Promise.resolve();
+}
+
+async function captureReviewBaselineInner(cwd: string): Promise<void> {
   if (findBaseline(cwd) || hasCapturingCwd(cwd)) return;
   capturingCwds.add(cwd);
   for (const key of [...baselineFailures.keys()]) {

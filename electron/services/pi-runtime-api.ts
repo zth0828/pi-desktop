@@ -83,6 +83,7 @@ import {
   resolveUiResponse,
 } from './extension-ui';
 import {
+  awaitReviewBaseline,
   captureReviewBaseline,
   clearReviewBaseline,
   captureTurnCheckpointForActive,
@@ -1437,7 +1438,10 @@ export const piRuntimeApi = {
     active.pendingPrompts.push(pendingPrompt);
     try {
       const userTurnIndex = session.messages?.filter((m) => (m as { role?: string })?.role === 'user').length ?? 0;
-      void captureTurnCheckpointForActive(active, userTurnIndex);
+      // 快照必须先于本轮工具写盘完成：异步捕获与编辑并发会把编辑后的文件
+      // 采进 baseline/检查点，撤销时“复原”成已编辑状态（mock provider 秒回时尤甚）。
+      await awaitReviewBaseline(active.cwd);
+      await captureTurnCheckpointForActive(active, userTurnIndex);
 
       // @path 就地展开为 <file> 块（pi file-processor 语义；图片转 images 通道）
       const expanded = await expandFileReferences(payload.text, active.cwd);
@@ -1605,7 +1609,14 @@ export const piRuntimeApi = {
       if (!active) return { success: false, error: 'session not started' };
       // 同一会话可同时显示在多个窗口。此时不能在共享 runtime 上原地
       // newSession，否则所有窗口都会收到 sessionReplaced；只为发起窗口创建新 runtime。
-      if (active.adapterRuntime.session.isStreaming || active.running || shouldIsolateSessionReplacement(active, ctx)) {
+      // pendingPrompts 非空 = 有 prompt 在发送前准备阶段（快照/展开），
+      // run 尚未开始但消息属于当前会话，同样必须隔离而非原地替换。
+      if (
+        active.adapterRuntime.session.isStreaming ||
+        active.running ||
+        active.pendingPrompts.length > 0 ||
+        shouldIsolateSessionReplacement(active, ctx)
+      ) {
         try {
           await createReplacementRuntime(active, ctx, actionId);
           invalidateSessionListCache();
