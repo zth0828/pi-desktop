@@ -49,6 +49,7 @@ export function isInsideWorkspace(root: string, candidate: string): boolean {
   }
 
   const check = (r: string, c: string): boolean => {
+    if (!r || !c) return false;
     const isWindows = process.platform === 'win32' || /^[a-zA-Z]:/.test(r) || /^[a-zA-Z]:/.test(c);
     const normRoot = r.replace(/\\/g, '/').replace(/\/+$/, '');
     const normCand = c.replace(/\\/g, '/').replace(/\/+$/, '');
@@ -65,17 +66,23 @@ export function isInsideWorkspace(root: string, candidate: string): boolean {
     return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
   };
 
+  const resolvedCandidate = path.isAbsolute(cleanCandidate) ? cleanCandidate : path.resolve(cleanRoot, cleanCandidate);
+
+  // 1. 优先尝试原始路径匹配（兼容 Windows 8.3 短路径名未展开场景）
+  if (check(cleanRoot, resolvedCandidate)) return true;
+
+  // 2. 尝试规范化/真实路径判定（处理 macOS /private/tmp、symlink 与短名展开）
   try {
-    const resolvedCandidate = path.isAbsolute(cleanCandidate) ? cleanCandidate : path.resolve(cleanRoot, cleanCandidate);
     const realRoot = normalizePreviewablePath(cleanRoot);
     const realCandidate = normalizePreviewablePath(resolvedCandidate);
     if (check(realRoot, realCandidate)) return true;
+    if (check(realRoot, resolvedCandidate)) return true;
+    if (check(cleanRoot, realCandidate)) return true;
   } catch {
     // ignore
   }
 
-  const resolvedCandidate = path.isAbsolute(cleanCandidate) ? cleanCandidate : path.resolve(cleanRoot, cleanCandidate);
-  return check(cleanRoot, resolvedCandidate);
+  return false;
 }
 
 /** Rebuild the external-file preview grant from pi's native historical messages (scoped to the last maxTurns turns). */
