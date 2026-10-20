@@ -326,6 +326,13 @@ test('导出 HTML → 按项目分类目录并在会话列表中标记已导出�
   await rm(path.join(projectExportDir, reExported[0]));
   await page.getByTestId('nav-models').click();
   await page.getByTestId('nav-sessions').click();
+  // TEMP-DIAG
+  const exportInfoDiag = await page.evaluate(async () => {
+    const api = (window as unknown as { pidesktop: { hostInvoke: (r: unknown) => Promise<unknown> } }).pidesktop;
+    return api.hostInvoke({ id: 'diag', module: 'piSessions', action: 'getExportInfo', payload: {} });
+  });
+  console.log('EXPORT_INFO_DIAG:', JSON.stringify(exportInfoDiag));
+  console.log('EXPORT_DIR_DIAG:', projectExportDir, reExported[0]);
   // 切换回来后自动检测，无需用户点击，最近导出列表已自动清空且会话行已导出徽标消失
   await expect(page.getByTestId('sessions-recent-list')).toHaveCount(0, { timeout: 15_000 });
   await expect(row.getByTestId('session-exported')).toHaveCount(0);
