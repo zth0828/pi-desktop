@@ -116,7 +116,6 @@ if (!hasSingleInstanceLock) {
     }
     void getElectronStore();
     createMainWindow();
-    void sessionsApi.listAll().catch(() => {});
     createTray();
     scheduleVersionChecks();
 

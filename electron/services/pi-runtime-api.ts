@@ -73,6 +73,7 @@ import { syncLmStudioModels } from '../utils/lmstudio-models';
 import { projectFolderName, sessionExportPath } from '../utils/session-export';
 import { getElectronStore } from '../utils/electron-store';
 import { getCachedSubprocessProxyEnv } from './proxy-api';
+import { invalidateSessionListCache } from './sessions-api';
 import {
   cancelPendingUiForContext,
   createExtensionUIContext,
@@ -1592,6 +1593,7 @@ export const piRuntimeApi = {
       if (active.adapterRuntime.session.isStreaming || active.running || shouldIsolateSessionReplacement(active, ctx)) {
         try {
           await createReplacementRuntime(active, ctx, actionId);
+          invalidateSessionListCache();
           return { success: true };
         } catch (err) {
           return { success: false, error: toError(err) };
@@ -1600,6 +1602,7 @@ export const piRuntimeApi = {
       await active.adapterRuntime.newSession();
       await afterSessionReplaced(active, ctx, actionId !== undefined ? { actionId } : undefined);
       bindSenderToRuntime(ctx, active);
+      invalidateSessionListCache();
       return { success: true };
     });
   },

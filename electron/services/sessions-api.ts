@@ -725,7 +725,7 @@ async function switchSessionImpl(
 
 let inFlightListAll: Promise<PiSessionDescriptor[]> | null = null;
 let listAllCache: { timestamp: number; infos: PiSessionDescriptor[] } | null = null;
-const LIST_ALL_CACHE_TTL_MS = 30_000;
+const LIST_ALL_CACHE_TTL_MS = 3_000;
 
 export function invalidateSessionListCache(): void {
   listAllCache = null;
