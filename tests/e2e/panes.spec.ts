@@ -119,11 +119,14 @@ async function waitSessionReady(page: Page) {
 
 /** 发一条消息并等 mock 回复落地（保证会话文件已写入）；scope 缺省为整页（单面板） */
 async function sendAndWaitReply(scope: Page | Locator, text: string) {
+  // 锚定本轮 user 消息之后的 assistant：只看 last 文本会被上一轮的 PONG 提前满足，
+  // 计数基线则在 mock 秒回时被本轮 assistant 抢先污染（prompt 发送前准备拉长后两向都翻车）。
   await scope.getByTestId('chat-input').fill(text);
   await scope.getByTestId('chat-send').click();
-  await expect(scope.getByTestId('message-assistant').last()).toContainText('PONG', {
-    timeout: 30_000,
-  });
+  const userMsg = scope.getByTestId('message-user').filter({ hasText: text }).first();
+  await expect(userMsg).toBeVisible({ timeout: 30_000 });
+  const reply = userMsg.locator('xpath=following::*[@data-testid="message-assistant"]').first();
+  await expect(reply).toContainText('PONG', { timeout: 30_000 });
 }
 
 /** 侧栏会话行 title 属性即会话文件路径（SessionList 里 title={session.path}） */

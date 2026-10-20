@@ -73,11 +73,14 @@ async function waitSessionReady(page: import('@playwright/test').Page) {
 
 /** 发一条消息并等 mock 回复落地（保证会话文件已写入） */
 async function sendAndWaitReply(page: import('@playwright/test').Page, text: string) {
+  // 锚定本轮 user 消息之后的 assistant：只看 last 文本会被上一轮的 PONG 提前满足，
+  // 计数基线则在 mock 秒回时被本轮 assistant 抢先污染（prompt 发送前准备拉长后两向都翻车）。
   await page.getByTestId('chat-input').fill(text);
   await page.getByTestId('chat-send').click();
-  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
-    timeout: 30_000,
-  });
+  const userMsg = page.getByTestId('message-user').filter({ hasText: text }).first();
+  await expect(userMsg).toBeVisible({ timeout: 30_000 });
+  const reply = userMsg.locator('xpath=following::*[@data-testid="message-assistant"]').first();
+  await expect(reply).toContainText('PONG', { timeout: 30_000 });
 }
 
 /** 右键侧栏会话行 →「Open in separate window」，返回新窗口 Page */

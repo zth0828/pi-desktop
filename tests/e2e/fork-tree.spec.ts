@@ -71,12 +71,14 @@ async function waitSessionReady(page: import('@playwright/test').Page) {
 
 /** 发一条消息并等 mock 回复完成（entryId 在 run 结束后才补齐） */
 async function sendAndWaitReply(page: import('@playwright/test').Page, text: string) {
+  // 锚定本轮 user 消息之后的 assistant：只看 last 文本会被上一轮的 PONG 提前满足，
+  // 计数基线则在 mock 秒回时被本轮 assistant 抢先污染（prompt 发送前准备拉长后两向都翻车）。
   await page.getByTestId('chat-input').fill(text);
   await page.getByTestId('chat-send').click();
-  await expect(page.getByTestId('message-assistant').last()).toContainText('PONG', {
-    timeout: 30_000,
-  });
-  await expect(page.getByTestId('chat-input')).toBeEnabled({ timeout: 15_000 });
+  const userMsg = page.getByTestId('message-user').filter({ hasText: text }).first();
+  await expect(userMsg).toBeVisible({ timeout: 30_000 });
+  const reply = userMsg.locator('xpath=following::*[@data-testid="message-assistant"]').first();
+  await expect(reply).toContainText('PONG', { timeout: 30_000 });
 }
 
 async function openTree(page: import('@playwright/test').Page) {
@@ -163,26 +165,8 @@ test('/tree 跳分支选「摘要」：被弃分支写入 branch_summary 节点'
   const page = await app.firstWindow();
   await waitSessionReady(page);
 
-  const dumpSessionEntries = async (tag: string) => {
-    const { readdir, readFile } = await import('node:fs/promises');
-    const sessRoot = path.join(agentDir, 'sessions');
-    for (const dir of await readdir(sessRoot)) {
-      for (const f of await readdir(path.join(sessRoot, dir))) {
-        const content = await readFile(path.join(sessRoot, dir, f), 'utf8').catch(() => '');
-        if (!content.includes('question')) continue;
-        const entries = content.trim().split('\n').map((l) => {
-          const e = JSON.parse(l) as { type?: string; id?: string; parentId?: string; message?: { role?: string; content?: unknown } };
-          const text = JSON.stringify(e.message?.content ?? '')?.slice(0, 30);
-          return `${e.type}/${e.message?.role ?? '-'} id=${e.id} parent=${e.parentId} ${text}`;
-        });
-        console.log(`FORKTREE_DUMP[${tag}]:`, f, '\n' + entries.join('\n'));
-      }
-    }
-  };
   await sendAndWaitReply(page, 'first question');
-  await dumpSessionEntries('after-round1');
   await sendAndWaitReply(page, 'second question');
-  await dumpSessionEntries('after-round2');
 
   // 跳到第一条分支起点并改发新消息，长出第二条分支
   await openTree(page);
@@ -190,7 +174,6 @@ test('/tree 跳分支选「摘要」：被弃分支写入 branch_summary 节点'
   await page.getByTestId('tree-summary-no').click();
   await expect(page.getByTestId('chat-input')).toHaveValue('first question', { timeout: 30_000 });
   await sendAndWaitReply(page, 'branch question');
-  await dumpSessionEntries('after-branch');
 
   // 跳回第一条分支，这次选「摘要」：被弃的 branch 分支应留下摘要节点
   await openTree(page);
@@ -198,28 +181,6 @@ test('/tree 跳分支选「摘要」：被弃分支写入 branch_summary 节点'
   await page.getByTestId('tree-summary-yes').click();
   // 摘要进行中显示等待态，完成后对话框关闭、列表切到目标分支
   await expect(page.getByTestId('tree-dialog')).toHaveCount(0, { timeout: 30_000 });
-  // TEMP-DIAG
-  const stateDiag = await page.evaluate(async () => {
-    const api = (window as unknown as { pidesktop: { hostInvoke: (r: unknown) => Promise<unknown> } }).pidesktop;
-    const res = await api.hostInvoke({ id: 'diag', module: 'piRuntime', action: 'getState', payload: {} }) as { ok: boolean; data?: { messages?: unknown[]; historyMessages?: unknown[]; sessionId?: string; isStreaming?: boolean } };
-    return { ok: res.ok, msgs: res.data?.messages?.length, hist: res.data?.historyMessages?.length, sessionId: res.data?.sessionId, isStreaming: res.data?.isStreaming };
-  }).catch((e) => String(e));
-  console.log('FORKTREE_STATE_DIAG:', JSON.stringify(stateDiag));
-  console.log('FORKTREE_LIST_DIAG:', (await page.getByTestId('message-list').innerText()).slice(0, 300));
-  // TEMP-DIAG：dump 会话文件 entry 结构（type/role/id/parentId）
-  const { readdir, readFile } = await import('node:fs/promises');
-  const sessRoot = path.join(agentDir, 'sessions');
-  for (const dir of await readdir(sessRoot)) {
-    for (const f of await readdir(path.join(sessRoot, dir))) {
-      const lines = (await readFile(path.join(sessRoot, dir, f), 'utf8')).trim().split('\n');
-      const entries = lines.map((l) => {
-        const e = JSON.parse(l) as { type?: string; id?: string; parentId?: string; message?: { role?: string; content?: unknown } };
-        const text = JSON.stringify(e.message?.content ?? '')?.slice(0, 40);
-        return `${e.type}/${e.message?.role ?? '-'} id=${e.id} parent=${e.parentId} ${text}`;
-      });
-      console.log('FORKTREE_FILE_DIAG:', f, '\n' + entries.join('\n'));
-    }
-  }
   await expect(page.getByTestId('message-user').first()).toContainText('first question', {
     timeout: 30_000,
   });
