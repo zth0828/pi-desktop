@@ -180,3 +180,77 @@ describe('probeSuggestedCwd', () => {
   });
 });
 
+describe('sessionsApi.archiveProject 跨目录覆盖', () => {
+  it('能够跨目录正确归档和恢复归档不同物理目录下的同 cwd 会话', async () => {
+    const rootTemp = await mkdtemp(path.join(tmpdir(), 'pi-test-archive-cross-'));
+    const agentDir = path.join(rootTemp, 'agent');
+    const projectCwd = path.join(rootTemp, 'project');
+    const legacyDir = path.join(agentDir, 'sessions', '--legacy-custom-dir--');
+
+    const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+
+    await mkdir(projectCwd, { recursive: true });
+    await mkdir(legacyDir, { recursive: true });
+
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const { samePath } = await import('../../electron/utils/same-path');
+    const s1 = SessionManager.create(projectCwd);
+    s1.appendMessage({ role: 'user', content: 'msg 1', timestamp: Date.now() });
+    s1.appendMessage({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'reply 1' }],
+      api: 'openai',
+      provider: 'mock',
+      model: 'mock-model',
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      stopReason: 'stop',
+      timestamp: Date.now(),
+    } as any);
+
+    const legacyFile = path.join(legacyDir, 'legacy_session.jsonl');
+    const header = JSON.stringify({
+      type: 'session',
+      version: 3,
+      id: 'legacy-id-123',
+      timestamp: new Date().toISOString(),
+      cwd: projectCwd,
+    });
+    const msg = JSON.stringify({
+      type: 'message',
+      id: 'm1',
+      parentId: null,
+      timestamp: new Date().toISOString(),
+      message: { role: 'user', content: [{ type: 'text', text: 'legacy message' }] },
+    });
+    await writeFile(legacyFile, `${header}\n${msg}\n`, 'utf8');
+
+    try {
+      const resArchive = await sessionsApi.archiveProject({ cwd: projectCwd, archived: true });
+      expect(resArchive.success).toBe(true);
+
+      const allArchived = await sessionsApi.listAll();
+      const s1Row = allArchived.sessions.find((s) => samePath(s.path, (s1 as any).sessionFile));
+      const s2Row = allArchived.sessions.find((s) => samePath(s.path, legacyFile));
+      expect(s1Row?.archived).toBe(true);
+      expect(s2Row?.archived).toBe(true);
+
+      const resUnarchive = await sessionsApi.archiveProject({ cwd: projectCwd, archived: false });
+      expect(resUnarchive.success).toBe(true);
+
+      const allRestored = await sessionsApi.listAll();
+      const s1RowRestored = allRestored.sessions.find((s) => samePath(s.path, (s1 as any).sessionFile));
+      const s2RowRestored = allRestored.sessions.find((s) => samePath(s.path, legacyFile));
+      expect(s1RowRestored?.archived).toBe(false);
+      expect(s2RowRestored?.archived).toBe(false);
+
+      const legacyContent = await readFile(legacyFile, 'utf8');
+      expect(legacyContent).toContain('"pi-desktop.archive"');
+      expect(legacyContent).toContain('"archived":false');
+    } finally {
+      if (previousAgentDir) process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+      else delete process.env.PI_CODING_AGENT_DIR;
+      await rm(rootTemp, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+});

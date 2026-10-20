@@ -416,6 +416,8 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
       if (!result.success) {
         setSessions(previous);
         showNotice(result.error ?? t('sessions.actionFailedPlain'));
+      } else {
+        refreshSessions(true);
       }
     } catch (err) {
       setSessions(previous);
@@ -433,6 +435,8 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
       if (!result.success) {
         setSessions(previous);
         showNotice(result.error ?? t('sessions.actionFailedPlain'));
+      } else {
+        refreshSessions(true);
       }
     } catch (err) {
       setSessions(previous);

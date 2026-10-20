@@ -933,8 +933,11 @@ export const sessionsApi = {
     }
     try {
       const adapter = await loadPiAdapter();
-      const rawSessions = await adapter.sessions.list(cleanCwd);
-      const projectSessions = rawSessions.filter((session) => session.messageCount > 0);
+      const allInfos = await getCachedOrFetchListAll(adapter.sessions);
+      const liveSessions = mergeLiveSessions(allInfos);
+      const projectSessions = liveSessions.filter(
+        (session) => samePath(session.cwd, cleanCwd) && session.messageCount > 0,
+      );
       if (projectSessions.some((session) => isSessionRunning(session.path))) {
         return { success: false, error: 'project has a running session' };
       }
@@ -942,6 +945,7 @@ export const sessionsApi = {
         setArchived(session.path, payload.archived, adapter.sessions);
         invalidateSessionMetadata(session.path);
       }
+      invalidateSessionListCache();
       sendHostEvent('piRuntime', 'sessionsChanged', { reason: 'archive' });
       return { success: true };
     } catch (err) {

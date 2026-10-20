@@ -314,6 +314,8 @@ export function SessionList({ onOpenChat }: SessionListProps) {
         pushGlobalError(formatErrorMessage(result.error, t) ?? t('sessions.actionFailedPlain'));
         setSessions(previous);
         refresh();
+      } else {
+        refresh();
       }
     } catch {
       pushGlobalError(t('sessions.actionFailedPlain'));
@@ -337,6 +339,8 @@ export function SessionList({ onOpenChat }: SessionListProps) {
         pushGlobalError(formatErrorMessage(result.error, t) ?? t('sessions.actionFailedPlain'));
         setSessions(previous);
         refresh();
+      } else {
+        refresh();
       }
     } catch {
       pushGlobalError(t('sessions.actionFailedPlain'));
@@ -359,6 +363,8 @@ export function SessionList({ onOpenChat }: SessionListProps) {
       if (!result.success) {
         pushGlobalError(formatErrorMessage(result.error, t) ?? t('sessions.actionFailedPlain'));
         setSessions(previous);
+        refresh();
+      } else {
         refresh();
       }
     } catch {
