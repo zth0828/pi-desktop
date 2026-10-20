@@ -155,7 +155,8 @@ test('场景5：npm 安装且版本达标 → 进入主界面', async ({ launchE
     });
     const page = await app.firstWindow();
     await expect(page.getByTestId('nav-chat')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('button', { name: 'Choose folder' })).toBeVisible();
+    // 新会话默认落在 scratchpad 草稿工作区，首屏是问候卡片而非选目录空态
+    await expect(page.getByTestId('chat-greeting')).toBeVisible();
   } finally {
     await fake.cleanup();
   }
@@ -170,7 +171,7 @@ test('场景5b：npm 全局包已安装但 pi shim 不在 PATH → 仍进入主�
     });
     const page = await app.firstWindow();
     await expect(page.getByTestId('nav-chat')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Choose folder' })).toBeVisible();
+    await expect(page.getByTestId('chat-greeting')).toBeVisible();
   } finally {
     await fake.cleanup();
   }
