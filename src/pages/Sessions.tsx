@@ -344,8 +344,10 @@ export default function SessionsPage({ active = true, onOpenChat }: SessionsPage
     void loadExportInfo();
   }, [loadExportInfo]);
 
+  console.log('[diag] sessions-render', active);
   // 当会话页面激活时静默同步最新会话并复查导出磁盘文件（用户可能在站外删除导出文件）
   useEffect(() => {
+    console.log('[diag] sessions-active-effect', active);
     if (active) {
       refreshSessions(true);
       void loadExportInfo();
