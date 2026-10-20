@@ -323,6 +323,7 @@ export function getLiveSessionRows(): Array<{
     const session = entry.adapterRuntime.session;
     const sessionFile = session.sessionFile;
     if (!sessionFile) return [];
+    if (!existsSync(sessionFile) && !entry.running && !session.isStreaming) return [];
     const stats = session.getSessionStats();
     if (stats.totalMessages === 0) return [];
     const messages = session.messages as Array<{ role?: string; content?: unknown; timestamp?: number }>;
@@ -1083,8 +1084,6 @@ export async function detachRuntimesFromSessionFile(sessionPath: string): Promis
       await runtime.adapterRuntime.newSession();
       await afterSessionReplaced(runtime, undefined, { replacesSessionId: previousSessionId });
     } catch (err) {
-      // 单个 runtime 失败不能中断循环：其余持有者仍要 detach，
-      // 否则它们继续往已删会话文件追加（会话"复活"）
       writePiDiagnostic({
         level: 'error',
         event: 'session.detach-failed',
@@ -1093,6 +1092,12 @@ export async function detachRuntimesFromSessionFile(sessionPath: string): Promis
         piVersion: runtime.adapter.packageVersion,
         ...safeErrorFields(err),
       });
+      try {
+        disposeRuntime(runtime);
+      } catch {
+        runtimes.delete(runtime);
+        if (active === runtime) active = null;
+      }
     }
   }
 }

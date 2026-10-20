@@ -200,15 +200,17 @@ export function SessionCwdMissingDialog() {
               </>
             ) : (
               <>
-                <button
-                  type="button"
-                  className="confirm-undo-btn confirm-undo-btn-cancel"
-                  data-testid="session-cwd-missing-confirm"
-                  onClick={onConfirmFallback}
-                  title={isMismatch ? t('chat.sessionCwdMissing.mismatchWarning', { original: originalName, current: fallbackName }) : undefined}
-                >
-                  {t('chat.sessionCwdMissing.continueInCurrent')}
-                </button>
+                {Boolean(fallbackCwd && fallbackCwd !== originalCwd) && (
+                  <button
+                    type="button"
+                    className="confirm-undo-btn confirm-undo-btn-cancel"
+                    data-testid="session-cwd-missing-confirm"
+                    onClick={onConfirmFallback}
+                    title={isMismatch ? t('chat.sessionCwdMissing.mismatchWarning', { original: originalName, current: fallbackName }) : undefined}
+                  >
+                    {t('chat.sessionCwdMissing.continueInCurrent')}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="confirm-undo-btn confirm-undo-btn-confirm"

@@ -556,13 +556,30 @@ async function commitWorkspaceCwd(cwd: string | undefined): Promise<void> {
 }
 
 /** switch 的实际执行体（经 serializeSessionOp 按目标 sessionPath 串行）。 */
+function isScratchpadCwd(cwd?: string | null): boolean {
+  if (!cwd) return false;
+  const normalized = cwd.replace(/\\/g, '/').toLowerCase();
+  return normalized.includes('/.pi/scratchpad');
+}
+
 async function switchSessionImpl(
   payload: PiSessionPathPayload,
   ctx: HostActionContext | undefined,
 ): Promise<PiSessionSwitchResult> {
+  const targetFile = stripWindowsExtendedPrefix(path.resolve(payload.path));
+  if (!existsSync(targetFile)) {
+    return { success: false, error: 'session file does not exist' };
+  }
+
   const storedCwd = payload.cwd ?? (await sessionHeaderCwd(payload.path));
   const currentRuntime = getActiveRuntime();
-  const fallbackCwd = currentRuntime?.cwd ?? process.cwd();
+  let fallbackCwd = currentRuntime?.cwd ?? process.cwd();
+  if (!existsSync(fallbackCwd) || isScratchpadCwd(fallbackCwd)) {
+    const configuredWorkspace = await settingsApi.get({ key: 'workspaceCwd' });
+    if (configuredWorkspace && typeof configuredWorkspace === 'string' && existsSync(configuredWorkspace)) {
+      fallbackCwd = configuredWorkspace;
+    }
+  }
 
   // 若没有提供 cwdOverride，且会话记录的 cwd 不存在，直接返回 SESSION_CWD_MISSING
   if (!payload.cwdOverride && storedCwd && !existsSync(storedCwd)) {
