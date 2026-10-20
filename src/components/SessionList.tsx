@@ -78,10 +78,24 @@ function SessionDragHint() {
   );
 }
 
+const SIDEBAR_SESSIONS_CACHE_KEY = 'pi-desktop.sidebar-sessions-cache';
+
+function getInitialSessions(): PiSessionRow[] {
+  try {
+    const raw = typeof window !== 'undefined' ? window.localStorage?.getItem(SIDEBAR_SESSIONS_CACHE_KEY) : null;
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 /** 侧栏会话列表：按项目分组，支持项目/会话归档与删除。 */
 export function SessionList({ onOpenChat }: SessionListProps) {
   const { t } = useTranslation();
-  const [sessions, setSessions] = useState<PiSessionRow[]>([]);
+  const [sessions, setSessions] = useState<PiSessionRow[]>(getInitialSessions);
+  const [initialLoading, setInitialLoading] = useState(() => sessions.length === 0);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [openMenu, setOpenMenu] = useState<string>();
   const [confirmDelete, setConfirmDelete] = useState<string>();
@@ -164,9 +178,17 @@ export function SessionList({ onOpenChat }: SessionListProps) {
     void hostApi.piSessions
       .listAll()
       .then((r) => {
-        if (sequence === refreshSequence.current) setSessions(r.sessions);
+        if (sequence === refreshSequence.current) {
+          setSessions(r.sessions);
+          setInitialLoading(false);
+          try {
+            window.localStorage?.setItem(SIDEBAR_SESSIONS_CACHE_KEY, JSON.stringify(r.sessions));
+          } catch {}
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (sequence === refreshSequence.current) setInitialLoading(false);
+      });
   }, []);
 
   const refreshAfterSessionChange = useCallback(() => {
@@ -942,13 +964,31 @@ export function SessionList({ onOpenChat }: SessionListProps) {
       onDrop={onSidebarDrop}
     >
       {draggingPath && <SessionDragHint />}
-      {renderPinnedSection()}
-      {activeGroups.map((group) => renderGroup(group, false))}
-      {archivedGroups.length > 0 && (
-        <div className="archived-sessions" data-testid="archived-sessions">
-          <div className="archived-sessions-label">{t('sessions.archived')}</div>
-          {archivedGroups.map((group) => renderGroup(group, true))}
+      {initialLoading && sessions.length === 0 ? (
+        <div className="sidebar-skeleton" data-testid="sidebar-skeleton">
+          <div className="sidebar-skeleton-group">
+            <div className="sidebar-skeleton-header" />
+            <div className="sidebar-skeleton-item medium" />
+            <div className="sidebar-skeleton-item short" />
+          </div>
+          <div className="sidebar-skeleton-group">
+            <div className="sidebar-skeleton-header" style={{ width: '50%' }} />
+            <div className="sidebar-skeleton-item" />
+            <div className="sidebar-skeleton-item short" />
+            <div className="sidebar-skeleton-item medium" />
+          </div>
         </div>
+      ) : (
+        <>
+          {renderPinnedSection()}
+          {activeGroups.map((group) => renderGroup(group, false))}
+          {archivedGroups.length > 0 && (
+            <div className="archived-sessions" data-testid="archived-sessions">
+              <div className="archived-sessions-label">{t('sessions.archived')}</div>
+              {archivedGroups.map((group) => renderGroup(group, true))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

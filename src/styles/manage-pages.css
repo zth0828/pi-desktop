@@ -2520,3 +2520,47 @@
   background: var(--bg-hover);
   color: var(--text-secondary);
 }
+
+/* 侧栏初次加载骨架屏（平滑脉冲动效，消除空白停滞感） */
+@keyframes session-skeleton-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.75; }
+}
+
+.sidebar-skeleton {
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: session-skeleton-pulse 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.sidebar-skeleton-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-skeleton-header {
+  height: 20px;
+  width: 65%;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-tertiary) 20%, transparent);
+}
+
+.sidebar-skeleton-item {
+  height: 22px;
+  margin-left: 12px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-tertiary) 12%, transparent);
+}
+
+.sidebar-skeleton-item.short {
+  width: 70%;
+}
+
+.sidebar-skeleton-item.medium {
+  width: 85%;
+}
+

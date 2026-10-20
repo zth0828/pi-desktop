@@ -4,6 +4,7 @@ import { HostApiRegistry, registerHostInvokeHandler } from './ipc/host-invoke';
 import { createMainWindow, focusOrCreateMainWindow, isQuitting, setQuitting } from './window-manager';
 import { createTray } from './tray';
 import { createHostServices } from '../services';
+import { sessionsApi } from '../services/sessions-api';
 import { disposeAllRuntimes, hasStreamingRuntimes } from '../services/pi-runtime-api';
 import { DEV_RESTART_READY, DEV_RESTART_REQUEST } from '@shared/dev-reload';
 import { resolveAppIconPath } from '../utils/app-icon';
@@ -115,6 +116,7 @@ if (!hasSingleInstanceLock) {
     }
     void getElectronStore();
     createMainWindow();
+    void sessionsApi.listAll().catch(() => {});
     createTray();
     scheduleVersionChecks();
 
