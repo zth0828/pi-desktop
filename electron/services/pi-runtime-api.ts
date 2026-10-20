@@ -1884,6 +1884,8 @@ export const piRuntimeApi = {
     if (!name) return { success: false, error: 'empty name' };
     try {
       active.adapterRuntime.session.setSessionName(name);
+      // 改名写 session_info 落盘：废掉 listAll TTL 快照，否则侧栏刷新读到改名前的缓存
+      invalidateSessionListCache();
       // 侧栏会话列表靠 sessionReplaced / isStreaming 翻转刷新；
       // streaming 中推全量会丢 partial 消息，跳过（流结束时列表自会刷新）。
       if (payload.notify !== false && !active.adapterRuntime.session.isStreaming) {
