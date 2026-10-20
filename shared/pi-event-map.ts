@@ -106,6 +106,8 @@ export function mapPiSessionEvent(value: unknown, onDrop?: PiEventDropCallback):
     case 'agent_end': return { type: 'run.ended', willRetry: typeof event.willRetry === 'boolean' ? event.willRetry : undefined };
     case 'message_start': {
       const message = record(event.message);
+      // pi ≥1.0 的结构化系统提示（role=system）是会话内部状态，不下发给渲染层
+      if (message?.role === 'system') return null;
       return typeof message?.role === 'string' ? { type: 'message.started', role: message.role } : null;
     }
     case 'message_update': {
@@ -120,6 +122,7 @@ export function mapPiSessionEvent(value: unknown, onDrop?: PiEventDropCallback):
     }
     case 'message_end': {
       const message = normalizeMessage(event.message);
+      if (message?.role === 'system') return null;
       return message ? { type: 'message.ended', message } : null;
     }
     case 'tool_execution_start':

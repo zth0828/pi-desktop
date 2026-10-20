@@ -316,6 +316,8 @@ export function getLiveSessionRows(): Array<{
   cwd: string;
   name?: string;
   firstMessage: string;
+  /** 实时消息全文（user/assistant 文本拼接）；同会话搜索刚发即搜时磁盘快照可能滞后。 */
+  allMessagesText: string;
   messageCount: number;
   created: Date;
   modified: Date;
@@ -331,12 +333,18 @@ export function getLiveSessionRows(): Array<{
     const messages = session.messages as Array<{ role?: string; content?: unknown; timestamp?: number }>;
     const firstUser = messages.find((message) => message.role === 'user');
     const firstMessage = contentSummaryText(firstUser?.content);
+    const allMessagesText = messages
+      .filter((message) => message.role === 'user' || message.role === 'assistant')
+      .map((message) => contentSummaryText(message.content))
+      .filter((text) => text.length > 0)
+      .join(' ');
     return [{
       path: sessionFile,
       id: session.sessionId,
       cwd: entry.cwd,
       name: session.sessionManager.getSessionName() ?? undefined,
       firstMessage,
+      allMessagesText,
       messageCount: stats.totalMessages,
       created: firstUser?.timestamp ? new Date(firstUser.timestamp) : now,
       modified: now,
@@ -489,6 +497,11 @@ export function getLatestMcpStatusSnapshot(): Record<string, unknown> | null {
   return latestMcpStatus;
 }
 
+/** pi ≥1.0 把结构化系统提示持久化为 role=system 的会话消息；壳不展示此类内部消息。 */
+function isSystemRoleMessage(message: unknown): boolean {
+  return (message as { role?: unknown } | null | undefined)?.role === 'system';
+}
+
 /**
  * 与 messages 平行的 entry id 序列（仅 user 消息 entry 有值）。
  * pi 的 AgentMessage 不带 entryId；session.messages 与
@@ -504,6 +517,7 @@ function messageEntryIds(session: PiSessionPort): (string | null)[] {
       (entry.type === 'branch_summary' && Boolean(entry.summary)) ||
       entry.type === 'compaction';
     if (!producesMessage) continue;
+    if (entry.type === 'message' && isSystemRoleMessage(entry.message)) continue;
     ids.push(entry.type === 'message' && (entry.message as { role?: unknown }).role === 'user' ? (entry.id ?? null) : null);
   }
   return ids;
@@ -521,6 +535,7 @@ function historyMessages(session: PiSessionPort): { messages: unknown[]; entryId
     // 必须走动态加载的用户环境 pi（包是 ESM-only，main 进程 CJS 包里 require 会直接崩）
     const converted = session.getModelContextMessages(entry);
     for (const message of converted) {
+      if (isSystemRoleMessage(message)) continue;
       messages.push(message);
       entryIds.push(entry.type === 'message' && (entry.message as { role?: unknown }).role === 'user' ? (entry.id ?? null) : null);
     }
@@ -679,7 +694,7 @@ function snapshotState(runtime: ActiveRuntime): PiRuntimeStateResult {
     availableThinkingLevels: availableThinkingLevels(session),
     isStreaming: session.isStreaming,
     running: runtime.running || session.isStreaming,
-    messages: session.messages as unknown[],
+    messages: (session.messages as unknown[]).filter((m) => !isSystemRoleMessage(m)),
     historyMessages: history.messages,
     messageEntryIds: messageEntryIds(session),
     historyMessageEntryIds: history.entryIds,
