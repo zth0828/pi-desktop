@@ -47,17 +47,35 @@ export function isInsideWorkspace(root: string, candidate: string): boolean {
   if (isWindowsDevicePath(cleanRoot) || isWindowsDevicePath(cleanCandidate)) {
     return false;
   }
+
+  const check = (r: string, c: string): boolean => {
+    const isWindows = process.platform === 'win32' || /^[a-zA-Z]:/.test(r) || /^[a-zA-Z]:/.test(c);
+    const normRoot = r.replace(/\\/g, '/').replace(/\/+$/, '');
+    const normCand = c.replace(/\\/g, '/').replace(/\/+$/, '');
+    const a = isWindows ? normCand.toLowerCase() : normCand;
+    const b = isWindows ? normRoot.toLowerCase() : normRoot;
+    if (a === b || a.startsWith(`${b}/`)) return true;
+    if (!isWindows) {
+      const privateB = b.startsWith('/private/') ? b.slice('/private'.length) : `/private${b}`;
+      if (a === privateB || a.startsWith(`${privateB}/`)) return true;
+      const privateA = a.startsWith('/private/') ? a.slice('/private'.length) : `/private${a}`;
+      if (privateA === b || privateA.startsWith(`${b}/`)) return true;
+    }
+    const relative = path.relative(r, c);
+    return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  };
+
   try {
     const resolvedCandidate = path.isAbsolute(cleanCandidate) ? cleanCandidate : path.resolve(cleanRoot, cleanCandidate);
     const realRoot = normalizePreviewablePath(cleanRoot);
     const realCandidate = normalizePreviewablePath(resolvedCandidate);
-    const relative = path.relative(realRoot, realCandidate);
-    return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+    if (check(realRoot, realCandidate)) return true;
   } catch {
-    const resolvedCandidate = path.isAbsolute(cleanCandidate) ? cleanCandidate : path.resolve(cleanRoot, cleanCandidate);
-    const relative = path.relative(cleanRoot, resolvedCandidate);
-    return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+    // ignore
   }
+
+  const resolvedCandidate = path.isAbsolute(cleanCandidate) ? cleanCandidate : path.resolve(cleanRoot, cleanCandidate);
+  return check(cleanRoot, resolvedCandidate);
 }
 
 /** Rebuild the external-file preview grant from pi's native historical messages (scoped to the last maxTurns turns). */

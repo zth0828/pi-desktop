@@ -61,19 +61,19 @@ async function resolvePreviewFile(pathValue: string, ctx?: HostActionContext): P
   }
   const runtime = resolveRuntimeForContext(ctx);
   if (!runtime) throw new Error('session not started');
-  const root = await realpath(runtime.cwd);
+  const root = stripWindowsExtendedPrefix(await realpath(runtime.cwd));
   if (!path.isAbsolute(pathValue)) return resolveWorkspacePath(root, pathValue);
   const candidate = normalizePreviewablePath(pathValue);
   if (isInsideWorkspace(root, candidate)) {
     if (isWindowsDevicePath(candidate)) throw new Error('device paths are not allowed');
-    const resolved = await realpath(candidate);
+    const resolved = stripWindowsExtendedPrefix(await realpath(candidate));
     if (!isInsideWorkspace(root, resolved)) throw new Error('path escapes workspace');
     return resolved;
   }
   if (!hasPreviewableExternalFile(runtime.previewableExternalFiles, candidate)) {
     throw new Error('file is outside the active workspace and was not produced by this session');
   }
-  return realpath(candidate);
+  return stripWindowsExtendedPrefix(await realpath(candidate));
 }
 
 function relativePath(root: string, absolute: string): string {

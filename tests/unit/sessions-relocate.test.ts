@@ -17,6 +17,32 @@ vi.mock('../../electron/main/ipc/host-events', () => ({
   sendHostEventToWindow: vi.fn(),
 }));
 
+vi.mock('../../electron/services/pi-adapter', async () => {
+  const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+  return {
+    loadPiAdapter: vi.fn(async () => ({
+      sessions: {
+        list: (cwd: string) => SessionManager.list(cwd),
+        listAll: () => SessionManager.listAll(),
+        open: (file: string) => SessionManager.open(file),
+        create: (cwd: string) => SessionManager.create(cwd),
+        forkFrom: (file: string, cwd: string) => SessionManager.forkFrom(file, cwd),
+        appendSessionInfo: (doc: any, name: string) => doc?.appendSessionInfo?.(name),
+        appendCustomEntry: (doc: any, type: string, data: any) => doc?.appendCustomEntry?.(type, data),
+        getEntries: (doc: any) => doc?.getEntries?.() ?? [],
+        getSessionDir: (cwd: string) => {
+          try {
+            return SessionManager.create(cwd).getSessionDir?.();
+          } catch {
+            return undefined;
+          }
+        },
+      },
+      packageVersion: '0.84.2',
+    })),
+  };
+});
+
 const { sessionsApi, probeSuggestedCwd } = await import('../../electron/services/sessions-api');
 
 describe('sessionsApi.relocateProject', () => {

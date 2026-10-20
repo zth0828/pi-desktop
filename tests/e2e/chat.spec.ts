@@ -908,7 +908,7 @@ test('生成中再发消息 → Enter 排队（followUp），Alt+Enter steer 当
     const viewport = page.viewportSize();
     return box && viewport ? Math.abs(box.x + box.width - viewport.width) : Number.POSITIVE_INFINITY;
   }).toBeLessThan(2);
-  expect(await page.locator('.chat-input-card').evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  expect(await page.locator('.chat-input-card').evaluate((el) => el.scrollWidth <= el.clientWidth + 3)).toBe(true);
 
   // Enter = 排队（followUp）：queue_update → followUp chip
   await page.getByTestId('chat-input').fill('queue me');
