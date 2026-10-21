@@ -282,6 +282,7 @@ function bindInstanceEvents(
   onEvent: HostEventSubscriber,
   reporters?: ChatEventReporters,
   clearReplacementWait?: () => void,
+  onSessionReplacedApplied?: () => void,
 ): () => void {
   // 流式合帧：assistant.partial / tool.execution.updated 是替换式流式事件，
   // 在 ≤50ms 窗口内合并（同类只留最新）后批量进 store；其余关键事件直透（直透前先
@@ -322,6 +323,7 @@ function bindInstanceEvents(
       // attach 兜底路径（switchSession 里 getState 取不到状态）只有这里能把面板置为已启动
       clearReplacementWait?.();
       store.setState({ started: true, boundSessionId: state.sessionId, expectingReplacement: false, expectedReplacementActionId: null });
+      onSessionReplacedApplied?.();
     }),
     onEvent('piRuntime', 'runtimeStateChanged', (event) => {
       const current = store.getState();
@@ -361,6 +363,9 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
   // 订阅竞态）时标志会永远悬挂，之后任意广播都可能误命中，必须在时限内收敛。
   const replacementTimer: { handle: ReturnType<typeof setTimeout> | null } = { handle: null };
   let clearPendingCompactionFlush = () => {};
+  // 会话替换（newSession/fork 等）等待期间发送的消息：面板展示的已是新会话语境，
+  // 直接投递会按旧绑定路由进旧会话。排队到改绑完成后按新会话重投。
+  let flushPendingReplacementPrompts: () => Promise<void> = async () => {};
   const clearReplacementTimer = () => {
     if (replacementTimer.handle !== null) {
       clearTimeout(replacementTimer.handle);
@@ -398,6 +403,19 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
     const currentSessionId = () => get().sessionId ?? get().boundSessionId;
     const belongsToCurrentSession = (prompt: PendingPrompt) =>
       prompt.sessionId === currentSessionId() && prompt.generation === get().generation;
+    const pendingReplacementPrompts: PendingPrompt[] = [];
+    flushPendingReplacementPrompts = async () => {
+      while (pendingReplacementPrompts.length > 0) {
+        const prompt = pendingReplacementPrompts.shift()!;
+        prompt.sessionId = currentSessionId();
+        prompt.generation = get().generation;
+        const result = await submitPrompt(prompt);
+        if (result === 'retry') {
+          pendingCompactionPrompts.push(prompt);
+          schedulePendingCompactionFlush();
+        }
+      }
+    };
     const schedulePendingCompactionFlush = () => {
       if (pendingCompactionFlushTimer !== null) return;
       pendingCompactionFlushTimer = setTimeout(() => {
@@ -466,8 +484,11 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
 
     // 撤销替换等待（事件已应用 / 动作失败 / 新绑定建立）：清定时器与标志
     const endReplacementWait = () => {
+      const wasReplacing = get().expectingReplacement;
       clearReplacementTimer();
       set({ expectingReplacement: false, expectedReplacementActionId: null });
+      // 动作失败/超时收尾：面板停留在当前会话，排队的消息按当前会话投递
+      if (wasReplacing) void flushPendingReplacementPrompts();
     };
     // 进入替换等待并记录发起上下文；超时未收到匹配事件则收敛标志并报运行期错误
     const beginReplacementWait = (actionId: string | null) => {
@@ -477,6 +498,8 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         replacementTimer.handle = null;
         if (!get().expectingReplacement) return;
         set({ expectingReplacement: false, expectedReplacementActionId: null, runtimeError: SESSION_REPLACEMENT_TIMEOUT });
+        // 替换失败：面板仍停留在原会话，排队的消息按当前（原）会话投递
+        void flushPendingReplacementPrompts();
       }, REPLACEMENT_WAIT_TIMEOUT_MS);
     };
 
@@ -668,6 +691,11 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
         // 这里入队而不是依赖 ChatInput 恢复草稿，保证连续发送和附件顺序都不丢。
         if (state.compaction || state.transcriptSyncing || pendingCompactionPrompts.some(belongsToCurrentSession)) {
           pendingCompactionPrompts.push(pendingPrompt);
+          return;
+        }
+        // 替换等待期：用户已在操作新会话语境，消息排队到改绑后投递
+        if (state.expectingReplacement) {
+          pendingReplacementPrompts.push(pendingPrompt);
           return;
         }
         const result = await submitPrompt(pendingPrompt);
@@ -1302,7 +1330,9 @@ export function createChatStore(deps: ChatStoreDeps = {}): ChatStore {
   });
   // dispose 同时清替换等待定时器：面板卸载后超时回调再触发就是对已废弃实例写状态
   const unbindEvents = deps.onEvent
-    ? bindInstanceEvents(store, deps.onEvent, deps.reporters, clearReplacementTimer)
+    ? bindInstanceEvents(store, deps.onEvent, deps.reporters, clearReplacementTimer, () => {
+      void flushPendingReplacementPrompts();
+    })
     : () => {};
   const dispose = () => {
     clearReplacementTimer();

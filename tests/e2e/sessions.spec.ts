@@ -851,6 +851,10 @@ test('流式输出中点击新建会话：新会话立即处于空闲态且不�
   // 在生成开始后立即点击新建会话
   await page.getByTestId('new-chat').click();
 
+  // 等面板真正改绑到新会话：空会话渲染问候页才是改绑完成的可靠信号
+  // （status-working/chat-stop 在旧会话 run 已结束时同样为 0，不能用作同步点）。
+  await expect(page.getByTestId('chat-greeting')).toBeVisible({ timeout: 30_000 });
+
   // 新会话消息列表清空，不应卡在「工作中...」，不应显示红色停止按钮
   await expect(page.getByTestId('message-assistant')).toHaveCount(0);
   await expect(page.getByTestId('status-working')).toHaveCount(0);
