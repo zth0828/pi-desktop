@@ -857,9 +857,13 @@ test('流式输出中点击新建会话：新会话立即处于空闲态且不�
   await expect(page.getByTestId('chat-stop')).toHaveCount(0);
   await expect(page.getByTestId('runtime-error-notice')).toHaveCount(0);
 
-  // 新会话能够正常发送下一条消息
+  // 新会话能够正常发送下一条消息（分步断言：先看 user 消息落地与错误条，再等回复）
   await page.getByTestId('chat-input').fill('PING AFTER NEW');
   await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('message-user').first()).toContainText('PING AFTER NEW', {
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId('runtime-error-notice')).toHaveCount(0);
   await expect(page.getByTestId('message-assistant').first()).toContainText('PONG', {
     timeout: 30_000,
   });
