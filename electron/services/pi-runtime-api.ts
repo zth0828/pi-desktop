@@ -1637,11 +1637,18 @@ export const piRuntimeApi = {
     return serializeSessionOp(key, async () => {
       const active = resolveRuntimeForContext(ctx);
       if (!active) return { success: false, error: 'session not started' };
-      // 准备中的 prompt 先提交到当前会话，再做替换判定（提交后 isStreaming 为真，走隔离路径）。
+      // 准备中的 prompt 先提交到当前会话，再做替换判定。
       await waitForPromptPreps(active);
       // 同一会话可同时显示在多个窗口。此时不能在共享 runtime 上原地
       // newSession，否则所有窗口都会收到 sessionReplaced；只为发起窗口创建新 runtime。
-      if (active.adapterRuntime.session.isStreaming || active.running || shouldIsolateSessionReplacement(active, ctx)) {
+      // pendingPrompts 非空 = prompt 已提交但 run 尚未标记 streaming（提交与
+      // isStreaming 翻牌之间有窗口），原地替换会把这条消息带进新会话。
+      if (
+        active.adapterRuntime.session.isStreaming ||
+        active.running ||
+        active.pendingPrompts.length > 0 ||
+        shouldIsolateSessionReplacement(active, ctx)
+      ) {
         try {
           await createReplacementRuntime(active, ctx, actionId);
           invalidateSessionListCache();

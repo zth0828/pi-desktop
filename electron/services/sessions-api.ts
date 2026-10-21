@@ -705,9 +705,17 @@ async function switchSessionImpl(
     return { success: true };
   }
   try {
-    // 准备中的 prompt 先提交到当前会话（提交后 isStreaming 为真，走保活路径），
-    // 否则原地 switch 会让这条消息落进切换后的会话。
+    // 准备中的 prompt 先提交到当前会话；pendingPrompts 非空 = 已提交但 run
+    // 尚未标记 streaming，原地 switch 会把这条消息带进切换后的会话。
     await waitForPromptPreps(active);
+    if (active.pendingPrompts.length > 0) {
+      await createSessionRuntime(targetCwd ?? active.cwd, payload.path, {
+        cwdOverride: payload.cwdOverride,
+      });
+      bindSenderWindow(ctx, payload.path);
+      if (payload.cwdOverride) await updateSessionHeaderCwd(payload.path, payload.cwdOverride);
+      return { success: true };
+    }
     if (active.adapterRuntime.session.view.isStreaming) {
       await createSessionRuntime(targetCwd ?? active.cwd, payload.path, {
         cwdOverride: payload.cwdOverride,
